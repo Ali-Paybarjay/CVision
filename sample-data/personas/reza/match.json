@@ -1,0 +1,40 @@
+{
+  "jobId": "reza-job-1",
+  "score": 78,
+  "strengths": [
+    {
+      "requirement": "Coordinating several workstreams at once",
+      "evidence": "Coordinated the move to a new school timetable for 1,100 students and 80 staff, delivered on time"
+    },
+    {
+      "requirement": "Clear communication with stakeholders",
+      "evidence": "Ran parents' evenings and kept parents updated on progress"
+    },
+    {
+      "requirement": "PRINCE2 or Agile training",
+      "evidence": "PRINCE2 Foundation, PeopleCert, 2026"
+    },
+    {
+      "requirement": "Education sector knowledge",
+      "evidence": "Nine years teaching maths in London secondary schools"
+    }
+  ],
+  "uncoveredRequirements": ["Asana or Jira"],
+  "gaps": [
+    {
+      "id": "reza-gap-1",
+      "requirement": "Strong Excel and Microsoft Office",
+      "importance": "essential",
+      "kind": "unclear",
+      "detail": "Excel is listed as a skill, but no example shows how it was used."
+    },
+    {
+      "id": "reza-gap-2",
+      "requirement": "Asana or Jira",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "No project management tools are mentioned."
+    }
+  ],
+  "reasoning": "Reza's timetable project and head of year role show coordination, organisation and stakeholder communication, and he has PRINCE2 Foundation and deep education sector knowledge. Excel is claimed but not shown in use, and he has no project tool experience on the CV."
+}

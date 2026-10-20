@@ -1,0 +1,41 @@
+[
+  {
+    "id": "sara-job-1",
+    "title": "Junior Data Analyst",
+    "company": "Pennine Health Analytics",
+    "location": "Manchester",
+    "salary": { "min": 29000, "max": 32000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "hybrid",
+    "description": "Pennine Health Analytics helps NHS trusts in the North West use their data to plan services. We are looking for a Junior Data Analyst to join our team of eight in central Manchester, working in the office two days a week.\n\nYou will write SQL to pull data from our warehouse, analyse it in Python or R, and build Power BI dashboards that clinical and operational managers use every week. You will present your findings to people who are not analysts, so clear communication matters as much as technical skill.\n\nEssential:\n- Strong SQL\n- Python or R for analysis\n- Experience building dashboards in Power BI or Tableau\n- Clear communication with non-technical stakeholders\n\nDesirable:\n- Power BI specifically\n- Experience with healthcare or NHS data\n- Version control with Git\n\nSalary £29,000 to £32,000. Permanent, full-time, hybrid.",
+    "requirements": {
+      "essential": [
+        "Strong SQL",
+        "Python or R for analysis",
+        "Dashboards in Power BI or Tableau",
+        "Clear communication with non-technical stakeholders"
+      ],
+      "desirable": ["Power BI", "Healthcare or NHS data", "Git"]
+    },
+    "url": "https://example.com/jobs/pennine-junior-data-analyst",
+    "source": "pasted"
+  },
+  {
+    "id": "sara-job-2",
+    "title": "Graduate Data Analyst",
+    "company": "Irwell Energy",
+    "location": "Salford",
+    "salary": { "min": 27500, "max": 27500, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "on-site",
+    "description": "Irwell Energy supplies gas and electricity to 300,000 homes across the North of England. Our graduate scheme places you in the pricing analytics team at our Salford office.\n\nYou will forecast customer demand, test pricing changes and report results to the commercial team. Training in our tools is provided.\n\nEssential:\n- A degree in a numerate subject\n- Excel to an advanced level\n- Some experience with SQL or Python\n\nDesirable:\n- Forecasting or time-series analysis\n- Experience in energy or utilities\n\nSalary £27,500. Permanent, full-time, on-site.",
+    "requirements": {
+      "essential": ["Degree in a numerate subject", "Advanced Excel", "SQL or Python"],
+      "desirable": ["Forecasting or time-series analysis", "Energy or utilities experience"]
+    },
+    "url": "https://example.com/jobs/irwell-graduate-data-analyst",
+    "source": "pasted"
+  }
+]

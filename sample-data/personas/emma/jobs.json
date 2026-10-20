@@ -1,0 +1,36 @@
+[
+  {
+    "id": "emma-job-1",
+    "title": "Junior Front-end Developer",
+    "company": "Lumen Health Tech",
+    "location": "Remote (UK)",
+    "salary": { "min": 32000, "max": 36000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "remote",
+    "description": "Lumen Health Tech builds appointment and messaging tools used by 200 GP surgeries. We are a fully remote team across the UK and are hiring a Junior Front-end Developer.\n\nYou will build features in our React and TypeScript web app, write tests for them, and work closely with our designer. Accessibility matters to us because many of our users are older patients.\n\nEssential:\n- React\n- TypeScript\n- Git and pull request workflows\n- Writing automated tests\n\nDesirable:\n- Next.js\n- Accessibility (WCAG)\n- Working with a design system\n\nSalary £32,000 to £36,000. Permanent, full-time, remote within the UK.",
+    "requirements": {
+      "essential": ["React", "TypeScript", "Git and pull request workflows", "Writing automated tests"],
+      "desirable": ["Next.js", "Accessibility (WCAG)", "Design systems"]
+    },
+    "url": "https://example.com/jobs/lumen-junior-front-end-developer",
+    "source": "pasted"
+  },
+  {
+    "id": "emma-job-2",
+    "title": "Graduate Software Engineer",
+    "company": "Fenwick Payments",
+    "location": "Remote (UK)",
+    "salary": { "min": 30000, "max": 30000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "remote",
+    "description": "Fenwick Payments processes card payments for 5,000 small UK businesses. Our graduate engineers join a two-year programme, rotating through our web, API and data teams.\n\nEssential:\n- Programming experience in any language\n- Interest in how payments work\n- Clear written communication\n\nDesirable:\n- TypeScript or Node.js\n- Experience with REST APIs\n\nSalary £30,000. Permanent, full-time, remote within the UK.",
+    "requirements": {
+      "essential": ["Programming experience", "Interest in payments", "Clear written communication"],
+      "desirable": ["TypeScript or Node.js", "REST APIs"]
+    },
+    "url": "https://example.com/jobs/fenwick-graduate-software-engineer",
+    "source": "pasted"
+  }
+]

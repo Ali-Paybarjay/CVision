@@ -1,0 +1,43 @@
+{
+  "jobId": "daniel-job-1",
+  "score": 74,
+  "strengths": [
+    {
+      "requirement": "Budget and P&L responsibility",
+      "evidence": "Own the store's profit and loss, wage budget and stock levels"
+    },
+    {
+      "requirement": "Managing to KPIs",
+      "evidence": "Report weekly sales, waste and availability KPIs to the area manager"
+    },
+    {
+      "requirement": "Health and safety leadership",
+      "evidence": "IOSH Managing Safely, 2020"
+    }
+  ],
+  "uncoveredRequirements": ["Warehouse or logistics experience", "Warehouse management systems (WMS)"],
+  "gaps": [
+    {
+      "id": "daniel-gap-1",
+      "requirement": "Leading large teams through other managers",
+      "importance": "essential",
+      "kind": "unclear",
+      "detail": "Daniel runs 45 staff, but the CV does not say whether he leads them through department managers."
+    },
+    {
+      "id": "daniel-gap-2",
+      "requirement": "Lean or continuous improvement",
+      "importance": "desirable",
+      "kind": "unclear",
+      "detail": "Cutting stock loss suggests improvement work, but no method is described."
+    },
+    {
+      "id": "daniel-gap-3",
+      "requirement": "Warehouse or logistics experience",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "Stockroom and deliveries work is the closest experience on the CV."
+    }
+  ],
+  "reasoning": "Daniel clearly meets the P&L, KPI and health and safety essentials. The role leads 120 people through shift managers, which is larger than his current team, and the CV does not show whether he manages through other managers. He has no warehouse experience, which is desirable."
+}

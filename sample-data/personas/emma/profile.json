@@ -1,0 +1,60 @@
+{
+  "id": "emma-profile",
+  "fullName": "Emma Walsh",
+  "contact": {
+    "email": "emma.walsh@example.com",
+    "phone": "07700 900303",
+    "location": "Bristol"
+  },
+  "summary": "Junior web developer with a year of commercial experience building React sites for agency clients. Looking for a remote front-end role.",
+  "skills": ["JavaScript", "TypeScript", "React", "Node.js", "HTML", "CSS", "Git", "REST APIs"],
+  "experience": [
+    {
+      "title": "Junior Web Developer",
+      "company": "Copperleaf Digital",
+      "location": "Bristol",
+      "startDate": "2025-03",
+      "endDate": null,
+      "duties": [
+        "Build and maintain React and TypeScript websites for six agency clients",
+        "Turn Figma designs into responsive pages",
+        "Review pull requests with two senior developers"
+      ],
+      "achievements": ["Rebuilt a client's booking form, reducing abandoned bookings by 18%"]
+    },
+    {
+      "title": "Customer Service Advisor",
+      "company": "Lineway Telecom",
+      "location": "Bristol",
+      "startDate": "2021-02",
+      "endDate": "2024-08",
+      "duties": ["Answered broadband and mobile support calls", "Logged faults and followed them up with engineers"],
+      "achievements": ["Top-rated advisor in my team for customer satisfaction, three quarters running"]
+    }
+  ],
+  "education": [
+    {
+      "institution": "Code Harbour",
+      "qualification": "Software Development Bootcamp (12 weeks)",
+      "startDate": "2024-09",
+      "endDate": "2024-12"
+    },
+    {
+      "institution": "University of Exeter",
+      "qualification": "BA",
+      "subject": "English",
+      "startDate": "2017-09",
+      "endDate": "2020-06",
+      "grade": "2:1"
+    }
+  ],
+  "certifications": [],
+  "preferences": {
+    "salary": { "min": 30000, "max": 35000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "location": "Bristol",
+    "workModes": ["remote"],
+    "contractTypes": ["permanent", "contract"],
+    "hours": ["full-time"]
+  },
+  "followUpAnswers": []
+}

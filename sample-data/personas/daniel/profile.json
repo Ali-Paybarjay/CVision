@@ -1,0 +1,66 @@
+{
+  "id": "daniel-profile",
+  "fullName": "Daniel Brooks",
+  "contact": {
+    "email": "daniel.brooks@example.com",
+    "phone": "07700 900404",
+    "location": "Birmingham"
+  },
+  "summary": "Retail store manager with 15 years of experience running large teams and multi-million-pound budgets. Ready for an operations management role in the West Midlands.",
+  "skills": ["Team leadership", "P&L management", "KPI reporting", "Health and safety", "Rota planning", "Recruitment and training", "Stock control"],
+  "experience": [
+    {
+      "title": "Store Manager",
+      "company": "Hartley's Home Stores",
+      "location": "Birmingham",
+      "startDate": "2016-04",
+      "endDate": null,
+      "duties": [
+        "Run a store with 45 staff and a turnover of £9 million a year",
+        "Own the store's profit and loss, wage budget and stock levels",
+        "Report weekly sales, waste and availability KPIs to the area manager"
+      ],
+      "achievements": [
+        "Cut stock loss from 2.1% to 1.3% of sales in two years",
+        "Store of the Year for the Midlands region, 2023"
+      ]
+    },
+    {
+      "title": "Deputy Store Manager",
+      "company": "Hartley's Home Stores",
+      "location": "Wolverhampton",
+      "startDate": "2011-03",
+      "endDate": "2016-03",
+      "duties": ["Managed deliveries, stockroom and a team of 12", "Covered the store manager's role during absences"],
+      "achievements": []
+    },
+    {
+      "title": "Department Supervisor",
+      "company": "Valewood Supermarkets",
+      "location": "Wolverhampton",
+      "startDate": "2009-05",
+      "endDate": "2011-02",
+      "duties": ["Supervised the fresh food department and its team of eight"],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "Chartered Management Institute",
+      "qualification": "Level 5 Diploma in Management and Leadership",
+      "endDate": "2018-07"
+    }
+  ],
+  "certifications": [
+    { "name": "IOSH Managing Safely", "issuer": "IOSH", "year": 2020 },
+    { "name": "Mental Health First Aider", "issuer": "MHFA England", "year": 2022 }
+  ],
+  "preferences": {
+    "salary": { "min": 45000, "max": 55000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "location": "Birmingham",
+    "workModes": ["on-site", "hybrid"],
+    "contractTypes": ["permanent"],
+    "hours": ["full-time"]
+  },
+  "followUpAnswers": []
+}

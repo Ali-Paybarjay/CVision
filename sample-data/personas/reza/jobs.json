@@ -1,0 +1,41 @@
+[
+  {
+    "id": "reza-job-1",
+    "title": "Project Coordinator",
+    "company": "Thames Learning Trust",
+    "location": "London",
+    "salary": { "min": 34000, "max": 37000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "hybrid",
+    "description": "Thames Learning Trust is an education charity running reading and maths programmes in 40 London schools. We need a Project Coordinator to keep our programmes on track.\n\nYou will plan schedules, track budgets and risks, keep schools and funders informed, and support two project managers. You will work from our Southwark office three days a week.\n\nEssential:\n- Coordinating several workstreams at once\n- Clear written and spoken communication with stakeholders\n- Strong Excel and Microsoft Office\n- Excellent organisation\n\nDesirable:\n- PRINCE2 or Agile training\n- Experience with project tools such as Asana or Jira\n- Knowledge of the education sector\n\nSalary £34,000 to £37,000. Permanent, full-time, hybrid.",
+    "requirements": {
+      "essential": [
+        "Coordinating several workstreams at once",
+        "Clear communication with stakeholders",
+        "Strong Excel and Microsoft Office",
+        "Excellent organisation"
+      ],
+      "desirable": ["PRINCE2 or Agile training", "Asana or Jira", "Education sector knowledge"]
+    },
+    "url": "https://example.com/jobs/thames-project-coordinator",
+    "source": "pasted"
+  },
+  {
+    "id": "reza-job-2",
+    "title": "Junior Project Coordinator",
+    "company": "Brightwater Construction",
+    "location": "London",
+    "salary": { "min": 32000, "max": 32000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "on-site",
+    "description": "Brightwater Construction builds schools and community buildings across Greater London. Our project team needs a Junior Project Coordinator based at our Croydon office.\n\nYou will keep project documents up to date, book site meetings, track orders and chase suppliers.\n\nEssential:\n- Good organisation and attention to detail\n- Confident with Excel\n- Clear communication by phone and email\n\nDesirable:\n- Construction or property experience\n- A project management qualification\n\nSalary £32,000. Permanent, full-time, on-site.",
+    "requirements": {
+      "essential": ["Organisation and attention to detail", "Excel", "Clear communication by phone and email"],
+      "desirable": ["Construction or property experience", "Project management qualification"]
+    },
+    "url": "https://example.com/jobs/brightwater-junior-project-coordinator",
+    "source": "pasted"
+  }
+]

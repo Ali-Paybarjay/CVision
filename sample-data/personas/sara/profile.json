@@ -1,0 +1,70 @@
+{
+  "id": "sara-profile",
+  "fullName": "Sara Khan",
+  "contact": {
+    "email": "sara.khan@example.com",
+    "phone": "07700 900101",
+    "location": "Manchester"
+  },
+  "summary": "Data science graduate with hands-on experience cleaning and analysing retail sales data in Python and SQL. Looking for a first analyst role in Manchester.",
+  "skills": ["Python (pandas)", "SQL", "Excel", "Tableau", "R", "Statistics", "Data cleaning"],
+  "experience": [
+    {
+      "title": "Data Analyst Intern",
+      "company": "Northgate Retail Insights",
+      "location": "Manchester",
+      "startDate": "2025-06",
+      "endDate": "2025-09",
+      "duties": [
+        "Cleaned and joined weekly sales data from 120 stores using SQL and Python",
+        "Built Tableau dashboards for the regional sales team"
+      ],
+      "achievements": [
+        "Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes"
+      ]
+    },
+    {
+      "title": "Customer Assistant (part-time)",
+      "company": "Greenway Foods",
+      "location": "Leeds",
+      "startDate": "2022-01",
+      "endDate": "2024-06",
+      "duties": ["Served customers on the tills and the shop floor", "Trained four new starters"],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Manchester",
+      "qualification": "MSc",
+      "subject": "Data Science",
+      "startDate": "2024-09",
+      "endDate": "2025-09",
+      "grade": "Merit"
+    },
+    {
+      "institution": "University of Leeds",
+      "qualification": "BSc",
+      "subject": "Mathematics",
+      "startDate": "2021-09",
+      "endDate": "2024-06",
+      "grade": "2:1"
+    }
+  ],
+  "certifications": [],
+  "preferences": {
+    "salary": { "min": 28000, "max": 32000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "location": "Manchester",
+    "workModes": ["hybrid", "on-site"],
+    "contractTypes": ["permanent"],
+    "hours": ["full-time"]
+  },
+  "followUpAnswers": [
+    {
+      "id": "sara-answer-1",
+      "question": "Your dashboards were used by the regional sales team. How did you explain the results to people who were not analysts?",
+      "answer": "Every Monday I walked the regional managers through the dashboard on a call and wrote a one-page summary in plain English with the three things that changed that week.",
+      "answeredAt": "2026-10-20T18:00:00Z"
+    }
+  ]
+}

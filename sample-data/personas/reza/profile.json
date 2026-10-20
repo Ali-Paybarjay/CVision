@@ -1,0 +1,64 @@
+{
+  "id": "reza-profile",
+  "fullName": "Reza Karimi",
+  "contact": {
+    "email": "reza.karimi@example.com",
+    "phone": "07700 900202",
+    "location": "London"
+  },
+  "summary": "Former secondary school maths teacher and head of year with nine years of planning, organising and leading people. Moving into project coordination, with PRINCE2 Foundation.",
+  "skills": ["Planning and scheduling", "Stakeholder communication", "Excel", "Budget tracking", "Team leadership", "Microsoft Office"],
+  "experience": [
+    {
+      "title": "Maths Teacher and Head of Year 9",
+      "company": "Riverside Academy",
+      "location": "London",
+      "startDate": "2017-09",
+      "endDate": "2026-07",
+      "duties": [
+        "Taught maths to classes of 30 across Key Stages 3 and 4",
+        "Led a team of nine form tutors for a year group of 210 students",
+        "Ran parents' evenings and kept parents updated on progress"
+      ],
+      "achievements": [
+        "Coordinated the move to a new school timetable for 1,100 students and 80 staff, delivered on time",
+        "Managed the year group's £15,000 trips and activities budget"
+      ]
+    },
+    {
+      "title": "Maths Teacher",
+      "company": "Northfield School",
+      "location": "London",
+      "startDate": "2015-09",
+      "endDate": "2017-08",
+      "duties": ["Taught maths to Years 7 to 11", "Organised the school's maths challenge club"],
+      "achievements": ["GCSE maths results in my classes rose from 62% to 71% at grade 4 or above"]
+    }
+  ],
+  "education": [
+    {
+      "institution": "UCL Institute of Education",
+      "qualification": "PGCE",
+      "subject": "Secondary Mathematics",
+      "startDate": "2014-09",
+      "endDate": "2015-07"
+    },
+    {
+      "institution": "University of Kent",
+      "qualification": "BSc",
+      "subject": "Mathematics",
+      "startDate": "2011-09",
+      "endDate": "2014-06",
+      "grade": "2:1"
+    }
+  ],
+  "certifications": [{ "name": "PRINCE2 Foundation", "issuer": "PeopleCert", "year": 2026 }],
+  "preferences": {
+    "salary": { "min": 35000, "max": 40000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "location": "London",
+    "workModes": ["hybrid"],
+    "contractTypes": ["permanent"],
+    "hours": ["full-time"]
+  },
+  "followUpAnswers": []
+}

@@ -1,0 +1,46 @@
+[
+  {
+    "id": "daniel-job-1",
+    "title": "Operations Manager",
+    "company": "Midland Fulfilment Services",
+    "location": "Birmingham",
+    "salary": { "min": 48000, "max": 55000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "on-site",
+    "description": "Midland Fulfilment Services picks, packs and ships online orders for 60 UK retailers from our 200,000 sq ft warehouse near Birmingham Airport. We are looking for an Operations Manager to run our day shift.\n\nYou will lead three shift managers and around 120 operatives, own the shift's budget and KPIs, and keep the site safe. You will also lead improvement projects to raise productivity.\n\nEssential:\n- Leading large teams through other managers\n- Budget and P&L responsibility\n- Managing to KPIs\n- Health and safety leadership\n\nDesirable:\n- Warehouse or logistics experience\n- Lean or continuous improvement methods\n- Warehouse management systems (WMS)\n\nSalary £48,000 to £55,000. Permanent, full-time, on-site.",
+    "requirements": {
+      "essential": [
+        "Leading large teams through other managers",
+        "Budget and P&L responsibility",
+        "Managing to KPIs",
+        "Health and safety leadership"
+      ],
+      "desirable": ["Warehouse or logistics experience", "Lean or continuous improvement", "Warehouse management systems (WMS)"]
+    },
+    "url": "https://example.com/jobs/midland-operations-manager",
+    "source": "pasted"
+  },
+  {
+    "id": "daniel-job-2",
+    "title": "Area Operations Manager",
+    "company": "Corner Coffee Co.",
+    "location": "West Midlands",
+    "salary": { "min": 50000, "max": 50000, "currency": "GBP", "period": "year", "isEstimate": false },
+    "contractType": "permanent",
+    "hours": "full-time",
+    "workMode": "hybrid",
+    "description": "Corner Coffee Co. runs 85 coffee shops across the Midlands. Our Area Operations Manager looks after 12 shops in the West Midlands, travelling between them most days.\n\nEssential:\n- Multi-site or large-store management\n- Coaching and developing managers\n- Strong commercial awareness\n- Full UK driving licence\n\nDesirable:\n- Food and drink or hospitality experience\n\nSalary £50,000 plus car allowance. Permanent, full-time.",
+    "requirements": {
+      "essential": [
+        "Multi-site or large-store management",
+        "Coaching and developing managers",
+        "Commercial awareness",
+        "Full UK driving licence"
+      ],
+      "desirable": ["Food and drink or hospitality experience"]
+    },
+    "url": "https://example.com/jobs/corner-coffee-area-operations-manager",
+    "source": "pasted"
+  }
+]

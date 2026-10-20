@@ -1,0 +1,43 @@
+{
+  "jobId": "emma-job-1",
+  "score": 70,
+  "strengths": [
+    {
+      "requirement": "React",
+      "evidence": "Build and maintain React and TypeScript websites for six agency clients"
+    },
+    {
+      "requirement": "TypeScript",
+      "evidence": "Build and maintain React and TypeScript websites for six agency clients"
+    },
+    {
+      "requirement": "Git and pull request workflows",
+      "evidence": "Review pull requests with two senior developers"
+    }
+  ],
+  "uncoveredRequirements": ["Next.js", "Accessibility (WCAG)"],
+  "gaps": [
+    {
+      "id": "emma-gap-1",
+      "requirement": "Writing automated tests",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Testing is not mentioned anywhere on the CV."
+    },
+    {
+      "id": "emma-gap-2",
+      "requirement": "Accessibility (WCAG)",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "No accessibility work is mentioned, although the booking form rebuild may have involved some."
+    },
+    {
+      "id": "emma-gap-3",
+      "requirement": "Design systems",
+      "importance": "desirable",
+      "kind": "unclear",
+      "detail": "Emma turns Figma designs into pages, but the CV does not say whether she used a design system."
+    }
+  ],
+  "reasoning": "Emma's agency work covers React, TypeScript and pull requests well. Automated testing is essential for this role and is missing from the CV, which holds the score down. Next.js and accessibility are desirable and not shown."
+}

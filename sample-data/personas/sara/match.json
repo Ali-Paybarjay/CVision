@@ -1,0 +1,43 @@
+{
+  "jobId": "sara-job-1",
+  "score": 72,
+  "strengths": [
+    {
+      "requirement": "Strong SQL",
+      "evidence": "Cleaned and joined weekly sales data from 120 stores using SQL and Python"
+    },
+    {
+      "requirement": "Python or R for analysis",
+      "evidence": "Skills: Python (pandas), R; MSc Data Science"
+    },
+    {
+      "requirement": "Dashboards in Power BI or Tableau",
+      "evidence": "Built Tableau dashboards for the regional sales team"
+    }
+  ],
+  "uncoveredRequirements": ["Healthcare or NHS data"],
+  "gaps": [
+    {
+      "id": "sara-gap-1",
+      "requirement": "Clear communication with non-technical stakeholders",
+      "importance": "essential",
+      "kind": "unclear",
+      "detail": "The CV shows dashboards for a sales team but not how results were explained to them."
+    },
+    {
+      "id": "sara-gap-2",
+      "requirement": "Power BI",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "Tableau is on the CV; Power BI is not."
+    },
+    {
+      "id": "sara-gap-3",
+      "requirement": "Git",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "No version control is mentioned."
+    }
+  ],
+  "reasoning": "Sara meets three of the four essentials with clear evidence from her internship and MSc. The fourth, explaining results to non-analysts, is likely but not shown on the CV. She has no healthcare data experience and no Power BI, both desirable."
+}
