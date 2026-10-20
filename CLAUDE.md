@@ -8,7 +8,7 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 
 | Folder | Owner | What is built there |
 |---|---|---|
-| `src/app/page.tsx`, `src/app/dashboard`, `src/features/tracker`, `src/features/account`, `src/shared` | Person 1 | Landing page, dashboard, application tracker, account and data rights, shared code |
+| `src/app/page.tsx`, `src/app/dashboard`, `src/features/tracker`, `src/features/account`, `src/shared`, `.github` | Person 1 | Landing page, dashboard, application tracker, account and data rights, shared code, CI |
 | `src/app/profile`, `src/app/jobs`, `src/features/profile`, `prompts/profile-*` | Person 2 | CV upload, Profile, follow-up questions, job ad parsing, matching |
 | `src/app/tailor`, `src/features/tailor`, `tests/tailor`, `prompts/tailor-*` | Person 3 | Gap questions, tailored CV and cover letter, export, Apply |
 | `src/app/cv-check`, `src/app/interview`, `src/features/cvcheck`, `src/features/interview`, `prompts/cvcheck-*`, `prompts/interview-*` | Person 4 | Free 2-minute CV check, interview practice |
@@ -27,6 +27,7 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 9. **Branches and PRs:** start every task on a new branch from `main`. Run lint and tests before opening a PR. Keep PRs small.
 10. **Tests never call the real model.** Prompt evals run with a separate command.
 11. **CI stays lean:** GitHub Actions runs only on push to `main`, pull requests to `main`, and manual runs (`workflow_dispatch`). End-to-end tests run only on `main` or on PRs labelled `e2e`. A new run cancels the previous one (`concurrency`). Changes that touch only documentation do not run CI.
+12. **Every task has a GitHub Issue.** Name the branch `<area>/<issue number>-<short description>`, where area is `foundation`, `profile`, `tailor`, `cvcheck` or `interview` (e.g. `profile/3-cv-to-profile`), and put `Closes #<issue number>` in the PR description (or `Part of #<n>` when the PR finishes only part of it).
 
 ## Shared building blocks
 
