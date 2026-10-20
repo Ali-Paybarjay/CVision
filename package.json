@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "eval": "vitest run --config vitest.eval.config.mts --passWithNoTests"
   },
   "dependencies": {
