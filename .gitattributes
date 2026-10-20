@@ -1,0 +1,7 @@
+# Keep line endings the same on every teammate's machine.
+* text=auto eol=lf
+*.ico binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
