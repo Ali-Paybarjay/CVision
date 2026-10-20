@@ -8,7 +8,7 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 
 | Folder | Owner | What is built there |
 |---|---|---|
-| `src/app/page.tsx`, `src/app/dashboard`, `src/features/tracker`, `src/features/account`, `src/shared`, `.github` | Person 1 | Landing page, dashboard, application tracker, account and data rights, shared code, CI |
+| `src/app/page.tsx`, `src/app/dashboard`, `src/app/sign-in`, `src/app/sign-up`, `src/app/auth`, `src/app/ui-kit`, `src/features/tracker`, `src/features/account`, `src/shared`, `src/proxy.ts`, `supabase`, `.github` | Person 1 | Landing page, dashboard, application tracker, account and data rights, shared code, database, CI |
 | `src/app/profile`, `src/app/jobs`, `src/features/profile`, `prompts/profile-*` | Person 2 | CV upload, Profile, follow-up questions, job ad parsing, matching |
 | `src/app/tailor`, `src/features/tailor`, `tests/tailor`, `prompts/tailor-*` | Person 3 | Gap questions, tailored CV and cover letter, export, Apply |
 | `src/app/cv-check`, `src/app/interview`, `src/features/cvcheck`, `src/features/interview`, `prompts/cvcheck-*`, `prompts/interview-*` | Person 4 | Free 2-minute CV check, interview practice |
@@ -34,6 +34,11 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 - **Contracts:** `import { ProfileSchema, type Profile } from "@/shared/contracts"`.
 - **Sample data:** `import { personas } from "@/shared/sample-data"` gives Sara, Reza, Emma and Daniel, each with a Profile, two Jobs and a MatchResult.
 - **AI:** `askModel({ feature, prompt, schema, sample })` from `@/shared/ai`, with `loadPrompt("profile-extract", { cv })` to read `prompts/profile-extract.md` and fill its `{{cv}}` placeholder. In mock mode it returns `sample`; in live mode it asks Claude Haiku 5.5 and checks the answer against `schema`. It adds `prompts/_voice.md` unless you pass `voice: false`.
+- **UI kit:** `import { Page, Card, Button, ButtonLink, Field, Input, Textarea, Notice, CvPaper, FitLine } from "@/shared/ui"`. See them all at `/ui-kit`. One `variant="primary"` (Coral) button per page at most. Show the CV inside `CvPaper` (it stays light in dark mode) and mark tailored lines with `FitLine`.
+- **Signed-in user:** `getCurrentUser()` from `@/features/account/current-user` (null when signed out). It reads cookies, so call it inside a component wrapped in `<Suspense>`.
+- **Database:** `createSupabaseServerClient()` from `@/shared/supabase/server` (or `createSupabaseBrowserClient()` in Client Components) acts as the signed-in user, and row-level security limits them to their own rows. Tables: `profiles`, `jobs`, `match_results`, `tailoring_changes`, `interview_sessions`, `applications`, each with `user_id` and the contract object in `data`. Schema changes go in a new file in `supabase/migrations` (create it with `npx supabase migration new <name>`) and need the team's agreement. Both helpers return null until Supabase is connected, so keep a sample-data path.
+- **Usage events:** `track("<area>.<action>", { ...details }, { userId })` from `@/shared/analytics/track`, ideally inside `after()`. Never put CV text or personal details in an event.
+- **Anonymous visitors:** pass `requester: await getAnonymousKey()` to `askModel` in the free CV check, and `requester: { userId }` everywhere else, so daily limits apply.
 - **Brand:** the name and core copy live only in `src/shared/brand.ts`. Colours are role tokens (`bg-canvas`, `bg-surface`, `text-text`, `text-text-muted`, `border-line`, `text-accent`, `bg-cta`, `text-on-cta`, `bg-fit`, `border-fit-bar`…); Tailwind's default palette is switched off, so `bg-blue-500` and similar do not exist. Never use `dark:` variants: the tokens switch by themselves.
 
 ## Commands

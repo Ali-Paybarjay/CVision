@@ -4,6 +4,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 import { DEFAULT_MODEL, getAiMode } from "./config";
 import { loadVoice } from "./prompts";
+import { assertWithinDailyLimit, estimateCostUsd, getUsageStore, LimitReachedError, type Requester } from "./usage";
 
 export type AskModelOptions<S extends z.ZodType> = {
   /** Who is asking, for usage logs and daily limits, e.g. "profile-extract" or "cv-check". */
@@ -17,7 +18,7 @@ export type AskModelOptions<S extends z.ZodType> = {
   /** Add the brand voice from prompts/_voice.md. Default true; set false for pure data extraction. */
   voice?: boolean;
   /** The signed-in user, or an anonymous key for the CV check. Used for daily limits. */
-  requester?: { userId: string } | { anonymousKey: string };
+  requester?: Requester;
   /** Defaults to Claude Haiku 5.5 (AI_MODEL can change the default). */
   model?: string;
   effort?: "low" | "medium" | "high";
@@ -27,7 +28,7 @@ export type AskModelOptions<S extends z.ZodType> = {
 export class AskModelError extends Error {
   constructor(
     message: string,
-    readonly reason: "no-api-key" | "refused" | "invalid-answer",
+    readonly reason: "no-api-key" | "limit-reached" | "refused" | "invalid-answer",
   ) {
     super(message);
     this.name = "AskModelError";
@@ -42,7 +43,8 @@ let client: Anthropic | undefined;
 /**
  * The one way to ask a language model for anything in CVision.
  * In mock mode (the default) it sends nothing and returns `sample`.
- * In live mode it asks Claude for JSON, checks it against `schema`, and asks once more if it does not fit.
+ * In live mode it checks the daily limit, asks Claude for JSON, logs the usage,
+ * checks the answer against `schema`, and asks once more if it does not fit.
  */
 export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>): Promise<z.output<S>> {
   if (getAiMode() === "mock") {
@@ -52,42 +54,84 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new AskModelError("AI_MODE is live but ANTHROPIC_API_KEY is not set.", "no-api-key");
   }
+  try {
+    await assertWithinDailyLimit(options.requester);
+  } catch (error) {
+    if (error instanceof LimitReachedError) throw new AskModelError(error.message, "limit-reached");
+    throw error;
+  }
   client ??= new Anthropic();
 
+  const model = options.model ?? DEFAULT_MODEL;
   const system = options.voice === false ? baseInstructions : `${baseInstructions}\n\n${await loadVoice()}`;
+  const format = zodOutputFormat(options.schema);
   let prompt = options.prompt;
+  let problem = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const response = await client.messages.parse({
-        model: options.model ?? DEFAULT_MODEL,
-        max_tokens: options.maxTokens ?? 16000,
-        system,
-        messages: [{ role: "user", content: prompt }],
-        output_config: {
-          effort: options.effort ?? "medium",
-          format: zodOutputFormat(options.schema),
-        },
-      });
+    // API errors (limits, outages) are retried by the SDK itself and reach the caller unchanged.
+    const response = await client.messages.create({
+      model,
+      max_tokens: options.maxTokens ?? 16000,
+      system,
+      messages: [{ role: "user", content: prompt }],
+      output_config: { effort: options.effort ?? "medium", format },
+    });
 
-      if (response.stop_reason === "refusal") {
-        throw new AskModelError(`The model declined the ${options.feature} request.`, "refused");
-      }
-      if (response.parsed_output != null) {
-        return response.parsed_output as z.output<S>;
-      }
-      prompt = `${options.prompt}\n\nYour previous answer was incomplete. Answer again with the full JSON.`;
-    } catch (error) {
-      // API errors (limits, outages) are already retried by the SDK; only a malformed answer is retried here.
-      if (error instanceof AskModelError || error instanceof Anthropic.APIError) {
-        throw error;
-      }
-      if (attempt === 2) {
-        throw new AskModelError(`The ${options.feature} answer did not match its schema: ${String(error)}`, "invalid-answer");
-      }
-      prompt = `${options.prompt}\n\nYour previous answer did not match the required format:\n${String(error)}\nAnswer again with JSON that matches it exactly.`;
+    if (response.stop_reason === "refusal") {
+      await logUsage(options, model, response.usage, false);
+      throw new AskModelError(`The model declined the ${options.feature} request.`, "refused");
     }
+
+    const text = response.content.find((block) => block.type === "text")?.text;
+    const result = text === undefined ? null : parseJson(options.schema, text);
+    await logUsage(options, model, response.usage, result?.success === true);
+
+    if (result?.success) {
+      return result.data;
+    }
+
+    problem = result ? result.problem : `the answer stopped early (${response.stop_reason})`;
+    prompt = `${options.prompt}\n\nYour previous answer did not match the required format: ${problem}\nAnswer again with complete JSON that matches it exactly.`;
   }
 
-  throw new AskModelError(`The ${options.feature} answer was incomplete twice.`, "invalid-answer");
+  throw new AskModelError(`The ${options.feature} answer did not match its schema: ${problem}`, "invalid-answer");
+}
+
+function parseJson<S extends z.ZodType>(
+  schema: S,
+  text: string,
+): { success: true; data: z.output<S> } | { success: false; problem: string } {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { success: false, problem: "it was not valid JSON" };
+  }
+  const result = schema.safeParse(value);
+  if (result.success) return { success: true, data: result.data };
+  const issues = result.error.issues.slice(0, 5).map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`);
+  return { success: false, problem: issues.join("; ") };
+}
+
+async function logUsage(
+  options: AskModelOptions<z.ZodType>,
+  model: string,
+  usage: Anthropic.Usage,
+  ok: boolean,
+): Promise<void> {
+  try {
+    await getUsageStore().record({
+      requester: options.requester,
+      feature: options.feature,
+      model,
+      inputTokens: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+      outputTokens: usage.output_tokens,
+      costUsd: estimateCostUsd(model, usage),
+      ok,
+    });
+  } catch (error) {
+    // A logging failure must never break the user's request.
+    console.error("askModel: could not record usage", error);
+  }
 }
