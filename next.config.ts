@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // askModel reads prompts/*.md at runtime, so ship them with every server function.
+  outputFileTracingIncludes: {
+    "/**": ["./prompts/**/*.md"],
+  },
   turbopack: {
     rules: {
       "*.css": {

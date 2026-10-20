@@ -12,4 +12,6 @@ export const brand = {
     cvCheck: "Free 2-minute CV check",
     cvCheckQuestion: "Is your CV ready for UK employers?",
   },
+  /** Never write these anywhere: app copy, AI output, invitations or slides. */
+  bannedPhrases: ["guaranteed", "dream job", "beat the bots", "hack the ATS", "revolutionary", "10x", "effortless"],
 } as const;

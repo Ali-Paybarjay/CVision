@@ -28,8 +28,16 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 10. **Tests never call the real model.** Prompt evals run with a separate command.
 11. **CI stays lean:** GitHub Actions runs only on push to `main`, pull requests to `main`, and manual runs (`workflow_dispatch`). End-to-end tests run only on `main` or on PRs labelled `e2e`. A new run cancels the previous one (`concurrency`). Changes that touch only documentation do not run CI.
 
+## Shared building blocks
+
+- **Contracts:** `import { ProfileSchema, type Profile } from "@/shared/contracts"`.
+- **Sample data:** `import { personas } from "@/shared/sample-data"` gives Sara, Reza, Emma and Daniel, each with a Profile, two Jobs and a MatchResult.
+- **AI:** `askModel({ feature, prompt, schema, sample })` from `@/shared/ai`, with `loadPrompt("profile-extract", { cv })` to read `prompts/profile-extract.md` and fill its `{{cv}}` placeholder. In mock mode it returns `sample`; in live mode it asks Claude Haiku 5.5 and checks the answer against `schema`. It adds `prompts/_voice.md` unless you pass `voice: false`.
+- **Brand:** the name and core copy live only in `src/shared/brand.ts`. Colours are role tokens (`bg-canvas`, `bg-surface`, `text-text`, `text-text-muted`, `border-line`, `text-accent`, `bg-cta`, `text-on-cta`, `bg-fit`, `border-fit-bar`…); Tailwind's default palette is switched off, so `bg-blue-500` and similar do not exist. Never use `dark:` variants: the tokens switch by themselves.
+
 ## Commands
 
 - `npm run dev`: start the app at http://localhost:3000
-- `npm run lint`: lint
+- `npm run lint`, `npm run typecheck`, `npm test`: run all three before every PR
+- `npm run eval`: prompt evals (`*.eval.ts`) against the real model; needs `ANTHROPIC_API_KEY` and costs money
 - `npm run build`: production build
