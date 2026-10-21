@@ -3,7 +3,7 @@
 //
 // For each fixture it reports: start-up time (stages 1 to 3), the spread of each scoring dimension when every
 // sample answer is scored three times (target: 1 point or less), and estimated tokens and cost per session.
-// Set INTERVIEW_EVAL_REVIEW_MODEL=claude-opus-5-5 to run stage 3 on Opus and compare it with Sonnet.
+// Set INTERVIEW_EVAL_REVIEW_MODEL=claude-sonnet-5-5 to run stage 3 on Sonnet and compare it with Haiku.
 import { describe, expect, it } from "vitest";
 import type { TechnicalScores } from "./contracts";
 import { addAnswer, applyAnalysis, applyFollowUpDecision, applyQuestions, askQuestion, createSession } from "./engine/session";
@@ -41,7 +41,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("technical interview engine, liv
         const sample = fixture.answers[question.id];
         session = askQuestion(session, question.id, at(), `${question.id}-ask`);
         session = addAnswer(session, { questionId: question.id, kind: "main", text: sample.main, startedAt: at(), submittedAt: at(), id: `${question.id}-a` });
-        const { decision, usage, provenance } = await decideFollowUp(session, question.id, overrides);
+        const { decision, usage, provenance } = await decideFollowUp(session, question.id, { overrides });
         session = applyFollowUpDecision(session, decision, at(), `${question.id}-fu`, usage, provenance);
         if (decision.askFollowUp) {
           session = addAnswer(session, {
@@ -56,7 +56,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("technical interview engine, liv
 
         const scores: TechnicalScores[] = [];
         for (let run = 0; run < runs; run++) {
-          const result = await evaluateAnswer(session, question.id, overrides);
+          const result = await evaluateAnswer(session, question.id, { overrides });
           scores.push(result.evaluation.scores);
           if (run === 0) session = { ...session, evaluations: [...(session.evaluations ?? []), result.evaluation], usage: [...(session.usage ?? []), result.usage] };
         }
@@ -65,7 +65,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("technical interview engine, liv
         ) as Record<keyof TechnicalScores, number>;
       }
 
-      const report = await writeReport(session, overrides);
+      const report = await writeReport(session, { overrides });
       // One session: the live start-up, then one follow-up decision and one score per question, and the report.
       const usage = [...(startup.usage ?? []), ...(session.usage ?? []), report.usage];
       const totals = usageTotals(usage);

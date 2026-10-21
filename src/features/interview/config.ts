@@ -13,19 +13,22 @@ export type StageSettings = {
 
 /**
  * Model, effort and max_tokens for every stage, in one place.
+ * Every stage runs on Haiku to keep a session to a few cents: the team has about $10 of credit.
  * These are starting points: tune them with the eval (`npm run eval`, src/features/interview/interview.eval.ts).
+ * If the eval shows a stage needs a stronger model (generate is the most likely), move only that stage to Sonnet.
  */
 export const stageConfig: Record<StageName, StageSettings> = {
-  analyse: { prompt: "interview-analyse", model: "claude-sonnet-5-5", effort: "medium", maxTokens: 8000 },
-  generate: { prompt: "interview-generate-technical", model: "claude-sonnet-5-5", effort: "high", maxTokens: 16000 },
-  // claude-opus-5-5 is worth trialling here, so that a different model checks the generator's work.
-  // Compare the two with the eval: INTERVIEW_EVAL_REVIEW_MODEL=claude-opus-5-5 npm run eval
-  review: { prompt: "interview-review", model: "claude-sonnet-5-5", effort: "high", maxTokens: 16000 },
+  analyse: { prompt: "interview-analyse", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
+  generate: { prompt: "interview-generate-technical", model: "claude-haiku-5-5", effort: "high", maxTokens: 16000 },
+  // A stronger model is worth trialling here, so that a different model checks the generator's work.
+  // Compare with the eval: INTERVIEW_EVAL_REVIEW_MODEL=claude-sonnet-5-5 npm run eval
+  review: { prompt: "interview-review", model: "claude-haiku-5-5", effort: "high", maxTokens: 16000 },
   // At low effort Haiku can let reasoning leak into its reply; the code falls back to the planned text.
   // If tests show quality problems, raise effort to medium.
   followUp: { prompt: "interview-followup", model: "claude-haiku-5-5", effort: "low", maxTokens: 2000 },
-  evaluate: { prompt: "interview-evaluate-technical", model: "claude-sonnet-5-5", effort: "high", maxTokens: 8000 },
-  report: { prompt: "interview-report", model: "claude-sonnet-5-5", effort: "medium", maxTokens: 8000 },
+  // The eval's target is a spread of 1 point or less per dimension; raise effort to high if medium misses it.
+  evaluate: { prompt: "interview-evaluate-technical", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
+  report: { prompt: "interview-report", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
 };
 
 /**
@@ -64,6 +67,10 @@ export const levelDescriptions: Record<LevelBand, string> = {
 export const answerGuide = { minWords: 150, maxWords: 300, suggestedMinutes: 4 };
 
 export const limits = {
+  /** Longest job ad, CV and single answer the lab API accepts, in characters, so one request cannot run up a large bill. */
+  jobDescriptionMaxChars: 15_000,
+  cvMaxChars: 20_000,
+  answerMaxChars: 3_000,
   questionMaxWords: 80,
   followUpMaxWords: 40,
   quoteMaxWords: 25,
