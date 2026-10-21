@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ProfileSchema, type Profile, type WorkExperience } from "@/shared/contracts";
 import { uniqueLines } from "./cv-extraction";
+import { phoneProblem, tidyPhone } from "./phone";
 
 // The review step: the user checks every item read from their CV, corrects it if needed and approves it.
 // Nothing is saved until every item is approved (You approve everything). Pure functions, so the
@@ -68,7 +69,7 @@ export function draftFromProfile(profile: Profile): ReviewDraft {
     contact: entry("contact", {
       fullName: profile.fullName,
       email: profile.contact.email ?? "",
-      phone: profile.contact.phone ?? "",
+      phone: tidyPhone(profile.contact.phone ?? ""),
       location: profile.contact.location ?? "",
       linkedIn: profile.contact.linkedIn ?? "",
     }),
@@ -179,7 +180,7 @@ export function profileFromDraft(draft: ReviewDraft, base: Profile): Profile {
     fullName: contact.fullName.trim(),
     contact: {
       email: optional(contact.email),
-      phone: optional(contact.phone),
+      phone: optional(tidyPhone(contact.phone)),
       location,
       linkedIn: normaliseLink(contact.linkedIn),
     },
@@ -214,6 +215,8 @@ export function validateContact(value: ContactDraft): FieldErrors {
   if (value.email.trim() && !z.email().safeParse(value.email.trim()).success) {
     errors.email = "Check the email address, for example name@example.com.";
   }
+  const phone = phoneProblem(value.phone);
+  if (phone) errors.phone = phone;
   const link = normaliseLink(value.linkedIn);
   if (link !== undefined && !isWebLink(link)) {
     errors.linkedIn = "Check the link, for example https://www.linkedin.com/in/your-name.";

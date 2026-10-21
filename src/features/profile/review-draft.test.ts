@@ -132,6 +132,19 @@ describe("review draft", () => {
     expect(draft.contact.errors.linkedIn).toBeDefined();
   });
 
+  it("tidies the phone number from the CV and from the user, and won't approve one that can't be right", () => {
+    const fromCv: Profile = { ...sara, contact: { ...sara.contact, phone: "07700900101" } };
+    expect(draftFromProfile(fromCv).contact.value.phone).toBe("07700 900101");
+
+    let draft = apply(draftFromProfile(sara), { type: "edit-contact", change: { phone: "+44 (0)7700 900 101" } }, { type: "approve", key: "contact" });
+    expect(draft.contact.approved).toBe(true);
+    expect(profileFromDraft(approveAll(draft), sara).contact.phone).toBe("+44 7700 900101");
+
+    draft = apply(draft, { type: "edit-contact", change: { phone: "0770 090" } }, { type: "approve", key: "contact" });
+    expect(draft.contact.approved).toBe(false);
+    expect(draft.contact.errors.phone).toBe("Check the phone number, for example 07700 900101.");
+  });
+
   it("checks a certificate's year", () => {
     const draft = apply(
       draftFromProfile(personas.reza.profile),

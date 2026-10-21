@@ -17,6 +17,7 @@ import {
   type ReviewAction,
   type ReviewDraft,
 } from "../review-draft";
+import { tidyPhone } from "../phone";
 import { count, formatPeriod } from "./format";
 import { Button, CheckIcon, cn, ErrorIcon, Field, Input, Notice, Textarea } from "./kit";
 import { Steps } from "./steps";
@@ -484,7 +485,11 @@ function EducationFields({ value, errors, onChange }: FieldsProps<EducationDraft
             <Input {...props} value={value.institution} onChange={(event) => onChange({ institution: event.target.value })} />
           )}
         </Field>
-        <Field label="Grade (optional)" hint="For example 2:1 or Merit" error={errors.grade}>
+        <Field
+          label="Grade (optional)"
+          hint="As on your certificate. Degrees: First, 2:1, 2:2 or Third. Master’s: Distinction, Merit or Pass."
+          error={errors.grade}
+        >
           {(props) => <Input {...props} value={value.grade} onChange={(event) => onChange({ grade: event.target.value })} />}
         </Field>
       </div>
@@ -639,7 +644,9 @@ function SkillsEditor({ list, onChange }: { list: string[]; onChange: (list: str
 // --- Summaries --------------------------------------------------------------------------------
 
 function contactSummary(value: ContactDraft): string {
-  return [value.fullName, value.email, value.phone, value.location, value.linkedIn].filter((part) => part.trim()).join(" · ");
+  // Non-breaking spaces keep the phone number on one line on a narrow screen.
+  const phone = tidyPhone(value.phone).replace(/ /g, " ");
+  return [value.fullName, value.email, phone, value.location, value.linkedIn].filter((part) => part.trim()).join(" · ");
 }
 
 function jobTitle(value: ExperienceDraft): string {
@@ -664,7 +671,12 @@ function courseTitle(value: EducationDraft): string {
 
 function educationSummary(value: EducationDraft): string {
   return (
-    [value.institution, formatPeriod(value.startDate || undefined, value.current ? null : value.endDate || undefined), value.grade]
+    [
+      value.institution,
+      formatPeriod(value.startDate || undefined, value.current ? null : value.endDate || undefined),
+      // Labelled, so "2:1" or "Merit" on its own isn't a puzzle.
+      value.grade.trim() && `Grade: ${value.grade.trim()}`,
+    ]
       .filter((part) => part?.trim())
       .join(" · ") || "No details."
   );
