@@ -20,7 +20,7 @@ Ask the user which of the four builders they are if it is not clear, then work o
 ## Language
 
 - **Persian (Farsi) for the team.** Everything teammates read on GitHub is written in Persian: issue and PR titles and descriptions, comments, review comments, and commit messages. Reply to the user in Persian too.
-- **PR titles:** `#<PR number> · <author> · <goal>`, where the goal is one short, plain Persian sentence on what the PR does for the app, e.g. `#27 · شایان · رزومه را می‌خواند، Profile می‌سازد و پرسش تکمیلی می‌پرسد`. When you open a PR, write only the goal as its title: the PR title workflow (`.github/workflows/pr-title.yml`) adds the number and the author's name.
+- **PR titles:** `#<PR number> · <author> · <goal>`, where the goal is one short, plain Persian sentence on what the PR does for the app, e.g. `#27 · شایان · رزومه را می‌خواند، Profile می‌سازد و پرسش تکمیلی می‌پرسد`. When you open a PR, write only the goal as its title: the PR title workflow (`.github/workflows/pr-title.yml`) adds the number and the author's name, and corrects them if they are wrong. Nobody types them by hand.
 - **English for the product and the code.** Code, identifiers, file, folder and branch names (rule 12), prompts, and everything users see in the app stay in English; app copy and AI output are UK English, as the brand requires.
 
 ## Who owns what
