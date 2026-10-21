@@ -1,7 +1,7 @@
 // The six stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
 // against the stage's schema (askModel retries once, then fails clearly) and records estimated usage.
 import "server-only";
-import { askModel, AskModelError, getAiMode, loadPrompt } from "@/shared/ai";
+import { askModel, AskModelError, getAiMode, loadPrompt, type Requester } from "@/shared/ai";
 import {
   answerGuide,
   defaultComposition,
@@ -55,6 +55,9 @@ import { estimateUsage } from "./usage";
 /** Overrides for one stage's settings, used by the eval to compare models. */
 export type StageOverrides = Partial<Record<StageName, Partial<StageSettings>>>;
 
+/** How a stage runs: setting overrides for the eval, and who is asking, for askModel's daily limits. */
+export type StageRun = { overrides?: StageOverrides; requester?: Requester };
+
 export class InterviewStageError extends Error {
   constructor(message: string) {
     super(message);
@@ -89,10 +92,10 @@ async function callStage<T>(options: {
   schema: Parameters<typeof askModel>[0]["schema"];
   sample: unknown;
   voice: boolean;
-  overrides?: StageOverrides;
+  run: StageRun;
   questionId?: string;
 }): Promise<{ output: T; usage: StageUsage; provenance: Provenance }> {
-  const settings = settingsFor(options.stage, options.overrides);
+  const settings = settingsFor(options.stage, options.run.overrides);
   const prompt = await loadInterviewPrompt(settings.prompt, options.values);
   const output = (await askModel({
     feature: settings.prompt,
@@ -103,6 +106,7 @@ async function callStage<T>(options: {
     model: settings.model,
     effort: settings.effort,
     maxTokens: settings.maxTokens,
+    requester: options.run.requester,
   })) as T;
   const system = options.voice ? await loadPrompt("_voice") : "";
   const usage = estimateUsage({
@@ -125,7 +129,7 @@ function sampleFixture(jobId: string) {
 }
 
 /** Stage 1: analyse the role and the candidate. Creates the session. */
-export async function analyseStep(inputs: InterviewInputs, options: { id: string; startedAt: string; overrides?: StageOverrides }): Promise<InterviewSession> {
+export async function analyseStep(inputs: InterviewInputs, options: { id: string; startedAt: string } & StageRun): Promise<InterviewSession> {
   const fixture = sampleFixture(inputs.jobId);
   const { output, usage, provenance } = await callStage<AnalyseOutput>({
     stage: "analyse",
@@ -137,7 +141,7 @@ export async function analyseStep(inputs: InterviewInputs, options: { id: string
     schema: analyseOutputSchema(inputs.jobDescription, inputs.cv),
     sample: fixture.analyse,
     voice: false,
-    overrides: options.overrides,
+    run: options,
   });
   const session = createSession({ id: options.id, jobId: inputs.jobId, startedAt: options.startedAt, mode: getAiMode() });
   return applyAnalysis(session, { ...output, composition: defaultComposition }, usage, provenance);
@@ -222,7 +226,7 @@ function toDraft(question: TechnicalInterviewQuestion): DraftQuestion {
 }
 
 /** Stage 2: blueprint and questions. */
-export async function generateStep(session: InterviewSession, inputs: InterviewInputs, overrides?: StageOverrides): Promise<InterviewSession> {
+export async function generateStep(session: InterviewSession, inputs: InterviewInputs, run: StageRun = {}): Promise<InterviewSession> {
   const context = questionSetContext(session, inputs);
   const { output, usage, provenance } = await callStage<GenerateOutput>({
     stage: "generate",
@@ -230,14 +234,14 @@ export async function generateStep(session: InterviewSession, inputs: InterviewI
     schema: generateOutputSchema(context),
     sample: sampleFixture(session.jobId).generate,
     voice: false,
-    overrides,
+    run,
   });
   const questions = output.questions.map((q) => toTechnicalQuestion(q, context));
   return applyQuestions(session, { blueprint: output.blueprint, questions }, usage, provenance);
 }
 
 /** Stage 3: a separate call reviews the whole set and rewrites what fails the checklist. */
-export async function reviewStep(session: InterviewSession, inputs: InterviewInputs, overrides?: StageOverrides): Promise<InterviewSession> {
+export async function reviewStep(session: InterviewSession, inputs: InterviewInputs, run: StageRun = {}): Promise<InterviewSession> {
   const context = questionSetContext(session, inputs);
   if (!session.blueprint || session.questions.length === 0) throw new InterviewStageError("There are no questions to review yet.");
   const { output, usage, provenance } = await callStage<ReviewOutput>({
@@ -250,7 +254,7 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
     schema: reviewOutputSchema(context),
     sample: sampleFixture(session.jobId).review,
     voice: false,
-    overrides,
+    run,
   });
   const questions = output.questions.map((q) => toTechnicalQuestion(q, context));
   return applyQuestions(session, { blueprint: output.blueprint, questions, changelog: output.changelog }, usage, provenance);
@@ -259,14 +263,14 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
 /** Stages 1 to 3 back to back, for the eval. The page calls them one by one to show progress. */
 export async function runStartup(
   inputs: InterviewInputs,
-  options: { id: string; startedAt: string; overrides?: StageOverrides; onProgress?: (stage: "analyse" | "generate" | "review") => void },
+  options: { id: string; startedAt: string; onProgress?: (stage: "analyse" | "generate" | "review") => void } & StageRun,
 ): Promise<InterviewSession> {
   options.onProgress?.("analyse");
   let session = await analyseStep(inputs, options);
   options.onProgress?.("generate");
-  session = await generateStep(session, inputs, options.overrides);
+  session = await generateStep(session, inputs, options);
   options.onProgress?.("review");
-  return reviewStep(session, inputs, options.overrides);
+  return reviewStep(session, inputs, options);
 }
 
 function findQuestion(session: InterviewSession, questionId: string): TechnicalInterviewQuestion {
@@ -317,7 +321,7 @@ export function settleFollowUp(question: TechnicalInterviewQuestion, output: Fol
 export async function decideFollowUp(
   session: InterviewSession,
   questionId: string,
-  overrides?: StageOverrides,
+  run: StageRun = {},
 ): Promise<{ decision: FollowUpDecision; usage?: StageUsage; provenance?: Provenance }> {
   const question = findQuestion(session, questionId);
   const existing = decisionFor(session, questionId);
@@ -344,7 +348,7 @@ export async function decideFollowUp(
       schema: FollowUpOutputSchema,
       sample: mockFollowUpDecision(question, session.jobId, main),
       voice: false,
-      overrides,
+      run,
       questionId,
     });
     return { decision: settleFollowUp(question, output), usage, provenance };
@@ -354,7 +358,7 @@ export async function decideFollowUp(
     const decision = settleFollowUp(question, null);
     if (!(error instanceof AskModelError) || error.reason !== "invalid-answer") return { decision };
     // The model was asked twice and both answers were rejected: record what that cost and which prompt ran.
-    const settings = settingsFor("followUp", overrides);
+    const settings = settingsFor("followUp", run.overrides);
     const prompt = await loadInterviewPrompt(settings.prompt, followUpValues).catch(() => null);
     if (!prompt) return { decision };
     const once = estimateUsage({ stage: "followUp", model: settings.model, input: prompt.text, extraInputChars: askModelInstructionsChars, output: {}, questionId });
@@ -380,7 +384,7 @@ export function buildTranscript(session: InterviewSession, questionId: string): 
 export async function evaluateAnswer(
   session: InterviewSession,
   questionId: string,
-  overrides?: StageOverrides,
+  run: StageRun = {},
 ): Promise<{ evaluation: AnswerEvaluation; usage: StageUsage; provenance: Provenance }> {
   const question = findQuestion(session, questionId);
   const role = session.roleProfile;
@@ -407,7 +411,7 @@ export async function evaluateAnswer(
     schema: evaluateOutputSchema({ lookForIds: question.lookFors.map((l) => l.id), mainAnswer: main, followUpAnswer: followUp, followUpAsked: asked }),
     sample: mockEvaluation(session, question),
     voice: true,
-    overrides,
+    run,
     questionId,
   });
 
@@ -436,7 +440,7 @@ export async function evaluateAnswer(
 /** Stage 6: the report. Numbers come from code; the model writes the verdict, priorities and notes. */
 export async function writeReport(
   session: InterviewSession,
-  overrides?: StageOverrides,
+  run: StageRun = {},
 ): Promise<{ report: InterviewReport; usage: StageUsage; provenance: Provenance }> {
   const role = session.roleProfile;
   const candidate = session.candidateProfile;
@@ -486,7 +490,7 @@ export async function writeReport(
     schema: reportOutputSchema({ levelGap, lowConfidenceIds }),
     sample: mockReport(session, { overall, readiness, levelGap, lowConfidenceIds }),
     voice: true,
-    overrides,
+    run,
   });
 
   const report: InterviewReport = {

@@ -22,12 +22,13 @@ import {
   type QuestionSetContext,
 } from "./checks";
 import { IdSchema } from "@/shared/contracts";
+import { limits } from "../config";
 
 /** What the engine needs to start a session: the job ad and the CV as text. */
 export const InterviewInputsSchema = z.object({
   jobId: IdSchema,
-  jobDescription: z.string().min(1),
-  cv: z.string().min(1),
+  jobDescription: z.string().min(1).max(limits.jobDescriptionMaxChars),
+  cv: z.string().min(1).max(limits.cvMaxChars),
   /** Essential and desirable lists already parsed from a Job, or null for a pasted ad. */
   parsedRequirements: z.string().nullable(),
 });

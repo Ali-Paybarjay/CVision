@@ -5,7 +5,7 @@
 // reload resumes exactly where it stopped, and finished questions are scored in the background.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { AiMode } from "@/shared/ai/config";
-import { answerGuide } from "@/features/interview/config";
+import { answerGuide, limits } from "@/features/interview/config";
 import type { AnswerEvaluation, FollowUpDecision, InterviewReport, InterviewSession, StageUsage } from "@/features/interview/contracts";
 import {
   addAnswer,
@@ -233,11 +233,11 @@ function Setup({ mode, sources }: { mode: AiMode; sources: LabSource[] }) {
         <div className="grid gap-3 md:grid-cols-2">
           <label className="block">
             <span className="text-sm font-semibold">Job ad</span>
-            <textarea className="mt-1 h-56 w-full rounded-md border border-text-muted bg-surface p-2" value={jobText} onChange={(e) => setJobText(e.target.value)} />
+            <textarea className="mt-1 h-56 w-full rounded-md border border-text-muted bg-surface p-2" maxLength={limits.jobDescriptionMaxChars} value={jobText} onChange={(e) => setJobText(e.target.value)} />
           </label>
           <label className="block">
             <span className="text-sm font-semibold">CV</span>
-            <textarea className="mt-1 h-56 w-full rounded-md border border-text-muted bg-surface p-2" value={cvText} onChange={(e) => setCvText(e.target.value)} />
+            <textarea className="mt-1 h-56 w-full rounded-md border border-text-muted bg-surface p-2" maxLength={limits.cvMaxChars} value={cvText} onChange={(e) => setCvText(e.target.value)} />
           </label>
         </div>
       )}
@@ -431,6 +431,7 @@ function AnswerForm({ questionId, kind, sample }: { questionId: string; kind: "m
         <span className="text-sm font-semibold">{kind === "main" ? "Your answer" : "Your answer to the follow-up"}</span>
         <textarea
           className="mt-1 h-48 w-full rounded-md border border-text-muted bg-surface p-2"
+          maxLength={limits.answerMaxChars}
           value={text}
           onFocus={markStart}
           onChange={(event) => {
