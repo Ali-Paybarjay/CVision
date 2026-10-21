@@ -17,6 +17,11 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 
 Ask the user which of the four builders they are if it is not clear, then work only in that person's folders.
 
+## Language
+
+- **Persian (Farsi) for the team.** Everything teammates read on GitHub is written in Persian: issue and PR titles and descriptions, comments, review comments, and commit messages. Reply to the user in Persian too.
+- **English for the product and the code.** Code, identifiers, file, folder and branch names (rule 12), prompts, and everything users see in the app stay in English; app copy and AI output are UK English, as the brand requires.
+
 ## Who owns what
 
 | Folder | Owner | What is built there |
