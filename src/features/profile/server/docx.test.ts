@@ -66,6 +66,26 @@ describe("wordXmlToText", () => {
     const xml = body(p(`<w:del><w:r><w:delText>old words</w:delText></w:r></w:del>` + r("new words")));
     expect(wordXmlToText(xml)).toBe("new words");
   });
+
+  it("keeps the text after an empty, self-closing tab stop list", () => {
+    const tabStops = '<w:tabs><w:tab w:val="right" w:pos="9638"/></w:tabs>';
+    const xml = body(p(r("Sara Khan"), "<w:tabs/>") + p(r("Data analyst"), tabStops));
+    expect(wordXmlToText(xml)).toBe("Sara Khan\nData analyst");
+  });
+
+  // Each of these took seconds with the old patterns, which rescanned the rest of the text for every broken tag.
+  it.each([
+    ["text tags", "<w:t ".repeat(40_000)],
+    ["paragraph tags", "<w:p ".repeat(40_000)],
+    ["line breaks", "<w:br ".repeat(40_000)],
+    ["text box copies", "<mc:Fallback>".repeat(20_000)],
+    ["field codes", "<w:instrText>".repeat(20_000)],
+    ["tab stop lists", "<w:tabs>".repeat(20_000)],
+  ])("reads a long run of unclosed %s in linear time", (_, broken) => {
+    const started = performance.now();
+    expect(wordXmlToText(body(p(r("Sara Khan")) + broken))).toBe("Sara Khan");
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe("extractDocxText", () => {
@@ -80,6 +100,21 @@ describe("extractDocxText", () => {
     ]);
 
     expect(extractDocxText(docx)).toBe("Daniel Brooks\n\nWORK EXPERIENCE");
+  });
+
+  it("reads at most six page headers", () => {
+    const headerXml = (text: string) =>
+      `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${p(r(text))}</w:hdr>`;
+    const headers = Array.from({ length: 7 }, (_, index) => ({
+      name: `word/header${index + 1}.xml`,
+      data: headerXml(`Header ${index + 1}`),
+    }));
+    const docx = writeZip([{ name: "word/document.xml", data: body(p(r("Body"))) }, ...headers]);
+
+    const text = extractDocxText(docx);
+
+    expect(text).toContain("Header 6");
+    expect(text).not.toContain("Header 7");
   });
 
   it("refuses a ZIP archive with no Word document in it", () => {

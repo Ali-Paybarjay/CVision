@@ -21,16 +21,29 @@ type ReadZipOptions = {
   include: (name: string) => boolean;
   /** The largest an unpacked entry may be, so a small file cannot unpack into gigabytes. */
   maxEntryBytes: number;
+  /** The most all unpacked entries may add up to, so many entries cannot do it together either. */
+  maxTotalBytes: number;
+  /** The most entries the archive may list. A Word file has a few dozen. */
+  maxEntries?: number;
 };
 
 /** Unpacks the entries of a ZIP archive that `include` asks for, keyed by name. */
-export function readZip(bytes: Uint8Array, { include, maxEntryBytes }: ReadZipOptions): Map<string, Uint8Array> {
+export function readZip(
+  bytes: Uint8Array,
+  { include, maxEntryBytes, maxTotalBytes, maxEntries = 1000 }: ReadZipOptions,
+): Map<string, Uint8Array> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const end = findEndOfCentralDirectory(view);
   const entryCount = view.getUint16(end + 10, true);
+  if (entryCount > maxEntries) throw new ZipError("The archive holds too many files.");
   let offset = view.getUint32(end + 16, true);
   const decoder = new TextDecoder();
   const files = new Map<string, Uint8Array>();
+  // A name listed twice, or one block of packed data listed under two names, is how a small archive
+  // is made to unpack into far more than its size. Real Word files do neither.
+  const names = new Set<string>();
+  const usedRanges: Array<{ start: number; end: number }> = [];
+  let unpackedBytes = 0;
 
   for (let index = 0; index < entryCount; index++) {
     assertInside(view, offset, 46);
@@ -49,9 +62,14 @@ export function readZip(bytes: Uint8Array, { include, maxEntryBytes }: ReadZipOp
     const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
     offset += 46 + nameLength + extraLength + commentLength;
 
+    if (names.has(name)) throw new ZipError(`The archive lists ${name} twice.`);
+    names.add(name);
+
     if (!include(name)) continue;
     if (flags & 0x1) throw new ZipError(`${name} is encrypted.`);
-    if (size > maxEntryBytes) throw new ZipError(`${name} is too large to unpack.`);
+    // What this entry may still unpack to: its own limit, or what is left of the total.
+    const limit = Math.min(maxEntryBytes, maxTotalBytes - unpackedBytes);
+    if (limit <= 0 || size > limit) throw new ZipError(`${name} is too large to unpack.`);
 
     assertInside(view, localOffset, 30);
     if (view.getUint32(localOffset, true) !== LOCAL_FILE_HEADER) {
@@ -59,15 +77,25 @@ export function readZip(bytes: Uint8Array, { include, maxEntryBytes }: ReadZipOp
     }
     const dataStart = localOffset + 30 + view.getUint16(localOffset + 26, true) + view.getUint16(localOffset + 28, true);
     assertInside(view, dataStart, compressedSize);
+    const range = { start: localOffset, end: dataStart + compressedSize };
+    if (usedRanges.some((used) => range.start < used.end && used.start < range.end)) {
+      throw new ZipError(`${name} shares its data with another file in the archive.`);
+    }
+    usedRanges.push(range);
     const data = bytes.subarray(dataStart, dataStart + compressedSize);
 
+    let unpacked: Uint8Array;
     if (method === 0) {
-      files.set(name, data);
+      if (data.length > limit) throw new ZipError(`${name} is too large to unpack.`);
+      unpacked = data;
     } else if (method === 8) {
-      files.set(name, inflate(data, name, maxEntryBytes));
+      // The size in the file list can be false, so the unpacking itself is capped too.
+      unpacked = inflate(data, name, limit);
     } else {
       throw new ZipError(`${name} uses an unsupported compression method (${method}).`);
     }
+    unpackedBytes += unpacked.length;
+    files.set(name, unpacked);
   }
 
   return files;
