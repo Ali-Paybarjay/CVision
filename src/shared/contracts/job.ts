@@ -5,7 +5,7 @@ import { ContractTypeSchema, HoursSchema, IdSchema, SalarySchema, WorkModeSchema
 export const JobSourceSchema = z.enum(["pasted", "reed", "adzuna"]);
 export type JobSource = z.infer<typeof JobSourceSchema>;
 
-/** A job ad turned into data (person 2 builds it from the pasted text). */
+/** A job ad turned into data (Shayan builds it from the pasted text). */
 export const JobSchema = z.object({
   id: IdSchema,
   title: z.string().min(1),

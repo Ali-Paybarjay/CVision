@@ -1,12 +1,12 @@
-## What this PR does
+## این PR چه می‌کند
 
 Closes #
 
-## Checklist
+## چک‌لیست
 
-- [ ] I changed only my own folders, or agreed the change with the folder's owner
-- [ ] `npm run lint`, `npm run typecheck` and `npm test` pass on my machine
-- [ ] All copy is UK English, in the brand voice, with none of the banned words
-- [ ] No keys, passwords or real people's data in the changes
-- [ ] If it has a page, I tried it on a phone too
-- [ ] If the contracts changed, the team knows
+- [ ] فقط در پوشه‌های خودم تغییر دادم، یا با صاحب پوشه هماهنگ کردم
+- [ ] `npm run lint`، `npm run typecheck` و `npm test` روی کامپیوترم سبز است
+- [ ] همهٔ متن‌های اپ انگلیسی بریتانیایی است، با لحن برند و بدون کلمه‌های ممنوع
+- [ ] هیچ کلید، رمز یا دادهٔ واقعی آدم‌ها در تغییرها نیست
+- [ ] اگر صفحه دارد، روی گوشی هم امتحانش کردم
+- [ ] اگر شکل داده‌ها عوض شده، تیم خبر دارد

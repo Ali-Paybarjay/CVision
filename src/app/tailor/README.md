@@ -1,1 +1,1 @@
-Person 3 · Tailor page: before and after changes with approve and reject, cover letter, export and Apply.
+نازنین · صفحهٔ تنظیم رزومه: تغییرها با قبل و بعد و تأیید و رد، کاورلتر، خروجی و Apply.

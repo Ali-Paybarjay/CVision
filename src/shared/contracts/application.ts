@@ -4,7 +4,7 @@ import { DateSchema, IdSchema } from "./common";
 export const ApplicationStatusSchema = z.enum(["ready", "applied", "interview", "offer", "rejected"]);
 export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
 
-/** One job the user is applying for, as shown in the tracker (person 3 creates it on Apply; person 1 shows it). */
+/** One job the user is applying for, as shown in the tracker (Nazanin creates it on Apply; Ali shows it). */
 export const ApplicationSchema = z.object({
   id: IdSchema,
   jobId: IdSchema,
