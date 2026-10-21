@@ -1,0 +1,1 @@
+Shayan · Four fictional Word CVs built from the personas, for trying the CV upload on /profile and for the profile-extract evals. Rebuild them after a persona changes: `WRITE_SAMPLE_CVS=1 npx vitest run src/features/profile/server/sample-cvs.test.ts`.
