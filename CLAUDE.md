@@ -13,7 +13,9 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 | Nazanin | `nazaninpnhi89-oss` | Tailored CV and cover letter | Quality and testing | Shayan |
 | Marzieh | `Marzieh-Manager` | CV check and interview practice | Team coordination and the pitch | Ali |
 
-Ask the user which of the four they are if it is not clear, then work only in that person's folders.
+**Advisor: Niusha.** Writes no code and owns no folders. Niusha gives feedback at each station (in the comments of that station's report card), on any issue or PR labelled `needs-advisor`, and on the pitch and rehearsals.
+
+Ask the user which of the four builders they are if it is not clear, then work only in that person's folders.
 
 ## Who owns what
 
