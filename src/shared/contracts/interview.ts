@@ -39,7 +39,7 @@ export const InterviewAnswerSchema = z.object({
 });
 export type InterviewAnswer = z.infer<typeof InterviewAnswerSchema>;
 
-/** One practice interview for one job (person 4 builds it). */
+/** One practice interview for one job (Marzieh builds it). */
 export const InterviewSessionSchema = z.object({
   id: IdSchema,
   jobId: IdSchema,

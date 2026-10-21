@@ -64,7 +64,7 @@ export const FollowUpAnswerSchema = z.object({
 });
 export type FollowUpAnswer = z.infer<typeof FollowUpAnswerSchema>;
 
-/** The user's CV turned into data (person 2 builds it; everyone reads it). */
+/** The user's CV turned into data (Shayan builds it; everyone reads it). */
 export const ProfileSchema = z.object({
   id: IdSchema,
   fullName: z.string().min(1),

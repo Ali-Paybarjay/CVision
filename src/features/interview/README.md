@@ -1,1 +1,1 @@
-Person 4 · Interview logic: InterviewSession questions, scoring on four criteria and feedback.
+Marzieh · Interview logic: InterviewSession questions, scoring on four criteria and feedback.

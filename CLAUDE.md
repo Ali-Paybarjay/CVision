@@ -4,14 +4,25 @@
 
 CVision is a job-application tailoring app for the UK. A user uploads their CV, pastes a job ad, and gets a tailored CV and cover letter. Four teammates build it in parallel, each with their own Claude Code. Brand: `docs/brand.md`.
 
+## Team
+
+| Name | GitHub | Part of the app | Second hat | Reviews the PRs of |
+|---|---|---|---|---|
+| Ali | `Ali-Paybarjay` | Foundation, brand and dashboard | Tech lead and release: merges into `main` daily | Marzieh |
+| Shayan | `shsheytan` | Profile and match | User recruitment and feedback | Nazanin |
+| Nazanin | `nazaninpnhi89-oss` | Tailored CV and cover letter | Quality and testing | Shayan |
+| Marzieh | `Marzieh-Manager` | CV check and interview practice | Team coordination and the pitch | Ali |
+
+Ask the user which of the four they are if it is not clear, then work only in that person's folders.
+
 ## Who owns what
 
 | Folder | Owner | What is built there |
 |---|---|---|
-| `src/app/page.tsx`, `src/app/dashboard`, `src/app/sign-in`, `src/app/sign-up`, `src/app/auth`, `src/app/ui-kit`, `src/features/tracker`, `src/features/account`, `src/shared`, `src/proxy.ts`, `supabase`, `.github` | Person 1 | Landing page, dashboard, application tracker, account and data rights, shared code, database, CI |
-| `src/app/profile`, `src/app/jobs`, `src/features/profile`, `prompts/profile-*` | Person 2 | CV upload, Profile, follow-up questions, job ad parsing, matching |
-| `src/app/tailor`, `src/features/tailor`, `tests/tailor`, `prompts/tailor-*` | Person 3 | Gap questions, tailored CV and cover letter, export, Apply |
-| `src/app/cv-check`, `src/app/interview`, `src/features/cvcheck`, `src/features/interview`, `prompts/cvcheck-*`, `prompts/interview-*` | Person 4 | Free 2-minute CV check, interview practice |
+| `src/app/page.tsx`, `src/app/dashboard`, `src/app/sign-in`, `src/app/sign-up`, `src/app/auth`, `src/app/ui-kit`, `src/features/tracker`, `src/features/account`, `src/shared`, `src/proxy.ts`, `supabase`, `.github` | Ali | Landing page, dashboard, application tracker, account and data rights, shared code, database, CI |
+| `src/app/profile`, `src/app/jobs`, `src/features/profile`, `prompts/profile-*` | Shayan | CV upload, Profile, follow-up questions, job ad parsing, matching |
+| `src/app/tailor`, `src/features/tailor`, `tests/tailor`, `prompts/tailor-*` | Nazanin | Gap questions, tailored CV and cover letter, export, Apply |
+| `src/app/cv-check`, `src/app/interview`, `src/features/cvcheck`, `src/features/interview`, `prompts/cvcheck-*`, `prompts/interview-*` | Marzieh | Free 2-minute CV check, interview practice |
 | `prompts`, `sample-data`, `docs` | Shared | Each person adds or edits only their own files |
 
 ## Rules
