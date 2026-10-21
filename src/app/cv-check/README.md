@@ -1,1 +1,1 @@
-Marzieh · Free 2-minute CV check page: no sign-up and nothing stored.
+مرضیه · صفحهٔ چک دودقیقه‌ای رزومه: بدون ثبت‌نام و بدون ذخیرهٔ داده.

@@ -1,1 +1,1 @@
-Nazanin · Tailoring tests and prompt evals, including the Nothing invented checks.
+نازنین · تست‌ها و آزمون‌های پرامپت تنظیم رزومه، از جمله آزمون‌های Nothing invented.

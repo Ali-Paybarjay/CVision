@@ -1,1 +1,1 @@
-Nazanin · Tailoring logic: gap questions, TailoringChange proposals, cover letter, PDF and Word export.
+نازنین · منطق تنظیم رزومه: پرسش برای شکاف‌ها، پیشنهادهای TailoringChange، کاورلتر، خروجی PDF و Word.

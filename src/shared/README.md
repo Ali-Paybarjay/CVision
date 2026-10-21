@@ -1,1 +1,1 @@
-Ali · Shared code for everyone: contracts, AI access (askModel), brand, UI kit and analytics. Change only with the team's agreement.
+علی · کد مشترک همه: شکل داده‌ها، دسترسی به هوش مصنوعی (askModel)، برند، اجزای UI و آمار. فقط با هماهنگی تیم عوض شود.

@@ -1,1 +1,1 @@
-Ali · Application tracker: list, status changes and next steps for each Application.
+علی · پیگیری درخواست‌ها: فهرست، تغییر وضعیت و قدم بعدی هر Application.

@@ -1,1 +1,1 @@
-Marzieh · CV check logic: CvCheckResult for UK employers.
+مرضیه · منطق چک رزومه: CvCheckResult برای کارفرمای بریتانیایی.

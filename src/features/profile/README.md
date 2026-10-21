@@ -1,1 +1,1 @@
-Shayan · Profile and match logic: CV parsing, Profile extraction, follow-up questions, Job parsing and matching.
+شایان · منطق پروفایل و تطابق: خواندن رزومه، استخراج Profile، پرسش‌های تکمیلی، تبدیل آگهی و تطابق.

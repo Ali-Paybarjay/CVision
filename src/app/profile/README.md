@@ -1,1 +1,1 @@
-Shayan · Profile page: CV upload, extracted Profile and follow-up questions.
+شایان · صفحهٔ پروفایل: آپلود رزومه، Profile استخراج‌شده و پرسش‌های تکمیلی.
