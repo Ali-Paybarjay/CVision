@@ -20,6 +20,9 @@ export async function generateFollowUpQuestions(
     schema: FollowUpQuestionListSchema,
     sample: { questions: suggested.map(({ question, reason, topic, about }) => ({ question, reason, topic, about })) },
     requester: options.requester,
+    // The answer is a few hundred tokens. Haiku thinks first and that counts too, so this leaves room
+    // while capping what one request can cost.
+    maxTokens: 4000,
   });
 
   return questions.map((question, index) => ({ id: `q${index + 1}`, ...question }));

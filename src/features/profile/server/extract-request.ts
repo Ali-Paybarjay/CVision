@@ -19,7 +19,7 @@ export type ExtractResponse =
        */
       demo: { persona: string; text: string } | null;
     }
-  | { ok: false; code: CvFileErrorCode | "consent" | "forbidden" | AiErrorCode; message: string };
+  | { ok: false; code: CvFileErrorCode | "consent" | "forbidden" | "sign-in" | AiErrorCode; message: string };
 
 export type AiErrorCode = "ai-unavailable" | "ai-busy" | "ai-failed" | "limit-reached";
 
@@ -60,6 +60,8 @@ export async function handleExtractRequest(
 export function statusFor(response: ExtractResponse): number {
   if (response.ok) return 200;
   switch (response.code) {
+    case "sign-in":
+      return 401;
     case "forbidden":
       return 403;
     case "too-large":
@@ -84,10 +86,9 @@ export function describeAiError(error: unknown, whatFailed: string): { code: AiE
   console.error("profile: AI request failed:", error instanceof Error ? `${error.name}: ${error.message.slice(0, 200)}` : error);
 
   if (error instanceof AskModelError) {
-    // "limit-reached" arrives with the daily limits in PR #25; compared as text so this works before and after it.
-    const reason: string = error.reason;
-    if (reason === "limit-reached") return { code: "limit-reached", message: error.message };
-    if (reason === "no-api-key") {
+    // The daily limit's message is written for the user.
+    if (error.reason === "limit-reached") return { code: "limit-reached", message: error.message };
+    if (error.reason === "no-api-key") {
       return { code: "ai-unavailable", message: "This part of CVision is switched off at the moment. Try again later." };
     }
     return { code: "ai-failed", message: `${whatFailed} Try again in a moment.` };

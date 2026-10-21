@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { cvConsent, type ConsentRecord } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
@@ -19,7 +20,7 @@ type UploadStepProps = {
   onCancel?: () => void;
 };
 
-type Errors = { file?: string; consent?: string; form?: string };
+type Errors = { file?: string; consent?: string; form?: string; signIn?: boolean };
 
 export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onCancel }: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -53,7 +54,9 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
         onExtracted(result, { version: cvConsent.version, givenAt: new Date().toISOString() });
         return;
       }
-      setErrors(result.code === "consent" ? { consent: result.message } : { form: result.message });
+      if (result.code === "consent") setErrors({ consent: result.message });
+      else if (result.code === "sign-in") setErrors({ signIn: true });
+      else setErrors({ form: result.message });
     } finally {
       setPending(false);
     }
@@ -128,6 +131,7 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
               {errors.form}
             </Notice>
           )}
+          {errors.signIn && <SignInNotice />}
 
           <div className="flex flex-wrap items-center gap-4">
             <Button type="submit" variant="primary" disabled={pending}>
@@ -145,6 +149,22 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
         </form>
       </Card>
     </section>
+  );
+}
+
+/** Shown when the upload needs a signed-in user: with the AI switched on, each CV read counts against the user's daily limit. */
+export function SignInNotice() {
+  return (
+    <Notice tone="info" title="Sign in to upload your CV">
+      <Link href="/sign-in" className="font-semibold text-accent hover:underline">
+        Sign in
+      </Link>{" "}
+      or{" "}
+      <Link href="/sign-up" className="font-semibold text-accent hover:underline">
+        create a free account
+      </Link>
+      , then come back to this page.
+    </Notice>
   );
 }
 

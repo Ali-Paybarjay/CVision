@@ -79,6 +79,7 @@ describe("statusFor", () => {
 
   it("maps each answer to an HTTP status", () => {
     expect(statusFor(failure("consent"))).toBe(400);
+    expect(statusFor(failure("sign-in"))).toBe(401);
     expect(statusFor(failure("forbidden"))).toBe(403);
     expect(statusFor(failure("too-large"))).toBe(413);
     expect(statusFor(failure("limit-reached"))).toBe(429);
@@ -100,8 +101,7 @@ describe("describeAiError", () => {
 
   it("passes on the daily limit message, which is written for the user", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const limit = new AskModelError("You have reached today's limit. Try again tomorrow.", "refused");
-    Object.defineProperty(limit, "reason", { value: "limit-reached" });
+    const limit = new AskModelError("You have reached today's limit. Try again tomorrow.", "limit-reached");
 
     expect(describeAiError(limit, "x")).toEqual({ code: "limit-reached", message: "You have reached today's limit. Try again tomorrow." });
   });

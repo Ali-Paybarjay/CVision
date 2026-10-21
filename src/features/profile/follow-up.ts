@@ -169,7 +169,8 @@ const STOP_WORDS = new Set(["and", "or", "of", "the", "to", "in", "for", "with",
  * ("planning" matches "planned"). Words in brackets are details and are skipped: "Python (pandas)" needs "Python".
  */
 export function isMentioned(skill: string, evidence: string): boolean {
-  const core = skill.replace(/\([^)]*\)/g, " ").trim();
+  // [^()] rather than [^)]: an unclosed "(" then stops at the next "(", so "((((…" takes linear time, not quadratic.
+  const core = skill.replace(/\([^()]*\)/g, " ").trim();
   const words = core.split(/[^\p{L}\p{N}+#.]+/u).filter((word) => word && !STOP_WORDS.has(word.toLowerCase()));
   // Single letters ("P&L" splits into P and L) only count when they are the whole skill, like "R" or "C".
   const significant = words.length > 1 ? words.filter((word) => word.length > 1) : words;

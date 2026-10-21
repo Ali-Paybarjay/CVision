@@ -8,7 +8,7 @@ import { ProfileBuilder } from "./profile-builder";
 import { ProfileOverview } from "./profile-overview";
 import { QuestionsStep } from "./questions-step";
 import { ReviewStep } from "./review-step";
-import { UploadStep } from "./upload-step";
+import { SignInNotice, UploadStep } from "./upload-step";
 
 // Render checks for each screen of the profile flow: they catch crashes and missing content.
 // Clicking through the flow is covered by the reducer tests and by trying it in a browser.
@@ -57,6 +57,14 @@ describe("profile screens", () => {
     const html = text(renderToStaticMarkup(<UploadStep replacing={false} demoMode focusHeading={false} onExtracted={noop} />));
     expect(html).toContain("Demo mode: your CV won’t become your profile yet");
     expect(html).toContain("sample-data/cvs");
+  });
+
+  it("points a signed-out visitor to sign in or create an account", () => {
+    const html = renderToStaticMarkup(<SignInNotice />);
+
+    expect(text(html)).toContain("Sign in to upload your CV");
+    expect(html).toContain('href="/sign-in"');
+    expect(html).toContain('href="/sign-up"');
   });
 
   it.each(names)("lists every item of %s's CV for review, none approved yet", (name) => {

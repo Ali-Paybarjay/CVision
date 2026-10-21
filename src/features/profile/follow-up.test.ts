@@ -112,6 +112,12 @@ describe("isMentioned", () => {
     expect(isMentioned("R", "Reported sales every week")).toBe(false);
     expect(isMentioned("C", "Wrote firmware in C for sensors")).toBe(true);
   });
+
+  it("checks a skill made of thousands of open brackets quickly", () => {
+    const started = performance.now();
+    expect(isMentioned("(".repeat(100_000), evidence)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe("recordFollowUpAnswer", () => {
