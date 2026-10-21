@@ -56,4 +56,29 @@ describe("hashVisitor", () => {
     expect(hashVisitor("203.0.113.7", new Date("2026-10-21"))).toBe(today);
     expect(hashVisitor("203.0.113.7", new Date("2026-10-22"))).not.toBe(today);
   });
+
+  it("refuses to run on Vercel without a secret salt", () => {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("ANONYMOUS_KEY_SALT", "");
+    expect(() => hashVisitor("203.0.113.7", new Date("2026-10-21"))).toThrow("ANONYMOUS_KEY_SALT");
+  });
+});
+
+describe("getUsageStore", () => {
+  it("refuses to fall back to memory on Vercel", async () => {
+    vi.resetModules();
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_SECRET_KEY", "");
+    const { getUsageStore } = await import("./usage");
+    expect(() => getUsageStore()).toThrow("SUPABASE_SECRET_KEY");
+  });
+
+  it("uses memory for local development", async () => {
+    vi.resetModules();
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("SUPABASE_SECRET_KEY", "");
+    const { getUsageStore } = await import("./usage");
+    await expect(getUsageStore().countToday({ userId: "sara" })).resolves.toBe(0);
+  });
 });

@@ -88,8 +88,18 @@ function createSupabaseUsageStore(): UsageStore | null {
 
 let store: UsageStore | undefined;
 
+/**
+ * The shared usage log in Supabase, or an in-memory one for local development.
+ * On Vercel each instance has its own memory, so limits would not hold: there it refuses instead.
+ */
 export function getUsageStore(): UsageStore {
-  store ??= createSupabaseUsageStore() ?? createMemoryUsageStore();
+  if (store) return store;
+
+  const shared = createSupabaseUsageStore();
+  if (!shared && process.env.VERCEL) {
+    throw new Error("SUPABASE_SECRET_KEY must be set on Vercel: daily limits need the shared usage log.");
+  }
+  store = shared ?? createMemoryUsageStore();
   return store;
 }
 
