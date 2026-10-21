@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
-import { suggestFollowUpQuestionsAction } from "./actions";
+import { deleteMyProfileAction, suggestFollowUpQuestionsAction } from "./actions";
 import { generateFollowUpQuestions } from "./server/generate-follow-up";
+import { deleteAccountProfile } from "./server/profile-account";
 
-const { getCurrentUser } = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
+const { getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
+  getCurrentUser: vi.fn(),
+  createSupabaseServerClient: vi.fn(),
+}));
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
+vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
+vi.mock("./server/profile-account", () => ({ deleteAccountProfile: vi.fn(async () => true) }));
 vi.mock("./server/generate-follow-up", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./server/generate-follow-up")>();
   return { ...actual, generateFollowUpQuestions: vi.fn(actual.generateFollowUpQuestions) };
@@ -58,5 +64,31 @@ describe("suggestFollowUpQuestionsAction", () => {
     getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
 
     expect((await suggestFollowUpQuestionsAction({ fullName: "Not a whole profile" })).ok).toBe(false);
+  });
+});
+
+describe("deleteMyProfileAction", () => {
+  it("deletes the signed-in user's profile and CV files", async () => {
+    createSupabaseServerClient.mockResolvedValue({});
+    getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
+
+    expect(await deleteMyProfileAction()).toEqual({ ok: true });
+    expect(deleteAccountProfile).toHaveBeenCalledWith({}, "user-1");
+  });
+
+  it("deletes nothing for a signed-out visitor", async () => {
+    createSupabaseServerClient.mockResolvedValue({});
+    getCurrentUser.mockResolvedValue(null);
+
+    expect(await deleteMyProfileAction()).toEqual({ ok: false, message: "Sign in to delete your profile." });
+    expect(deleteAccountProfile).not.toHaveBeenCalled();
+  });
+
+  it("says so when the account couldn't delete it", async () => {
+    createSupabaseServerClient.mockResolvedValue({});
+    getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
+    vi.mocked(deleteAccountProfile).mockResolvedValueOnce(false);
+
+    expect(await deleteMyProfileAction()).toMatchObject({ ok: false });
   });
 });

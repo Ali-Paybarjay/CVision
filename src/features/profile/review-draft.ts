@@ -69,7 +69,25 @@ export type ReviewAction =
   /** `key` comes from the caller, so the reducer stays pure. */
   | { type: "add"; section: ListSection; key: string };
 
-export function draftFromProfile(profile: Profile): ReviewDraft {
+/**
+ * The draft for a saved profile. With `approved`, every item starts approved (the user approved them before),
+ * so editing one item only needs that item approved again.
+ */
+export function draftFromProfile(profile: Profile, options: { approved?: boolean } = {}): ReviewDraft {
+  const draft = savedProfileDraft(profile);
+  if (!options.approved) return draft;
+  const approved = <T>(item: ReviewEntry<T>): ReviewEntry<T> => ({ ...item, approved: true });
+  return {
+    contact: approved(draft.contact),
+    summary: approved(draft.summary),
+    skills: approved(draft.skills),
+    experience: draft.experience.map(approved),
+    education: draft.education.map(approved),
+    certifications: draft.certifications.map(approved),
+  };
+}
+
+function savedProfileDraft(profile: Profile): ReviewDraft {
   return {
     contact: entry("contact", {
       fullName: profile.fullName,

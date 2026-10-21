@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, cn, ErrorIcon, Field, Notice } from "@/shared/ui";
-import { cvConsent, type ConsentRecord } from "../consent";
+import { consentPoints, cvConsent, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
 import { Steps } from "./steps";
@@ -15,14 +15,17 @@ type UploadStepProps = {
   replacing: boolean;
   /** True while the AI is in mock mode: say so before the upload, not only after it. */
   demoMode: boolean;
+  /** Where the approved profile will be kept, so the consent says so. */
+  storage: ProfileStorageKind;
   focusHeading: boolean;
-  onExtracted: (result: ExtractSuccess, consent: ConsentRecord) => void;
+  /** `file` is the uploaded CV, kept in the page until the user approves their profile. */
+  onExtracted: (result: ExtractSuccess, consent: ConsentRecord, file: File) => void;
   onCancel?: () => void;
 };
 
 type Errors = { file?: string; consent?: string; form?: string; signIn?: boolean };
 
-export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onCancel }: UploadStepProps) {
+export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtracted, onCancel }: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
@@ -51,7 +54,7 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
     try {
       const result = await uploadCv(form);
       if (result.ok) {
-        onExtracted(result, { version: cvConsent.version, givenAt: new Date().toISOString() });
+        onExtracted(result, { version: cvConsent.version, givenAt: new Date().toISOString() }, file as File);
         return;
       }
       if (result.code === "consent") setErrors({ consent: result.message });
@@ -103,7 +106,7 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
           >
             <legend className="px-1 text-sm font-semibold">Before we read your CV</legend>
             <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-text-muted">
-              {cvConsent.points.map((point) => (
+              {consentPoints(storage).map((point) => (
                 <li key={point}>{point}</li>
               ))}
             </ul>

@@ -1,15 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { personas, type PersonaName } from "@/shared/sample-data";
-import { cvConsent } from "../consent";
+import { consentPoints, cvConsent } from "../consent";
 import { extractionFromProfile } from "../cv-extraction";
 import { draftFromExtraction } from "../review-draft";
 import { suggestFollowUpQuestions } from "../follow-up";
 import type { StoredProfile } from "../profile-store";
+import { fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import { ProfileBuilder } from "./profile-builder";
 import { ProfileOverview } from "./profile-overview";
 import { QuestionsStep } from "./questions-step";
 import { ReviewStep } from "./review-step";
+import { SignInToStart } from "./sign-in-to-start";
 import { SignInNotice, UploadStep } from "./upload-step";
 
 // Render checks for each screen of the profile flow: they catch crashes and missing content.
@@ -23,7 +25,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("../actions", () => ({ suggestFollowUpQuestionsAction: vi.fn() }));
+vi.mock("../actions", () => ({ suggestFollowUpQuestionsAction: vi.fn(), deleteMyProfileAction: vi.fn() }));
 
 const noop = () => {};
 const names = Object.keys(personas) as PersonaName[];
@@ -44,11 +46,14 @@ describe("profile screens", () => {
     expect(text(renderToStaticMarkup(<ProfileBuilder demoMode={false} />))).toContain("Loading your profile…");
   });
 
-  it("asks for consent next to the upload, unticked", () => {
-    const html = renderToStaticMarkup(<UploadStep replacing={false} demoMode={false} focusHeading={false} onExtracted={noop} />);
+  it("asks for consent next to the upload, unticked, saying the profile and file go to the account", () => {
+    const html = renderToStaticMarkup(
+      <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} />,
+    );
 
     expect(text(html)).toContain(cvConsent.label);
-    for (const point of cvConsent.points) expect(text(html)).toContain(point);
+    for (const point of consentPoints("account")) expect(text(html)).toContain(point);
+    expect(text(html)).toContain("we save it and your CV file to your CVision account");
     expect(html).toMatch(new RegExp(`<input type="checkbox"[^>]*name="consent" value="${cvConsent.version}"`));
     expect(html).not.toMatch(/name="consent"[^>]*checked/);
     expect(html).toContain('accept=".pdf,.docx');
@@ -56,8 +61,11 @@ describe("profile screens", () => {
   });
 
   it("warns before an upload in demo mode that the CV won’t become the profile", () => {
-    const html = text(renderToStaticMarkup(<UploadStep replacing={false} demoMode focusHeading={false} onExtracted={noop} />));
+    const html = text(
+      renderToStaticMarkup(<UploadStep replacing={false} demoMode storage="browser" focusHeading={false} onExtracted={noop} />),
+    );
     expect(html).toContain("Demo mode: your CV won’t become your profile yet");
+    expect(html).toContain("Your profile is saved in this browser only");
     expect(html).toContain("sample-data/cvs");
   });
 
@@ -158,41 +166,93 @@ describe("profile screens", () => {
     expect(html).toContain("Try again");
   });
 
-  it.each(names)("sums up %s's saved profile, with download and delete", (name) => {
-    const html = text(
+  function overview(saved: SavedProfile, storage: "account" | "browser", persistent = true) {
+    return text(
       renderToStaticMarkup(
         <ProfileOverview
-          stored={stored(name)}
-          persistent
+          saved={saved}
+          storage={storage}
+          persistent={persistent}
           focusHeading={false}
           onEdit={noop}
           onQuestions={noop}
           onUploadNew={noop}
-          onDelete={noop}
+          onDelete={async () => null}
+          onSavePreferences={async () => null}
         />,
       ),
     );
+  }
+
+  it.each(names)("sums up %s's saved profile, with preferences, download and delete", (name) => {
+    const html = overview(fromBrowser(stored(name)), "browser");
 
     expect(html).toContain(personas[name].profile.fullName);
+    expect(html).toContain("What you’re looking for");
+    expect(html).toContain(personas[name].profile.preferences.location);
     expect(html).toContain("Download my data");
     expect(html).toContain("Delete my profile");
     expect(html).toContain("Paste a job ad");
   });
 
+  it("says a browser profile is in this browser, with the day consent was given", () => {
+    const html = overview(fromBrowser(stored("sara")), "browser");
+
+    expect(html).toContain("Saved in this browser only");
+    expect(html).toContain("You agreed to us reading your CV on 20 October 2026");
+  });
+
+  it("says an account profile is in the account, with its CV file", () => {
+    const html = overview(
+      fromAccount({ profile: personas.emma.profile, savedAt: "2026-10-21T10:00:00.000Z", cvFormat: "pdf" }),
+      "account",
+    );
+
+    expect(html).toContain("Saved to your CVision account, last changed on 21 October 2026.");
+    expect(html).toContain("The CV file you uploaded (PDF) is kept with it.");
+    expect(html).not.toContain("this browser");
+  });
+
+  it("invites the user to add preferences when there are none", () => {
+    const profile = { ...personas.reza.profile, preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] } };
+
+    const html = overview({ ...fromBrowser(stored("reza")), profile }, "browser");
+
+    expect(html).toContain("Not set yet.");
+    expect(html).toContain("Add what you’re looking for");
+  });
+
   it("warns when the browser will not keep the profile", () => {
+    expect(overview(fromBrowser(stored("sara")), "browser", false)).toContain("This browser doesn’t keep saved data");
+    expect(overview(fromBrowser(stored("sara")), "account", false)).not.toContain("This browser doesn’t keep saved data");
+  });
+
+  it("asks a signed-out visitor to sign in before building a profile", () => {
+    const html = renderToStaticMarkup(<SignInToStart />);
+
+    expect(text(html)).toContain("Sign in to build your profile");
+    expect(html).toContain('href="/sign-up"');
+    expect(html).toContain('href="/sign-in"');
+  });
+
+  it("starts from the saved account profile, without waiting for the browser", () => {
     const html = text(
       renderToStaticMarkup(
-        <ProfileOverview
-          stored={stored("sara")}
-          persistent={false}
-          focusHeading={false}
-          onEdit={noop}
-          onQuestions={noop}
-          onUploadNew={noop}
-          onDelete={noop}
+        <ProfileBuilder
+          demoMode={false}
+          storage={{ kind: "account", initial: { profile: personas.daniel.profile, savedAt: "2026-10-21T10:00:00.000Z", cvFormat: null } }}
         />,
       ),
     );
-    expect(html).toContain("This browser doesn’t keep saved data");
+
+    expect(html).toContain("Daniel Brooks");
+    expect(html).not.toContain("Loading your profile…");
+  });
+
+  it("starts at the upload when the account has no profile yet", () => {
+    const html = text(renderToStaticMarkup(<ProfileBuilder demoMode={false} storage={{ kind: "account", initial: null }} />));
+
+    expect(html).toContain("Upload your CV");
+    expect(html).toContain("we save it and your CV file to your CVision account");
   });
 });

@@ -33,13 +33,15 @@ type ReviewStepProps = {
   demo: { persona: string; text: string } | null;
   truncated: boolean;
   focusHeading: boolean;
-  onSave: (profile: Profile) => void;
+  /** Saves the approved profile; resolves to a message for the user if it couldn't. */
+  onSave: (profile: Profile) => Promise<string | null> | void;
   onCancel: () => void;
 };
 
 export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, focusHeading, onSave, onCancel }: ReviewStepProps) {
   const [draft, dispatch] = useReducer(reviewReducer, initialDraft);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const cards = useRef(new Map<string, HTMLElement>());
   const added = useRef(0);
@@ -93,16 +95,25 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
     focusIn(key, "input");
   };
 
-  const save = () => {
+  const save = async () => {
     if (approved < total) {
       const left = total - approved;
       setSaveError(`Approve every item first: ${count(left, "item")} still to check.`);
       return;
     }
+    let profile: Profile;
     try {
-      onSave(profileFromDraft(draft, base));
+      profile = profileFromDraft(draft, base);
     } catch {
       setSaveError("Some details are not valid. Check each item, then approve it again.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const problem = await onSave(profile);
+      if (problem) setSaveError(problem);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -283,11 +294,11 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
             items approved
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="quiet" onClick={onCancel}>
+            <Button variant="quiet" onClick={onCancel} disabled={saving}>
               {isNew ? "Start again" : "Cancel"}
             </Button>
-            <Button id="save-profile" variant="primary" onClick={save}>
-              Save my profile
+            <Button id="save-profile" variant="primary" onClick={() => void save()} disabled={saving} aria-busy={saving}>
+              {saving ? "Saving…" : "Save my profile"}
             </Button>
           </div>
         </div>

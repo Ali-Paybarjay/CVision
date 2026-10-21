@@ -18,7 +18,8 @@ type QuestionsStepProps = {
   /** True right after a new CV, when this is step 3 of 3. */
   showSteps: boolean;
   focusHeading: boolean;
-  onAnswer: (question: FollowUpQuestion, answer: string) => void;
+  /** Saves an answer; resolves to a message for the user if it couldn't. */
+  onAnswer: (question: FollowUpQuestion, answer: string) => Promise<string | null> | void;
   onRetry: () => void;
   onFinish: () => void;
 };
@@ -98,22 +99,32 @@ type QuestionCardProps = {
   number: number;
   question: FollowUpQuestion;
   saved: FollowUpAnswer | undefined;
-  onAnswer: (question: FollowUpQuestion, answer: string) => void;
+  onAnswer: (question: FollowUpQuestion, answer: string) => Promise<string | null> | void;
 };
 
 function QuestionCard({ number, question, saved, onAnswer }: QuestionCardProps) {
   const [editing, setEditing] = useState(saved === undefined);
   const [text, setText] = useState(saved?.answer ?? "");
   const [error, setError] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
   const headingId = `question-${question.id}`;
 
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!text.trim()) {
       setError("Write your answer first, or leave this question for now.");
       return;
     }
-    onAnswer(question, text);
+    setSaving(true);
+    try {
+      const problem = await onAnswer(question, text);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    } finally {
+      setSaving(false);
+    }
     setError(undefined);
     setEditing(false);
   };
@@ -127,12 +138,14 @@ function QuestionCard({ number, question, saved, onAnswer }: QuestionCardProps) 
       <p className="mt-1 text-sm text-text-muted">{question.reason}</p>
 
       {editing ? (
-        <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-3">
+        <form onSubmit={(event) => void submit(event)} noValidate className="mt-4 flex flex-col gap-3">
           <Field label="Your answer" hint="In your own words. A number or a result helps." error={error}>
             {(props) => <Textarea {...props} value={text} onChange={(event) => setText(event.target.value)} className="min-h-28" />}
           </Field>
           <div>
-            <Button type="submit">Save answer</Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving…" : "Save answer"}
+            </Button>
           </div>
         </form>
       ) : (

@@ -132,6 +132,28 @@ describe("JobChecker", () => {
     expect(text(renderToStaticMarkup(<JobChecker demoMode={false} />))).toContain("Loading your profile…");
   });
 
+  it("compares with the profile saved in the account, without waiting for the browser", () => {
+    const html = text(renderToStaticMarkup(<JobChecker demoMode={false} source={{ kind: "account", profile: personas.emma.profile }} />));
+
+    expect(html).toContain("the profile you approved for Emma Walsh");
+    expect(html).not.toContain("Loading your profile…");
+  });
+
+  it("asks an account with no profile yet to upload a CV first", () => {
+    expect(text(renderToStaticMarkup(<JobChecker demoMode={false} source={{ kind: "account", profile: null }} />))).toContain(
+      "Your profile comes first",
+    );
+  });
+
+  it("asks a signed-out visitor to sign in, but keeps the demo open to them", () => {
+    expect(text(renderToStaticMarkup(<JobChecker demoMode={false} source={{ kind: "signed-out" }} />))).toContain(
+      "Sign in to check a job against your profile",
+    );
+    expect(text(renderToStaticMarkup(<JobChecker demoMode source={{ kind: "signed-out" }} />))).toContain(
+      "the match uses the sample person’s profile",
+    );
+  });
+
   it("sends a visitor with no profile to the profile page first", () => {
     const html = renderToStaticMarkup(<ProfileFirst />);
 

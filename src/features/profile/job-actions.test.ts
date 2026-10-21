@@ -4,6 +4,7 @@ import { personas } from "@/shared/sample-data";
 import { checkJobAction } from "./job-actions";
 import { matchJob, parseJob } from "./server/check-job";
 import { saveJobAndMatch } from "./server/job-store";
+import { loadAccountProfile } from "./server/profile-account";
 
 const { getCurrentUser, track, isSupabaseConfigured, createSupabaseServerClient } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("@/shared/analytics/track", () => ({ track }));
 vi.mock("@/shared/supabase/env", () => ({ isSupabaseConfigured }));
 vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("./server/job-store", () => ({ saveJobAndMatch: vi.fn() }));
+vi.mock("./server/profile-account", () => ({ loadAccountProfile: vi.fn() }));
 vi.mock("./server/check-job", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./server/check-job")>();
   return { ...actual, parseJob: vi.fn(actual.parseJob), matchJob: vi.fn(actual.matchJob) };
@@ -31,6 +33,7 @@ beforeEach(() => {
   isSupabaseConfigured.mockReturnValue(true);
   createSupabaseServerClient.mockResolvedValue({});
   vi.mocked(saveJobAndMatch).mockResolvedValue(true);
+  vi.mocked(loadAccountProfile).mockResolvedValue({ profile: sara.profile, savedAt: "2026-10-21T09:00:00.000Z", cvFormat: null });
 });
 
 afterEach(() => {
@@ -51,6 +54,35 @@ describe("checkJobAction", () => {
     expect(parseJob).toHaveBeenCalledWith(ad, { url: "https://example.com/job", requester: { userId: "user-1" } });
     expect(matchJob).toHaveBeenCalledWith(sara.profile, result.job, { requester: { userId: "user-1" } });
     expect(saveJobAndMatch).toHaveBeenCalledWith({}, result.job, result.match);
+  });
+
+  it("matches a signed-in user's saved profile, whatever the browser sends", async () => {
+    const result = await checkJobAction({ ad, url: "", profile: personas.daniel.profile });
+
+    expect(result.ok).toBe(true);
+    expect(vi.mocked(matchJob).mock.calls[0][0]).toBe(sara.profile);
+  });
+
+  it("asks a signed-in user with no saved profile to upload their CV first when the AI is live", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.mocked(loadAccountProfile).mockResolvedValue(null);
+
+    const result = await checkJobAction({ ad, url: "", profile: sara.profile });
+
+    expect(result).toMatchObject({ ok: false, code: "profile" });
+    expect(parseJob).not.toHaveBeenCalled();
+  });
+
+  it("uses the browser's profile when accounts are not switched on", async () => {
+    getCurrentUser.mockResolvedValue(null);
+    createSupabaseServerClient.mockResolvedValue(null);
+    isSupabaseConfigured.mockReturnValue(false);
+
+    const result = await checkJobAction({ ad, url: "", profile: personas.reza.profile });
+
+    expect(result.ok && result.saved).toBe("unavailable");
+    expect(vi.mocked(matchJob).mock.calls[0][0]).toEqual(personas.reza.profile);
   });
 
   it("records both events without the ad or the profile", async () => {
@@ -89,6 +121,7 @@ describe("checkJobAction", () => {
   });
 
   it("matches the sample person the ad belongs to when a demo visitor has no profile", async () => {
+    getCurrentUser.mockResolvedValue(null);
     const emmaAd = personas.emma.jobs[0].description;
 
     const result = await checkJobAction({ ad: emmaAd, url: "", profile: null });
@@ -97,18 +130,10 @@ describe("checkJobAction", () => {
     expect(vi.mocked(matchJob).mock.calls[0][0]).toBe(personas.emma.profile);
   });
 
-  it("needs the user's own profile when the AI is live", async () => {
-    vi.stubEnv("AI_MODE", "live");
-
-    const result = await checkJobAction({ ad, url: "", profile: null });
-
-    expect(result).toMatchObject({ ok: false, code: "profile" });
-    expect(parseJob).not.toHaveBeenCalled();
-  });
-
   it("refuses a short ad, a bad link or something that is not a profile, before any model request", async () => {
     expect(await checkJobAction({ ad: "Analyst, Leeds", url: "", profile: sara.profile })).toMatchObject({ ok: false, code: "ad" });
     expect(await checkJobAction({ ad, url: "javascript:alert(1)", profile: sara.profile })).toMatchObject({ ok: false, code: "url" });
+    getCurrentUser.mockResolvedValue(null);
     expect(await checkJobAction({ ad, url: "", profile: { fullName: "Not a profile" } })).toMatchObject({ ok: false, code: "profile" });
     expect(parseJob).not.toHaveBeenCalled();
   });

@@ -14,17 +14,28 @@ type CheckJobSuccess = Extract<CheckJobResult, { ok: true }>;
 type View = { name: "form" } | { name: "report"; result: CheckJobSuccess };
 
 /**
+ * Where the profile to compare with comes from: the signed-in user's account (read on the server), this browser
+ * when accounts are not switched on, or nowhere for a signed-out visitor.
+ */
+export type JobProfileSource = { kind: "account"; profile: Profile | null } | { kind: "browser" } | { kind: "signed-out" };
+
+/**
  * The jobs page: paste an ad (and its link, if the user has one), then see the match report.
- * The ad is compared with the profile the user approved on /profile, which lives in this browser for now.
+ * The ad is compared with the profile the user approved on /profile.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before the check.
  */
-export function JobChecker({ demoMode }: { demoMode: boolean }) {
+export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMode: boolean; source?: JobProfileSource }) {
   const stored = useStoredProfile();
   const [view, setView] = useState<View>({ name: "form" });
   // Focus moves to each new view, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
 
-  if (stored === undefined) {
+  let profile: Profile | null | undefined;
+  if (source.kind === "account") profile = source.profile;
+  else if (source.kind === "signed-out") profile = null;
+  else profile = stored === undefined ? undefined : (stored?.profile ?? null);
+
+  if (profile === undefined) {
     return (
       <Card aria-busy="true">
         <p className="text-text-muted">Loading your profile…</p>
@@ -49,11 +60,13 @@ export function JobChecker({ demoMode }: { demoMode: boolean }) {
     );
   }
 
-  if (!stored && !demoMode) return <ProfileFirst />;
+  // In the demo a signed-out visitor can try it with a sample profile; otherwise they sign in first.
+  if (source.kind === "signed-out" && !demoMode) return <SignInNotice title="Sign in to check a job against your profile" />;
+  if (!profile && !demoMode) return <ProfileFirst />;
 
   return (
     <JobForm
-      profile={stored?.profile ?? null}
+      profile={profile}
       demoMode={demoMode}
       focusAd={navigated}
       onChecked={(result) => {

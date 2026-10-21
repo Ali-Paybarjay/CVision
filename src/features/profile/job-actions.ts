@@ -13,6 +13,7 @@ import { modelAccessFor } from "./server/access";
 import { matchJob, parseJob, sampleJobFor } from "./server/check-job";
 import { describeAiError, type AiErrorCode } from "./server/extract-request";
 import { saveJobAndMatch } from "./server/job-store";
+import { loadAccountProfile } from "./server/profile-account";
 import { readProfileInput } from "./server/profile-input";
 
 /**
@@ -37,7 +38,8 @@ export type CheckJobResult =
 
 /**
  * Reads a pasted job ad into a Job, matches it to the user's profile and saves both for a signed-in user.
- * The profile comes from the browser for now; once it is saved in the profiles table (#47), it is read from there.
+ * A signed-in user's profile is read from their account, whatever the browser sends. The browser's profile is
+ * used only when accounts are not switched on, and a sample profile only in the demo.
  */
 export async function checkJobAction(input: { ad: unknown; url: unknown; profile: unknown }): Promise<CheckJobResult> {
   const mode = getAiMode();
@@ -53,13 +55,17 @@ export async function checkJobAction(input: { ad: unknown; url: unknown; profile
   if (!url.ok) return { ok: false, code: "url", message: url.message };
 
   let profile: Profile | null = null;
-  if (input.profile != null) {
+  const supabase = user ? await createSupabaseServerClient() : null;
+  if (user && supabase) {
+    profile = (await loadAccountProfile(supabase))?.profile ?? null;
+  } else if (input.profile != null) {
     const parsed = readProfileInput(input.profile);
     if (!parsed.ok) {
       return { ok: false, code: "profile", message: "Your profile could not be read. Reload the page and try again." };
     }
     profile = parsed.profile;
-  } else if (mode === "live") {
+  }
+  if (!profile && mode === "live") {
     return { ok: false, code: "profile", message: "Upload your CV first, so there is a profile to compare with this job." };
   }
 
