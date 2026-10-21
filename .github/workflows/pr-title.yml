@@ -1,0 +1,48 @@
+# PR titles read "#<number> · <name> · <goal>" (CLAUDE.md, Language). The author writes the goal;
+# this puts the number and the author's name in front when a PR is opened, reopened or retitled.
+# It edits only the title, so it runs for documentation-only PRs too and takes a few seconds.
+name: PR title
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, edited]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  prefix:
+    name: Number and name in the PR title
+    # An edit to the description alone leaves the title as it is.
+    if: github.event.action != 'edited' || github.event.changes.title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Put "#<number> · <name> · " in front of the title
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          # Passed as an environment variable, never pasted into the script, so a title cannot run commands.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          case "$AUTHOR" in
+            Ali-Paybarjay) name="علی" ;;
+            shsheytan) name="شایان" ;;
+            nazaninpnhi89-oss) name="نازنین" ;;
+            Marzieh-Manager) name="مرضیه" ;;
+            *) name="$AUTHOR" ;;
+          esac
+          # Already in the format, written by the author or by an earlier run.
+          if [[ "$TITLE" == "#$NUMBER · "* ]]; then
+            echo "The title already starts with #$NUMBER."
+            exit 0
+          fi
+          gh pr edit "$NUMBER" --repo "$REPO" --title "#$NUMBER · $name · $TITLE"
