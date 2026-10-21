@@ -15,6 +15,7 @@ export const cvFileMessages = {
   oldWord: "This is an older Word file (.doc). Save it as .docx or PDF, then upload it again.",
   password: "This file is password-protected. Remove the password, then upload it again.",
   unreadable: "We couldn’t open this file. Check that it opens on your computer, then try again.",
+  tooSlow: "This PDF takes too long to read. Upload the Word version, or save the PDF again from Word or Google Docs.",
   noText:
     "We couldn’t find any text in this file. If it is a scanned image, upload the Word version, or a PDF saved from Word or Google Docs.",
 } as const;

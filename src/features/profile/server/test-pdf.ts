@@ -1,18 +1,30 @@
-// Test helper: a one-page PDF with the given lines in Helvetica, built by hand,
+// Test helper: PDFs with the given lines in Helvetica, built by hand,
 // so the PDF tests need no fixture files. Text must be plain ASCII or Latin-1 (e.g. "£").
 
+/** A one-page PDF. */
 export function makeTestPdf(lines: string[]): Uint8Array {
-  const escape = (text: string) => text.replace(/[\\()]/g, (character) => `\\${character}`);
-  const content = lines.length
-    ? `BT /F1 11 Tf 72 770 Td 15 TL ${lines.map((line) => `(${escape(line)}) Tj T*`).join(" ")} ET`
-    : "";
+  return makeTestPdfPages([lines]);
+}
 
+/** A PDF with one page for each list of lines. */
+export function makeTestPdfPages(pages: string[][]): Uint8Array {
+  const escape = (text: string) => text.replace(/[\\()]/g, (character) => `\\${character}`);
+  const content = (lines: string[]) =>
+    lines.length ? `BT /F1 11 Tf 72 770 Td 15 TL ${lines.map((line) => `(${escape(line)}) Tj T*`).join(" ")} ET` : "";
+
+  // Objects 1 to 3 are the catalogue, the page list and the font; then each page and its content.
+  const pageId = (index: number) => 4 + index * 2;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    `<< /Type /Pages /Kids [${pages.map((_, index) => `${pageId(index)} 0 R`).join(" ")}] /Count ${pages.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-    `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`,
+    ...pages.flatMap((lines, index) => {
+      const stream = content(lines);
+      return [
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageId(index) + 1} 0 R >>`,
+        `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+      ];
+    }),
   ];
 
   let pdf = "%PDF-1.4\n";

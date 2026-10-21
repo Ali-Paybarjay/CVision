@@ -1,18 +1,28 @@
 import "server-only";
 import { cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import { extractDocxText } from "./docx";
-import { extractPdfText } from "./pdf";
+import { extractPdfText, PdfTooSlowError } from "./pdf";
 
 export { cvFileMessages, MAX_CV_BYTES };
 
 /** About 7,500 words: far more than any CV, and a cap on what one request can cost. */
 export const MAX_CV_CHARACTERS = 30_000;
+/** How much text is read from a file and tidied. Tidying mostly removes spaces, so twice the final cap is plenty. */
+const MAX_RAW_CHARACTERS = MAX_CV_CHARACTERS * 2;
 /** Less text than this is not a CV: usually a scanned image with no text layer. */
 const MIN_CV_LETTERS = 40;
 
 export type CvFormat = "pdf" | "docx";
 
-export type CvFileErrorCode = "missing" | "empty" | "too-large" | "wrong-type" | "password" | "unreadable" | "no-text";
+export type CvFileErrorCode =
+  | "missing"
+  | "empty"
+  | "too-large"
+  | "wrong-type"
+  | "password"
+  | "unreadable"
+  | "too-slow"
+  | "no-text";
 
 /** A problem with the uploaded file that the user can fix. The message is written for them. */
 export class CvFileError extends Error {
@@ -49,20 +59,23 @@ export async function readCvText(file: { name: string; bytes: Uint8Array }): Pro
 
   let raw: string;
   try {
-    raw = format === "pdf" ? await extractPdfText(bytes) : extractDocxText(bytes);
+    raw = format === "pdf" ? await extractPdfText(bytes, { maxCharacters: MAX_RAW_CHARACTERS }) : extractDocxText(bytes);
   } catch (error) {
     if (error instanceof Error && error.name === "PasswordException") {
       throw new CvFileError("password", cvFileMessages.password);
     }
+    if (error instanceof PdfTooSlowError) throw new CvFileError("too-slow", cvFileMessages.tooSlow);
     throw new CvFileError("unreadable", cvFileMessages.unreadable);
   }
 
-  const text = cleanCvText(raw);
+  // Only the start of a very long file is tidied: the rest would be cut anyway.
+  const cut = raw.length > MAX_RAW_CHARACTERS;
+  const text = cleanCvText(cut ? raw.slice(0, MAX_RAW_CHARACTERS) : raw);
   if ((text.match(/\p{L}/gu)?.length ?? 0) < MIN_CV_LETTERS) {
     throw new CvFileError("no-text", cvFileMessages.noText);
   }
 
-  return text.length > MAX_CV_CHARACTERS
+  return cut || text.length > MAX_CV_CHARACTERS
     ? { text: text.slice(0, MAX_CV_CHARACTERS), format, truncated: true }
     : { text, format, truncated: false };
 }
