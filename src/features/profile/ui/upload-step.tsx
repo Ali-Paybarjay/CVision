@@ -152,10 +152,13 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
   );
 }
 
-/** Shown when the upload needs a signed-in user: with the AI switched on, each CV read counts against the user's daily limit. */
-export function SignInNotice() {
+/**
+ * Shown when a step needs a signed-in user: with the AI switched on, each request counts against the user's daily limit.
+ * `title` says what signing in is for; the upload's wording is the default.
+ */
+export function SignInNotice({ title = "Sign in to upload your CV" }: { title?: string }) {
   return (
-    <Notice tone="info" title="Sign in to upload your CV">
+    <Notice tone="info" title={title}>
       <Link href="/sign-in" className="font-semibold text-accent hover:underline">
         Sign in
       </Link>{" "}
