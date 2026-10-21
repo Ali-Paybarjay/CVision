@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { cvConsent } from "../consent";
+import { extractionFromProfile } from "../cv-extraction";
+import { draftFromExtraction } from "../review-draft";
 import { suggestFollowUpQuestions } from "../follow-up";
 import type { StoredProfile } from "../profile-store";
 import { ProfileBuilder } from "./profile-builder";
@@ -72,7 +74,8 @@ describe("profile screens", () => {
     const html = text(
       renderToStaticMarkup(
         <ReviewStep
-          profile={profile}
+          draft={draftFromExtraction(extractionFromProfile(profile))}
+          base={profile}
           isNew
           demo={{ persona: profile.fullName, text: "Text read from the uploaded file" }}
           truncated={false}
@@ -90,6 +93,28 @@ describe("profile screens", () => {
     const total = 3 + profile.experience.length + profile.education.length + profile.certifications.length;
     expect(html).toContain(`0 of ${total} items approved`);
     expect(html.match(/Approve /g)?.length).toBe(total);
+  });
+
+  it("says when a month is our guess, and leaves missing details empty for the user to fill", () => {
+    const extraction = extractionFromProfile(personas.daniel.profile);
+    extraction.experience[0] = { ...extraction.experience[0], startDate: "2019", company: "" };
+    const html = text(
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={draftFromExtraction(extraction)}
+          base={personas.daniel.profile}
+          isNew
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      ),
+    );
+
+    expect(html).toContain("Your CV gives only the year, so we put January. Check the month.");
+    expect(html).not.toContain("so we put December");
   });
 
   it.each(names)("shows %s's follow-up questions with a place to answer each", (name) => {

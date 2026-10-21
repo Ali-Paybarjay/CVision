@@ -6,6 +6,7 @@ import { suggestFollowUpQuestionsAction } from "../actions";
 import type { ConsentRecord } from "../consent";
 import { recordFollowUpAnswer, type FollowUpQuestion } from "../follow-up";
 import { getBrowserProfileStore, useStorageIsPersistent, useStoredProfile, type StoredProfile } from "../profile-store";
+import { draftFromExtraction, draftFromProfile, newProfileBase, type ProfileBase, type ReviewDraft } from "../review-draft";
 import { Card, Notice } from "@/shared/ui";
 import { ProfileOverview } from "./profile-overview";
 import { QuestionsStep, type QuestionsState } from "./questions-step";
@@ -18,7 +19,8 @@ type View =
   | { name: "upload" }
   | {
       name: "review";
-      profile: Profile;
+      draft: ReviewDraft;
+      base: ProfileBase;
       consent: ConsentRecord;
       demo: ExtractSuccess["demo"];
       truncated: boolean;
@@ -67,8 +69,12 @@ export function ProfileBuilder({ demoMode }: { demoMode: boolean }) {
 
   const handleExtracted = (result: ExtractSuccess, consent: ConsentRecord) => {
     // A new CV keeps the earlier follow-up answers: they are still the user's own words.
-    const profile = { ...result.profile, followUpAnswers: stored?.profile.followUpAnswers ?? [] };
-    go({ name: "review", profile, consent, demo: result.demo, truncated: result.truncated, isNew: true });
+    const base = newProfileBase(result.extraction, {
+      id: crypto.randomUUID(),
+      followUpAnswers: stored?.profile.followUpAnswers ?? [],
+    });
+    const draft = draftFromExtraction(result.extraction);
+    go({ name: "review", draft, base, consent, demo: result.demo, truncated: result.truncated, isNew: true });
   };
 
   const handleSave = (profile: Profile) => {
@@ -123,7 +129,8 @@ export function ProfileBuilder({ demoMode }: { demoMode: boolean }) {
   if (view.name === "review") {
     content = (
       <ReviewStep
-        profile={view.profile}
+        draft={view.draft}
+        base={view.base}
         isNew={view.isNew}
         demo={view.demo}
         truncated={view.truncated}
@@ -164,7 +171,8 @@ export function ProfileBuilder({ demoMode }: { demoMode: boolean }) {
         onEdit={() =>
           go({
             name: "review",
-            profile: stored.profile,
+            draft: draftFromProfile(stored.profile),
+            base: stored.profile,
             consent: stored.consent,
             demo: null,
             truncated: false,

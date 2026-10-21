@@ -4,7 +4,6 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
 import {
-  draftFromProfile,
   profileFromDraft,
   reviewProgress,
   reviewReducer,
@@ -14,6 +13,7 @@ import {
   type ExperienceDraft,
   type FieldErrors,
   type ListSection,
+  type ProfileBase,
   type ReviewAction,
   type ReviewDraft,
 } from "../review-draft";
@@ -23,7 +23,10 @@ import { Button, CheckIcon, cn, ErrorIcon, Field, Input, Notice, Textarea } from
 import { Steps } from "./steps";
 
 type ReviewStepProps = {
-  profile: Profile;
+  /** What to check: read from a new CV (draftFromExtraction) or from the saved profile (draftFromProfile). */
+  draft: ReviewDraft;
+  /** What the saved profile keeps besides the reviewed items: its id, preferences and follow-up answers. */
+  base: ProfileBase;
   /** True for a CV just read; false when editing a saved profile. */
   isNew: boolean;
   /** Set in mock mode: whose sample profile is shown, and the text read from the user's own file. */
@@ -34,8 +37,8 @@ type ReviewStepProps = {
   onCancel: () => void;
 };
 
-export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSave, onCancel }: ReviewStepProps) {
-  const [draft, dispatch] = useReducer(reviewReducer, profile, draftFromProfile);
+export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, focusHeading, onSave, onCancel }: ReviewStepProps) {
+  const [draft, dispatch] = useReducer(reviewReducer, initialDraft);
   const [saveError, setSaveError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const cards = useRef(new Map<string, HTMLElement>());
@@ -97,7 +100,7 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
       return;
     }
     try {
-      onSave(profileFromDraft(draft, profile));
+      onSave(profileFromDraft(draft, base));
     } catch {
       setSaveError("Some details are not valid. Check each item, then approve it again.");
     }
@@ -445,6 +448,8 @@ function ExperienceFields({ value, errors, onChange }: FieldsProps<ExperienceDra
         start={value.startDate}
         end={value.endDate}
         current={value.current}
+        startGuessed={value.startGuessed}
+        endGuessed={value.endGuessed}
         currentLabel="I still work here"
         errors={errors}
         onChange={onChange}
@@ -497,6 +502,8 @@ function EducationFields({ value, errors, onChange }: FieldsProps<EducationDraft
         start={value.startDate}
         end={value.endDate}
         current={value.current}
+        startGuessed={value.startGuessed}
+        endGuessed={value.endGuessed}
         currentLabel="I’m still studying for this"
         optional
         errors={errors}
@@ -535,18 +542,23 @@ type MonthRangeProps = {
   start: string;
   end: string;
   current: boolean;
+  /** True when the month is our guess, because the CV gave only the year. */
+  startGuessed: boolean;
+  endGuessed: boolean;
   currentLabel: string;
   optional?: boolean;
   errors: FieldErrors;
   onChange: (change: { startDate?: string; endDate?: string; current?: boolean }) => void;
 };
 
-function MonthRange({ start, end, current, currentLabel, optional, errors, onChange }: MonthRangeProps) {
+function MonthRange({ start, end, current, startGuessed, endGuessed, currentLabel, optional, errors, onChange }: MonthRangeProps) {
   const suffix = optional ? " (optional)" : "";
+  const hint = (guessed: boolean, month: string) =>
+    guessed ? `Your CV gives only the year, so we put ${month}. Check the month.` : "Month and year";
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={`Started${suffix}`} hint="Month and year" error={errors.startDate}>
+        <Field label={`Started${suffix}`} hint={hint(startGuessed, "January")} error={errors.startDate}>
           {(props) => (
             <Input
               {...props}
@@ -558,7 +570,7 @@ function MonthRange({ start, end, current, currentLabel, optional, errors, onCha
           )}
         </Field>
         {!current && (
-          <Field label={`Finished${suffix}`} hint="Month and year" error={errors.endDate}>
+          <Field label={`Finished${suffix}`} hint={hint(endGuessed, "December")} error={errors.endDate}>
             {(props) => (
               <Input
                 {...props}

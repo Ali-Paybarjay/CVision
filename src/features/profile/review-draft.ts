@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { ProfileSchema, type Profile, type WorkExperience } from "@/shared/contracts";
-import { uniqueLines } from "./cv-extraction";
+import { ProfileSchema, type JobPreferences, type Profile, type WorkExperience } from "@/shared/contracts";
+import { uniqueLines, type CvExtraction } from "./cv-extraction";
 import { phoneProblem, tidyPhone } from "./phone";
 
 // The review step: the user checks every item read from their CV, corrects it if needed and approves it.
@@ -18,6 +18,9 @@ export type ExperienceDraft = {
   startDate: string;
   endDate: string;
   current: boolean;
+  /** True while a month is our guess, because the CV gave only the year. Editing the date clears it. */
+  startGuessed: boolean;
+  endGuessed: boolean;
   /** One per line. */
   duties: string;
   /** One per line. */
@@ -30,6 +33,8 @@ export type EducationDraft = {
   startDate: string;
   endDate: string;
   current: boolean;
+  startGuessed: boolean;
+  endGuessed: boolean;
   grade: string;
 };
 export type CertificationDraft = { name: string; issuer: string; year: string };
@@ -83,6 +88,8 @@ export function draftFromProfile(profile: Profile): ReviewDraft {
         startDate: job.startDate,
         endDate: job.endDate ?? "",
         current: job.endDate === null,
+        startGuessed: false,
+        endGuessed: false,
         duties: job.duties.join("\n"),
         achievements: job.achievements.join("\n"),
       }),
@@ -95,6 +102,8 @@ export function draftFromProfile(profile: Profile): ReviewDraft {
         startDate: course.startDate ?? "",
         endDate: course.endDate ?? "",
         current: course.endDate === null,
+        startGuessed: false,
+        endGuessed: false,
         grade: course.grade ?? "",
       }),
     ),
@@ -108,6 +117,94 @@ export function draftFromProfile(profile: Profile): ReviewDraft {
   };
 }
 
+/**
+ * The review draft for a CV just read. Gaps stay empty, so approving asks the user to fill them;
+ * a year without a month becomes January (start) or December (end), marked as a guess.
+ */
+export function draftFromExtraction(extraction: CvExtraction): ReviewDraft {
+  const months = (start: string, end: string, current: boolean) => {
+    const from = readCvMonth(start, "start");
+    const to = current ? { month: "", guessed: false } : readCvMonth(end, "end");
+    return { startDate: from.month, endDate: to.month, current, startGuessed: from.guessed, endGuessed: to.guessed };
+  };
+  return {
+    contact: entry("contact", {
+      fullName: extraction.fullName,
+      email: extraction.contact.email ?? "",
+      phone: tidyPhone(extraction.contact.phone ?? ""),
+      location: extraction.contact.location ?? "",
+      linkedIn: extraction.contact.linkedIn ?? "",
+    }),
+    summary: entry("summary", { text: extraction.summary }),
+    skills: entry("skills", { list: [...extraction.skills] }),
+    experience: extraction.experience.map((job, index) =>
+      entry(`experience-${index}`, {
+        title: job.title,
+        company: job.company,
+        location: job.location ?? "",
+        ...months(job.startDate, job.endDate, job.current),
+        duties: job.duties.join("\n"),
+        achievements: job.achievements.join("\n"),
+      }),
+    ),
+    education: extraction.education.map((course, index) =>
+      entry(`education-${index}`, {
+        qualification: course.qualification,
+        subject: course.subject ?? "",
+        institution: course.institution,
+        ...months(course.startDate, course.endDate, course.current),
+        grade: course.grade ?? "",
+      }),
+    ),
+    certifications: extraction.certifications.map((certificate, index) =>
+      entry(`certification-${index}`, {
+        name: certificate.name,
+        issuer: certificate.issuer ?? "",
+        year: certificate.year?.toString() ?? "",
+      }),
+    ),
+  };
+}
+
+const MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/**
+ * A CV date as YYYY-MM: "2021-09", "09/2021" and "Sept 2021" are read as they are; a year alone becomes
+ * January or December and is marked as a guess. Anything else comes back empty, for the user to fill in.
+ */
+export function readCvMonth(text: string, side: "start" | "end"): { month: string; guessed: boolean } {
+  const value = text.trim();
+  const month = (year: string, number: string) => {
+    const n = Number(number);
+    return n >= 1 && n <= 12 ? { month: `${year}-${String(n).padStart(2, "0")}`, guessed: false } : { month: "", guessed: false };
+  };
+
+  let match = /^(\d{4})[-/](\d{1,2})$/.exec(value);
+  if (match) return month(match[1], match[2]);
+  match = /^(\d{1,2})[/.-](\d{4})$/.exec(value);
+  if (match) return month(match[2], match[1]);
+  match = /^([a-z]{3,9})\.?,?\s+(\d{4})$/i.exec(value);
+  const named = match ? MONTH_NAMES.indexOf(match[1].slice(0, 3).toLowerCase()) : -1;
+  if (match && named >= 0) return month(match[2], String(named + 1));
+  if (/^\d{4}$/.test(value)) return { month: `${value}-${side === "start" ? "01" : "12"}`, guessed: true };
+  return { month: "", guessed: false };
+}
+
+/** What a saved profile keeps that the review doesn't show: its id, the job preferences and the follow-up answers. */
+export type ProfileBase = Pick<Profile, "id" | "preferences" | "followUpAnswers"> & {
+  contact: Pick<Profile["contact"], "location">;
+};
+
+/** The base for a profile from a CV just read: a new id, preferences starting from the CV's location, and earlier answers. */
+export function newProfileBase(
+  extraction: CvExtraction,
+  details: { id: string; followUpAnswers: Profile["followUpAnswers"] },
+): ProfileBase {
+  const location = extraction.contact.location?.trim() ?? "";
+  const preferences: JobPreferences = { salary: null, location, workModes: [], contractTypes: [], hours: [] };
+  return { id: details.id, preferences, followUpAnswers: details.followUpAnswers, contact: { location: location || undefined } };
+}
+
 export function reviewReducer(draft: ReviewDraft, action: ReviewAction): ReviewDraft {
   switch (action.type) {
     case "edit-contact":
@@ -117,9 +214,9 @@ export function reviewReducer(draft: ReviewDraft, action: ReviewAction): ReviewD
     case "edit-skills":
       return { ...draft, skills: edited(draft.skills, { list: action.list }) };
     case "edit-experience":
-      return { ...draft, experience: editInList(draft.experience, action.key, action.change) };
+      return { ...draft, experience: editInList(draft.experience, action.key, withoutGuess(action.change)) };
     case "edit-education":
-      return { ...draft, education: editInList(draft.education, action.key, action.change) };
+      return { ...draft, education: editInList(draft.education, action.key, withoutGuess(action.change)) };
     case "edit-certification":
       return { ...draft, certifications: editInList(draft.certifications, action.key, action.change) };
     case "approve":
@@ -159,7 +256,7 @@ export function isFullyApproved(draft: ReviewDraft): boolean {
  * The approved draft as a Profile. `base` supplies what the review does not show
  * (id, job preferences and follow-up answers). Throws if an item is invalid, which approval prevents.
  */
-export function profileFromDraft(draft: ReviewDraft, base: Profile): Profile {
+export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile {
   const contact = draft.contact.value;
   const location = optional(contact.location);
   // Job preferences start from the CV's location; keep them in step unless the user has set them apart.
@@ -176,7 +273,8 @@ export function profileFromDraft(draft: ReviewDraft, base: Profile): Profile {
   }));
 
   return ProfileSchema.parse({
-    ...base,
+    id: base.id,
+    followUpAnswers: base.followUpAnswers,
     fullName: contact.fullName.trim(),
     contact: {
       email: optional(contact.email),
@@ -315,11 +413,24 @@ function allEntries(draft: ReviewDraft): AnyEntry[] {
 }
 
 function emptyExperience(): ExperienceDraft {
-  return { title: "", company: "", location: "", startDate: "", endDate: "", current: false, duties: "", achievements: "" };
+  const dates = { startDate: "", endDate: "", current: false, startGuessed: false, endGuessed: false };
+  return { title: "", company: "", location: "", ...dates, duties: "", achievements: "" };
 }
 
 function emptyEducation(): EducationDraft {
-  return { qualification: "", subject: "", institution: "", startDate: "", endDate: "", current: false, grade: "" };
+  const dates = { startDate: "", endDate: "", current: false, startGuessed: false, endGuessed: false };
+  return { qualification: "", subject: "", institution: "", ...dates, grade: "" };
+}
+
+/** A date the user has touched is no longer our guess. */
+function withoutGuess<T extends { startDate?: string; endDate?: string; startGuessed?: boolean; endGuessed?: boolean }>(
+  change: T,
+): T {
+  return {
+    ...change,
+    ...("startDate" in change ? { startGuessed: false } : {}),
+    ...("endDate" in change ? { endGuessed: false } : {}),
+  };
 }
 
 function splitLines(text: string): string[] {

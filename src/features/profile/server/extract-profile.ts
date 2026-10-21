@@ -1,18 +1,17 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 import { askModel, loadPrompt, type AskModelOptions } from "@/shared/ai";
-import type { Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
-import { CvExtractionSchema, profileFromExtraction, type CvExtraction } from "../cv-extraction";
+import { CvExtractionSchema, extractionFromProfile, tidyExtraction, type CvExtraction } from "../cv-extraction";
 
 export type Requester = AskModelOptions<z.ZodType>["requester"];
 
 /**
- * Turns the text of a CV into a Profile with askModel and prompts/profile-extract.md.
+ * Reads the details of a CV with askModel and prompts/profile-extract.md, for the user to check in the review step.
+ * Anything the CV doesn't give stays empty; the review step asks the user to fill it.
  * In mock mode no model is called: the answer is the sample persona named in the CV (see samplePersonaFor).
  */
-export async function extractProfile(cvText: string, options: { requester?: Requester } = {}): Promise<Profile> {
+export async function extractProfile(cvText: string, options: { requester?: Requester } = {}): Promise<CvExtraction> {
   const extraction = await askModel({
     feature: "profile-extract",
     prompt: await loadPrompt("profile-extract", { cv: cvText }),
@@ -23,7 +22,7 @@ export async function extractProfile(cvText: string, options: { requester?: Requ
     requester: options.requester,
   });
 
-  return profileFromExtraction(extraction, randomUUID());
+  return tidyExtraction(extraction);
 }
 
 /** The persona whose full name appears in the CV, so each sample CV gets its own mock answer. Sara if none does. */
@@ -34,5 +33,5 @@ export function samplePersonaFor(cvText: string): PersonaName {
 }
 
 function sampleExtraction(cvText: string): CvExtraction {
-  return CvExtractionSchema.parse(personas[samplePersonaFor(cvText)].profile);
+  return extractionFromProfile(personas[samplePersonaFor(cvText)].profile);
 }

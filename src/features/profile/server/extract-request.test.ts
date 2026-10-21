@@ -22,12 +22,12 @@ afterEach(() => {
 });
 
 describe("handleExtractRequest", () => {
-  it("reads an uploaded Word CV into a Profile", async () => {
+  it("reads the details of an uploaded Word CV, for the review step", async () => {
     const response = await handleExtractRequest(form({ cv: sampleCv("daniel"), consent: cvConsent.version }));
 
     expect(response.ok).toBe(true);
     if (!response.ok) return;
-    expect(response.profile.fullName).toBe("Daniel Brooks");
+    expect(response.extraction.fullName).toBe("Daniel Brooks");
     expect(response.format).toBe("docx");
     expect(response.truncated).toBe(false);
     // Mock mode says whose sample profile it is, and returns the text read from the file.
