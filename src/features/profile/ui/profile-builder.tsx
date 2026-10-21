@@ -6,7 +6,7 @@ import { suggestFollowUpQuestionsAction } from "../actions";
 import type { ConsentRecord } from "../consent";
 import { recordFollowUpAnswer, type FollowUpQuestion } from "../follow-up";
 import { getBrowserProfileStore, useStorageIsPersistent, useStoredProfile, type StoredProfile } from "../profile-store";
-import { Card, Notice } from "./kit";
+import { Card, Notice } from "@/shared/ui";
 import { ProfileOverview } from "./profile-overview";
 import { QuestionsStep, type QuestionsState } from "./questions-step";
 import { ReviewStep } from "./review-step";

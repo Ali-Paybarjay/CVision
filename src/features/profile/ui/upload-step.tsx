@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Button, Card, cn, ErrorIcon, Field, Notice } from "@/shared/ui";
 import { cvConsent, type ConsentRecord } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
 import { Steps } from "./steps";
-import { Button, Card, cn, ErrorIcon, Field, Notice } from "./kit";
 
 export type ExtractSuccess = Extract<ExtractResponse, { ok: true }>;
 

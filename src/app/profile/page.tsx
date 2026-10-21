@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getAiMode } from "@/shared/ai";
-import { Page } from "@/features/profile/ui/kit";
+import { Page } from "@/shared/ui";
 import { ProfileBuilder } from "@/features/profile/ui/profile-builder";
 
 export const metadata: Metadata = {

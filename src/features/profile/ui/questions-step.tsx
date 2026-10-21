@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FollowUpAnswer } from "@/shared/contracts";
 import type { FollowUpQuestion } from "../follow-up";
-import { Button, Card, Field, Notice, Textarea } from "./kit";
+import { Button, Card, Field, Notice, Textarea } from "@/shared/ui";
 import { Steps } from "./steps";
 
 export type QuestionsState =

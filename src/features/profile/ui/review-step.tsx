@@ -19,7 +19,7 @@ import {
 } from "../review-draft";
 import { tidyPhone } from "../phone";
 import { count, formatPeriod } from "./format";
-import { Button, CheckIcon, cn, ErrorIcon, Field, Input, Notice, Textarea } from "./kit";
+import { Button, CheckIcon, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
 import { Steps } from "./steps";
 
 type ReviewStepProps = {

@@ -1,4 +1,4 @@
-import { CheckIcon, cn } from "./kit";
+import { CheckIcon, cn } from "@/shared/ui";
 
 const steps = ["Upload your CV", "Check your details", "Add the detail"] as const;
 

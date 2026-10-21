@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { StoredProfile } from "../profile-store";
 import { count, formatDay, formatPeriod } from "./format";
-import { Button, ButtonLink, Card, Notice } from "./kit";
+import { Button, ButtonLink, Card, Notice } from "@/shared/ui";
 
 type ProfileOverviewProps = {
   stored: StoredProfile;

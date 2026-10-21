@@ -4,7 +4,7 @@ import { DateTimeSchema, ProfileSchema } from "@/shared/contracts";
 import { ConsentRecordSchema } from "./consent";
 import { FollowUpQuestionSchema } from "./follow-up";
 
-// Until the profiles table from PR #25 is in use, the approved profile lives in the user's browser only.
+// For now the approved profile lives in the user's browser only. Moving it to the profiles table is a separate card.
 // Nothing about the CV is kept on our servers. The user can download or delete it at any time (Your data is yours).
 
 export const StoredProfileSchema = z.object({
