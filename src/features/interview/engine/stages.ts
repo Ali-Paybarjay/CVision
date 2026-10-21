@@ -1,7 +1,7 @@
 // The six stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
 // against the stage's schema (askModel retries once, then fails clearly) and records estimated usage.
 import "server-only";
-import { askModel, getAiMode, loadPrompt } from "@/shared/ai";
+import { askModel, AskModelError, getAiMode, loadPrompt } from "@/shared/ai";
 import {
   answerGuide,
   defaultComposition,
@@ -20,7 +20,7 @@ import type {
   TechnicalInterviewQuestion,
 } from "../contracts";
 import { rubricFor, appliedEvidenceByType } from "../rubrics";
-import { bannedTopicHits, isCleanFollowUp, isLevelBelow, type DraftQuestion, type QuestionSetContext } from "./checks";
+import { bannedTopicHits, isCleanFollowUp, isLevelBelow, isSpeakable, type DraftQuestion, type QuestionSetContext } from "./checks";
 import { fixtureOrPlaceholder, mockEvaluation, mockFollowUpDecision, mockReport, requireFixture } from "./mock";
 import {
   analyseOutputSchema,
@@ -296,14 +296,16 @@ export function settleFollowUp(question: TechnicalInterviewQuestion, output: Fol
   const byId = planned.find((f) => f.id === output.plannedFollowUpId);
   const chosen = byId ?? planned.find((f) => f.gapType === output.gapType) ?? planned[0];
   const text = output.followUpText?.trim() ?? "";
-  const textOk = isCleanFollowUp(text) && bannedTopicHits(text).length === 0;
+  const textOk = isCleanFollowUp(text) && isSpeakable(text) && bannedTopicHits(text).length === 0;
+  // The record stays consistent: the gap type is always the chosen planned follow-up's.
+  const consistent = Boolean(byId) && chosen.gapType === output.gapType;
   return {
     questionId: question.id,
     askFollowUp: true,
-    gapType: output.gapType,
+    gapType: chosen.gapType,
     plannedFollowUpId: chosen.id,
-    followUpText: textOk && byId ? text : chosen.text,
-    usedFallback: !(textOk && byId),
+    followUpText: textOk && consistent ? text : chosen.text,
+    usedFallback: !(textOk && consistent),
     reason: output.reason,
   };
 }
@@ -329,15 +331,16 @@ export async function decideFollowUp(
     return { decision: { questionId, askFollowUp: false, gapType: "none", usedFallback: false, reason: "No genuine attempt to answer, so the interview moves on." } };
   }
 
+  const followUpValues = {
+    question: neutraliseTags(question.text),
+    look_fors: data(question.lookFors),
+    planned_follow_ups: data(question.followUps),
+    candidate_answer: neutraliseTags(main),
+  };
   try {
     const { output, usage, provenance } = await callStage<FollowUpOutput>({
       stage: "followUp",
-      values: {
-        question: neutraliseTags(question.text),
-        look_fors: data(question.lookFors),
-        planned_follow_ups: data(question.followUps),
-        candidate_answer: neutraliseTags(main),
-      },
+      values: followUpValues,
       schema: FollowUpOutputSchema,
       sample: mockFollowUpDecision(question, session.jobId, main),
       voice: false,
@@ -348,7 +351,15 @@ export async function decideFollowUp(
   } catch (error) {
     // Logs the kind of failure only, never the answer text.
     console.error(`interview follow-up: falling back to the planned text (${error instanceof Error ? error.name : "unknown error"})`);
-    return { decision: settleFollowUp(question, null) };
+    const decision = settleFollowUp(question, null);
+    if (!(error instanceof AskModelError) || error.reason !== "invalid-answer") return { decision };
+    // The model was asked twice and both answers were rejected: record what that cost and which prompt ran.
+    const settings = settingsFor("followUp", overrides);
+    const prompt = await loadInterviewPrompt(settings.prompt, followUpValues).catch(() => null);
+    if (!prompt) return { decision };
+    const once = estimateUsage({ stage: "followUp", model: settings.model, input: prompt.text, extraInputChars: askModelInstructionsChars, output: {}, questionId });
+    const usage = { ...once, inputTokens: once.inputTokens * 2, costUsd: once.costUsd * 2 };
+    return { decision, usage, provenance: { stage: "followUp", prompt: settings.prompt, version: prompt.version, model: settings.model } };
   }
 }
 

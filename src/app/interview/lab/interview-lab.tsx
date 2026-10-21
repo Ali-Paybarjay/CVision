@@ -53,18 +53,29 @@ function advance(session: InterviewSession): InterviewSession {
 
 type WithUsage = { usage?: StageUsage; provenance?: Provenance };
 
+/** Each Start begins a new run. Job keys and results carry the run, so "Start again" discards anything still in flight. */
+function runOf(envelope: LabEnvelope): string {
+  return String(envelope.startedAtMs);
+}
+
+/** Applies a result only to the session it was requested for. */
+function updateSameSession(sessionId: string, change: (session: InterviewSession) => InterviewSession) {
+  updateSession((current) => (current.id === sessionId ? change(current) : current));
+}
+
 /** Requests whatever the session needs next. Running or failed requests are not repeated (see runJob). */
 function drive(envelope: LabEnvelope) {
   const { inputs, session } = envelope;
+  const run = runOf(envelope);
   if (!session) {
-    runJob("analyse", async () => {
+    runJob(`${run}:analyse`, async () => {
       const result = await callStep<{ session: InterviewSession }>({
         step: "analyse",
         inputs,
         id: crypto.randomUUID(),
         startedAt: new Date(envelope.startedAtMs).toISOString(),
       });
-      updateEnvelope((current) => (current.session ? current : { ...current, session: result.session }));
+      updateEnvelope((current) => (current.session || runOf(current) !== run ? current : { ...current, session: result.session }));
     });
     return;
   }
@@ -72,10 +83,10 @@ function drive(envelope: LabEnvelope) {
   const next = nextStep(session);
   if (next.step === "generate" || next.step === "review") {
     const step = next.step;
-    runJob(step, async () => {
+    runJob(`${run}:${step}`, async () => {
       const result = await callStep<{ session: InterviewSession }>({ step, inputs, session });
       updateEnvelope((envelope) => {
-        if (!envelope.session || nextStep(envelope.session).step !== step) return envelope;
+        if (!envelope.session || envelope.session.id !== session.id || nextStep(envelope.session).step !== step) return envelope;
         if (step === "generate") return { ...envelope, session: result.session };
         return { ...envelope, session: advance(result.session), startupMs: Date.now() - envelope.startedAtMs };
       });
@@ -84,9 +95,9 @@ function drive(envelope: LabEnvelope) {
 
   if (next.step === "decide") {
     const questionId = next.questionId;
-    runJob(`decide:${questionId}`, async () => {
+    runJob(`${run}:decide:${questionId}`, async () => {
       const result = await callStep<{ decision: FollowUpDecision } & WithUsage>({ step: "follow-up", session, questionId });
-      updateSession((current) =>
+      updateSameSession(session.id, (current) =>
         decisionFor(current, questionId)
           ? current
           : advance(applyFollowUpDecision(current, result.decision, now(), crypto.randomUUID(), result.usage, result.provenance)),
@@ -97,16 +108,16 @@ function drive(envelope: LabEnvelope) {
   // Each finished question is scored on its own, in the background, while the interview carries on.
   for (const question of session.questions) {
     if (!isQuestionFinished(session, question.id) || evaluationFor(session, question.id)) continue;
-    runJob(`evaluate:${question.id}`, async () => {
+    runJob(`${run}:evaluate:${question.id}`, async () => {
       const result = await callStep<{ evaluation: AnswerEvaluation } & WithUsage>({ step: "evaluate", session, questionId: question.id });
-      updateSession((current) => applyEvaluation(current, result.evaluation, result.usage, result.provenance));
+      updateSameSession(session.id, (current) => applyEvaluation(current, result.evaluation, result.usage, result.provenance));
     });
   }
 
   if (next.step === "report") {
-    runJob("report", async () => {
+    runJob(`${run}:report`, async () => {
       const result = await callStep<{ report: InterviewReport } & WithUsage>({ step: "report", session });
-      updateSession((current) => (current.report ? current : applyReport(current, result.report, result.usage, result.provenance)));
+      updateSameSession(session.id, (current) => (current.report ? current : applyReport(current, result.report, result.usage, result.provenance)));
     });
   }
 }
@@ -158,11 +169,11 @@ export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSour
             <p className="text-sm text-text-muted">{source ? source.label : "Pasted job ad and CV"}</p>
             <SecondaryButton onClick={restart}>Start again</SecondaryButton>
           </div>
-          <Progress session={session} jobs={jobs} startupMs={envelope.startupMs} />
+          <Progress session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
           {session && nextStep(session).step === "done" ? (
             <LabReport session={session} />
           ) : (
-            session && <Interview session={session} jobs={jobs} source={source} mode={mode} />
+            session && <Interview session={session} jobs={jobs} run={runOf(envelope)} source={source} mode={mode} />
           )}
           {session && <LabDebug session={session} startupMs={envelope.startupMs} />}
         </>
@@ -244,7 +255,17 @@ const startupStages = [
   { key: "review", label: "Reviewing questions" },
 ] as const;
 
-function Progress({ session, jobs, startupMs }: { session: InterviewSession | null; jobs: Readonly<Record<string, JobState>>; startupMs: number | null }) {
+function Progress({
+  session,
+  jobs,
+  run,
+  startupMs,
+}: {
+  session: InterviewSession | null;
+  jobs: Readonly<Record<string, JobState>>;
+  run: string;
+  startupMs: number | null;
+}) {
   const reached = !session ? 0 : !session.questions.length ? 1 : !session.reviewChangelog ? 2 : 3;
   if (reached === 3) {
     return startupMs === null ? null : <p className="text-sm text-text-muted">Questions ready. Start-up took {(startupMs / 1000).toFixed(1)} seconds.</p>;
@@ -254,7 +275,7 @@ function Progress({ session, jobs, startupMs }: { session: InterviewSession | nu
       <h2 className="text-xl">Preparing your interview</h2>
       <ol className="mt-3 space-y-2">
         {startupStages.map((stage, index) => {
-          const job = jobs[stage.key];
+          const job = jobs[`${run}:${stage.key}`];
           return (
             <li key={stage.key} className="flex flex-wrap items-center gap-2">
               {index < reached ? (
@@ -270,7 +291,7 @@ function Progress({ session, jobs, startupMs }: { session: InterviewSession | nu
               {job?.status === "failed" && (
                 <>
                   <span className="w-full text-sm text-error">{job.message}</span>
-                  <SecondaryButton onClick={() => retryJob(stage.key)}>Try again</SecondaryButton>
+                  <SecondaryButton onClick={() => retryJob(`${run}:${stage.key}`)}>Try again</SecondaryButton>
                 </>
               )}
             </li>
@@ -281,17 +302,30 @@ function Progress({ session, jobs, startupMs }: { session: InterviewSession | nu
   );
 }
 
-function Interview({ session, jobs, source, mode }: { session: InterviewSession; jobs: Readonly<Record<string, JobState>>; source?: LabSource; mode: AiMode }) {
+function Interview({
+  session,
+  jobs,
+  run,
+  source,
+  mode,
+}: {
+  session: InterviewSession;
+  jobs: Readonly<Record<string, JobState>>;
+  run: string;
+  source?: LabSource;
+  mode: AiMode;
+}) {
   const step = nextStep(session);
   const asked = session.questions.filter((q) => turnsFor(session, q.id).length > 0);
   const scored = session.questions.filter((q) => evaluationFor(session, q.id)).length;
+  const reportJob = jobs[`${run}:report`];
 
   return (
     <div className="space-y-4">
       {asked.map((question, index) => {
         const turns = turnsFor(session, question.id);
         const finished = isQuestionFinished(session, question.id);
-        const evaluateJob = jobs[`evaluate:${question.id}`];
+        const evaluateJob = jobs[`${run}:evaluate:${question.id}`];
         return (
           <Card key={question.id} className="space-y-3">
             <p className="text-sm text-text-muted">
@@ -317,7 +351,7 @@ function Interview({ session, jobs, source, mode }: { session: InterviewSession;
                   <span className="flex flex-wrap items-center gap-2">
                     <Status tone="error">Scoring failed</Status>
                     <span className="text-sm text-error">{evaluateJob.message}</span>
-                    <SecondaryButton onClick={() => retryJob(`evaluate:${question.id}`)}>Try again</SecondaryButton>
+                    <SecondaryButton onClick={() => retryJob(`${run}:evaluate:${question.id}`)}>Try again</SecondaryButton>
                   </span>
                 ) : (
                   <Status tone="muted">Scoring in the background…</Status>
@@ -333,7 +367,7 @@ function Interview({ session, jobs, source, mode }: { session: InterviewSession;
               />
             )}
             {step.step === "decide" && step.questionId === question.id && (
-              <DecisionStatus job={jobs[`decide:${question.id}`]} questionId={question.id} />
+              <DecisionStatus job={jobs[`${run}:decide:${question.id}`]} jobKey={`${run}:decide:${question.id}`} />
             )}
           </Card>
         );
@@ -346,10 +380,10 @@ function Interview({ session, jobs, source, mode }: { session: InterviewSession;
             {scored} of {session.questions.length} answers scored.
             {step.step === "report" ? " Putting the report together…" : ""}
           </p>
-          {jobs.report?.status === "failed" && (
+          {reportJob?.status === "failed" && (
             <div className="mt-2 space-y-2">
-              <Notice tone="error">{jobs.report.message}</Notice>
-              <SecondaryButton onClick={() => retryJob("report")}>Try again</SecondaryButton>
+              <Notice tone="error">{reportJob.message}</Notice>
+              <SecondaryButton onClick={() => retryJob(`${run}:report`)}>Try again</SecondaryButton>
             </div>
           )}
         </Card>
@@ -358,12 +392,12 @@ function Interview({ session, jobs, source, mode }: { session: InterviewSession;
   );
 }
 
-function DecisionStatus({ job, questionId }: { job?: JobState; questionId: string }) {
+function DecisionStatus({ job, jobKey }: { job?: JobState; jobKey: string }) {
   if (job?.status === "failed") {
     return (
       <div className="space-y-2">
         <Notice tone="error">{job.message}</Notice>
-        <SecondaryButton onClick={() => retryJob(`decide:${questionId}`)}>Try again</SecondaryButton>
+        <SecondaryButton onClick={() => retryJob(jobKey)}>Try again</SecondaryButton>
       </div>
     );
   }

@@ -6,11 +6,11 @@
 // Set INTERVIEW_EVAL_REVIEW_MODEL=claude-opus-5-5 to run stage 3 on Opus and compare it with Sonnet.
 import { describe, expect, it } from "vitest";
 import type { TechnicalScores } from "./contracts";
-import { addAnswer, applyFollowUpDecision, askQuestion } from "./engine/session";
-import { decideFollowUp, evaluateAnswer, runStartup, writeReport, type StageOverrides } from "./engine/stages";
+import { addAnswer, applyAnalysis, applyFollowUpDecision, applyQuestions, askQuestion, createSession } from "./engine/session";
+import { decideFollowUp, evaluateAnswer, runStartup, toTechnicalQuestion, writeReport, type StageOverrides } from "./engine/stages";
 import { usageTotals } from "./engine/usage";
 import { fixtures } from "./fixtures";
-import { inputsFor } from "./test-support";
+import { inputsFor, questionSetContextFor } from "./test-support";
 
 const runs = 3;
 const overrides: StageOverrides = process.env.INTERVIEW_EVAL_REVIEW_MODEL ? { review: { model: process.env.INTERVIEW_EVAL_REVIEW_MODEL } } : {};
@@ -22,13 +22,23 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("technical interview engine, liv
     async (fixture) => {
       const inputs = inputsFor(fixture);
       const started = Date.now();
-      let session = await runStartup(inputs, { id: `eval-${fixture.id}`, startedAt: at(), overrides });
+      const startup = await runStartup(inputs, { id: `eval-${fixture.id}-startup`, startedAt: at(), overrides });
       const startupSeconds = (Date.now() - started) / 1000;
 
-      // Answer the live questions with the fixture's sample answers, by position.
+      // Score each sample answer against its own fixture question, so the spread measures the scorer, not a mismatch.
+      const context = questionSetContextFor(fixture);
+      let session = applyAnalysis(createSession({ id: `eval-${fixture.id}`, jobId: fixture.job.id, startedAt: at(), mode: "live" }), {
+        ...fixture.analyse,
+        composition: { technical: 6, behavioural: 0 },
+      });
+      session = applyQuestions(session, {
+        blueprint: fixture.review.blueprint,
+        questions: fixture.review.questions.map((q) => toTechnicalQuestion(q, context)),
+        changelog: fixture.review.changelog,
+      });
       const spreads: Record<string, Record<keyof TechnicalScores, number>> = {};
-      for (const [index, question] of session.questions.entries()) {
-        const sample = Object.values(fixture.answers)[index];
+      for (const question of session.questions) {
+        const sample = fixture.answers[question.id];
         session = askQuestion(session, question.id, at(), `${question.id}-ask`);
         session = addAnswer(session, { questionId: question.id, kind: "main", text: sample.main, startedAt: at(), submittedAt: at(), id: `${question.id}-a` });
         const { decision, usage, provenance } = await decideFollowUp(session, question.id, overrides);
@@ -56,8 +66,8 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("technical interview engine, liv
       }
 
       const report = await writeReport(session, overrides);
-      const usage = [...(session.usage ?? []), report.usage];
-      // A session scores each answer once; the extra eval runs are left out of the per-session figure.
+      // One session: the live start-up, then one follow-up decision and one score per question, and the report.
+      const usage = [...(startup.usage ?? []), ...(session.usage ?? []), report.usage];
       const totals = usageTotals(usage);
       const worstSpread = Math.max(...Object.values(spreads).flatMap((s) => Object.values(s)));
 

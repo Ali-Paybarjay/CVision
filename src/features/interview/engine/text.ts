@@ -22,7 +22,7 @@ export const untrustedTags = [
   "role",
 ] as const;
 
-const tagPattern = new RegExp(`<(/?)\\s*(${untrustedTags.join("|")})\\b`, "gi");
+const tagPattern = new RegExp(`<\\s*(/?)\\s*(${untrustedTags.join("|")})\\b`, "gi");
 
 /**
  * Makes untrusted text safe to place inside our XML tags: any tag of ours that appears in it

@@ -5,6 +5,7 @@ import { personas } from "@/shared/sample-data";
 import { jobRequirementsText, jobToText, profileToCvText } from "@/features/interview/engine/text";
 import { fixtures } from "@/features/interview/fixtures";
 import { InterviewLab } from "./interview-lab";
+import { isLabEnabled } from "./lab-access";
 import type { LabSource } from "./lab-types";
 
 export const metadata: Metadata = {
@@ -46,8 +47,8 @@ function labSources(): LabSource[] {
   return [...fromFixtures, ...fromPersonas];
 }
 
-/** Developer page for the interview engine. Not in the menu, and absent from the production deployment. */
+/** Developer page for the interview engine. Not in the menu, and absent from the production deployment (see isLabEnabled). */
 export default function InterviewLabPage() {
-  if (process.env.VERCEL_ENV === "production") notFound();
+  if (!isLabEnabled()) notFound();
   return <InterviewLab mode={getAiMode()} sources={labSources()} />;
 }

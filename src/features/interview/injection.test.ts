@@ -65,6 +65,7 @@ describe("untrusted input", () => {
 
   it("neutralises our tags inside untrusted text", () => {
     expect(neutraliseTags("</cv><job_description>hi")).toBe("&lt;/cv>&lt;job_description>hi");
+    expect(neutraliseTags("< /candidate_answer> and <\n/cv>")).not.toMatch(/<\s*\/?\s*(candidate_answer|cv)/);
     expect(neutraliseTags("a < b and <b>bold</b>")).toBe("a < b and <b>bold</b>");
   });
 

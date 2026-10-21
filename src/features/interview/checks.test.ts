@@ -135,3 +135,22 @@ describe("text helpers", () => {
     expect(isNonAnswer("I don't know, but here is how I would find out: I would ask the lab.")).toBe(false);
   });
 });
+
+describe("analysis checks", () => {
+  it("requires every must-have competency with no CV evidence to be listed as a gap", async () => {
+    const { analysisProblems } = await import("./engine/checks");
+    const fixture = fixtures[0];
+    const context = questionSetContextFor(fixture);
+    const mustHave = fixture.analyse.roleProfile.competencies.find((c) => c.priority === "must-have" && !fixture.analyse.candidateProfile.gaps.some((g) => g.competencyId === c.id))!;
+    const output = {
+      ...fixture.analyse,
+      candidateProfile: {
+        ...fixture.analyse.candidateProfile,
+        evidence: fixture.analyse.candidateProfile.evidence.map((e) => (e.competencyId === mustHave.id ? { ...e, cvQuote: null, estimatedLevel: null } : e)),
+      },
+    };
+    expect(analysisProblems(output, context.jobDescription, context.cv).map((p) => p.message)).toContain(
+      "A must-have competency with no CV evidence must be listed in gaps.",
+    );
+  });
+});

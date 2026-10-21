@@ -206,6 +206,12 @@ export function analysisProblems(
       problems.push({ path: ["candidateProfile", "gaps", i, "competencyId"], message: "Gaps list must-have competencies only." });
     }
   });
+  const listedGaps = new Set(candidate.gaps.map((gap) => gap.competencyId));
+  candidate.evidence.forEach((entry, i) => {
+    if (entry.cvQuote === null && mustHave.has(entry.competencyId) && !listedGaps.has(entry.competencyId)) {
+      problems.push({ path: ["candidateProfile", "evidence", i], message: "A must-have competency with no CV evidence must be listed in gaps." });
+    }
+  });
   return problems;
 }
 

@@ -15,6 +15,7 @@ import {
   reviewStep,
   writeReport,
 } from "@/features/interview/engine/stages";
+import { isLabEnabled } from "../lab-access";
 
 const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("analyse"), inputs: InterviewInputsSchema, id: z.string().min(1), startedAt: z.iso.datetime() }),
@@ -25,13 +26,8 @@ const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("report"), session: InterviewSessionSchema }),
 ]);
 
-/** The lab is for development and previews only: it does not exist on the production deployment. */
-function isProduction(): boolean {
-  return process.env.VERCEL_ENV === "production";
-}
-
 export async function POST(request: Request): Promise<Response> {
-  if (isProduction()) return new Response("Not found", { status: 404 });
+  if (!isLabEnabled()) return new Response("Not found", { status: 404 });
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "The request did not match any interview step." }, { status: 400 });

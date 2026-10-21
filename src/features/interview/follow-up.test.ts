@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as ai from "@/shared/ai";
 import { AskModelError } from "@/shared/ai";
 import { addAnswer, applyFollowUpDecision, askQuestion, decisionFor, InterviewRuleError } from "./engine/session";
-import { analyseStep, decideFollowUp, generateStep, reviewStep } from "./engine/stages";
+import { analyseStep, decideFollowUp, generateStep, reviewStep, settleFollowUp } from "./engine/stages";
 import { processEngineer } from "./fixtures/process-engineer";
 import { inputsFor } from "./test-support";
 
@@ -73,6 +73,30 @@ describe("follow-up decisions", () => {
     const { decision } = await decideFollowUp(session, "q2");
     expect(decision.usedFallback).toBe(true);
     expect(decision.followUpText).toBe("What were the main steps between finding the still idle and running it again?");
+  });
+
+  it("uses the planned text when the model's follow-up is not speakable or does not match its gap type", async () => {
+    const session = await sessionWithAnswer("q2", processEngineer.answers.q2.main);
+    const question = session.questions.find((q) => q.id === "q2")! as Parameters<typeof settleFollowUp>[0];
+    const unspeakable = settleFollowUp(question, {
+      askFollowUp: true,
+      gapType: "missing-specifics",
+      plannedFollowUpId: "q2-f1",
+      followUpText: "Which steps took the still from 0 to 100 kg/h?",
+      reason: "Missing specifics.",
+    });
+    expect(unspeakable.usedFallback).toBe(true);
+    expect(unspeakable.followUpText).toBe(question.followUps[0].text);
+
+    const mismatched = settleFollowUp(question, {
+      askFollowUp: true,
+      gapType: "unverified-claim",
+      plannedFollowUpId: "q2-f1",
+      followUpText: "Which steps did you take?",
+      reason: "Unverified claim.",
+    });
+    expect(mismatched.gapType).toBe("missing-specifics");
+    expect(mismatched.usedFallback).toBe(true);
   });
 
   it("makes a second follow-up on the same question impossible", async () => {
