@@ -1,6 +1,8 @@
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { describe, expect, it } from "vitest";
 import { personas } from "@/shared/sample-data";
-import { profileEvidenceLines } from "../match";
+import { JobExtractionSchema } from "../job-extraction";
+import { MatchAssessmentSchema, profileEvidenceLines } from "../match";
 import { jobPrompt, matchJob, matchPrompt, parseJob, sampleJobFor } from "./check-job";
 
 const emmaJob = personas.emma.jobs[1];
@@ -86,5 +88,14 @@ describe("matchJob in mock mode", () => {
     expect(unsupported).toEqual([]);
     const lines = profileEvidenceLines(profile).map((line) => line.text);
     for (const strength of match.strengths) expect(lines).toContain(strength.evidence);
+  });
+});
+
+describe("the model's answer formats", () => {
+  it.each([
+    ["JobExtractionSchema", JobExtractionSchema],
+    ["MatchAssessmentSchema", MatchAssessmentSchema],
+  ])("%s converts to a structured output format", (_, schema) => {
+    expect(() => zodOutputFormat(schema)).not.toThrow();
   });
 });
