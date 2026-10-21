@@ -3,4 +3,4 @@ export { askModel, AskModelError, type AskModelOptions } from "./ask-model";
 export { getAiMode, DEFAULT_MODEL, type AiMode } from "./config";
 export { loadPrompt } from "./prompts";
 export { getAnonymousKey } from "./anonymous-key";
-export { getDailyLimits, type Requester } from "./usage";
+export { getDailyLimits, type ModelUsage, type Requester } from "./usage";
