@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { type Profile } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
+import { extractionFromProfile, type CvExtraction } from "./cv-extraction";
 import {
+  draftFromExtraction,
   draftFromProfile,
   isFullyApproved,
+  newProfileBase,
   normaliseLink,
   profileFromDraft,
+  readCvMonth,
   reviewProgress,
   reviewReducer,
   type ReviewAction,
@@ -174,5 +178,73 @@ describe("normaliseLink", () => {
     expect(normaliseLink(" www.linkedin.com/in/emma ")).toBe("https://www.linkedin.com/in/emma");
     expect(normaliseLink("https://www.linkedin.com/in/emma")).toBe("https://www.linkedin.com/in/emma");
     expect(normaliseLink("")).toBeUndefined();
+  });
+});
+
+describe("a draft from a CV just read (#33)", () => {
+  const read = (change: Partial<CvExtraction> = {}): CvExtraction => ({ ...extractionFromProfile(sara), ...change });
+  const firstJob = (job: Partial<CvExtraction["experience"][number]>) =>
+    read({ experience: [{ ...extractionFromProfile(sara).experience[0], ...job }] });
+
+  it.each(Object.keys(personas) as (keyof typeof personas)[])("gives %s's profile back once every item is approved", (name) => {
+    const profile = personas[name].profile;
+    const draft = draftFromExtraction(extractionFromProfile(profile));
+
+    expect(profileFromDraft(approveAll(draft), profile)).toEqual(profile);
+  });
+
+  it("asks the user to fill what the CV doesn't give, instead of inventing it", () => {
+    let draft = draftFromExtraction({ ...firstJob({ company: "", startDate: "" }), fullName: "" });
+
+    draft = apply(draft, { type: "approve", key: "contact" }, { type: "approve", key: "experience-0" });
+
+    expect(draft.contact.errors.fullName).toBe("Add your full name.");
+    expect(draft.experience[0].errors).toMatchObject({ company: "Add the employer’s name." });
+    expect(draft.experience[0].errors.startDate).toContain("Add the month you started.");
+    expect(isFullyApproved(approveAll(draft))).toBe(false);
+  });
+
+  it("turns a year alone into January or December, marked as a guess until the user edits it", () => {
+    const draft = draftFromExtraction(firstJob({ startDate: "2019", endDate: "2021", current: false }));
+
+    expect(draft.experience[0].value).toMatchObject({ startDate: "2019-01", endDate: "2021-12", startGuessed: true, endGuessed: true });
+
+    const edited = apply(draft, { type: "edit-experience", key: "experience-0", change: { startDate: "2019-03" } });
+    expect(edited.experience[0].value).toMatchObject({ startDate: "2019-03", startGuessed: false, endGuessed: true });
+  });
+
+  it("leaves no end date for a job the user still has", () => {
+    const draft = draftFromExtraction(firstJob({ endDate: "2021", current: true }));
+
+    expect(draft.experience[0].value).toMatchObject({ endDate: "", current: true, endGuessed: false });
+  });
+
+  it("starts the job preferences from the CV's location, with a new id and the earlier answers", () => {
+    const answers = sara.followUpAnswers;
+    const base = newProfileBase(read(), { id: "new-id", followUpAnswers: answers });
+
+    expect(base).toEqual({
+      id: "new-id",
+      followUpAnswers: answers,
+      preferences: { salary: null, location: "Manchester", workModes: [], contractTypes: [], hours: [] },
+      contact: { location: "Manchester" },
+    });
+  });
+});
+
+describe("readCvMonth", () => {
+  it.each([
+    ["2021-09", "start", { month: "2021-09", guessed: false }],
+    ["2021/9", "start", { month: "2021-09", guessed: false }],
+    ["09/2021", "end", { month: "2021-09", guessed: false }],
+    ["Sept 2021", "start", { month: "2021-09", guessed: false }],
+    ["September, 2021", "end", { month: "2021-09", guessed: false }],
+    ["2021", "start", { month: "2021-01", guessed: true }],
+    ["2021", "end", { month: "2021-12", guessed: true }],
+    ["", "start", { month: "", guessed: false }],
+    ["Summer 2021", "start", { month: "", guessed: false }],
+    ["2021-13", "start", { month: "", guessed: false }],
+  ] as const)("reads %j as a %s date", (text, side, expected) => {
+    expect(readCvMonth(text, side)).toEqual(expected);
   });
 });

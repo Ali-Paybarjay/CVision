@@ -56,7 +56,7 @@ describe("POST /profile/extract", () => {
     const response = await POST(upload({ consent: cvConsent.version }));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true, profile: { fullName: "Sara Khan" } });
+    expect(await response.json()).toMatchObject({ ok: true, extraction: { fullName: "Sara Khan" } });
   });
 
   it("refuses an upload from another site", async () => {

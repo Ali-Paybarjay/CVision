@@ -2,7 +2,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { describe, expect, it } from "vitest";
 import { ProfileSchema } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
-import { CvExtractionSchema } from "../cv-extraction";
+import { CvExtractionSchema, extractionFromProfile, tidyExtraction } from "../cv-extraction";
 import { FollowUpQuestionListSchema } from "../follow-up";
 import { extractProfile, samplePersonaFor } from "./extract-profile";
 
@@ -14,24 +14,52 @@ describe("extractProfile in mock mode", () => {
     expect(profile.experience.map((job) => job.company)).toEqual(personas.reza.profile.experience.map((job) => job.company));
   });
 
-  it("returns a full Profile with a fresh id, empty preferences and no answers yet", async () => {
-    const profile = await extractProfile("Daniel Brooks, Store Manager");
+  it("gives back the sample profile's details unchanged, for the review step", async () => {
+    const details = await extractProfile("Daniel Brooks, Store Manager");
 
-    expect(() => ProfileSchema.parse(profile)).not.toThrow();
-    expect(profile.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(profile.preferences).toEqual({
-      salary: null,
-      location: "Birmingham",
-      workModes: [],
-      contractTypes: [],
-      hours: [],
+    expect(details).toEqual(extractionFromProfile(personas.daniel.profile));
+  });
+});
+
+describe("tidyExtraction (#33)", () => {
+  const base = extractionFromProfile(personas.sara.profile);
+
+  it("keeps what the CV doesn't give empty, instead of failing", () => {
+    const details = CvExtractionSchema.parse({
+      ...base,
+      fullName: "   ",
+      experience: [{ ...base.experience[0], company: "", startDate: "", endDate: "", current: false }],
+      education: [{ ...base.education[0], startDate: "", endDate: "" }],
     });
-    expect(profile.followUpAnswers).toEqual([]);
+
+    const tidy = tidyExtraction(details);
+
+    expect(tidy.fullName).toBe("");
+    expect(tidy.experience[0]).toMatchObject({ company: "", startDate: "", endDate: "" });
   });
 
-  it("gives each CV its own id", async () => {
-    const [first, second] = await Promise.all([extractProfile("Emma Walsh"), extractProfile("Emma Walsh")]);
-    expect(first.id).not.toBe(second.id);
+  it("drops the end date of a job the user still has, and empty or repeated lines", () => {
+    const tidy = tidyExtraction({
+      ...base,
+      skills: [" SQL ", "sql", "", "Python"],
+      experience: [{ ...base.experience[0], endDate: "2026-01", current: true, duties: ["Built dashboards", " ", "built dashboards"] }],
+    });
+
+    expect(tidy.skills).toEqual(["SQL", "Python"]);
+    expect(tidy.experience[0]).toMatchObject({ endDate: "", current: true, duties: ["Built dashboards"] });
+  });
+
+  it("keeps a certificate with an issuer but no name for the user to complete, and drops an empty one", () => {
+    const tidy = tidyExtraction({ ...base, certifications: [{ name: " ", issuer: "BCS" }, { name: "" }] });
+
+    expect(tidy.certifications).toEqual([{ name: "", issuer: "BCS", year: undefined }]);
+  });
+
+  it("never needs a guess from the model: every sample profile fits the loose format", () => {
+    for (const persona of Object.values(personas)) {
+      expect(() => CvExtractionSchema.parse(extractionFromProfile(persona.profile))).not.toThrow();
+    }
+    expect(() => ProfileSchema.parse(personas.sara.profile)).not.toThrow();
   });
 });
 

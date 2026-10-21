@@ -34,9 +34,9 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("profile-extract on the sample C
 
     it("reads every job, with its dates, newest first", async () => {
       const { profile } = await result();
-      const summary = (jobs: typeof expected.experience) =>
-        jobs.map((job) => [normalise(job.title), normalise(job.company), job.startDate, job.endDate]);
-      expect(summary(profile.experience)).toEqual(summary(expected.experience));
+      const read = profile.experience.map((job) => [normalise(job.title), normalise(job.company), job.startDate, job.current ? null : job.endDate]);
+      const right = expected.experience.map((job) => [normalise(job.title), normalise(job.company), job.startDate, job.endDate]);
+      expect(read).toEqual(right);
     });
 
     it("keeps every duty and achievement in the user's own words", async () => {
