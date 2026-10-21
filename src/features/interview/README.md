@@ -1,1 +1,1 @@
-Person 4 · Interview logic: InterviewSession questions, scoring on four criteria and feedback.
+مرضیه · منطق مصاحبه: پرسش‌های InterviewSession، نمره در چهار معیار و بازخورد.

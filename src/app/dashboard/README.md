@@ -1,1 +1,1 @@
-Person 1 · Dashboard: the signed-in home with the application tracker and account links.
+علی · داشبورد: صفحهٔ اصلی کاربرِ واردشده، با پیگیری درخواست‌ها و پیوند حساب.

@@ -1,1 +1,1 @@
-Shared · Team documents. brand.md is the CVision brand guide (version 2.1); follow it for colour, type, voice and copy.
+مشترک · سندهای تیم. brand.md برند گاید CVision نسخهٔ ۲٫۱ است؛ رنگ، فونت، لحن و متن‌ها طبق آن.

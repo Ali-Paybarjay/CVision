@@ -1,1 +1,1 @@
-Shared · Fictional sample data (personas, jobs, matches). Never real people or real CVs.
+مشترک · دادهٔ نمونهٔ ساختگی (پرسوناها، آگهی‌ها، تطابق‌ها). هرگز آدم واقعی یا رزومهٔ واقعی.

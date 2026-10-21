@@ -5,7 +5,7 @@ export const TailoringStatusSchema = z.enum(["proposed", "approved", "rejected"]
 export type TailoringStatus = z.infer<typeof TailoringStatusSchema>;
 
 /**
- * One suggested edit to the CV for one job (person 3 builds it).
+ * One suggested edit to the CV for one job (Nazanin builds it).
  * Only "approved" changes reach the exported CV (You approve everything).
  */
 export const TailoringChangeSchema = z.object({
