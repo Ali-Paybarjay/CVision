@@ -1,11 +1,26 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { askGapQuestions, proposeChanges, sampleAnswers, sampleProposals } from "@/features/tailor";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { Card, Notice, Page } from "@/shared/ui";
 import { ChangeReview } from "./change-review";
 
 // A test page on the sample personas until Profile and Jobs hand over real data: /tailor?persona=reza
-export default async function TailorPage({ searchParams }: PageProps<"/tailor">) {
+export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
+  return (
+    <Page
+      width="wide"
+      title="Tailor"
+      description="Review each suggested change before it goes into your CV and cover letter."
+    >
+      <Suspense fallback={<p className="text-text-muted">Loading your changes…</p>}>
+        <TailorView searchParams={searchParams} />
+      </Suspense>
+    </Page>
+  );
+}
+
+async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchParams">) {
   const requested = (await searchParams).persona;
   const name: PersonaName = typeof requested === "string" && requested in personas ? (requested as PersonaName) : "sara";
   const { profile, jobs, match } = personas[name];
@@ -16,11 +31,7 @@ export default async function TailorPage({ searchParams }: PageProps<"/tailor">)
   const proposal = await proposeChanges({ profile, job, match, answers, sample: sampleProposals[name] });
 
   return (
-    <Page
-      width="wide"
-      title="Tailor"
-      description="Review each suggested change before it goes into your CV and cover letter."
-    >
+    <>
       <nav aria-label="Sample personas" className="flex flex-wrap gap-2">
         {(Object.keys(personas) as PersonaName[]).map((key) => (
           <Link
@@ -82,6 +93,6 @@ export default async function TailorPage({ searchParams }: PageProps<"/tailor">)
           </ul>
         </section>
       )}
-    </Page>
+    </>
   );
 }
