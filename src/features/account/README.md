@@ -1,1 +1,1 @@
-Person 1 · Account: sign-in, privacy and consent, data download and full deletion (Your data is yours).
+علی · حساب کاربری: ورود، حریم خصوصی و رضایت، دانلود و حذف کامل داده (Your data is yours).

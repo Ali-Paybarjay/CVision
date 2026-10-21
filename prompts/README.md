@@ -1,1 +1,1 @@
-Shared · Prompts for askModel. Each person adds or edits only their own files (profile-*, tailor-*, cvcheck-*, interview-*); _voice.md is the shared brand voice.
+مشترک · پرامپت‌های askModel. هر نفر فقط فایل‌های خودش را اضافه یا عوض می‌کند (profile-* شایان، tailor-* نازنین، cvcheck-* و interview-* مرضیه). _voice.md لحن مشترک برند است. متن خود پرامپت‌ها انگلیسی است.

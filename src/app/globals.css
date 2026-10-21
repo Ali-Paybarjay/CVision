@@ -2,8 +2,10 @@
 
 /* CVision brand tokens, exactly as docs/brand.md › "Colour tokens for the app".
    Light is the default. Dark applies when the device is set to dark,
-   unless the page sets data-theme="light". */
-:root {
+   unless the page sets data-theme="light". The .light-palette class keeps
+   a part of the page light in both modes (the CV preview). */
+:root,
+.light-palette {
   /* CVision Light (default) */
   --color-canvas: #F2F5F9;      /* Canvas: app background */
   --color-surface: #FFFFFF;     /* Paper: cards, fields */
@@ -107,5 +109,16 @@
   h3,
   h4 {
     @apply font-semibold;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }

@@ -1,1 +1,1 @@
-Person 2 · Jobs page: paste a job ad, turn it into a Job and show the MatchResult.
+شایان · صفحهٔ آگهی‌ها: چسباندن آگهی، تبدیلش به Job و نمایش MatchResult.

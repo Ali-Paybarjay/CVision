@@ -9,7 +9,7 @@ export const StrengthSchema = z.object({
 });
 export type Strength = z.infer<typeof StrengthSchema>;
 
-/** Something to ask the user about before tailoring (person 3 asks one question per gap). */
+/** Something to ask the user about before tailoring (Nazanin asks one question per gap). */
 export const GapSchema = z.object({
   id: IdSchema,
   requirement: z.string().min(1),
@@ -20,7 +20,7 @@ export const GapSchema = z.object({
 });
 export type Gap = z.infer<typeof GapSchema>;
 
-/** How well a Profile fits a Job (person 2 builds it). */
+/** How well a Profile fits a Job (Shayan builds it). */
 export const MatchResultSchema = z.object({
   jobId: IdSchema,
   /** 0 to 100. */

@@ -13,7 +13,7 @@ export const CvIssueSchema = z.object({
 export type CvIssue = z.infer<typeof CvIssueSchema>;
 
 /**
- * The free 2-minute CV check (person 4 builds it).
+ * The free 2-minute CV check (Marzieh builds it).
  * Anonymous and never stored, so it has no id and no database table.
  */
 export const CvCheckResultSchema = z.object({
