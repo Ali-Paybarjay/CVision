@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/features/account/current-user";
 import { loadAccountProfile } from "@/features/profile/server/profile-account";
@@ -38,6 +39,9 @@ export default function JobsPage() {
 async function JobsForVisitor({ demoMode }: { demoMode: boolean }) {
   if (!isSupabaseConfigured()) return <JobChecker demoMode={demoMode} source={{ kind: "browser" }} />;
 
+  // Reading the session checks the token's expiry against the clock, so it waits for the real request
+  // instead of running while Next.js prerenders the page ahead of time.
+  await connection();
   const [user, supabase] = await Promise.all([getCurrentUser(), createSupabaseServerClient()]);
   if (!user || !supabase) return <JobChecker demoMode={demoMode} source={{ kind: "signed-out" }} />;
 
