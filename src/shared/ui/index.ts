@@ -9,4 +9,5 @@ export { CheckIcon, ErrorIcon, InfoIcon, WarningIcon } from "./icons";
 export { Notice } from "./notice";
 export { Page } from "./page";
 export { SiteHeader } from "./site-header";
+export { TrackedButtonLink } from "./tracked-button-link";
 export { Wordmark } from "./wordmark";
