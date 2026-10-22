@@ -4,7 +4,14 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 import { DEFAULT_MODEL, getAiMode } from "./config";
 import { loadVoice } from "./prompts";
-import { assertWithinDailyLimit, estimateCostUsd, getUsageStore, LimitReachedError, type Requester } from "./usage";
+import {
+  assertWithinDailyLimit,
+  estimateCostUsd,
+  getUsageStore,
+  LimitReachedError,
+  type ModelUsage,
+  type Requester,
+} from "./usage";
 
 export type AskModelOptions<S extends z.ZodType> = {
   /** Who is asking, for usage logs and daily limits, e.g. "profile-extract" or "cv-check". */
@@ -23,6 +30,11 @@ export type AskModelOptions<S extends z.ZodType> = {
   model?: string;
   effort?: "low" | "medium" | "high";
   maxTokens?: number;
+  /**
+   * Live mode only: called after each request to the model, a retry included, with the tokens it really used.
+   * askModel waits for it, so an async callback that writes somewhere should be quick.
+   */
+  onUsage?: (usage: ModelUsage) => void | Promise<void>;
 };
 
 export class AskModelError extends Error {
@@ -120,18 +132,22 @@ async function logUsage(
   usage: Anthropic.Usage,
   ok: boolean,
 ): Promise<void> {
+  const used: ModelUsage = {
+    model,
+    inputTokens: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+    outputTokens: usage.output_tokens,
+    costUsd: estimateCostUsd(model, usage),
+    ok,
+  };
+  // A logging failure must never break the user's request, and neither must the caller's onUsage.
   try {
-    await getUsageStore().record({
-      requester: options.requester,
-      feature: options.feature,
-      model,
-      inputTokens: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
-      outputTokens: usage.output_tokens,
-      costUsd: estimateCostUsd(model, usage),
-      ok,
-    });
+    await getUsageStore().record({ requester: options.requester, feature: options.feature, ...used });
   } catch (error) {
-    // A logging failure must never break the user's request.
     console.error("askModel: could not record usage", error);
+  }
+  try {
+    await options.onUsage?.(used);
+  } catch (error) {
+    console.error("askModel: onUsage failed", error);
   }
 }
