@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { answerGap, decideChange } from "@/features/tailor/actions";
 import { buildTailoredCv } from "@/features/tailor/tailored-cv";
-import type { NextStep } from "@/features/tailor/types";
+import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, Profile, TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { Button, Card, CvPaper, Field, FitLine, Notice, Textarea } from "@/shared/ui";
+import { CoverLetterPanel, type LetterState } from "./cover-letter-panel";
 import { CvPreview } from "./cv-preview";
 
 export type GapPrompt = { gap: Gap; question: string; sampleAnswer: string | null };
@@ -31,6 +32,8 @@ const sectionNames: Record<TailoringChange["section"], string> = {
 export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; profile: Profile; prompts: GapPrompt[] }) {
   const [gapStates, setGapStates] = useState<Record<string, GapState>>({});
   const [changes, setChanges] = useState<TailoringChange[]>([]);
+  const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
+  const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
 
   const counts = {
@@ -39,7 +42,9 @@ export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; pr
     waiting: changes.filter((change) => change.status === "proposed").length,
   };
 
-  const onAnswered = (gapId: string, newChanges: TailoringChange[], nextSteps: NextStep[]) => {
+  const onAnswered = (answer: GapAnswer, newChanges: TailoringChange[], nextSteps: NextStep[]) => {
+    const { gapId } = answer;
+    setAnswers((current) => ({ ...current, [gapId]: answer }));
     setChanges((current) => [...current.filter((change) => change.gapId !== gapId), ...newChanges]);
     setGapStates((current) => ({ ...current, [gapId]: { phase: "answered", nextSteps } }));
   };
@@ -81,6 +86,14 @@ export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; pr
             />
           ))}
         </section>
+
+        <CoverLetterPanel
+          jobId={jobId}
+          changes={changes}
+          answers={Object.values(answers)}
+          letter={letter}
+          setLetter={setLetter}
+        />
       </div>
 
       <aside className="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start" aria-labelledby="preview-heading">
@@ -99,7 +112,7 @@ type GapCardProps = {
   prompt: GapPrompt;
   state: GapState;
   setState: (state: GapState) => void;
-  onAnswered: (gapId: string, changes: TailoringChange[], nextSteps: NextStep[]) => void;
+  onAnswered: (answer: GapAnswer, changes: TailoringChange[], nextSteps: NextStep[]) => void;
   changes: TailoringChange[];
   onDecide: (change: TailoringChange) => Promise<void>;
 };
@@ -113,7 +126,8 @@ function GapCard({ jobId, prompt, state, setState, onAnswered, changes, onDecide
     setState({ phase: "working" });
     startTransition(async () => {
       const result = await answerGap({ jobId, gapId: gap.id, answer, hasExperience });
-      if (result.ok) onAnswered(gap.id, result.changes, result.nextSteps);
+      const given: GapAnswer = { gapId: gap.id, question: prompt.question, answer: answer.trim(), hasExperience };
+      if (result.ok) onAnswered(given, result.changes, result.nextSteps);
       else setState({ phase: "error", message: result.message });
     });
   };
