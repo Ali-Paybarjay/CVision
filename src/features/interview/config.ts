@@ -74,6 +74,8 @@ export const limits = {
   questionMaxWords: 80,
   followUpMaxWords: 40,
   quoteMaxWords: 25,
+  /** The one thing to do next time: a single specific action, not a list. */
+  improvementMaxWords: 60,
 };
 
 /** Overall score thresholds for the readiness label. */

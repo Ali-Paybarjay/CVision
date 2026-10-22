@@ -1,4 +1,4 @@
-// Small building blocks for the interview lab, in the brand's role tokens. Every status has an icon and words.
+// Small building blocks for interview practice, in the brand's role tokens. Every status has an icon and words.
 import type { ReactNode } from "react";
 
 export type Tone = "accent" | "warning" | "error" | "muted";

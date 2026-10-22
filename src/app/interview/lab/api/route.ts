@@ -1,31 +1,12 @@
 // The interview lab's API: one POST per engine step. A Route Handler rather than Server Actions, because the
 // client dispatches Server Actions one at a time and answers are scored in the background while the interview goes on.
 import { z } from "zod";
-import { AskModelError, getAiMode, type Requester } from "@/shared/ai";
+import { getAiMode, type Requester } from "@/shared/ai";
 import { getCurrentUser } from "@/features/account/current-user";
-import { limits } from "@/features/interview/config";
-import { InterviewSessionSchema as FullSessionSchema } from "@/features/interview/contracts";
-import { MockFixtureMissingError } from "@/features/interview/engine/mock";
 import { InterviewInputsSchema } from "@/features/interview/engine/schemas";
-import { InterviewRuleError } from "@/features/interview/engine/session";
-import {
-  analyseStep,
-  decideFollowUp,
-  evaluateAnswer,
-  generateStep,
-  InterviewStageError,
-  reviewStep,
-  writeReport,
-} from "@/features/interview/engine/stages";
+import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, writeReport } from "@/features/interview/engine/stages";
+import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
 import { isLabEnabled } from "../lab-access";
-
-// Answers are added in the browser and arrive inside the session, so their length is checked here.
-const InterviewSessionSchema = FullSessionSchema.refine(
-  (session) =>
-    session.answers.every((a) => a.text.length <= limits.answerMaxChars) &&
-    (session.turns ?? []).every((t) => t.speaker !== "candidate" || t.text.length <= limits.answerMaxChars),
-  { message: `An answer is longer than ${limits.answerMaxChars} characters.` },
-);
 
 const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("analyse"), inputs: InterviewInputsSchema, id: z.string().min(1), startedAt: z.iso.datetime() }),
@@ -49,11 +30,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    const tooLong = parsed.error.issues.some((issue) => issue.code === "too_big" || issue.message.includes("longer than"));
-    const error = tooLong ? "The job ad, CV or an answer is too long." : "The request did not match any interview step.";
-    return Response.json({ error }, { status: 400 });
-  }
+  if (!parsed.success) return badRequest(parsed.error.issues);
   const body = parsed.data;
 
   try {
@@ -72,17 +49,6 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json(await writeReport(body.session, { requester }));
     }
   } catch (error) {
-    // Log the kind of failure only: never the CV, the job description or an answer.
-    const reason = error instanceof AskModelError ? error.reason : undefined;
-    console.error(`interview lab: ${body.step} failed (${error instanceof Error ? error.name : "unknown"}${reason ? `, ${reason}` : ""})`);
-    const known =
-      error instanceof AskModelError ||
-      error instanceof MockFixtureMissingError ||
-      error instanceof InterviewStageError ||
-      error instanceof InterviewRuleError;
-    return Response.json(
-      { error: known ? (error as Error).message : `The ${body.step} step failed. Try again.` },
-      { status: known ? 422 : 500 },
-    );
+    return stepFailed("interview lab", body.step, error);
   }
 }
