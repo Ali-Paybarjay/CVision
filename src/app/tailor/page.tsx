@@ -1,19 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { askGapQuestions, proposeChanges, sampleAnswers, sampleProposals } from "@/features/tailor";
-import { personas, type PersonaName } from "@/shared/sample-data";
-import { Card, Notice, Page } from "@/shared/ui";
-import { ChangeReview } from "./change-review";
+import { askGapQuestions } from "@/features/tailor/gap-questions";
+import { sampleForGap } from "@/features/tailor/samples";
+import { getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
+import { getAiMode } from "@/shared/ai";
+import { ButtonLink, Card, Notice, Page } from "@/shared/ui";
+import { TailorWorkspace } from "./tailor-workspace";
 
-// A test page on the sample personas until Profile and Jobs hand over real data: /tailor?persona=reza
+export const metadata: Metadata = { title: "Tailor your CV" };
+
+// /tailor?job=<id>: the user's CV for one job, with a question per gap and every change approved by them.
 export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
   return (
-    <Page
-      width="wide"
-      title="Tailor"
-      description="Review each suggested change before it goes into your CV and cover letter."
-    >
-      <Suspense fallback={<p className="text-text-muted">Loading your changes…</p>}>
+    <Page width="wide" title="Tailor your CV" description="Answer a few questions, then approve each change before it goes into your CV.">
+      <Suspense fallback={<p className="text-text-muted">Loading your CV…</p>}>
         <TailorView searchParams={searchParams} />
       </Suspense>
     </Page>
@@ -21,78 +22,90 @@ export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
 }
 
 async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchParams">) {
-  const requested = (await searchParams).persona;
-  const name: PersonaName = typeof requested === "string" && requested in personas ? (requested as PersonaName) : "sara";
-  const { profile, jobs, match } = personas[name];
-  const job = jobs[0];
+  const requested = (await searchParams).job;
+  const jobId = typeof requested === "string" ? requested : null;
+
+  const profile = await getMyProfile();
+  if (!profile) {
+    return (
+      <Notice tone="info" title="Upload your CV first">
+        Tailoring starts from your CV. <Link href="/profile" className="text-accent underline">Upload your CV</Link>
+      </Notice>
+    );
+  }
+
+  if (!jobId) return <JobPicker />;
+
+  const [job, match] = await Promise.all([getMyJob(jobId), getMyMatch(jobId)]);
+  if (!job) {
+    return (
+      <Notice tone="error" title="We could not find this job">
+        Choose one of your jobs below.
+      </Notice>
+    );
+  }
+
+  const header = (
+    <p className="text-lg">
+      <span className="font-semibold">{job.title}</span> at {job.company}
+      {getAiMode() === "mock" && (
+        <span className="ml-3 rounded-full border border-line px-2 py-0.5 align-middle text-xs text-text-muted">Sample data · mock mode</span>
+      )}
+    </p>
+  );
+
+  if (!match) {
+    return (
+      <>
+        {header}
+        <Notice tone="info" title="We have not compared your CV with this job yet">
+          Check how your CV matches this job first, then come back to tailor it.
+        </Notice>
+        <div>
+          <ButtonLink href="/jobs">Go to your jobs</ButtonLink>
+        </div>
+      </>
+    );
+  }
 
   const questions = await askGapQuestions({ profile, job, match });
-  const answers = sampleAnswers[name];
-  const proposal = await proposeChanges({ profile, job, match, answers, sample: sampleProposals[name] });
+  const showSamples = getAiMode() === "mock";
+  const prompts = questions.flatMap(({ gapId, question }) => {
+    const gap = match.gaps.find((item) => item.id === gapId);
+    if (!gap) return [];
+    const sampleAnswer = showSamples ? (sampleForGap(job.id, gap.id).answer?.answer ?? null) : null;
+    return [{ gap, question, sampleAnswer }];
+  });
 
   return (
     <>
-      <nav aria-label="Sample personas" className="flex flex-wrap gap-2">
-        {(Object.keys(personas) as PersonaName[]).map((key) => (
-          <Link
-            key={key}
-            href={`/tailor?persona=${key}`}
-            aria-current={key === name ? "page" : undefined}
-            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm capitalize aria-[current=page]:border-accent aria-[current=page]:text-accent"
-          >
-            {key}
-          </Link>
-        ))}
-      </nav>
-
-      <p className="text-text-muted">
-        {profile.fullName} · {job.title} at {job.company} ·{" "}
-        <span className="rounded-full border border-line px-2 py-0.5 text-xs">Sample data · mock mode</span>
-      </p>
-
-      <section>
-        <h2 className="text-xl">Your answers to the gap questions</h2>
-        <ul className="mt-4 space-y-3">
-          {questions.map((question) => {
-            const answer = answers.find((item) => item.gapId === question.gapId);
-            return (
-              <li key={question.gapId}>
-                <Card>
-                  <p className="font-semibold">{question.question}</p>
-                  <p className="mt-2 text-text-muted">{answer ? `“${answer.answer}”` : "Not answered yet."}</p>
-                </Card>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <section>
-        <h2 className="text-xl">Suggested changes</h2>
-        <div className="mt-4">
-          <ChangeReview changes={proposal.changes} />
-        </div>
-      </section>
-
-      {proposal.nextSteps.length > 0 && (
-        <section>
-          <h2 className="text-xl">Not added to your CV</h2>
-          <p className="mt-2 text-text-muted">You told us you have not done these yet, so we have not added them. Here is a real next step for each.</p>
-          <ul className="mt-4 space-y-3">
-            {proposal.nextSteps.map((step) => {
-              const gap = match.gaps.find((item) => item.id === step.gapId);
-              return (
-                <li key={step.gapId}>
-                  <Notice tone="info" title={gap?.requirement ?? "Gap"}>
-                    {step.kind === "learn" ? "To learn: " : "Closest real skill: "}
-                    {step.suggestion}
-                  </Notice>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+      {header}
+      <TailorWorkspace jobId={job.id} profile={profile} prompts={prompts} />
     </>
+  );
+}
+
+async function JobPicker() {
+  const jobs = await listMyJobs();
+  if (jobs.length === 0) {
+    return (
+      <Notice tone="info" title="Add a job first">
+        Paste a job ad to tailor your CV for it. <Link href="/jobs" className="text-accent underline">Add a job</Link>
+      </Notice>
+    );
+  }
+  return (
+    <Card>
+      <h2 className="text-xl">Which job is this CV for?</h2>
+      <ul className="mt-4 flex flex-col gap-3">
+        {jobs.map((job) => (
+          <li key={job.id}>
+            <Link href={`/tailor?job=${encodeURIComponent(job.id)}`} className="text-accent underline underline-offset-4">
+              {job.title} at {job.company}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }

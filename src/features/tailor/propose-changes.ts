@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt } from "@/shared/ai";
 import { enforceNothingInvented } from "./nothing-invented";
@@ -49,9 +50,9 @@ export async function proposeChanges(input: ProposeInput): Promise<TailoringProp
   });
 
   return {
-    changes: kept.map((change, index) => ({
+    changes: kept.map((change) => ({
       ...change,
-      id: `${input.job.id}-change-${index + 1}`,
+      id: randomUUID(),
       jobId: input.job.id,
       status: "proposed",
     })),
