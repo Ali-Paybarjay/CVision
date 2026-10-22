@@ -1,0 +1,70 @@
+# PR titles read "#<number> · <name> · <goal>" (CLAUDE.md, Language). The author writes the goal;
+# this puts the right number and the author's name in front, so nobody does it by hand:
+# - when a PR is opened, reopened, retitled or gets new commits: that PR;
+# - after every merge into main, and on a manual run: every open PR to main.
+# It edits only titles, so it runs for documentation-only PRs too and takes a few seconds.
+name: PR title
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, edited, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number || 'all' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  titles:
+    name: Number and name in PR titles
+    # An edit to a PR's description alone leaves its title as it is.
+    if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.title
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Put "#<number> · <name> · " in front of each title
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ONE_PR: ${{ github.event.pull_request.number }}
+        # Titles are read with gh into variables, never pasted into the script, so a title cannot run commands.
+        run: |
+          if [ -n "$ONE_PR" ]; then
+            numbers="$ONE_PR"
+          else
+            numbers=$(gh pr list --base main --state open --limit 100 --json number --jq '.[].number')
+          fi
+
+          for number in $numbers; do
+            author=$(gh pr view "$number" --json author --jq .author.login)
+            title=$(gh pr view "$number" --json title --jq .title)
+            case "$author" in
+              Ali-Paybarjay) name="علی" ;;
+              shsheytan) name="شایان" ;;
+              nazaninpnhi89-oss) name="نازنین" ;;
+              Marzieh-Manager) name="مرضیه" ;;
+              *) name="$author" ;;
+            esac
+
+            # Drop a number-and-name prefix that is already there, even a wrong one, then add the right one.
+            goal="$title"
+            if [[ "$goal" == "#"[0-9]*" · "*" · "* ]]; then
+              goal="${goal#*" · "}"
+              goal="${goal#*" · "}"
+            fi
+            wanted="#$number · $name · $goal"
+
+            if [ "$title" = "$wanted" ]; then
+              echo "#$number: title already right."
+            else
+              gh pr edit "$number" --title "$wanted"
+              echo "#$number: title set."
+            fi
+          done
