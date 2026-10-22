@@ -80,9 +80,14 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   return (
     <>
       {header}
-      <TailorWorkspace jobId={job.id} profile={profile} prompts={prompts} />
+      <TailorWorkspace jobId={job.id} jobUrl={webLink(job.url)} company={job.company} profile={profile} prompts={prompts} />
     </>
   );
+}
+
+/** Only an http(s) link may open from the Apply button; anything else in a pasted ad counts as no link. */
+function webLink(url: string | null): string | null {
+  return url && /^https?:\/\//i.test(url) ? url : null;
 }
 
 async function JobPicker() {

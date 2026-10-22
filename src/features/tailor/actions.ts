@@ -3,6 +3,7 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/features/account/current-user";
+import { recordApplication } from "@/features/tracker/actions";
 import { track } from "@/shared/analytics/track";
 import { getAnonymousKey } from "@/shared/ai/anonymous-key";
 import { TailoringChangeSchema, type TailoringChange } from "@/shared/contracts";
@@ -168,6 +169,31 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
   } catch {
     return { ok: false, message: "We could not write your cover letter just now. Try again in a moment." };
   }
+}
+
+export type ApplyResult = { recorded: boolean; message: string };
+
+/**
+ * Called when the user presses Apply, as the employer's page opens in a new tab: adds the job to their
+ * tracker with Ali's recordApplication and records tailor.apply_clicked. The app never applies itself.
+ */
+export async function recordApply(jobId: string): Promise<ApplyResult> {
+  const parsed = z.string().min(1).max(100).safeParse(jobId);
+  if (!parsed.success) return { recorded: false, message: "We could not read this job." };
+
+  const result = await recordApplication(parsed.data);
+  after(async () => {
+    const user = await getCurrentUser();
+    await track(
+      "tailor.apply_clicked",
+      { recorded: result.ok, reason: result.ok ? (result.created ? "created" : "existing") : result.reason },
+      user ? { userId: user.id } : await getAnonymousKey(),
+    );
+  });
+
+  return result.ok
+    ? { recorded: true, message: "Added to your applications, so you can follow it up from your dashboard." }
+    : { recorded: false, message: result.message };
 }
 
 function failed(step: string, code: string | undefined): DecideChangeResult {

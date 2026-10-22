@@ -6,6 +6,7 @@ import { buildTailoredCv } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, Profile, TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { Button, Card, CvPaper, Field, FitLine, Notice, Textarea } from "@/shared/ui";
+import { ApplyPanel } from "./apply-panel";
 import { CoverLetterPanel, type LetterState } from "./cover-letter-panel";
 import { CvPreview } from "./cv-preview";
 
@@ -29,7 +30,15 @@ const sectionNames: Record<TailoringChange["section"], string> = {
  * The Tailor workspace for one job: a question per gap, the suggested changes with Approve, Reject and Edit,
  * and the CV preview, which shows approved changes only.
  */
-export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; profile: Profile; prompts: GapPrompt[] }) {
+type TailorWorkspaceProps = {
+  jobId: string;
+  jobUrl: string | null;
+  company: string;
+  profile: Profile;
+  prompts: GapPrompt[];
+};
+
+export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts }: TailorWorkspaceProps) {
   const [gapStates, setGapStates] = useState<Record<string, GapState>>({});
   const [changes, setChanges] = useState<TailoringChange[]>([]);
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
@@ -94,6 +103,8 @@ export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; pr
           letter={letter}
           setLetter={setLetter}
         />
+
+        <ApplyPanel jobId={jobId} jobUrl={jobUrl} company={company} />
       </div>
 
       <aside className="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start" aria-labelledby="preview-heading">
