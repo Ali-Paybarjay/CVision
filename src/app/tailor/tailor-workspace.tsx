@@ -9,6 +9,7 @@ import { Button, Card, CvPaper, Field, FitLine, Notice, Textarea } from "@/share
 import { ApplyPanel } from "./apply-panel";
 import { CoverLetterPanel, type LetterState } from "./cover-letter-panel";
 import { CvPreview } from "./cv-preview";
+import { ExportPanel } from "./export-panel";
 
 export type GapPrompt = { gap: Gap; question: string; sampleAnswer: string | null };
 
@@ -103,6 +104,8 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts }: Ta
           letter={letter}
           setLetter={setLetter}
         />
+
+        <ExportPanel jobId={jobId} changes={changes} letter={letter} />
 
         <ApplyPanel jobId={jobId} jobUrl={jobUrl} company={company} />
       </div>

@@ -10,10 +10,12 @@ import { TailoringChangeSchema, type TailoringChange } from "@/shared/contracts"
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
 import { coverLetterText, inventedTerms, writeCoverLetter } from "./cover-letter";
+import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes } from "./export";
 import { defaultGapQuestion } from "./gap-questions";
 import { proposeChanges } from "./propose-changes";
 import { sampleForGap } from "./samples";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
+import { buildTailoredCv } from "./tailored-cv";
 import type { NextStep } from "./types";
 
 // Anyone can call a Server Action, so every input is checked before use.
@@ -194,6 +196,55 @@ export async function recordApply(jobId: string): Promise<ApplyResult> {
   return result.ok
     ? { recorded: true, message: "Added to your applications, so you can follow it up from your dashboard." }
     : { recorded: false, message: result.message };
+}
+
+const ExportRequestSchema = z.object({
+  jobId: z.string().min(1).max(100),
+  document: z.enum(["cv", "cover-letter"]),
+  format: z.enum(["pdf", "docx"]),
+  changes: z.array(TailoringChangeSchema).max(50),
+  /** The cover letter exactly as the user approved it; only used for the cover letter. */
+  letter: z.string().max(10000).nullable(),
+});
+export type ExportRequest = z.infer<typeof ExportRequestSchema>;
+
+export type ExportResult =
+  | { ok: true; fileName: string; mimeType: string; base64: string }
+  | { ok: false; message: string };
+
+/**
+ * Builds the PDF or Word file of the tailored CV or the approved cover letter. The CV is rebuilt here from the
+ * Profile and only the approved changes, so a change the user rejected or has not decided on never reaches the file.
+ */
+export async function exportDocument(request: ExportRequest): Promise<ExportResult> {
+  const parsed = ExportRequestSchema.safeParse(request);
+  if (!parsed.success) return { ok: false, message: "We could not read your changes. Reload the page and try again." };
+  const { jobId, document, format, letter } = parsed.data;
+
+  const [profile, job] = await Promise.all([getMyProfile(), getMyJob(jobId)]);
+  if (!profile || !job) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
+  if (document === "cover-letter" && !letter?.trim()) return { ok: false, message: "Approve your cover letter first, then download it." };
+
+  const changes = parsed.data.changes.filter((change) => change.jobId === jobId);
+  const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes)) : letterBlocks(letter ?? "");
+  const title = `${document === "cv" ? "CV" : "Cover letter"}: ${job.title}, ${job.company}`;
+
+  try {
+    const bytes = await blocksToFile(blocks, format, { title, author: profile.fullName });
+    after(async () => {
+      const user = await getCurrentUser();
+      const approvedChanges = changes.filter((change) => change.status === "approved").length;
+      await track("tailor.cv_exported", { format, document, approvedChanges }, user ? { userId: user.id } : await getAnonymousKey());
+    });
+    return {
+      ok: true,
+      fileName: exportFileName(profile.fullName, job.title, document, format),
+      mimeType: mimeTypes[format],
+      base64: Buffer.from(bytes).toString("base64"),
+    };
+  } catch {
+    return { ok: false, message: "We could not make your file just now. Try again in a moment." };
+  }
 }
 
 function failed(step: string, code: string | undefined): DecideChangeResult {
