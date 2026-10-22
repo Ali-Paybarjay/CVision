@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-// Unit tests only. They never call the real model; prompt evals have their own config.
+// Unit tests, plus database tests on an in-memory Postgres (supabase/tests). They never call the real model;
+// prompt evals have their own config.
 export default defineConfig({
   resolve: {
     alias: {
@@ -10,7 +11,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}", "supabase/**/*.test.ts"],
     environment: "node",
     env: { AI_MODE: "mock" },
   },
