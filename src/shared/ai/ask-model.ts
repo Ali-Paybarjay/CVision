@@ -30,8 +30,11 @@ export type AskModelOptions<S extends z.ZodType> = {
   model?: string;
   effort?: "low" | "medium" | "high";
   maxTokens?: number;
-  /** Live mode only: called after each request to the model, a retry included, with the tokens it really used. */
-  onUsage?: (usage: ModelUsage) => void;
+  /**
+   * Live mode only: called after each request to the model, a retry included, with the tokens it really used.
+   * askModel waits for it, so an async callback that writes somewhere should be quick.
+   */
+  onUsage?: (usage: ModelUsage) => void | Promise<void>;
 };
 
 export class AskModelError extends Error {
@@ -143,7 +146,7 @@ async function logUsage(
     console.error("askModel: could not record usage", error);
   }
   try {
-    options.onUsage?.(used);
+    await options.onUsage?.(used);
   } catch (error) {
     console.error("askModel: onUsage failed", error);
   }

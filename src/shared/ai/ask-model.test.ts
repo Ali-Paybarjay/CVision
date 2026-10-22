@@ -23,7 +23,7 @@ const reply = (text: string) => ({
   usage: { input_tokens: 1000, output_tokens: 200 },
 });
 
-const askOk = (onUsage: () => void) =>
+const askOk = (onUsage: () => void | Promise<void>) =>
   askModel({ feature: "test", prompt: "x", schema: z.object({ ok: z.boolean() }), sample: { ok: true }, voice: false, model: "claude-haiku-5-5", onUsage });
 
 afterEach(() => {
@@ -87,18 +87,28 @@ describe("askModel in live mode", () => {
     expect(onUsage.mock.calls.map(([usage]) => usage.ok)).toEqual([false, true]);
   });
 
-  it("keeps the answer when onUsage throws", async () => {
+  it.each([
+    [
+      "throws",
+      () => {
+        throw new Error("broken callback");
+      },
+    ],
+    [
+      "is async and rejects",
+      async () => {
+        throw new Error("broken callback");
+      },
+    ],
+  ])("keeps the answer when onUsage %s", async (_, onUsage) => {
     vi.stubEnv("AI_MODE", "live");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
     create.mockResolvedValueOnce(reply('{"ok":true}'));
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(
-      askOk(() => {
-        throw new Error("broken callback");
-      }),
-    ).resolves.toEqual({ ok: true });
+    await expect(askOk(onUsage)).resolves.toEqual({ ok: true });
     expect(create).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith("askModel: onUsage failed", expect.any(Error));
     consoleError.mockRestore();
   });
 });
