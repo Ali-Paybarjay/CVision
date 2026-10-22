@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { answerGuide, defaultComposition } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
-import { nextStep } from "@/features/interview/engine/session";
+import { isNewerSession, nextStep } from "@/features/interview/engine/session";
 import { drive, InterviewFlow, Progress, runOf, type SampleAnswers } from "./_practice/flow";
 import { FeedbackReport } from "./_practice/report";
 import { createPracticeStore, parseEnvelope } from "./_practice/store";
@@ -15,7 +15,10 @@ const store = createPracticeStore("cvision.interview.v1", "/interview/api");
 const hydratedSnapshot = () => true;
 const serverHydratedSnapshot = () => false;
 
-type SaveState = "idle" | "saving" | "saved" | "failed";
+type SaveState = "idle" | "saving" | "saved" | "retrying" | "failed";
+
+/** A failed save is tried again after each of these delays, then waits for the next change or a reload. */
+const retryDelaysMs = [5_000, 15_000, 45_000];
 
 // Saves run one after another, so an older session can never overwrite a newer one.
 let saveQueue: Promise<unknown> = Promise.resolve();
@@ -45,34 +48,60 @@ export function InterviewPractice({
   const session = envelope?.session ?? null;
   const autoSave = signedIn && canSave;
 
-  // Resume from the account once, when this browser has nothing for this job.
+  // Resume from the account once: when this browser has nothing for this job, or an older copy of it (another
+  // device went further). A finished session is not resumed into an empty browser, so "Practise again" sticks.
   const resumed = useRef(false);
+  // The session as the account holds it, so an unchanged session is not sent back.
+  const accountCopy = useRef(saved ? JSON.stringify(saved) : null);
   useEffect(() => {
     if (!hydrated || resumed.current) return;
     resumed.current = true;
-    if (!envelope && saved) {
+    if (!saved) return;
+    const resume = session ? isNewerSession(saved, session) : !envelope && nextStep(saved).step !== "done";
+    if (resume) {
       store.writeEnvelope({ sourceId: jobId, inputs: null, session: saved, startedAtMs: Date.parse(saved.startedAt), startupMs: null });
     }
-  }, [hydrated, envelope, saved, jobId]);
+  }, [hydrated, envelope, session, saved, jobId]);
 
   useEffect(() => {
     if (envelope) drive(store, envelope, { jobId });
   }, [envelope, jobs, jobId]);
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  // Failed saves of the current session; a new value of `retry` runs the effect again.
+  const failures = useRef({ json: "", count: 0 });
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
-    if (!autoSave || !session) return;
-    const timer = setTimeout(() => {
-      setSaveState("saving");
-      saveQueue = saveQueue
-        .then(() => store.callStep<{ saved: boolean }>({ step: "save", jobId, session }))
-        .then(
-          (result) => setSaveState(result.saved ? "saved" : "failed"),
-          () => setSaveState("failed"),
-        );
-    }, 1000);
+    if (!autoSave || !session || !resumed.current) return;
+    const json = JSON.stringify(session);
+    if (json === accountCopy.current) return;
+    const failed = failures.current.json === json ? failures.current.count : 0;
+    if (failed > retryDelaysMs.length) return;
+    const timer = setTimeout(
+      () => {
+        setSaveState("saving");
+        saveQueue = saveQueue
+          .then(() => store.callStep<{ saved: boolean }>({ step: "save", jobId, session }))
+          .then(
+            (result) => result.saved,
+            () => false,
+          )
+          .then((ok) => {
+            if (ok) {
+              accountCopy.current = json;
+              setSaveState("saved");
+              return;
+            }
+            failures.current = { json, count: failed + 1 };
+            const again = failed < retryDelaysMs.length;
+            setSaveState(again ? "retrying" : "failed");
+            if (again) setRetry((n) => n + 1);
+          });
+      },
+      failed === 0 ? 1000 : retryDelaysMs[failed - 1],
+    );
     return () => clearTimeout(timer);
-  }, [autoSave, session, jobId]);
+  }, [autoSave, session, jobId, retry]);
 
   const start = () => {
     store.clearJobs();
@@ -130,7 +159,8 @@ function Intro({ signedIn, canSave, onStart }: { signedIn: boolean; canSave: boo
 
 function SaveStatus({ autoSave, signedIn, state }: { autoSave: boolean; signedIn: boolean; state: SaveState }) {
   if (!autoSave) return <p className="text-sm text-text-muted">{signedIn ? "Sample job: kept in this browser only." : "Kept in this browser only."}</p>;
-  if (state === "failed") return <Status tone="error">Not saved to your account. It will try again with your next answer.</Status>;
+  if (state === "retrying") return <Status tone="error">Not saved to your account yet. Trying again…</Status>;
+  if (state === "failed") return <Status tone="error">Not saved to your account. It is kept in this browser: reload the page to try again.</Status>;
   if (state === "saved") return <Status tone="accent">Saved to your account</Status>;
   return <Status tone="muted">{state === "saving" ? "Saving…" : "Saved as you go"}</Status>;
 }

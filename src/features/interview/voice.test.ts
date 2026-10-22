@@ -15,6 +15,13 @@ describe("voice helpers", () => {
     expect(usSpellingHits("A recolored chart")).toEqual([]);
   });
 
+  it("leaves US spellings that the feedback quotes", () => {
+    expect(usSpellingHits('You said "I optimized the pipeline" but gave no figure.')).toEqual([]);
+    expect(usSpellingHits("You said “I optimized the pipeline” but gave no figure.")).toEqual([]);
+    expect(usSpellingHits("For a Data Center Technician role, name the cooling standard.", "Data Center Technician")).toEqual([]);
+    expect(usSpellingHits("For a Data Center Technician role, analyze the cooling.", "Data Center Technician")).toEqual(["analyze"]);
+  });
+
   it("finds generic praise and advice", () => {
     expect(genericFeedbackHits("Great answer! Keep practising.")).toEqual(["great answer", "keep practising"]);
     expect(genericFeedbackHits("You named the reconciliation step and why it comes first.")).toEqual([]);
@@ -28,6 +35,21 @@ describe("answer feedback", () => {
 
   it("rejects US spelling", () => {
     expect(messages({ ...sample.evaluation, weaknesses: ["You did not analyze the root cause."] })).toContain("Use UK spelling in the feedback.");
+  });
+
+  it("accepts US spelling quoted from the answer or the role title", () => {
+    const withQuote = { ...sample.evaluation, weaknesses: ["You said you optimized the loop but gave no figure."] };
+    const quoting = { ...context, mainAnswer: `${sample.main} I optimized the loop.` };
+    expect(evaluationProblems(withQuote, quoting).map((p) => p.message)).not.toContain("Use UK spelling in the feedback.");
+    const centre = { ...sample.evaluation, strengths: ["You named the cooling checks a Data Center Technician runs first."] };
+    expect(evaluationProblems(centre, { ...context, quotable: "Data Center Technician" }).map((p) => p.message)).not.toContain(
+      "Use UK spelling in the feedback.",
+    );
+  });
+
+  it("does not end a sentence at e.g., i.e. or etc.", () => {
+    const one = "Open with the governing check, e.g. vibration, then give the figure you designed to. Say who signed it off.";
+    expect(messages({ ...sample.evaluation, improvement: one })).not.toContain("Give one specific action in at most 2 sentences and 60 words.");
   });
 
   it("rejects praise or advice that fits any answer", () => {
@@ -75,5 +97,11 @@ describe("report", () => {
     const found = reportProblems({ ...report, priorities }, reportContext).map((p) => p.message);
     expect(found).toContain("Priorities must be specific to this job and these answers: no generic advice.");
     expect(found).toContain("Use UK spelling in the report.");
+  });
+
+  it("accepts a US spelling the role or an answer uses", () => {
+    const verdict = `${report.verdict} Your Data Center experience shows.`;
+    expect(reportProblems({ ...report, verdict }, reportContext).map((p) => p.message)).toContain("Use UK spelling in the report.");
+    expect(reportProblems({ ...report, verdict }, { ...reportContext, quotable: '{"title":"Data Center Technician"}' })).toEqual([]);
   });
 });

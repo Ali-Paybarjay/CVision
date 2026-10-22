@@ -7,13 +7,18 @@ import { MockFixtureMissingError } from "../engine/mock";
 import { InterviewRuleError } from "../engine/session";
 import { InterviewStageError } from "../engine/stages";
 
-/** A session sent by the browser. Answers are added there, so their length is checked here. */
+/**
+ * A session sent by the browser. Everything in it reaches a prompt, so answers have a length limit and the whole
+ * session has a size limit: the daily limit counts requests, not their size.
+ */
 export const RequestSessionSchema = InterviewSessionSchema.refine(
   (session) =>
     session.answers.every((a) => a.text.length <= limits.answerMaxChars) &&
     (session.turns ?? []).every((t) => t.speaker !== "candidate" || t.text.length <= limits.answerMaxChars),
   { message: `An answer is longer than ${limits.answerMaxChars} characters.` },
-);
+).refine((session) => JSON.stringify(session).length <= limits.sessionMaxChars, {
+  message: `The session is longer than ${limits.sessionMaxChars} characters.`,
+});
 
 /** The 400 for a body that matches no step. */
 export function badRequest(issues: { code: string; message: string }[]): Response {

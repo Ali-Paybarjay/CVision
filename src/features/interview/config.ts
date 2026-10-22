@@ -71,6 +71,11 @@ export const limits = {
   jobDescriptionMaxChars: 15_000,
   cvMaxChars: 20_000,
   answerMaxChars: 3_000,
+  /**
+   * Longest session the browser may send back, as JSON. A finished session with every answer at full length is
+   * about 110K; the rest of it (role, blueprint, questions) has no length limits of its own, so this caps them.
+   */
+  sessionMaxChars: 150_000,
   questionMaxWords: 80,
   followUpMaxWords: 40,
   quoteMaxWords: 25,
