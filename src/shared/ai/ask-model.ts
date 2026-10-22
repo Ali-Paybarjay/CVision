@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { io } from "next/cache";
 import type { z } from "zod";
 import { type AiProvider, DEFAULT_MODEL, getAiMode, getAiProvider, OPENROUTER_BASE_URL, toOpenRouterModel } from "./config";
 import { loadVoice } from "./prompts";
@@ -73,6 +74,8 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
   if (!provider) {
     throw new AskModelError("AI_MODE is live but neither ANTHROPIC_API_KEY nor OPENROUTER_API_KEY is set.", "no-api-key");
   }
+  // A live request reads the clock (daily limits) and spends tokens: never inside a prerender or prefetch.
+  await io();
   try {
     await assertWithinDailyLimit(options.requester);
   } catch (error) {
