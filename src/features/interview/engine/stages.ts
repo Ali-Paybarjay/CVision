@@ -16,6 +16,7 @@ import type {
   FollowUpDecision,
   InterviewReport,
   InterviewSession,
+  RoleProfile,
   StageUsage,
   TechnicalInterviewQuestion,
 } from "../contracts";
@@ -408,7 +409,13 @@ export async function evaluateAnswer(
       applied_evidence: appliedEvidenceByType[question.type],
       transcript: buildTranscript(session, questionId),
     },
-    schema: evaluateOutputSchema({ lookForIds: question.lookFors.map((l) => l.id), mainAnswer: main, followUpAnswer: followUp, followUpAsked: asked }),
+    schema: evaluateOutputSchema({
+      lookForIds: question.lookFors.map((l) => l.id),
+      mainAnswer: main,
+      followUpAnswer: followUp,
+      followUpAsked: asked,
+      quotable: [role.title, role.discipline, question.text].join("\n"),
+    }),
     sample: mockEvaluation(session, question),
     voice: true,
     run,
@@ -435,6 +442,11 @@ export async function evaluateAnswer(
     ...(output.followUpClosedGap === null ? {} : { followUpClosedGap: output.followUpClosedGap }),
   };
   return { evaluation, usage, provenance };
+}
+
+/** What the report sees and may quote: the role, the questions and every answer. */
+function reportQuotable(session: InterviewSession, role: RoleProfile): string {
+  return [JSON.stringify(role), ...session.questions.map((q) => q.text), ...session.answers.map((a) => a.text)].join("\n");
 }
 
 /** Stage 6: the report. Numbers come from code; the model writes the verdict, priorities and notes. */
@@ -487,7 +499,7 @@ export async function writeReport(
         ? `The CV shows ${candidate.cvLevel}, below the role's level of ${role.roleLevel}. Write the levelGapNote.`
         : `No level gap: the CV shows ${candidate.cvLevel} and the role is ${role.roleLevel}. Set levelGapNote to null.`,
     },
-    schema: reportOutputSchema({ levelGap, lowConfidenceIds }),
+    schema: reportOutputSchema({ levelGap, lowConfidenceIds, quotable: reportQuotable(session, role) }),
     sample: mockReport(session, { overall, readiness, levelGap, lowConfidenceIds }),
     voice: true,
     run,
