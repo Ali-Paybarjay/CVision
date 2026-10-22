@@ -47,6 +47,7 @@ Ask the user which of the four builders they are if it is not clear, then work o
 10. **Tests never call the real model.** Prompt evals run with a separate command.
 11. **CI stays lean:** GitHub Actions runs only on push to `main`, pull requests to `main`, and manual runs (`workflow_dispatch`). End-to-end tests run only on `main` or on PRs labelled `e2e`. A new run cancels the previous one (`concurrency`). Changes that touch only documentation do not run CI.
 12. **Every task has a GitHub Issue.** Name the branch `<area>/<issue number>-<short description>`, where area is `foundation`, `profile`, `tailor`, `cvcheck` or `interview` (e.g. `profile/3-cv-to-profile`), and put `Closes #<issue number>` in the PR description (or `Part of #<n>` when the PR finishes only part of it).
+13. **One owner per PR.** Every PR has one owner, its author, and sits on the team board, so everyone can see who is finishing what. The PR title workflow makes the author its assignee if nobody is. When a piece of work spans more than one person, each person opens and finishes only their own PR, linked to the same card (rule 12); nobody finishes or pushes to someone else's PR.
 
 ## Shared building blocks
 

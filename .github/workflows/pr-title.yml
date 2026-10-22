@@ -1,9 +1,10 @@
 # PR titles read "#<number> · <name> · <goal>" (CLAUDE.md, Language). The author writes the goal;
-# this puts the right number and the author's name in front, so nobody does it by hand:
+# this puts the right number and the author's name in front, so nobody does it by hand.
+# A PR with no assignee is assigned to its author, its one owner (CLAUDE.md, rule 13), so the board shows whose it is.
 # - when a PR is opened, reopened, retitled or gets new commits: that PR;
 # - after every merge into main, and on a manual run: every open PR to main.
-# It edits only titles, so it runs for documentation-only PRs too and takes a few seconds.
-name: PR title
+# It edits only titles and assignees, so it runs for documentation-only PRs too and takes a few seconds.
+name: PR title and owner
 
 on:
   pull_request:
@@ -20,16 +21,18 @@ concurrency:
 permissions:
   contents: read
   pull-requests: write
+  # Assignees are kept on the issue side of a PR.
+  issues: write
 
 jobs:
   titles:
-    name: Number and name in PR titles
+    name: Number and name in PR titles, author as owner
     # An edit to a PR's description alone leaves its title as it is.
     if: github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.title
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Put "#<number> · <name> · " in front of each title
+      - name: Put "#<number> · <name> · " in front of each title and assign the author
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -43,7 +46,7 @@ jobs:
           fi
 
           for number in $numbers; do
-            author=$(gh pr view "$number" --json author --jq .author.login)
+            read -r author assignees < <(gh pr view "$number" --json author,assignees --jq '"\(.author.login) \(.assignees | length)"')
             title=$(gh pr view "$number" --json title --jq .title)
             case "$author" in
               Ali-Paybarjay) name="علی" ;;
@@ -66,5 +69,14 @@ jobs:
             else
               gh pr edit "$number" --title "$wanted"
               echo "#$number: title set."
+            fi
+
+            # Nobody assigned yet: the author owns the PR. A bot or outside author cannot be assigned, and that is fine.
+            if [ "$assignees" = "0" ]; then
+              if gh pr edit "$number" --add-assignee "$author"; then
+                echo "#$number: assigned to $author."
+              else
+                echo "#$number: could not assign $author."
+              fi
             fi
           done
