@@ -1,5 +1,4 @@
 import "server-only";
-import { connection } from "next/server";
 import { cache } from "react";
 import type { z } from "zod";
 import { getCurrentUser } from "@/features/account/current-user";
@@ -24,9 +23,8 @@ type Account = { source: "account"; supabase: SupabaseServerClient } | { source:
 
 /** Who is asking, worked out once per request however many of these functions a page calls. */
 const getAccount = cache(async (): Promise<Account> => {
-  // Reading the session checks the token's expiry against the clock, so it must never run while Next.js
-  // prerenders a page ahead of time: connection() keeps everything after it for the real request.
-  await connection();
+  // No connection() here: createSupabaseServerClient awaits io() before it reads the session (#78), so the session
+  // is never read while Next.js prerenders, and teammates' tests that replace next/server keep working.
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { source: "sample" };
   return (await getCurrentUser()) ? { source: "account", supabase } : { source: "sample" };

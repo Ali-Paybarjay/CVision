@@ -1,4 +1,3 @@
-import { connection } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
 import { profileEvidenceLines } from "./match";
@@ -10,8 +9,6 @@ const { getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
 }));
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
 vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
-// Outside a real request connection() throws, so the tests stand in for one.
-vi.mock("next/server", () => ({ connection: vi.fn(async () => undefined) }));
 
 type Row = Record<string, unknown>;
 
@@ -65,17 +62,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-});
-
-describe("reading the session", () => {
-  it("waits for the real request first, so it never runs while Next.js prerenders a page", async () => {
-    createSupabaseServerClient.mockResolvedValue(null);
-
-    await getMyProfile();
-
-    expect(connection).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(connection).mock.invocationCallOrder[0]).toBeLessThan(createSupabaseServerClient.mock.invocationCallOrder[0]);
-  });
 });
 
 describe("with no account (Supabase not connected, or signed out)", () => {
