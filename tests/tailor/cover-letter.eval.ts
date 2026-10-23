@@ -1,9 +1,10 @@
 // Live prompt evals for the cover letter: real requests to the model, run with `npm run eval`.
 import { describe, expect, it } from "vitest";
 import { coverLetterText, findBrandProblems, inventedTerms, writeCoverLetter } from "@/features/tailor";
+import { getAiProvider } from "@/shared/ai";
 import { coverLetterCases, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
 
-describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Cover letter (live)", () => {
+describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
   describe.each(coverLetterCases)("$name", ({ input, gaps }) => {
     let text = "";
 
