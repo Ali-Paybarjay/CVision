@@ -1,146 +1,37 @@
 "use client";
 
-// The interview lab: pick a fixture (or paste a job ad and CV in live mode), answer one question at a time,
-// and read the report. The saved session drives everything: whatever it needs next is requested, so a
-// reload resumes exactly where it stopped, and finished questions are scored in the background.
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+// The interview lab: pick a fixture (or paste a job ad and CV in live mode), run the same interview as the main
+// page, and read the report with the debug panel. The job ad and CV go with every request (see drive).
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AiMode } from "@/shared/ai/config";
-import { answerGuide, limits } from "@/features/interview/config";
-import type { AnswerEvaluation, FollowUpDecision, InterviewReport, InterviewSession, StageUsage } from "@/features/interview/contracts";
-import {
-  addAnswer,
-  applyEvaluation,
-  applyFollowUpDecision,
-  applyReport,
-  askQuestion,
-  decisionFor,
-  evaluationFor,
-  isQuestionFinished,
-  nextStep,
-  turnsFor,
-  type Provenance,
-} from "@/features/interview/engine/session";
-import { countWords } from "@/features/interview/engine/text";
+import { limits } from "@/features/interview/config";
+import { nextStep } from "@/features/interview/engine/session";
+import { drive, InterviewFlow, Progress, runOf } from "../_practice/flow";
+import { FeedbackReport } from "../_practice/report";
+import { createPracticeStore, parseEnvelope } from "../_practice/store";
+import { Card, PrimaryButton, SecondaryButton, Status } from "../_practice/ui";
 import { LabDebug } from "./lab-debug";
-import { LabReport } from "./lab-report";
-import {
-  callStep,
-  clearJobs,
-  getJobsSnapshot,
-  getRawSnapshot,
-  getServerJobsSnapshot,
-  getServerRawSnapshot,
-  parseEnvelope,
-  retryJob,
-  runJob,
-  subscribe,
-  updateEnvelope,
-  updateSession,
-  writeEnvelope,
-  type JobState,
-  type LabEnvelope,
-} from "./lab-store";
 import type { LabSource } from "./lab-types";
-import { Card, Notice, PrimaryButton, SecondaryButton, Status } from "./lab-ui";
 
-const now = () => new Date().toISOString();
-
-/** Asks the next question as soon as the previous one is finished. */
-function advance(session: InterviewSession): InterviewSession {
-  const next = nextStep(session);
-  return next.step === "ask" ? askQuestion(session, next.questionId, now(), crypto.randomUUID()) : session;
-}
-
-type WithUsage = { usage?: StageUsage; provenance?: Provenance };
-
-/** Each Start begins a new run. Job keys and results carry the run, so "Start again" discards anything still in flight. */
-function runOf(envelope: LabEnvelope): string {
-  return String(envelope.startedAtMs);
-}
-
-/** Applies a result only to the session it was requested for. */
-function updateSameSession(sessionId: string, change: (session: InterviewSession) => InterviewSession) {
-  updateSession((current) => (current.id === sessionId ? change(current) : current));
-}
-
-/** Requests whatever the session needs next. Running or failed requests are not repeated (see runJob). */
-function drive(envelope: LabEnvelope) {
-  const { inputs, session } = envelope;
-  const run = runOf(envelope);
-  if (!session) {
-    runJob(`${run}:analyse`, async () => {
-      const result = await callStep<{ session: InterviewSession }>({
-        step: "analyse",
-        inputs,
-        id: crypto.randomUUID(),
-        startedAt: new Date(envelope.startedAtMs).toISOString(),
-      });
-      updateEnvelope((current) => (current.session || runOf(current) !== run ? current : { ...current, session: result.session }));
-    });
-    return;
-  }
-
-  const next = nextStep(session);
-  if (next.step === "generate" || next.step === "review") {
-    const step = next.step;
-    runJob(`${run}:${step}`, async () => {
-      const result = await callStep<{ session: InterviewSession }>({ step, inputs, session });
-      updateEnvelope((envelope) => {
-        if (!envelope.session || envelope.session.id !== session.id || nextStep(envelope.session).step !== step) return envelope;
-        if (step === "generate") return { ...envelope, session: result.session };
-        return { ...envelope, session: advance(result.session), startupMs: Date.now() - envelope.startedAtMs };
-      });
-    });
-  }
-
-  if (next.step === "decide") {
-    const questionId = next.questionId;
-    runJob(`${run}:decide:${questionId}`, async () => {
-      const result = await callStep<{ decision: FollowUpDecision } & WithUsage>({ step: "follow-up", session, questionId });
-      updateSameSession(session.id, (current) =>
-        decisionFor(current, questionId)
-          ? current
-          : advance(applyFollowUpDecision(current, result.decision, now(), crypto.randomUUID(), result.usage, result.provenance)),
-      );
-    });
-  }
-
-  // Each finished question is scored on its own, in the background, while the interview carries on.
-  for (const question of session.questions) {
-    if (!isQuestionFinished(session, question.id) || evaluationFor(session, question.id)) continue;
-    runJob(`${run}:evaluate:${question.id}`, async () => {
-      const result = await callStep<{ evaluation: AnswerEvaluation } & WithUsage>({ step: "evaluate", session, questionId: question.id });
-      updateSameSession(session.id, (current) => applyEvaluation(current, result.evaluation, result.usage, result.provenance));
-    });
-  }
-
-  if (next.step === "report") {
-    runJob(`${run}:report`, async () => {
-      const result = await callStep<{ report: InterviewReport } & WithUsage>({ step: "report", session });
-      updateSameSession(session.id, (current) => (current.report ? current : applyReport(current, result.report, result.usage, result.provenance)));
-    });
-  }
-}
+const store = createPracticeStore("cvision.interview-lab.v1", "/interview/lab/api");
+const hydratedSnapshot = () => true;
+const serverHydratedSnapshot = () => false;
 
 export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSource[] }) {
-  const raw = useSyncExternalStore(subscribe, getRawSnapshot, getServerRawSnapshot);
-  const jobs = useSyncExternalStore(subscribe, getJobsSnapshot, getServerJobsSnapshot);
-  const hydrated = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false,
-  );
+  const raw = useSyncExternalStore(store.subscribe, store.getRawSnapshot, store.getServerRawSnapshot);
+  const jobs = useSyncExternalStore(store.subscribe, store.getJobsSnapshot, store.getServerJobsSnapshot);
+  const hydrated = useSyncExternalStore(store.subscribe, hydratedSnapshot, serverHydratedSnapshot);
   const envelope = useMemo(() => parseEnvelope(raw), [raw]);
 
   useEffect(() => {
-    if (envelope) drive(envelope);
+    if (envelope?.inputs) drive(store, envelope, { inputs: envelope.inputs });
   }, [envelope, jobs]);
 
   const source = sources.find((s) => s.id === envelope?.sourceId);
   const session = envelope?.session ?? null;
   const restart = () => {
-    writeEnvelope(null);
-    clearJobs();
+    store.writeEnvelope(null);
+    store.clearJobs();
   };
 
   return (
@@ -161,7 +52,7 @@ export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSour
 
       {!hydrated ? (
         <p className="text-text-muted">Loading…</p>
-      ) : !envelope ? (
+      ) : !envelope?.inputs ? (
         <Setup mode={mode} sources={sources} />
       ) : (
         <>
@@ -169,11 +60,13 @@ export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSour
             <p className="text-sm text-text-muted">{source ? source.label : "Pasted job ad and CV"}</p>
             <SecondaryButton onClick={restart}>Start again</SecondaryButton>
           </div>
-          <Progress session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
+          <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
           {session && nextStep(session).step === "done" ? (
-            <LabReport session={session} />
+            <FeedbackReport session={session} />
           ) : (
-            session && <Interview session={session} jobs={jobs} run={runOf(envelope)} source={source} mode={mode} />
+            session && (
+              <InterviewFlow store={store} session={session} jobs={jobs} run={runOf(envelope)} samples={mode === "mock" ? source?.samples : undefined} />
+            )
           )}
           {session && <LabDebug session={session} startupMs={envelope.startupMs} />}
         </>
@@ -195,8 +88,8 @@ function Setup({ mode, sources }: { mode: AiMode; sources: LabSource[] }) {
     const inputs = pasting
       ? { jobId: `pasted-${crypto.randomUUID().slice(0, 8)}`, jobDescription: jobText.trim(), cv: cvText.trim(), parsedRequirements: null }
       : chosen!.inputs;
-    clearJobs();
-    writeEnvelope({ sourceId: pasting ? null : choice, inputs, session: null, startedAtMs: Date.now(), startupMs: null });
+    store.clearJobs();
+    store.writeEnvelope({ sourceId: pasting ? null : choice, inputs, session: null, startedAtMs: Date.now(), startupMs: null });
   };
 
   return (
@@ -246,221 +139,5 @@ function Setup({ mode, sources }: { mode: AiMode; sources: LabSource[] }) {
         Start interview
       </PrimaryButton>
     </Card>
-  );
-}
-
-const startupStages = [
-  { key: "analyse", label: "Analysing the role and the CV" },
-  { key: "generate", label: "Writing questions" },
-  { key: "review", label: "Reviewing questions" },
-] as const;
-
-function Progress({
-  session,
-  jobs,
-  run,
-  startupMs,
-}: {
-  session: InterviewSession | null;
-  jobs: Readonly<Record<string, JobState>>;
-  run: string;
-  startupMs: number | null;
-}) {
-  const reached = !session ? 0 : !session.questions.length ? 1 : !session.reviewChangelog ? 2 : 3;
-  if (reached === 3) {
-    return startupMs === null ? null : <p className="text-sm text-text-muted">Questions ready. Start-up took {(startupMs / 1000).toFixed(1)} seconds.</p>;
-  }
-  return (
-    <Card>
-      <h2 className="text-xl">Preparing your interview</h2>
-      <ol className="mt-3 space-y-2">
-        {startupStages.map((stage, index) => {
-          const job = jobs[`${run}:${stage.key}`];
-          return (
-            <li key={stage.key} className="flex flex-wrap items-center gap-2">
-              {index < reached ? (
-                <Status tone="accent">Done</Status>
-              ) : job?.status === "failed" ? (
-                <Status tone="error">Failed</Status>
-              ) : index === reached ? (
-                <Status tone="muted">Working…</Status>
-              ) : (
-                <Status tone="muted">Waiting</Status>
-              )}
-              <span>{stage.label}</span>
-              {job?.status === "failed" && (
-                <>
-                  <span className="w-full text-sm text-error">{job.message}</span>
-                  <SecondaryButton onClick={() => retryJob(`${run}:${stage.key}`)}>Try again</SecondaryButton>
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </Card>
-  );
-}
-
-function Interview({
-  session,
-  jobs,
-  run,
-  source,
-  mode,
-}: {
-  session: InterviewSession;
-  jobs: Readonly<Record<string, JobState>>;
-  run: string;
-  source?: LabSource;
-  mode: AiMode;
-}) {
-  const step = nextStep(session);
-  const asked = session.questions.filter((q) => turnsFor(session, q.id).length > 0);
-  const scored = session.questions.filter((q) => evaluationFor(session, q.id)).length;
-  const reportJob = jobs[`${run}:report`];
-
-  return (
-    <div className="space-y-4">
-      {asked.map((question, index) => {
-        const turns = turnsFor(session, question.id);
-        const finished = isQuestionFinished(session, question.id);
-        const evaluateJob = jobs[`${run}:evaluate:${question.id}`];
-        return (
-          <Card key={question.id} className="space-y-3">
-            <p className="text-sm text-text-muted">
-              Question {index + 1} of {session.questions.length}
-            </p>
-            {turns.map((turn) =>
-              turn.speaker === "interviewer" ? (
-                <p key={turn.id} className={turn.kind === "follow-up" ? "border-l-2 border-accent pl-3 font-semibold" : "font-semibold"}>
-                  {turn.kind === "follow-up" && <span className="block text-xs font-normal text-text-muted">Follow-up</span>}
-                  {turn.text}
-                </p>
-              ) : (
-                <p key={turn.id} className="ml-auto max-w-[90%] whitespace-pre-wrap rounded-md bg-canvas p-3 text-sm sm:max-w-[80%]">
-                  {turn.text}
-                </p>
-              ),
-            )}
-            {finished && (
-              <p>
-                {evaluationFor(session, question.id) ? (
-                  <Status tone="accent">Scored</Status>
-                ) : evaluateJob?.status === "failed" ? (
-                  <span className="flex flex-wrap items-center gap-2">
-                    <Status tone="error">Scoring failed</Status>
-                    <span className="text-sm text-error">{evaluateJob.message}</span>
-                    <SecondaryButton onClick={() => retryJob(`${run}:evaluate:${question.id}`)}>Try again</SecondaryButton>
-                  </span>
-                ) : (
-                  <Status tone="muted">Scoring in the background…</Status>
-                )}
-              </p>
-            )}
-            {step.step === "answer" && step.questionId === question.id && (
-              <AnswerForm
-                key={`${question.id}-${step.kind}`}
-                questionId={question.id}
-                kind={step.kind}
-                sample={mode === "mock" ? (step.kind === "main" ? source?.samples[question.id]?.main : source?.samples[question.id]?.followUp) : undefined}
-              />
-            )}
-            {step.step === "decide" && step.questionId === question.id && (
-              <DecisionStatus job={jobs[`${run}:decide:${question.id}`]} jobKey={`${run}:decide:${question.id}`} />
-            )}
-          </Card>
-        );
-      })}
-
-      {(step.step === "evaluate" || step.step === "report") && (
-        <Card>
-          <h2 className="text-xl">Writing your report</h2>
-          <p className="mt-2 text-text-muted">
-            {scored} of {session.questions.length} answers scored.
-            {step.step === "report" ? " Putting the report together…" : ""}
-          </p>
-          {reportJob?.status === "failed" && (
-            <div className="mt-2 space-y-2">
-              <Notice tone="error">{reportJob.message}</Notice>
-              <SecondaryButton onClick={() => retryJob(`${run}:report`)}>Try again</SecondaryButton>
-            </div>
-          )}
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function DecisionStatus({ job, jobKey }: { job?: JobState; jobKey: string }) {
-  if (job?.status === "failed") {
-    return (
-      <div className="space-y-2">
-        <Notice tone="error">{job.message}</Notice>
-        <SecondaryButton onClick={() => retryJob(jobKey)}>Try again</SecondaryButton>
-      </div>
-    );
-  }
-  return <Status tone="muted">The interviewer is reading your answer…</Status>;
-}
-
-function AnswerForm({ questionId, kind, sample }: { questionId: string; kind: "main" | "follow-up"; sample?: string | null }) {
-  const [text, setText] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const startedAt = useRef<string | null>(null);
-  const words = countWords(text);
-  const markStart = () => {
-    startedAt.current ??= now();
-  };
-  const tone = words === 0 ? "text-text-muted" : words < answerGuide.minWords ? "text-warning" : words > answerGuide.maxWords ? "text-warning" : "text-accent";
-
-  const submit = () => {
-    try {
-      const startedAtValue = startedAt.current ?? now();
-      updateSession((session) =>
-        advance(addAnswer(session, { questionId, kind, text: text.trim(), startedAt: startedAtValue, submittedAt: now(), id: crypto.randomUUID() })),
-      );
-    } catch (error) {
-      setProblem(error instanceof Error ? error.message : "Could not save your answer.");
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <label className="block">
-        <span className="text-sm font-semibold">{kind === "main" ? "Your answer" : "Your answer to the follow-up"}</span>
-        <textarea
-          className="mt-1 h-48 w-full rounded-md border border-text-muted bg-surface p-2"
-          maxLength={limits.answerMaxChars}
-          value={text}
-          onFocus={markStart}
-          onChange={(event) => {
-            markStart();
-            setText(event.target.value);
-          }}
-        />
-      </label>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className={`text-sm ${tone}`} aria-live="polite">
-          {words} {words === 1 ? "word" : "words"} · aim for {answerGuide.minWords} to {answerGuide.maxWords}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {sample && (
-            <SecondaryButton
-              onClick={() => {
-                markStart();
-                setText(sample);
-              }}
-            >
-              Use sample answer
-            </SecondaryButton>
-          )}
-          <PrimaryButton onClick={submit} disabled={text.trim() === ""}>
-            Submit answer
-          </PrimaryButton>
-        </div>
-      </div>
-      {problem && <Notice tone="error">{problem}</Notice>}
-    </div>
   );
 }

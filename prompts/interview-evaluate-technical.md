@@ -1,6 +1,6 @@
 ---
 name: interview-evaluate-technical
-version: 1.0.0
+version: 1.1.0
 stage: 5
 rubric: technical-v1
 ---
@@ -38,7 +38,11 @@ For this question type, applied evidence looks like: {{applied_evidence}}
 2. List any technical errors, each with a one-line correction. Only call something wrong when you are confident. Set `accuracyConfidence` to `high`, `medium` or `low` for your own judgement of accuracy.
 3. Score the four dimensions using the rubric and the question's anchors, and justify each score in one line that cites the evidence.
 4. If a follow-up was asked, judge the main answer and the follow-up answer together, and set `followUpClosedGap` to whether the follow-up answer closed the gap. If no follow-up was asked, set it to null.
-5. Write the feedback: 1 or 2 strengths (none if the answer gives nothing to credit), 1 or 2 weaknesses, exactly one specific improvement for next time, and a 3 to 5 point outline of a stronger answer.
+5. Write the feedback the candidate reads first, outcome first:
+   - `strengths`: 1 or 2 things this answer did well, each naming what they said and why it works for this role. None if the answer gives nothing to credit.
+   - `weaknesses`: 1 or 2 things that cost them marks, each naming what was missing or wrong in this answer.
+   - `improvement`: exactly one action for next time, in one or two sentences of at most 60 words, specific enough to rehearse tonight (what to add, where in the answer, and from which part of their own experience).
+   - `strongerAnswerOutline`: 3 to 5 points.
 
 ## Rules
 
@@ -50,7 +54,9 @@ For this question type, applied evidence looks like: {{applied_evidence}}
 - The outline of a stronger answer uses placeholders such as "[your actual figure]" or "[the system you used]" instead of inventing facts about the candidate.
 - Quotes are copied exactly from `<candidate_answer>`: never from the question, never paraphrased.
 - Do not compute an overall score; the app does that.
-- Feedback follows the voice rules: direct and expert, no generic praise, UK English.
+- Feedback follows the voice rules: direct and expert, plain words and short sentences, UK English spelling (organisation, analyse, behaviour, practising).
+- No feedback that would fit any answer: never "great answer", "well done", "keep practising", "practise more" or "be more confident". Tie every point to this answer and this job.
+- Never suggest adding a skill, figure or result the candidate has not given. Point them to their own experience or to a placeholder instead.
 
 ## Output
 
@@ -70,3 +76,5 @@ Question: "Why might a long-span steel floor that passes its strength checks sti
 
 - Good justification: "depthOfReasoning 4: explains that the floor is governed by vibration rather than strength ('the response factor would be too high for an open-plan office') and weighs stiffening against damping, but does not mention cost."
 - Weak justification: "depthOfReasoning 4: good answer with lots of detail." — cites no evidence and rewards length.
+- Good improvement: "Open with the deciding check: say that vibration, not strength, governs this floor, then give the response factor you designed to on [the project you named]."
+- Weak improvement: "Add more detail and be more confident." — fits any answer and says nothing to rehearse.
