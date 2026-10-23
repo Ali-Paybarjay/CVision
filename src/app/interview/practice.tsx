@@ -8,10 +8,38 @@ import type { InterviewSession } from "@/features/interview/contracts";
 import { isNewerSession, nextStep } from "@/features/interview/engine/session";
 import { drive, InterviewFlow, Progress, runOf, type SampleAnswers } from "./_practice/flow";
 import { FeedbackReport } from "./_practice/report";
-import { createPracticeStore, parseEnvelope } from "./_practice/store";
-import { Card, PrimaryButton, SecondaryButton, Status } from "./_practice/ui";
+import { createPracticeStore, parseEnvelope, type PracticeStore } from "./_practice/store";
+import { Button, Card } from "@/shared/ui";
+import { Status } from "./_practice/ui";
 
-const store = createPracticeStore("cvision.interview.v1", "/interview/api");
+// One practice per job, each under its own key, so opening another job never replaces a practice in progress.
+const stores = new Map<string, PracticeStore>();
+const legacyKey = "cvision.interview.v1";
+
+function storeFor(jobId: string): PracticeStore {
+  let store = stores.get(jobId);
+  if (!store) {
+    const key = `${legacyKey}:${jobId}`;
+    moveLegacyPractice(jobId, key);
+    store = createPracticeStore(key, "/interview/api");
+    stores.set(jobId, store);
+  }
+  return store;
+}
+
+/** Before practices had a key per job, the browser kept one practice under one key: move it to its job's key. */
+function moveLegacyPractice(jobId: string, key: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const legacy = window.localStorage.getItem(legacyKey);
+    if (legacy === null || parseEnvelope(legacy)?.sourceId !== jobId) return;
+    if (window.localStorage.getItem(key) === null) window.localStorage.setItem(key, legacy);
+    window.localStorage.removeItem(legacyKey);
+  } catch {
+    // Storage is blocked: the store keeps the practice in memory instead.
+  }
+}
+
 const hydratedSnapshot = () => true;
 const serverHydratedSnapshot = () => false;
 
@@ -39,11 +67,11 @@ export function InterviewPractice({
   /** Mock mode only. */
   samples?: SampleAnswers;
 }) {
+  const store = storeFor(jobId);
   const raw = useSyncExternalStore(store.subscribe, store.getRawSnapshot, store.getServerRawSnapshot);
   const jobs = useSyncExternalStore(store.subscribe, store.getJobsSnapshot, store.getServerJobsSnapshot);
   const hydrated = useSyncExternalStore(store.subscribe, hydratedSnapshot, serverHydratedSnapshot);
   const stored = useMemo(() => parseEnvelope(raw), [raw]);
-  // This browser keeps one practice at a time; another job's practice is replaced only when a new one starts here.
   const envelope = stored?.sourceId === jobId ? stored : null;
   const session = envelope?.session ?? null;
   const autoSave = signedIn && canSave;
@@ -61,11 +89,11 @@ export function InterviewPractice({
     if (resume) {
       store.writeEnvelope({ sourceId: jobId, inputs: null, session: saved, startedAtMs: Date.parse(saved.startedAt), startupMs: null });
     }
-  }, [hydrated, envelope, session, saved, jobId]);
+  }, [store, hydrated, envelope, session, saved, jobId]);
 
   useEffect(() => {
     if (envelope) drive(store, envelope, { jobId });
-  }, [envelope, jobs, jobId]);
+  }, [store, envelope, jobs, jobId]);
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // Failed saves of the current session; a new value of `retry` runs the effect again.
@@ -77,31 +105,47 @@ export function InterviewPractice({
     if (json === accountCopy.current) return;
     const failed = failures.current.json === json ? failures.current.count : 0;
     if (failed > retryDelaysMs.length) return;
-    const timer = setTimeout(
-      () => {
-        setSaveState("saving");
-        saveQueue = saveQueue
-          .then(() => store.callStep<{ saved: boolean }>({ step: "save", jobId, session }))
-          .then(
-            (result) => result.saved,
-            () => false,
-          )
-          .then((ok) => {
-            if (ok) {
-              accountCopy.current = json;
-              setSaveState("saved");
-              return;
-            }
-            failures.current = { json, count: failed + 1 };
-            const again = failed < retryDelaysMs.length;
-            setSaveState(again ? "retrying" : "failed");
-            if (again) setRetry((n) => n + 1);
-          });
-      },
-      failed === 0 ? 1000 : retryDelaysMs[failed - 1],
-    );
-    return () => clearTimeout(timer);
-  }, [autoSave, session, jobId, retry]);
+    let started = false;
+    const save = (keepalive: boolean) => {
+      if (started) return;
+      started = true;
+      setSaveState("saving");
+      saveQueue = saveQueue
+        .then(() => store.callStep<{ saved: boolean }>({ step: "save", jobId, session }, { keepalive }))
+        .then(
+          (result) => result.saved,
+          () => false,
+        )
+        .then((ok) => {
+          if (ok) {
+            accountCopy.current = json;
+            setSaveState("saved");
+            return;
+          }
+          failures.current = { json, count: failed + 1 };
+          const again = failed < retryDelaysMs.length;
+          setSaveState(again ? "retrying" : "failed");
+          if (again) setRetry((n) => n + 1);
+        });
+    };
+    const timer = setTimeout(() => save(false), failed === 0 ? 1000 : retryDelaysMs[failed - 1]);
+    // Leaving the page (closing it, switching tab or app) saves at once rather than after the delay. A session too
+    // big for keepalive may not finish if the page is closing; this browser still has it and saves it on the next visit.
+    const saveNow = () => {
+      clearTimeout(timer);
+      save(true);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") saveNow();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", saveNow);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", saveNow);
+    };
+  }, [store, autoSave, session, jobId, retry]);
 
   const start = () => {
     store.clearJobs();
@@ -121,7 +165,7 @@ export function InterviewPractice({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
-        <SecondaryButton onClick={restart}>{done ? "Practise again" : "Start again"}</SecondaryButton>
+        <Button onClick={restart}>{done ? "Practise again" : "Start again"}</Button>
       </div>
       <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
       {session && done ? (
@@ -152,7 +196,7 @@ function Intro({ signedIn, canSave, onStart }: { signedIn: boolean; canSave: boo
             ? "Your practice is saved to your account as you go."
             : "This is a sample job, so this practice stays in this browser only."}
       </p>
-      <PrimaryButton onClick={onStart}>Start practice</PrimaryButton>
+      <Button variant="primary" onClick={onStart}>Start practice</Button>
     </Card>
   );
 }

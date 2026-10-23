@@ -1,4 +1,4 @@
-// Small building blocks for interview practice, in the brand's role tokens. Every status has an icon and words.
+// The status chip for interview practice, in the brand's role tokens. Cards, notices and buttons come from @/shared/ui.
 import type { ReactNode } from "react";
 
 export type Tone = "accent" | "warning" | "error" | "muted";
@@ -25,47 +25,5 @@ export function Status({ tone, children }: { tone: Tone; children: ReactNode }) 
       <Icon tone={tone} />
       {children}
     </span>
-  );
-}
-
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-line bg-surface p-4 sm:p-5 ${className}`}>{children}</section>;
-}
-
-/** The one main (Coral) button on a screen. */
-export function PrimaryButton(props: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      disabled={props.disabled}
-      className="rounded-md bg-cta px-4 py-2 font-semibold text-on-cta disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {props.children}
-    </button>
-  );
-}
-
-export function SecondaryButton(props: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      disabled={props.disabled}
-      className="rounded-md border border-accent px-3 py-1.5 text-sm font-semibold text-accent hover:bg-fit disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {props.children}
-    </button>
-  );
-}
-
-export function Notice({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return (
-    <div className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm ${toneClasses[tone]}`} role={tone === "error" ? "alert" : undefined}>
-      <span className="mt-0.5">
-        <Icon tone={tone} />
-      </span>
-      <div>{children}</div>
-    </div>
   );
 }
