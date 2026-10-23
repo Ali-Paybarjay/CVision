@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
+import { cvFileMessages } from "../cv-limits";
 import { saveFields } from "../server/save-request";
 import { saveProfileToAccount } from "./save-profile";
 
@@ -30,6 +31,51 @@ describe("saveProfileToAccount", () => {
   it("turns a network failure into a message", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
 
-    expect(await saveProfileToAccount(personas.sara.profile, { reason: "preferences" })).toMatchObject({ ok: false, code: "failed" });
+    expect(await saveProfileToAccount(personas.sara.profile, { reason: "preferences" })).toMatchObject({
+      ok: false,
+      code: "failed",
+      message: "We couldn’t reach CVision. Check your connection and try again.",
+    });
+  });
+
+  it("passes on the server's own answer", async () => {
+    const own = { ok: false, code: "sign-in", message: "Sign in to save your profile." };
+    answer(JSON.stringify(own), 401, "application/json");
+
+    expect(await saveProfileToAccount(personas.sara.profile, { reason: "approved" })).toEqual(own);
+  });
+
+  it("says when saving ran out of time", async () => {
+    answer("An error occurred with your deployment\n\nFUNCTION_INVOCATION_TIMEOUT", 504);
+
+    expect(await saveProfileToAccount(personas.sara.profile, { reason: "approved" })).toEqual({
+      ok: false,
+      code: "failed",
+      message: "Saving your profile took too long. Try again in a minute.",
+    });
+  });
+
+  it("says when the file was too big for the host", async () => {
+    answer("Request Entity Too Large", 413);
+
+    expect(await saveProfileToAccount(personas.sara.profile, { reason: "approved" })).toEqual({
+      ok: false,
+      code: "file",
+      message: cvFileMessages.tooLarge,
+    });
+  });
+
+  it("says something went wrong on our side for any other answer that isn't ours", async () => {
+    answer("<html><body>Internal Server Error</body></html>", 500, "text/html");
+
+    expect(await saveProfileToAccount(personas.sara.profile, { reason: "approved" })).toEqual({
+      ok: false,
+      code: "failed",
+      message: "Something went wrong on our side. Try again in a minute.",
+    });
   });
 });
+
+function answer(body: string, status: number, contentType = "text/plain") {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status, headers: { "Content-Type": contentType } })));
+}
