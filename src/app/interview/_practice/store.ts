@@ -20,6 +20,9 @@ export type JobState = { status: "running" } | { status: "failed"; message: stri
 
 const emptyJobs: Readonly<Record<string, JobState>> = {};
 
+/** Browsers refuse keepalive requests whose bodies add up to more than 64 KB. */
+const keepaliveLimitBytes = 60_000;
+
 /** Parses a saved envelope; a saved session that no longer matches the contract is dropped. */
 export function parseEnvelope(raw: string | null): PracticeEnvelope | null {
   if (!raw) return null;
@@ -35,6 +38,15 @@ export function parseEnvelope(raw: string | null): PracticeEnvelope | null {
   } catch {
     return null;
   }
+}
+
+/** Runs `work` only in the tab that holds the lock; any other tab waits until it is released and runs nothing. */
+async function withTabLock(name: string, work: () => Promise<void>): Promise<void> {
+  if (typeof navigator === "undefined" || !navigator.locks) return work();
+  await navigator.locks.request(name, { ifAvailable: true }, async (lock) => {
+    if (lock) await work();
+    else await navigator.locks.request(name, () => undefined);
+  });
 }
 
 export function createPracticeStore(storageKey: string, endpoint: string) {
@@ -110,11 +122,15 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
     updateSession(change: (session: InterviewSession) => InterviewSession) {
       updateEnvelope((envelope) => (envelope.session ? { ...envelope, session: change(envelope.session) } : envelope));
     },
-    /** Runs one request unless it is already running or has failed (a failed job waits for retryJob). */
+    /**
+     * Runs one request unless it is already running or has failed (a failed job waits for retryJob). Tabs share
+     * the session, so a tab that finds another tab already running the same request waits for it instead; the
+     * result arrives through storage, and if the other tab failed, this tab's next drive runs it.
+     */
     runJob(key: string, work: () => Promise<void>) {
       if (jobs[key]) return;
       setJob(key, { status: "running" });
-      work().then(
+      withTabLock(`${storageKey}:${key}`, work).then(
         () => setJob(key, null),
         (error: unknown) => setJob(key, { status: "failed", message: error instanceof Error ? error.message : "Something went wrong." }),
       );
@@ -126,12 +142,17 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
       jobs = {};
       emit();
     },
-    /** POSTs one engine step to the API and returns its JSON, or throws the API's error message. */
-    async callStep<T>(body: Record<string, unknown>): Promise<T> {
+    /**
+     * POSTs one engine step to the API and returns its JSON, or throws the API's error message. With `keepalive`,
+     * the request outlives the page when it fits the browser's 64 KB keepalive limit.
+     */
+    async callStep<T>(body: Record<string, unknown>, options: { keepalive?: boolean } = {}): Promise<T> {
+      const json = JSON.stringify(body);
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        body: json,
+        keepalive: options.keepalive && new Blob([json]).size < keepaliveLimitBytes,
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `The request failed (${response.status}).`);

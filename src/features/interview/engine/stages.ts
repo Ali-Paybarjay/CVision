@@ -414,7 +414,8 @@ export async function evaluateAnswer(
       mainAnswer: main,
       followUpAnswer: followUp,
       followUpAsked: asked,
-      quotable: [role.title, role.discipline, question.text].join("\n"),
+      // The job ad's own tools and standards may keep their US spelling when the model quotes them.
+      quotable: [role.title, role.discipline, question.text, ...role.namedItems.map((item) => item.text)].join("\n"),
     }),
     sample: mockEvaluation(session, question),
     voice: true,

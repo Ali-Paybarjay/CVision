@@ -29,8 +29,23 @@ export default function InterviewPage({ searchParams }: PageProps<"/interview">)
 async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "searchParams">) {
   const requested = (await searchParams).job;
   const jobId = typeof requested === "string" ? requested : null;
-  const [user, profile, job] = await Promise.all([getCurrentUser(), getMyProfile(), jobId ? getMyJob(jobId) : null]);
   const mode = getAiMode();
+  const user = await getCurrentUser();
+  // First, so a signed-out visitor is asked to sign in rather than told their job cannot be found.
+  if (mode === "live" && !user) {
+    return (
+      <>
+        <Notice tone="info" title="Sign in to practise">
+          Practice uses AI on your CV and answers, so it needs an account.
+        </Notice>
+        <ButtonLink href="/sign-in" variant="primary" className="self-start">
+          Sign in
+        </ButtonLink>
+      </>
+    );
+  }
+
+  const [profile, job] = await Promise.all([getMyProfile(), jobId ? getMyJob(jobId) : null]);
 
   if (!job) {
     return (
@@ -53,20 +68,6 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
           Go to Profile
         </ButtonLink>
       </Notice>
-    );
-  }
-
-  if (mode === "live" && !user) {
-    return (
-      <>
-        <JobHeading job={job} />
-        <Notice tone="info" title="Sign in to practise">
-          Practice uses AI on your CV and answers, so it needs an account.
-        </Notice>
-        <ButtonLink href="/sign-in" variant="primary" className="self-start">
-          Sign in
-        </ButtonLink>
-      </>
     );
   }
 
