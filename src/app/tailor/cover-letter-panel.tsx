@@ -3,12 +3,13 @@
 import { useTransition } from "react";
 import { createCoverLetter } from "@/features/tailor/actions";
 import { findBrandProblems } from "@/features/tailor/brand-check";
+import { letterBasis, type LetterState } from "@/features/tailor/letter-state";
 import type { GapAnswer } from "@/features/tailor/types";
 import type { TailoringChange } from "@/shared/contracts";
 import { Button, Card, CvPaper, Field, Notice, Textarea } from "@/shared/ui";
+import { unreachableMessage } from "./messages";
 
-/** The cover letter as the user last left it; only an approved letter is used for export. */
-export type LetterState = { text: string; approved: boolean; error?: string };
+export type { LetterState };
 
 type CoverLetterPanelProps = {
   jobId: string;
@@ -23,11 +24,16 @@ export function CoverLetterPanel({ jobId, changes, answers, letter, setLetter }:
   const [pending, startTransition] = useTransition();
   const approvedCount = changes.filter((change) => change.status === "approved").length;
   const problems = letter ? findBrandProblems(letter.text) : [];
+  const basis = letterBasis(changes, answers);
 
   const write = () =>
     startTransition(async () => {
-      const result = await createCoverLetter({ jobId, changes, answers });
-      setLetter(result.ok ? { text: result.text, approved: false } : { text: letter?.text ?? "", approved: false, error: result.message });
+      try {
+        const result = await createCoverLetter({ jobId, changes, answers });
+        setLetter(result.ok ? { text: result.text, approved: false } : { text: letter?.text ?? "", approved: false, error: result.message });
+      } catch {
+        setLetter({ text: letter?.text ?? "", approved: false, error: unreachableMessage });
+      }
     });
 
   return (
@@ -43,6 +49,9 @@ export function CoverLetterPanel({ jobId, changes, answers, letter, setLetter }:
       </div>
 
       {letter?.error && <Notice tone="error">{letter.error}</Notice>}
+      {letter?.stale && (
+        <Notice tone="warning">Your CV has changed since you approved this letter. Read it again, then approve it.</Notice>
+      )}
 
       {letter && letter.text && !letter.approved && (
         <Field label="Your cover letter" hint="Edit it freely. Keep it true: only what you have actually done.">
@@ -83,7 +92,7 @@ export function CoverLetterPanel({ jobId, changes, answers, letter, setLetter }:
         )}
         {letter?.text && !letter.approved && (
           <Button
-            onClick={() => setLetter({ text: letter.text.trim(), approved: true })}
+            onClick={() => setLetter({ text: letter.text.trim(), approved: true, basis })}
             disabled={pending || letter.text.trim() === ""}
           >
             Approve cover letter

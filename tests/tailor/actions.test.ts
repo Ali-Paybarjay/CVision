@@ -56,10 +56,22 @@ describe("answerGap", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("refuses a job or gap that is not the user's", async () => {
-    expect((await answerGap({ jobId: "reza-job-1", gapId: "reza-gap-1", answer: "Yes", hasExperience: true })).ok).toBe(false);
+  it("refuses a gap that is not in the job's match", async () => {
+    // With sample data an unknown job id falls back to Sara's first job, as in Shayan's my-data (#48).
+    expect((await answerGap({ jobId: "unknown-job", gapId: "reza-gap-1", answer: "Yes", hasExperience: true })).ok).toBe(false);
     expect((await answerGap({ jobId: "sara-job-1", gapId: "made-up", answer: "Yes", hasExperience: true })).ok).toBe(false);
   });
+
+  it("in live mode, asks a visitor to sign in before calling the model", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    try {
+      const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-1", answer: "I ran a weekly call.", hasExperience: true });
+      expect(result).toEqual({ ok: false, message: "Sign in to get suggestions for your CV." });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
 });
 
 const jobId = "0b6f2d3e-6a51-4c1e-9d6e-2f6c1a7b9e10";

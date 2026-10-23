@@ -25,6 +25,10 @@ describe("findBrandProblems", () => {
     ]);
   });
 
+  it("leaves words built on size, Belize and a gas meter alone", () => {
+    expect(findBrandProblems("I resized the charts, led the downsizing, fixed an Oversized image and read the gas meter in Belize.")).toEqual([]);
+  });
+
   it("leaves UK English and words like size and prize alone", () => {
     expect(findBrandProblems("I organised the colour scheme, won a prize and cut the team size. We tailored every CV.")).toEqual([]);
   });

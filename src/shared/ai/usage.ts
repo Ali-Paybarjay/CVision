@@ -68,13 +68,13 @@ function createSupabaseUsageStore(): UsageStore | null {
       if ("userId" in filter) query = query.eq("user_id", filter.userId);
       else if ("anonymousKey" in filter) query = query.eq("anonymous_key", filter.anonymousKey);
       else query = query.is("user_id", null);
-      const { count, error } = await query;
-      if (error) throw error;
+      const { count, error, status } = await query;
+      if (error) throw new UsageLogError("count", error, status);
       return count ?? 0;
     },
     async record(entry) {
       const who = entry.requester;
-      const { error } = await admin.from("ai_usage").insert({
+      const { error, status } = await admin.from("ai_usage").insert({
         user_id: who && "userId" in who ? who.userId : null,
         anonymous_key: who && "anonymousKey" in who ? who.anonymousKey : null,
         feature: entry.feature,
@@ -84,7 +84,7 @@ function createSupabaseUsageStore(): UsageStore | null {
         cost_usd: entry.costUsd,
         ok: entry.ok,
       });
-      if (error) throw error;
+      if (error) throw new UsageLogError("insert", error, status);
     },
   };
 }
@@ -133,6 +133,18 @@ export class LimitReachedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "LimitReachedError";
+  }
+}
+
+/**
+ * supabase-js hands back failures as plain objects, with an empty message on HEAD requests,
+ * so logs that print only the error's name said "unknown". `details` stays out: it can hold row values.
+ */
+export class UsageLogError extends Error {
+  constructor(action: "count" | "insert", error: { message?: string; code?: string }, status: number) {
+    const reason = [error.code, error.message].filter(Boolean).join(" ");
+    super(`ai_usage ${action} failed: HTTP ${status}${reason ? `, ${reason}` : ""}`);
+    this.name = "UsageLogError";
   }
 }
 

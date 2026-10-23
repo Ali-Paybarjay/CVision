@@ -47,7 +47,20 @@ describe("createCoverLetter", () => {
     expect(result.problems).toEqual([]);
   });
 
-  it("refuses a job that is not the user's", async () => {
-    expect((await createCoverLetter({ jobId: "made-up", changes: [], answers: [] })).ok).toBe(false);
+  it("refuses a request it cannot read", async () => {
+    // With sample data an unknown job id falls back to Sara's first job, as in Shayan's my-data (#48).
+    expect((await createCoverLetter({ jobId: "", changes: [], answers: [] })).ok).toBe(false);
+  });
+
+  it("in live mode, asks a visitor to sign in before calling the model", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    try {
+      expect(await createCoverLetter({ jobId: "sara-job-1", changes: [], answers: [] })).toEqual({
+        ok: false,
+        message: "Sign in to write your cover letter.",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

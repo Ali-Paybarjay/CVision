@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { recordApply, type ApplyResult } from "@/features/tailor/actions";
-import { Card, Notice } from "@/shared/ui";
-
-const linkButton =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-cta px-5 text-sm font-semibold text-on-cta transition-colors hover:brightness-95";
+import { ButtonLink, Card, Notice } from "@/shared/ui";
+import { unreachableMessage } from "./messages";
 
 /**
  * Apply opens the employer's own job page in a new tab and adds the job to the user's tracker.
@@ -15,11 +13,22 @@ const linkButton =
 export function ApplyPanel({ jobId, jobUrl, company }: { jobId: string; jobUrl: string | null; company: string }) {
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [, startTransition] = useTransition();
+  // A double click must not record the application twice; the link itself still opens every time.
+  const recording = useRef(false);
 
-  const onApply = () =>
+  const onApply = () => {
+    if (recording.current || result?.recorded) return;
+    recording.current = true;
     startTransition(async () => {
-      setResult(await recordApply(jobId));
+      try {
+        setResult(await recordApply(jobId));
+      } catch {
+        setResult({ recorded: false, message: unreachableMessage });
+      } finally {
+        recording.current = false;
+      }
     });
+  };
 
   return (
     <Card as="section" aria-labelledby="apply-heading" className="flex flex-col gap-4">
@@ -35,10 +44,10 @@ export function ApplyPanel({ jobId, jobUrl, company }: { jobId: string; jobUrl: 
       {jobUrl ? (
         <div>
           {/* A real link, so the employer's page opens even if recording the application fails. */}
-          <a href={jobUrl} target="_blank" rel="noopener noreferrer" onClick={onApply} className={linkButton}>
+          <ButtonLink href={jobUrl} variant="primary" target="_blank" rel="noopener noreferrer" onClick={onApply}>
             Apply on {company}’s site
             <span className="sr-only"> (opens in a new tab)</span>
-          </a>
+          </ButtonLink>
         </div>
       ) : (
         <Notice tone="warning" title="This job ad has no link">

@@ -12,11 +12,12 @@ const currentUser = vi.hoisted(() => ({ value: null as { id: string; email: stri
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser: async () => currentUser.value }));
 
 // Sara's sample jobs, plus one with a database id, so saving can be tested.
+const profileReads = vi.hoisted(() => ({ count: 0 }));
 vi.mock("@/features/interview/server/my-data", async () => {
   const { personas } = await import("@/shared/sample-data");
   const jobs = [...personas.sara.jobs, { ...personas.sara.jobs[0], id: storedJobId }];
   return {
-    getMyProfile: async () => personas.sara.profile,
+    getMyProfile: async () => (profileReads.count++, personas.sara.profile),
     listMyJobs: async () => jobs,
     getMyJob: async (id: string) => jobs.find((job) => job.id === id) ?? null,
   };
@@ -46,6 +47,23 @@ vi.mock("@/shared/analytics/track", () => ({
 
 const upserts = vi.hoisted(() => [] as { table: string; row: Record<string, unknown> }[]);
 const supabaseConnected = vi.hoisted(() => ({ value: false }));
+// The events already recorded, for the check that interview.session_completed is recorded once per session.
+const recordedSessionIds = vi.hoisted(() => [] as string[]);
+vi.mock("@/shared/supabase/admin", () => ({
+  getSupabaseAdmin: () => ({
+    from: () => {
+      const filters: Record<string, unknown> = {};
+      const query = {
+        select: () => query,
+        eq: (column: string, value: unknown) => ((filters[column] = value), query),
+        then: (resolve: (result: { count: number; error: null }) => unknown) =>
+          resolve({ count: recordedSessionIds.filter((id) => id === filters["properties->>sessionId"]).length, error: null }),
+      };
+      return query;
+    },
+  }),
+}));
+
 vi.mock("@/shared/supabase/server", () => ({
   createSupabaseServerClient: async () =>
     supabaseConnected.value
@@ -64,6 +82,8 @@ afterEach(() => {
   deferred.length = 0;
   tracked.length = 0;
   upserts.length = 0;
+  recordedSessionIds.length = 0;
+  profileReads.count = 0;
 });
 
 describe("the interview API in mock mode", () => {
@@ -93,6 +113,15 @@ describe("the interview API in mock mode", () => {
     expect(String(asked[0]?.prompt)).not.toContain("write a poem");
   });
 
+  it("reads the Profile only for the steps that write from the CV", async () => {
+    await analyse("sara-job-1");
+    expect(profileReads.count).toBe(1);
+    const full = await runMockSession(dataAnalystSara);
+    await post({ step: "report", jobId: "sara-job-1", session: { ...full, report: undefined, summary: null } });
+    await post({ step: "save", jobId: "sara-job-1", session: full });
+    expect(profileReads.count).toBe(1);
+  });
+
   it("rejects a session that belongs to another job", async () => {
     const session = await runMockSession(dataAnalystSara);
     const response = await post({ step: "report", jobId: "sara-job-2", session });
@@ -100,6 +129,7 @@ describe("the interview API in mock mode", () => {
   });
 
   it("records interview.session_completed after the report, without any answer text", async () => {
+    currentUser.value = { id: "user-1", email: null };
     const full = await runMockSession(dataAnalystSara);
     const session = { ...full, report: undefined, summary: null };
     const response = await post({ step: "report", jobId: "sara-job-1", session });
@@ -112,6 +142,22 @@ describe("the interview API in mock mode", () => {
     expect(tracked[0].properties).toMatchObject({ sessionId: full.id, jobId: "sara-job-1", questions: 6, overall: full.report?.overall });
     const sent = JSON.stringify(tracked[0].properties);
     for (const turn of (full.turns ?? []).filter((t) => t.text.length >= 30)) expect(sent).not.toContain(turn.text.slice(0, 30));
+  });
+
+  it("does not record interview.session_completed twice for the same session", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const full = await runMockSession(dataAnalystSara);
+    recordedSessionIds.push(full.id);
+    await post({ step: "report", jobId: "sara-job-1", session: { ...full, report: undefined, summary: null } });
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked).toHaveLength(0);
+  });
+
+  it("does not record interview.session_completed for a signed-out visitor", async () => {
+    const full = await runMockSession(dataAnalystSara);
+    const response = await post({ step: "report", jobId: "sara-job-1", session: { ...full, report: undefined, summary: null } });
+    expect(response.status).toBe(200);
+    expect(deferred).toHaveLength(0);
   });
 });
 

@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "typecheck": "next typegen && tsc --noEmit",
     "eval": "vitest run --config vitest.eval.config.mts --passWithNoTests"
   },
@@ -26,6 +27,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.4.6",
+    "@playwright/test": "1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^24.19.2",
     "@types/react": "^19",

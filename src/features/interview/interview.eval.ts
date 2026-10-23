@@ -1,10 +1,12 @@
 // Live eval for the technical interview engine. Real requests, so it costs money: run it by hand with
-// `npm run eval` and ANTHROPIC_API_KEY set. Never part of CI. Prints numbers and ids only, never CV, job or answer text.
+// `npm run eval` and ANTHROPIC_API_KEY or OPENROUTER_API_KEY set. Never part of CI. Prints numbers and ids only,
+// never CV, job or answer text.
 //
 // For each fixture it reports: start-up time (stages 1 to 3), the spread of each scoring dimension when every
 // sample answer is scored three times (target: 1 point or less), and estimated tokens and cost per session.
 // Set INTERVIEW_EVAL_REVIEW_MODEL=claude-sonnet-5-5 to run stage 3 on Sonnet and compare it with Haiku.
 import { describe, expect, it } from "vitest";
+import { getAiProvider } from "@/shared/ai";
 import type { TechnicalScores } from "./contracts";
 import { addAnswer, applyAnalysis, applyFollowUpDecision, applyQuestions, askQuestion, createSession } from "./engine/session";
 import { decideFollowUp, evaluateAnswer, runStartup, toTechnicalQuestion, writeReport, type StageOverrides } from "./engine/stages";
@@ -16,7 +18,7 @@ const runs = 3;
 const overrides: StageOverrides = process.env.INTERVIEW_EVAL_REVIEW_MODEL ? { review: { model: process.env.INTERVIEW_EVAL_REVIEW_MODEL } } : {};
 const at = () => new Date().toISOString();
 
-describe.skipIf(!process.env.ANTHROPIC_API_KEY)("technical interview engine, live", () => {
+describe.skipIf(!getAiProvider())("technical interview engine, live", () => {
   it.each(fixtures)(
     "$id",
     async (fixture) => {
