@@ -54,5 +54,15 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # No end-to-end suite yet; this runs it once a test:e2e script exists.
-      - run: npm run test:e2e --if-present
+      # Headless Chromium only, for the phone-sized test in tests/e2e.
+      - run: npx playwright install --with-deps --only-shell chromium
+      - run: npm run test:e2e
+      - name: Keep the report and traces of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

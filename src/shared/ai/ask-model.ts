@@ -3,7 +3,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { io } from "next/cache";
 import type { z } from "zod";
-import { type AiProvider, DEFAULT_MODEL, getAiMode, getAiProvider, OPENROUTER_BASE_URL, toOpenRouterModel } from "./config";
+import {
+  type AiProvider,
+  DEFAULT_MODEL,
+  getAiMode,
+  getAiProvider,
+  OPENROUTER_BASE_URL,
+  openRouterAppHeaders,
+  toOpenRouterModel,
+} from "./config";
 import { loadVoice } from "./prompts";
 import {
   assertWithinDailyLimit,
@@ -56,7 +64,12 @@ const clients: Partial<Record<AiProvider, Anthropic>> = {};
 function createClient(provider: AiProvider): Anthropic {
   if (provider === "anthropic") return new Anthropic();
   // OpenRouter speaks the same Messages API, but wants its key as a Bearer token rather than x-api-key.
-  return new Anthropic({ baseURL: OPENROUTER_BASE_URL, apiKey: null, authToken: process.env.OPENROUTER_API_KEY });
+  return new Anthropic({
+    baseURL: OPENROUTER_BASE_URL,
+    apiKey: null,
+    authToken: process.env.OPENROUTER_API_KEY,
+    defaultHeaders: openRouterAppHeaders(),
+  });
 }
 
 /**
@@ -80,6 +93,8 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
     await assertWithinDailyLimit(options.requester);
   } catch (error) {
     if (error instanceof LimitReachedError) throw new AskModelError(error.message, "limit-reached");
+    // Without the usage log there is no daily limit, so nothing is sent; log why, since callers may not.
+    console.error("askModel: could not check the daily limit", error);
     throw error;
   }
   const client = (clients[provider] ??= createClient(provider));

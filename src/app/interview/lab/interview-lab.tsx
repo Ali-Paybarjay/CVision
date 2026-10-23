@@ -9,7 +9,8 @@ import { nextStep } from "@/features/interview/engine/session";
 import { drive, InterviewFlow, Progress, runOf } from "../_practice/flow";
 import { FeedbackReport } from "../_practice/report";
 import { createPracticeStore, parseEnvelope } from "../_practice/store";
-import { Card, PrimaryButton, SecondaryButton, Status } from "../_practice/ui";
+import { Button, Card } from "@/shared/ui";
+import { Status } from "../_practice/ui";
 import { LabDebug } from "./lab-debug";
 import type { LabSource } from "./lab-types";
 
@@ -58,7 +59,7 @@ export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSour
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-text-muted">{source ? source.label : "Pasted job ad and CV"}</p>
-            <SecondaryButton onClick={restart}>Start again</SecondaryButton>
+            <Button onClick={restart}>Start again</Button>
           </div>
           <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
           {session && nextStep(session).step === "done" ? (
@@ -135,9 +136,9 @@ function Setup({ mode, sources }: { mode: AiMode; sources: LabSource[] }) {
         </div>
       )}
 
-      <PrimaryButton onClick={start} disabled={!ready}>
+      <Button variant="primary" onClick={start} disabled={!ready}>
         Start interview
-      </PrimaryButton>
+      </Button>
     </Card>
   );
 }

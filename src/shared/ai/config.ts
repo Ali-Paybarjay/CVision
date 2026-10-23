@@ -1,3 +1,5 @@
+import { brand } from "@/shared/brand";
+
 export type AiMode = "mock" | "live";
 
 /**
@@ -24,6 +26,15 @@ export function getAiProvider(): AiProvider | null {
 }
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
+
+/**
+ * App attribution: OpenRouter lists requests under this name instead of "Unknown".
+ * It needs the site's address too; Vercel sets VERCEL_PROJECT_PRODUCTION_URL on every deployment.
+ */
+export function openRouterAppHeaders(): Record<string, string> {
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return { "HTTP-Referer": host ? `https://${host}` : "http://localhost:3000", "X-OpenRouter-Title": brand.name };
+}
 
 /**
  * OpenRouter's name for a Claude model: "claude-haiku-5-5" becomes "anthropic/claude-haiku-5.5".

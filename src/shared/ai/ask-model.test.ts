@@ -6,7 +6,7 @@ import { z } from "zod";
 import { brand } from "@/shared/brand";
 import * as contracts from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
-import { toOpenRouterModel } from "./config";
+import { openRouterAppHeaders, toOpenRouterModel } from "./config";
 import { askModel, AskModelError, loadPrompt } from "./index";
 
 // Live-mode tests talk to a fake client and an in-memory usage log: never the real API or Supabase.
@@ -124,10 +124,11 @@ describe("askModel in live mode", () => {
 });
 
 describe("askModel through OpenRouter", () => {
-  it("sends the request to OpenRouter with its key and model name, and logs Anthropic's name", async () => {
+  it("sends the request to OpenRouter with its key, model name and app name, and logs Anthropic's name", async () => {
     vi.stubEnv("AI_MODE", "live");
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "cvision.example");
     create.mockResolvedValueOnce(reply('{"ok":true}'));
     const onUsage = vi.fn();
 
@@ -136,6 +137,7 @@ describe("askModel through OpenRouter", () => {
       baseURL: "https://openrouter.ai/api",
       apiKey: null,
       authToken: "openrouter-test-key",
+      defaultHeaders: { "HTTP-Referer": "https://cvision.example", "X-OpenRouter-Title": "CVision" },
     });
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ model: "anthropic/claude-haiku-5.5" }));
     expect(onUsage.mock.calls[0][0]).toMatchObject({ model: "claude-haiku-5-5", costUsd: expect.closeTo(0.0002, 10) });
@@ -158,6 +160,11 @@ describe("askModel through OpenRouter", () => {
     ["anthropic/claude-sonnet-5.5", "anthropic/claude-sonnet-5.5"],
   ])("names %s as %s", (model, expected) => {
     expect(toOpenRouterModel(model)).toBe(expected);
+  });
+
+  it("names the app from localhost when not on Vercel", () => {
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "");
+    expect(openRouterAppHeaders()).toEqual({ "HTTP-Referer": "http://localhost:3000", "X-OpenRouter-Title": "CVision" });
   });
 });
 
