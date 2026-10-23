@@ -81,6 +81,7 @@ describe("MatchReport", () => {
 
   it("asks a signed-out visitor to sign in to keep the job, and says when saving failed", () => {
     expect(text(report({ saved: "signed-out" }))).toContain("Sign in to keep this job");
+    expect(report({ saved: "signed-out" })).toContain('href="/sign-in?next=%2Fjobs"');
     expect(text(report({ saved: "failed" }))).toContain("This job isn’t saved to your account");
     expect(text(report({ saved: "saved" }))).not.toContain("Sign in");
   });
@@ -186,6 +187,9 @@ describe("JobChecker", () => {
   it("asks a signed-out visitor to sign in, but keeps the demo open to them", () => {
     expect(text(renderToStaticMarkup(<JobChecker demoMode={false} source={{ kind: "signed-out" }} />))).toContain(
       "Sign in to check a job against your profile",
+    );
+    expect(renderToStaticMarkup(<JobChecker demoMode={false} source={{ kind: "signed-out" }} />)).toContain(
+      'href="/sign-up?next=%2Fjobs"',
     );
     expect(text(renderToStaticMarkup(<JobChecker demoMode source={{ kind: "signed-out" }} />))).toContain(
       "the match uses the sample person’s profile",

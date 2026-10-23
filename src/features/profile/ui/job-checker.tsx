@@ -71,7 +71,7 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
     );
   } else if (source.kind === "signed-out" && !demoMode) {
     // In the demo a signed-out visitor can try it with a sample profile; otherwise they sign in first.
-    content = <SignInNotice title="Sign in to check a job against your profile" />;
+    content = <SignInNotice title="Sign in to check a job against your profile" next="/jobs" />;
   } else if (!profile && !demoMode) {
     content = <ProfileFirst />;
   } else {
@@ -213,7 +213,7 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
               {errors.form}
             </Notice>
           )}
-          {errors.signIn && <SignInNotice title="Sign in to check a job" />}
+          {errors.signIn && <SignInNotice title="Sign in to check a job" next="/jobs" />}
 
           <div>
             <Button type="submit" variant="primary" disabled={pending} className="w-full sm:w-auto">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { withNext } from "@/features/account/safe-redirect";
 import { Button, Card, cn, ErrorIcon, Field, Notice } from "@/shared/ui";
 import { consentPoints, cvConsent, privacyPage, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
@@ -172,19 +173,19 @@ function linkPrivacyPage(point: string): React.ReactNode {
 
 /**
  * Shown when a step needs a signed-in user: with the AI switched on, each request counts against the user's daily limit.
- * `title` says what signing in is for; the upload's wording is the default.
+ * `title` says what signing in is for; the upload's wording is the default. `next` is the page the user comes back to.
  */
-export function SignInNotice({ title = "Sign in to upload your CV" }: { title?: string }) {
+export function SignInNotice({ title = "Sign in to upload your CV", next = "/profile" }: { title?: string; next?: string }) {
   return (
     <Notice tone="info" title={title}>
-      <Link href="/sign-in" className="font-semibold text-accent hover:underline">
+      <Link href={withNext("/sign-in", next)} className="font-semibold text-accent hover:underline">
         Sign in
       </Link>{" "}
       or{" "}
-      <Link href="/sign-up" className="font-semibold text-accent hover:underline">
+      <Link href={withNext("/sign-up", next)} className="font-semibold text-accent hover:underline">
         create a free account
       </Link>
-      , then come back to this page.
+      , and you’ll come back to this page.
     </Notice>
   );
 }

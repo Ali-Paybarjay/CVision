@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { withNext } from "@/features/account/safe-redirect";
 import { ButtonLink, Card } from "@/shared/ui";
 import { BackLink } from "./back-link";
 
-/** Shown on the profile page to a signed-out visitor: the profile is saved to an account, so they sign in first. */
+/**
+ * Shown on the profile page to a signed-out visitor: the profile is saved to an account, so they sign in first.
+ * Both links bring them back here afterwards.
+ */
 export function SignInToStart() {
   return (
     <div className="flex flex-col gap-6">
@@ -14,10 +18,13 @@ export function SignInToStart() {
           download or delete it at any time. An account is free.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <ButtonLink href="/sign-up" variant="primary">
+          <ButtonLink href={withNext("/sign-up", "/profile")} variant="primary">
             Create a free account
           </ButtonLink>
-          <Link href="/sign-in" className="inline-flex min-h-11 items-center px-1 text-sm font-semibold text-accent hover:underline">
+          <Link
+            href={withNext("/sign-in", "/profile")}
+            className="inline-flex min-h-11 items-center px-1 text-sm font-semibold text-accent hover:underline"
+          >
             I already have an account
           </Link>
         </div>

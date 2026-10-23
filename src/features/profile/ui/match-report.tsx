@@ -108,7 +108,7 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         </Card>
       )}
 
-      {saved === "signed-out" && <SignInNotice title="Sign in to keep this job" />}
+      {saved === "signed-out" && <SignInNotice title="Sign in to keep this job" next="/jobs" />}
       {saved === "failed" && (
         <Notice tone="warning" title="This job isn’t saved to your account">
           We couldn’t save it just now. Your report is still here. To tailor your CV for this job, check it again in a

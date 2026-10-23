@@ -79,12 +79,13 @@ describe("profile screens", () => {
     expect(html).toContain("Keep my current profile");
   });
 
-  it("points a signed-out visitor to sign in or create an account", () => {
+  it("points a signed-out visitor to sign in or create an account, then back to the profile page", () => {
     const html = renderToStaticMarkup(<SignInNotice />);
 
     expect(text(html)).toContain("Sign in to upload your CV");
-    expect(html).toContain('href="/sign-in"');
-    expect(html).toContain('href="/sign-up"');
+    expect(html).toContain('href="/sign-in?next=%2Fprofile"');
+    expect(html).toContain('href="/sign-up?next=%2Fprofile"');
+    expect(text(html)).toContain("you’ll come back to this page");
   });
 
   it.each(names)("lists every item of %s's CV for review, with one approval at the end of the page", (name) => {
@@ -234,8 +235,8 @@ describe("profile screens", () => {
     const html = renderToStaticMarkup(<SignInToStart />);
 
     expect(text(html)).toContain("Sign in to build your profile");
-    expect(html).toContain('href="/sign-up"');
-    expect(html).toContain('href="/sign-in"');
+    expect(html).toContain('href="/sign-up?next=%2Fprofile"');
+    expect(html).toContain('href="/sign-in?next=%2Fprofile"');
     expect(html).toMatch(/<a href="\/"[^>]*>.*?Back<\/a>/);
   });
 
