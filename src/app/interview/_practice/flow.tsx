@@ -21,7 +21,8 @@ import {
 } from "@/features/interview/engine/session";
 import { countWords } from "@/features/interview/engine/text";
 import type { JobState, PracticeEnvelope, PracticeStore } from "./store";
-import { Card, Notice, PrimaryButton, SecondaryButton, Status } from "./ui";
+import { Button, Card, Notice } from "@/shared/ui";
+import { Status } from "./ui";
 
 /** Sample answers by question id, for one-click answers in mock mode. */
 export type SampleAnswers = Record<string, { main: string; followUp: string | null }>;
@@ -151,7 +152,7 @@ export function Progress({
               {job?.status === "failed" && (
                 <>
                   <span className="w-full text-sm text-error">{job.message}</span>
-                  <SecondaryButton onClick={() => store.retryJob(`${run}:${stage.key}`)}>Try again</SecondaryButton>
+                  <Button onClick={() => store.retryJob(`${run}:${stage.key}`)}>Try again</Button>
                 </>
               )}
             </li>
@@ -212,7 +213,7 @@ export function InterviewFlow({
                   <span className="flex flex-wrap items-center gap-2">
                     <Status tone="error">Scoring failed</Status>
                     <span className="text-sm text-error">{evaluateJob.message}</span>
-                    <SecondaryButton onClick={() => store.retryJob(`${run}:evaluate:${question.id}`)}>Try again</SecondaryButton>
+                    <Button onClick={() => store.retryJob(`${run}:evaluate:${question.id}`)}>Try again</Button>
                   </span>
                 ) : (
                   <Status tone="muted">Scoring in the background…</Status>
@@ -245,7 +246,7 @@ export function InterviewFlow({
           {reportJob?.status === "failed" && (
             <div className="mt-2 space-y-2">
               <Notice tone="error">{reportJob.message}</Notice>
-              <SecondaryButton onClick={() => store.retryJob(`${run}:report`)}>Try again</SecondaryButton>
+              <Button onClick={() => store.retryJob(`${run}:report`)}>Try again</Button>
             </div>
           )}
         </Card>
@@ -259,7 +260,7 @@ function DecisionStatus({ store, job, jobKey }: { store: PracticeStore; job?: Jo
     return (
       <div className="space-y-2">
         <Notice tone="error">{job.message}</Notice>
-        <SecondaryButton onClick={() => store.retryJob(jobKey)}>Try again</SecondaryButton>
+        <Button onClick={() => store.retryJob(jobKey)}>Try again</Button>
       </div>
     );
   }
@@ -318,18 +319,18 @@ function AnswerForm({
         </p>
         <div className="flex flex-wrap gap-2">
           {sample && (
-            <SecondaryButton
+            <Button
               onClick={() => {
                 markStart();
                 setText(sample);
               }}
             >
               Use sample answer
-            </SecondaryButton>
+            </Button>
           )}
-          <PrimaryButton onClick={submit} disabled={text.trim() === ""}>
+          <Button variant="primary" onClick={submit} disabled={text.trim() === ""}>
             Submit answer
-          </PrimaryButton>
+          </Button>
         </div>
       </div>
       {problem && <Notice tone="error">{problem}</Notice>}
