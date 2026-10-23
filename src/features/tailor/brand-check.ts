@@ -28,8 +28,7 @@ const usToUk: Record<string, string> = {
   centers: "centres",
   centered: "centred",
   theater: "theatre",
-  meter: "metre",
-  meters: "metres",
+  // Not "meter": in UK English a meter is a device (a gas meter), so it is often right.
   catalog: "catalogue",
   dialog: "dialogue",
   defense: "defence",
@@ -55,7 +54,9 @@ const usToUk: Record<string, string> = {
 };
 
 // -ize words that are spelt the same in UK English.
-const izeExceptions = new Set(["size", "sizes", "sized", "prize", "prizes", "seize", "seized", "capsize", "baize", "maize"]);
+const izeExceptions = new Set(["prize", "prizes", "prized", "seize", "seizes", "seized", "seizing", "baize", "maize", "belize"]);
+/** Any word built on "size" ("resized", "downsizing", "Oversized", "capsize") is UK English too. */
+const sizeWord = /size(s|d|r|rs)?$|sizing$/;
 
 function escape(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -85,7 +86,7 @@ export function findBrandProblems(text: string): BrandProblem[] {
     if ((lower === "resume" || lower === "resumes") && !/\b(my|your|a|the|his|her|their)\s+$/i.test(text.slice(0, match.index))) {
       uk = undefined;
     }
-    if (!uk && !izeExceptions.has(lower)) {
+    if (!uk && !izeExceptions.has(lower) && !sizeWord.test(lower)) {
       const ize = lower.match(/^(.{3,})(iz|yz)(e|es|ed|ing|ation|ations|er|ers)$/);
       if (ize) uk = `${ize[1]}${ize[2] === "iz" ? "is" : "ys"}${ize[3]}`;
     }

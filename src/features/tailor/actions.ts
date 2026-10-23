@@ -169,15 +169,18 @@ export type CreateCoverLetterResult =
  */
 export async function createCoverLetter(request: CoverLetterRequest): Promise<CreateCoverLetterResult> {
   const parsed = CoverLetterRequestSchema.safeParse(request);
-  if (!parsed.success) return { ok: false, message: "We could not read your changes. Reload the page and try again." };
+  if (!parsed.success) return { ok: false, message: "We could not read your changes. Try again." };
   const { jobId, answers } = parsed.data;
 
-  const [profile, job, match] = await Promise.all([getMyProfile(), getMyJob(jobId), getMyMatch(jobId)]);
+  const access = await tailorModelAccess();
+  if (!access.allowed) return { ok: false, message: "Sign in to write your cover letter." };
+
+  const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   if (!profile || !job) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
   const changes = parsed.data.changes.filter((change) => change.jobId === jobId && change.status === "approved");
 
   try {
-    const letter = await writeCoverLetter({ profile, job, changes, answers });
+    const letter = await writeCoverLetter({ profile, job, changes, answers, requester: access.requester });
     const text = coverLetterText(letter, profile.fullName);
     if (inventedTerms(text, match?.gaps ?? [], answers, profile).length > 0) {
       return { ok: false, message: "The draft mentioned something you told us you have not done, so we did not use it. Try again." };
@@ -192,8 +195,11 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
       );
     });
     return { ok: true, text, problems: findBrandProblems(text) };
-  } catch {
-    return { ok: false, message: "We could not write your cover letter just now. Try again in a moment." };
+  } catch (error) {
+    return {
+      ok: false,
+      message: modelFailureMessage(error, "write the cover letter", "We could not write your cover letter just now. Try again in a moment."),
+    };
   }
 }
 

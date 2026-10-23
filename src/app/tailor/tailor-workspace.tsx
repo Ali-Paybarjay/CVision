@@ -6,13 +6,13 @@ import { buildTailoredCv } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, Profile, TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { Button, Card, CvPaper, Field, FitLine, Notice, Textarea } from "@/shared/ui";
-import { CoverLetterPanel, type LetterState } from "./cover-letter-panel";
+import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
+import { CoverLetterPanel } from "./cover-letter-panel";
 import { CvPreview } from "./cv-preview";
+import { unreachableMessage } from "./messages";
 
 export type GapPrompt = { gap: Gap; question: string; sampleAnswer: string | null };
 
-/** Shown when a Server Action can't be reached: offline, or a new version was deployed mid-session. */
-export const unreachableMessage = "We could not reach CVision. Check your connection and try again.";
 
 type GapState =
   | { phase: "open" }
@@ -52,6 +52,8 @@ export function TailorWorkspace({
   const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const cv = buildTailoredCv(profile, changes);
+  // Worked out on every render, so a letter approved before the CV changed is never used as approved.
+  const approvedLetter = currentLetter(letter, letterBasis(changes, Object.values(answers)));
 
   const counts = {
     approved: changes.filter((change) => change.status === "approved").length,
@@ -115,13 +117,7 @@ export function TailorWorkspace({
           ))}
         </section>
 
-        <CoverLetterPanel
-          jobId={jobId}
-          changes={changes}
-          answers={Object.values(answers)}
-          letter={letter}
-          setLetter={setLetter}
-        />
+        <CoverLetterPanel jobId={jobId} changes={changes} answers={Object.values(answers)} letter={approvedLetter} setLetter={setLetter} />
       </div>
 
       <aside className="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start" aria-labelledby="preview-heading">
