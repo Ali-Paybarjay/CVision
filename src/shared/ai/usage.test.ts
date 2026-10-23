@@ -82,3 +82,35 @@ describe("getUsageStore", () => {
     await expect(getUsageStore().countToday({ userId: "sara" })).resolves.toBe(0);
   });
 });
+
+describe("Supabase usage log failures", () => {
+  // supabase-js returns failures as plain objects; a HEAD count that is refused has an empty message.
+  const failingSupabase = () => {
+    const count = { count: null, error: { message: "" }, status: 401 };
+    const query = { gte: () => query, eq: () => query, is: () => query, then: (resolve: (value: object) => void) => resolve(count) };
+    const insert = async () => ({
+      error: { message: "permission denied for table ai_usage", code: "42501", details: "Failing row contains (sara)" },
+      status: 403,
+    });
+    return { from: () => ({ select: () => query, insert }) };
+  };
+
+  afterEach(() => {
+    vi.doUnmock("@/shared/supabase/admin");
+  });
+
+  it("turns them into errors that say what failed, without row details", async () => {
+    vi.resetModules();
+    vi.doMock("@/shared/supabase/admin", () => ({ getSupabaseAdmin: failingSupabase }));
+    const { getUsageStore, UsageLogError } = await import("./usage");
+    const store = getUsageStore();
+
+    const counted = store.countToday({ userId: "sara" });
+    await expect(counted).rejects.toBeInstanceOf(UsageLogError);
+    await expect(counted).rejects.toThrow("ai_usage count failed: HTTP 401");
+
+    const recorded = store.record({ feature: "test", model: "claude-haiku-5-5", inputTokens: 1, outputTokens: 1, costUsd: 0, ok: true });
+    await expect(recorded).rejects.toThrow("ai_usage insert failed: HTTP 403, 42501 permission denied for table ai_usage");
+    await expect(recorded).rejects.not.toThrow("Failing row");
+  });
+});

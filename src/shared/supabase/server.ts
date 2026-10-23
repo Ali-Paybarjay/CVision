@@ -1,5 +1,6 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
+import { io } from "next/cache";
 import { cookies } from "next/headers";
 import { getSupabasePublicEnv } from "./env";
 
@@ -12,6 +13,9 @@ export async function createSupabaseServerClient() {
   const env = getSupabasePublicEnv();
   if (!env) return null;
 
+  // Supabase checks the session's expiry with Date.now(). With partial prefetching, the render is
+  // still a prerender after cookies() resolves, so that read logs an error; io() waits for the request.
+  await io();
   const cookieStore = await cookies();
 
   return createServerClient(env.url, env.publishableKey, {

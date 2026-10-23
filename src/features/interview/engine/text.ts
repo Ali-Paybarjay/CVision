@@ -1,5 +1,6 @@
 // Pure text helpers: CV and job text for the prompts, untrusted-input wrapping, word counts and quote checks.
 import type { Job, Profile } from "@/shared/contracts";
+import type { InterviewInputs } from "./schemas";
 
 /** The tags that carry untrusted text in the interview prompts. */
 export const untrustedTags = [
@@ -134,4 +135,9 @@ export function jobToText(job: Job): string {
 /** The essential and desirable lists already parsed from the ad, as a hint for stage 1. */
 export function jobRequirementsText(job: Job): string {
   return [`Essential: ${job.requirements.essential.join("; ")}`, `Desirable: ${job.requirements.desirable.join("; ")}`].join("\n");
+}
+
+/** What the engine reads for one job and one candidate. */
+export function interviewInputsFor(job: Job, profile: Profile): InterviewInputs {
+  return { jobId: job.id, jobDescription: jobToText(job), cv: profileToCvText(profile), parsedRequirements: jobRequirementsText(job) };
 }

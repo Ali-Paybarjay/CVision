@@ -165,6 +165,25 @@ export function nextStep(session: InterviewSession): SessionStep {
   return { step: "done" };
 }
 
+/** How far a session has got: every step adds to one of these, and nothing removes from them. */
+export function progressOf(session: InterviewSession): number {
+  return (
+    (session.roleProfile ? 1 : 0) +
+    session.questions.length +
+    (session.reviewChangelog ? 1 : 0) +
+    (session.turns?.length ?? 0) +
+    (session.followUpDecisions?.length ?? 0) +
+    (session.evaluations?.length ?? 0) +
+    (session.report ? 1 : 0)
+  );
+}
+
+/** True when `a` should replace `b`, two copies from different devices: a later practice, or the same one further on. */
+export function isNewerSession(a: InterviewSession, b: InterviewSession): boolean {
+  if (a.id !== b.id) return Date.parse(a.startedAt) > Date.parse(b.startedAt);
+  return progressOf(a) > progressOf(b);
+}
+
 function question(session: InterviewSession, questionId: string) {
   const found = session.questions.find((q) => q.id === questionId);
   if (!found) throw new InterviewRuleError(`Unknown question ${questionId}.`);

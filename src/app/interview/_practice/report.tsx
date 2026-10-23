@@ -1,9 +1,11 @@
-// The end-of-interview report: overall score, competency map, priorities, notes and one card per question.
+// The end-of-interview feedback report: overall score, priorities, competency map, notes, and for each answer
+// what worked, what cost marks and one specific thing to do next time (prompts/_voice.md: outcome first).
 import type { AnswerEvaluation, InterviewReport, InterviewSession } from "@/features/interview/contracts";
 import { readinessLabels } from "@/features/interview/engine/scoring";
 import { evaluationFor, followUpAnswer, followUpQuestion, mainAnswer } from "@/features/interview/engine/session";
 import { technicalV1 } from "@/features/interview/rubrics";
-import { Card, Notice, Status, type Tone } from "./lab-ui";
+import { Card, Notice } from "@/shared/ui";
+import { Status, type Tone } from "./ui";
 
 const readinessTone: Record<InterviewReport["readiness"], Tone> = { ready: "accent", "nearly-ready": "warning", "not-yet-ready": "error" };
 
@@ -20,7 +22,7 @@ const lookForStatus: Record<AnswerEvaluation["lookForEvidence"][number]["status"
   missing: { tone: "error", label: "Missing" },
 };
 
-export function LabReport({ session }: { session: InterviewSession }) {
+export function FeedbackReport({ session }: { session: InterviewSession }) {
   const report = session.report;
   const role = session.roleProfile;
   if (!report || !role) return null;
@@ -40,8 +42,7 @@ export function LabReport({ session }: { session: InterviewSession }) {
         <p className="mt-3">{report.verdict}</p>
         {report.levelGapNote && (
           <div className="mt-3">
-            <Notice tone="warning">
-              <strong>Level: </strong>
+            <Notice tone="warning" title="Level">
               {report.levelGapNote}
             </Notice>
           </div>
@@ -87,8 +88,7 @@ export function LabReport({ session }: { session: InterviewSession }) {
           <h2 className="text-xl">Check these points with a practitioner</h2>
           <div className="mt-3 space-y-2">
             {report.uncertaintyNotes.map((note) => (
-              <Notice key={note.questionId} tone="warning">
-                <strong>Question {position(note.questionId)}: </strong>
+              <Notice key={note.questionId} tone="warning" title={`Question ${position(note.questionId)}`}>
                 {note.note}
               </Notice>
             ))}
@@ -129,14 +129,19 @@ function QuestionCard(props: {
   const { evaluation } = props;
   return (
     <Card>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="font-semibold">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-semibold">
           {props.number}. {props.text}
+        </h3>
+        <p className="shrink-0 text-2xl font-bold">
+          {evaluation.overall.toFixed(1)}
+          <span className="sr-only"> out of 5</span>
         </p>
-        <p className="text-2xl font-bold">{evaluation.overall.toFixed(1)}</p>
       </div>
 
-      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <AnswerFeedback evaluation={evaluation} />
+
+      <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {technicalV1.dimensions.map((dimension) => (
           <div key={dimension.key} className="rounded-md bg-canvas p-2">
             <dt className="text-xs text-text-muted">{dimension.label}</dt>
@@ -153,7 +158,7 @@ function QuestionCard(props: {
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>
-          <h3 className="text-sm text-text-muted">What a strong answer covers</h3>
+          <h4 className="text-sm text-text-muted">What a strong answer covers</h4>
           <ul className="mt-2 space-y-2">
             {evaluation.lookForEvidence.map((entry) => {
               const lookFor = props.lookFors.find((l) => l.id === entry.lookForId);
@@ -168,15 +173,6 @@ function QuestionCard(props: {
           </ul>
         </div>
         <div className="space-y-3 text-sm">
-          {evaluation.strengths.length > 0 && <FeedbackList title="Strengths" items={evaluation.strengths} />}
-          <FeedbackList title="Weaknesses" items={evaluation.weaknesses} />
-          {evaluation.errors.length > 0 && (
-            <FeedbackList title="Corrections" items={evaluation.errors.map((e) => `${e.claim} → ${e.correction}`)} />
-          )}
-          <div>
-            <h3 className="text-text-muted">Next time</h3>
-            <p className="mt-1">{evaluation.improvement}</p>
-          </div>
           <FeedbackList title="Outline of a stronger answer" items={evaluation.strongerAnswerOutline} />
           {evaluation.followUpClosedGap !== undefined && (
             <p>
@@ -197,7 +193,7 @@ function QuestionCard(props: {
             <p className="mt-1 whitespace-pre-wrap">{props.followUpAnswer}</p>
           </>
         )}
-        <h3 className="mt-3 text-text-muted">Why these scores</h3>
+        <h4 className="mt-3 text-text-muted">Why these scores</h4>
         <ul className="mt-1 list-disc pl-5">
           {technicalV1.dimensions.map((dimension) => (
             <li key={dimension.key}>
@@ -210,10 +206,32 @@ function QuestionCard(props: {
   );
 }
 
+/** Outcome first: what worked, what cost marks, and the one thing to do next time. */
+function AnswerFeedback({ evaluation }: { evaluation: AnswerEvaluation }) {
+  const costMarks = [...evaluation.weaknesses, ...evaluation.errors.map((e) => `${e.claim} Correction: ${e.correction}`)];
+  return (
+    <div className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+      {evaluation.strengths.length > 0 ? (
+        <FeedbackList title="What worked" items={evaluation.strengths} />
+      ) : (
+        <div>
+          <h4 className="text-text-muted">What worked</h4>
+          <p className="mt-1">Nothing in this answer earned credit yet. Build it from the outline below.</p>
+        </div>
+      )}
+      <FeedbackList title="What cost you marks" items={costMarks} />
+      <div className="rounded-md border-l-4 border-fit-bar bg-fit p-3 sm:col-span-2">
+        <h4 className="font-semibold text-accent">Do this next time</h4>
+        <p className="mt-1">{evaluation.improvement}</p>
+      </div>
+    </div>
+  );
+}
+
 function FeedbackList({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <h3 className="text-text-muted">{title}</h3>
+      <h4 className="text-text-muted">{title}</h4>
       <ul className="mt-1 list-disc space-y-1 pl-5">
         {items.map((item) => (
           <li key={item}>{item}</li>
