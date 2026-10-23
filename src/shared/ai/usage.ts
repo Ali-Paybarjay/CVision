@@ -26,10 +26,28 @@ export type UsageRecord = {
 /** What one request to the model used, as askModel's onUsage reports it. Thinking tokens are part of outputTokens. */
 export type ModelUsage = Omit<UsageRecord, "requester" | "feature">;
 
+/** A request about to be sent to the model, before anything is known about what it uses. */
+export type UsageRequest = Pick<UsageRecord, "requester" | "feature" | "model">;
+
+/** The id of one row in the usage log. */
+export type UsageRowId = number;
+
+/** How a reserved row starts, and what is known about a request that failed before the model answered. */
+export function noUsage(model: string): ModelUsage {
+  return { model, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false };
+}
+
 type CountFilter = { userId: string } | { anonymousKey: string } | { allAnonymous: true };
 
 export interface UsageStore {
+  /** Adds a row for a request about to be sent, with nothing used yet, and returns its id. */
+  reserve(request: UsageRequest): Promise<UsageRowId>;
   countToday(filter: CountFilter): Promise<number>;
+  /** Fills in a reserved row with what its request really used. */
+  update(id: UsageRowId, used: ModelUsage): Promise<void>;
+  /** Removes a reserved row whose request was never sent. */
+  delete(id: UsageRowId): Promise<void>;
+  /** Adds a row for a request that had no reservation: a retry. */
   record(entry: UsageRecord): Promise<void>;
 }
 
@@ -40,11 +58,19 @@ function startOfTodayUtc(): string {
 
 /** In-memory store for local development before Supabase is connected. Resets on restart. */
 export function createMemoryUsageStore(): UsageStore {
-  const rows: Array<UsageRecord & { at: string }> = [];
+  const rows = new Map<UsageRowId, UsageRecord & { at: string }>();
+  let lastId = 0;
+  const add = (entry: UsageRecord) => {
+    rows.set(++lastId, { ...entry, at: new Date().toISOString() });
+    return lastId;
+  };
   return {
+    async reserve(request) {
+      return add({ ...request, ...noUsage(request.model) });
+    },
     async countToday(filter) {
       const since = startOfTodayUtc();
-      return rows.filter((row) => {
+      return [...rows.values()].filter((row) => {
         if (row.at < since) return false;
         const who = row.requester;
         if ("userId" in filter) return who !== undefined && "userId" in who && who.userId === filter.userId;
@@ -52,8 +78,15 @@ export function createMemoryUsageStore(): UsageStore {
         return who === undefined || "anonymousKey" in who;
       }).length;
     },
+    async update(id, used) {
+      const row = rows.get(id);
+      if (row) rows.set(id, { ...row, ...used });
+    },
+    async delete(id) {
+      rows.delete(id);
+    },
     async record(entry) {
-      rows.push({ ...entry, at: new Date().toISOString() });
+      add(entry);
     },
   };
 }
@@ -62,7 +95,22 @@ function createSupabaseUsageStore(): UsageStore | null {
   const admin = getSupabaseAdmin();
   if (!admin) return null;
 
+  const insert = (entry: UsageRecord) => {
+    const who = entry.requester;
+    return admin.from("ai_usage").insert({
+      user_id: who && "userId" in who ? who.userId : null,
+      anonymous_key: who && "anonymousKey" in who ? who.anonymousKey : null,
+      feature: entry.feature,
+      ...usageColumns(entry),
+    });
+  };
+
   return {
+    async reserve(request) {
+      const { data, error, status } = await insert({ ...request, ...noUsage(request.model) }).select("id").single();
+      if (error) throw new UsageLogError("insert", error, status);
+      return data.id;
+    },
     async countToday(filter) {
       let query = admin.from("ai_usage").select("id", { count: "exact", head: true }).gte("created_at", startOfTodayUtc());
       if ("userId" in filter) query = query.eq("user_id", filter.userId);
@@ -72,20 +120,28 @@ function createSupabaseUsageStore(): UsageStore | null {
       if (error) throw new UsageLogError("count", error, status);
       return count ?? 0;
     },
+    async update(id, used) {
+      const { error, status } = await admin.from("ai_usage").update(usageColumns(used)).eq("id", id);
+      if (error) throw new UsageLogError("update", error, status);
+    },
+    async delete(id) {
+      const { error, status } = await admin.from("ai_usage").delete().eq("id", id);
+      if (error) throw new UsageLogError("delete", error, status);
+    },
     async record(entry) {
-      const who = entry.requester;
-      const { error, status } = await admin.from("ai_usage").insert({
-        user_id: who && "userId" in who ? who.userId : null,
-        anonymous_key: who && "anonymousKey" in who ? who.anonymousKey : null,
-        feature: entry.feature,
-        model: entry.model,
-        input_tokens: entry.inputTokens,
-        output_tokens: entry.outputTokens,
-        cost_usd: entry.costUsd,
-        ok: entry.ok,
-      });
+      const { error, status } = await insert(entry);
       if (error) throw new UsageLogError("insert", error, status);
     },
+  };
+}
+
+function usageColumns(used: ModelUsage) {
+  return {
+    model: used.model,
+    input_tokens: used.inputTokens,
+    output_tokens: used.outputTokens,
+    cost_usd: used.costUsd,
+    ok: used.ok,
   };
 }
 
@@ -107,24 +163,60 @@ export function getUsageStore(): UsageStore {
 }
 
 /**
- * Throws a LimitReachedError when the requester has used up today's requests.
- * Requests with no requester count towards the shared anonymous limit.
+ * Reserves a row in the usage log for a request about to be sent, then checks today's limit with that row
+ * counted, and returns its id for askModel to fill in. When the requester has used up today's requests,
+ * removes the row and throws a LimitReachedError. Requests with no requester count towards the shared
+ * anonymous limit.
+ *
+ * Reserving before counting stops requests that arrive together from all taking the last place: of the
+ * requests let through, the one whose row was saved last counts every other one. That is why all of
+ * today's rows are counted, not only those with a smaller id: ids are handed out before rows are saved,
+ * so they do not show which came first. The cost is that rows of requests about to be turned away count
+ * too, so under heavy contention the limit can stop a request a little early, but never lets one too many through.
  */
-export async function assertWithinDailyLimit(requester: Requester | undefined, usage: UsageStore = getUsageStore()) {
+export async function reserveWithinDailyLimit(request: UsageRequest, usage: UsageStore = getUsageStore()): Promise<UsageRowId> {
+  const id = await usage.reserve(request);
+  let refusal: string | undefined;
+  try {
+    refusal = await limitReachedMessage(request.requester, usage);
+  } catch (error) {
+    // Without a count there is no limit, so the request will not be sent and needs no row.
+    await release(usage, id);
+    throw error;
+  }
+  if (refusal) {
+    await release(usage, id);
+    throw new LimitReachedError(refusal);
+  }
+  return id;
+}
+
+/** Today's counts include the request's own reservation, so a count may equal the limit but not pass it. */
+async function limitReachedMessage(requester: Requester | undefined, usage: UsageStore): Promise<string | undefined> {
   const limits = getDailyLimits();
 
   if (requester && "userId" in requester) {
-    if ((await usage.countToday({ userId: requester.userId })) >= limits.perUser) {
-      throw new LimitReachedError("You have reached today's limit. Try again tomorrow.");
+    if ((await usage.countToday({ userId: requester.userId })) > limits.perUser) {
+      return "You have reached today's limit. Try again tomorrow.";
     }
-    return;
+    return undefined;
   }
 
-  if (requester && (await usage.countToday({ anonymousKey: requester.anonymousKey })) >= limits.perAnonymousVisitor) {
-    throw new LimitReachedError("You have used today's free checks. Create a free account to keep going.");
+  if (requester && (await usage.countToday({ anonymousKey: requester.anonymousKey })) > limits.perAnonymousVisitor) {
+    return "You have used today's free checks. Create a free account to keep going.";
   }
-  if ((await usage.countToday({ allAnonymous: true })) >= limits.allAnonymous) {
-    throw new LimitReachedError("The free check is busy today. Create a free account to keep going.");
+  if ((await usage.countToday({ allAnonymous: true })) > limits.allAnonymous) {
+    return "The free check is busy today. Create a free account to keep going.";
+  }
+  return undefined;
+}
+
+/** Removes a reservation whose request will not be sent. A row left behind only adds one to today's count, so it is logged, not thrown. */
+async function release(usage: UsageStore, id: UsageRowId): Promise<void> {
+  try {
+    await usage.delete(id);
+  } catch (error) {
+    console.error("askModel: could not remove an unused usage reservation", error);
   }
 }
 
@@ -141,7 +233,7 @@ export class LimitReachedError extends Error {
  * so logs that print only the error's name said "unknown". `details` stays out: it can hold row values.
  */
 export class UsageLogError extends Error {
-  constructor(action: "count" | "insert", error: { message?: string; code?: string }, status: number) {
+  constructor(action: "count" | "insert" | "update" | "delete", error: { message?: string; code?: string }, status: number) {
     const reason = [error.code, error.message].filter(Boolean).join(" ");
     super(`ai_usage ${action} failed: HTTP ${status}${reason ? `, ${reason}` : ""}`);
     this.name = "UsageLogError";

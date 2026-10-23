@@ -1,25 +1,54 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashVisitor } from "./anonymous-key";
-import { assertWithinDailyLimit, createMemoryUsageStore, estimateCostUsd, LimitReachedError } from "./usage";
+import {
+  createMemoryUsageStore,
+  estimateCostUsd,
+  LimitReachedError,
+  type Requester,
+  reserveWithinDailyLimit,
+  type UsageStore,
+} from "./usage";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
-const use = (store: ReturnType<typeof createMemoryUsageStore>, requester?: Parameters<typeof assertWithinDailyLimit>[0]) =>
-  store.record({ requester, feature: "test", model: "claude-haiku-5-5", inputTokens: 1, outputTokens: 1, costUsd: 0, ok: true });
+const use = (store: UsageStore, requester?: Requester) =>
+  reserveWithinDailyLimit({ requester, feature: "test", model: "claude-haiku-5-5" }, store);
+
+/** Waits a number of turns of the event loop: a delay that does not depend on the clock, so tests run the same every time. */
+async function turns(count: number) {
+  for (let turn = 0; turn < count; turn++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+/** The in-memory log, but every call takes one to three turns, like a round trip to Supabase. */
+function withLatency(store: UsageStore): UsageStore {
+  let calls = 0;
+  const later = async <T>(run: () => Promise<T>) => {
+    await turns(1 + (calls++ % 3));
+    return run();
+  };
+  return {
+    reserve: (request) => later(() => store.reserve(request)),
+    countToday: (filter) => later(() => store.countToday(filter)),
+    update: (id, used) => later(() => store.update(id, used)),
+    delete: (id) => later(() => store.delete(id)),
+    record: (entry) => later(() => store.record(entry)),
+  };
+}
 
 describe("daily limits", () => {
-  it("stops a signed-in user at their daily limit", async () => {
+  it("stops a signed-in user at their daily limit, and takes back the refused reservation", async () => {
     vi.stubEnv("AI_DAILY_LIMIT_PER_USER", "2");
     const store = createMemoryUsageStore();
     const sara = { userId: "sara" };
 
-    await use(store, sara);
-    await expect(assertWithinDailyLimit(sara, store)).resolves.toBeUndefined();
-    await use(store, sara);
-    await expect(assertWithinDailyLimit(sara, store)).rejects.toBeInstanceOf(LimitReachedError);
-    await expect(assertWithinDailyLimit({ userId: "reza" }, store)).resolves.toBeUndefined();
+    await expect(use(store, sara)).resolves.toEqual(expect.any(Number));
+    await expect(use(store, sara)).resolves.toEqual(expect.any(Number));
+    await expect(use(store, sara)).rejects.toBeInstanceOf(LimitReachedError);
+    await expect(store.countToday(sara)).resolves.toBe(2);
+    await expect(use(store, { userId: "reza" })).resolves.toEqual(expect.any(Number));
   });
 
   it("gives each anonymous visitor their own small limit", async () => {
@@ -27,8 +56,8 @@ describe("daily limits", () => {
     const store = createMemoryUsageStore();
 
     await use(store, { anonymousKey: "a" });
-    await expect(assertWithinDailyLimit({ anonymousKey: "a" }, store)).rejects.toThrow("free checks");
-    await expect(assertWithinDailyLimit({ anonymousKey: "b" }, store)).resolves.toBeUndefined();
+    await expect(use(store, { anonymousKey: "a" })).rejects.toThrow("free checks");
+    await expect(use(store, { anonymousKey: "b" })).resolves.toEqual(expect.any(Number));
   });
 
   it("caps all anonymous use together, including requests with no requester", async () => {
@@ -37,8 +66,71 @@ describe("daily limits", () => {
 
     await use(store, { anonymousKey: "a" });
     await use(store);
-    await expect(assertWithinDailyLimit({ anonymousKey: "c" }, store)).rejects.toThrow("busy today");
-    await expect(assertWithinDailyLimit({ userId: "sara" }, store)).resolves.toBeUndefined();
+    await expect(use(store, { anonymousKey: "c" })).rejects.toThrow("busy today");
+    await expect(use(store, { userId: "sara" })).resolves.toEqual(expect.any(Number));
+  });
+
+  it("holds both anonymous limits when many requests arrive at once", async () => {
+    vi.stubEnv("AI_DAILY_LIMIT_PER_ANONYMOUS", "2");
+    vi.stubEnv("AI_DAILY_LIMIT_ALL_ANONYMOUS", "3");
+    const store = withLatency(createMemoryUsageStore());
+    const visitors = Array.from({ length: 16 }, (_, index) => ({ anonymousKey: "abcd"[index % 4] }));
+
+    // They arrive a moment apart, each while others are still being counted.
+    const results = await Promise.allSettled(
+      visitors.map(async (visitor, index) => {
+        await turns(index);
+        return use(store, visitor);
+      }),
+    );
+
+    const allowed = visitors.filter((_, index) => results[index].status === "fulfilled");
+    expect(allowed.length).toBeGreaterThan(0);
+    expect(allowed.length).toBeLessThanOrEqual(3);
+    for (const key of ["a", "b", "c", "d"]) {
+      expect(allowed.filter((visitor) => visitor.anonymousKey === key).length).toBeLessThanOrEqual(2);
+    }
+    for (const result of results) {
+      if (result.status === "rejected") expect(result.reason).toBeInstanceOf(LimitReachedError);
+    }
+    // The refused reservations are gone: only the requests let through are counted.
+    await expect(store.countToday({ allAnonymous: true })).resolves.toBe(allowed.length);
+  });
+
+  it("takes back the reservation when today's count fails, and passes the failure on", async () => {
+    const store = createMemoryUsageStore();
+    const failure = new Error("count failed");
+    vi.spyOn(store, "countToday").mockRejectedValueOnce(failure);
+
+    await expect(use(store, { userId: "sara" })).rejects.toBe(failure);
+    await expect(store.countToday({ userId: "sara" })).resolves.toBe(0);
+  });
+
+  it("still turns the request away when its reservation cannot be taken back, and logs why", async () => {
+    vi.stubEnv("AI_DAILY_LIMIT_PER_USER", "0");
+    const store = createMemoryUsageStore();
+    const failure = new Error("delete failed");
+    vi.spyOn(store, "delete").mockRejectedValueOnce(failure);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(use(store, { userId: "sara" })).rejects.toBeInstanceOf(LimitReachedError);
+    expect(consoleError).toHaveBeenCalledWith("askModel: could not remove an unused usage reservation", failure);
+  });
+});
+
+describe("the in-memory usage log", () => {
+  it("fills in, removes and adds rows", async () => {
+    const store = createMemoryUsageStore();
+    const sara = { userId: "sara" };
+
+    const first = await store.reserve({ requester: sara, feature: "test", model: "claude-haiku-5-5" });
+    const second = await store.reserve({ requester: sara, feature: "test", model: "claude-haiku-5-5" });
+    expect(second).not.toBe(first);
+    await store.update(first, { model: "claude-haiku-5-5", inputTokens: 1000, outputTokens: 200, costUsd: 0.0002, ok: true });
+    await store.delete(second);
+    await store.record({ requester: sara, feature: "test", model: "claude-haiku-5-5", inputTokens: 1, outputTokens: 1, costUsd: 0, ok: true });
+
+    await expect(store.countToday(sara)).resolves.toBe(2);
   });
 });
 
