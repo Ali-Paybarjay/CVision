@@ -11,11 +11,8 @@ import { detectCvFormat, type CvFormat } from "./read-cv";
 /** The names of the fields the profile page sends to POST /profile/save. */
 export const saveFields = { profile: "profile", cv: "cv", consent: "consent", reason: "reason" } as const;
 
-/**
- * Why the profile is being saved: the user approved it in the review step (a new CV or an edit),
- * answered a follow-up question, or changed their job preferences.
- */
-export type SaveReason = "approved" | "answers" | "preferences";
+/** Why the profile is being saved: the user approved it in the review step (a new CV or an edit), or changed their job preferences. */
+export type SaveReason = "approved" | "preferences";
 
 export type SaveResponse =
   | { ok: true; savedAt: string; cvFormat: CvFormat | null }
@@ -38,7 +35,7 @@ export async function handleSaveRequest(
   }
 
   const reasonField = form.get(saveFields.reason);
-  const reason: SaveReason = reasonField === "answers" || reasonField === "preferences" ? reasonField : "approved";
+  const reason: SaveReason = reasonField === "preferences" ? reasonField : "approved";
 
   let cv: { bytes: Uint8Array; format: CvFormat } | undefined;
   const file = form.get(saveFields.cv);

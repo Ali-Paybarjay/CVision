@@ -2,17 +2,16 @@
 
 import { useRef, useState } from "react";
 import type { JobPreferences, Profile } from "@/shared/contracts";
-import { deleteMyProfileAction, suggestFollowUpQuestionsAction } from "../actions";
+import { deleteMyProfileAction } from "../actions";
 import type { ConsentRecord, ProfileStorageKind } from "../consent";
-import { recordFollowUpAnswer, type FollowUpQuestion } from "../follow-up";
 import { getBrowserProfileStore, useStorageIsPersistent, useStoredProfile } from "../profile-store";
 import { draftFromExtraction, draftFromProfile, newProfileBase, type ProfileBase, type ReviewDraft } from "../review-draft";
 import { fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import type { SaveReason } from "../server/save-request";
 import type { AccountProfile } from "../server/profile-account";
 import { Card, Notice } from "@/shared/ui";
+import { BackLink } from "./back-link";
 import { ProfileOverview } from "./profile-overview";
-import { QuestionsStep, type QuestionsState } from "./questions-step";
 import { ReviewStep } from "./review-step";
 import { saveProfileToAccount } from "./save-profile";
 import { UploadStep, type ExtractSuccess } from "./upload-step";
@@ -39,12 +38,15 @@ type View =
       truncated: boolean;
       /** True for a CV just read; false when editing the saved profile. */
       isNew: boolean;
-    }
-  | { name: "questions"; afterUpload: boolean };
+    };
+
+/** Where Back goes from this page when the page before it isn't on this site. */
+const PAGE_BACK = "/dashboard";
 
 /**
- * The profile page: upload a CV (with consent), check and approve what was read, answer follow-up questions,
- * then see and manage the saved profile. Nothing is saved before the user approves it (You approve everything).
+ * The profile page: upload a CV (with consent), check what was read and approve it all at once, then see and manage
+ * the saved profile. Nothing is saved before the user approves it (You approve everything). Back goes to the step
+ * before, or from the first step to the page before.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before an upload.
  */
 export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { demoMode: boolean; storage?: ProfileStorage }) {
@@ -59,7 +61,6 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   // Focus moves to each new step's heading, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [questionsState, setQuestionsState] = useState<QuestionsState>({ status: "ready", demo: false });
 
   const where: ProfileStorageKind = storage.kind;
   const saved: SavedProfile | null | undefined =
@@ -85,7 +86,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
 
   /** Keeps the profile where this page keeps it. Resolves to a message for the user, or null once it is saved. */
   const write = async (
-    next: Pick<SavedProfile, "profile" | "questions" | "consent">,
+    next: Pick<SavedProfile, "profile" | "consent">,
     options: { reason: SaveReason; cv?: File | null },
   ): Promise<string | null> => {
     if (where === "browser") {
@@ -106,33 +107,6 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     return null;
   };
 
-  const setQuestions = (questions: FollowUpQuestion[]) => {
-    if (where === "account") {
-      const current = accountRef.current;
-      if (current) updateAccount({ ...current, questions });
-      return;
-    }
-    const store = getBrowserProfileStore();
-    const current = store.read();
-    if (current) store.save({ ...current, questions, savedAt: new Date().toISOString() });
-  };
-
-  const loadQuestions = async (profile: Profile) => {
-    setQuestionsState({ status: "loading" });
-    let result: Awaited<ReturnType<typeof suggestFollowUpQuestionsAction>>;
-    try {
-      result = await suggestFollowUpQuestionsAction(profile);
-    } catch {
-      result = { ok: false, message: "We couldn’t reach CVision. Check your connection and try again." };
-    }
-    if (!result.ok) {
-      setQuestionsState({ status: "error", message: result.message });
-      return;
-    }
-    setQuestions(result.questions);
-    setQuestionsState({ status: "ready", demo: result.demo });
-  };
-
   const handleExtracted = (result: ExtractSuccess, consent: ConsentRecord, file: File) => {
     // A new CV keeps the earlier follow-up answers: they are still the user's own words.
     const base = newProfileBase(result.extraction, {
@@ -146,39 +120,18 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   const handleSave = async (profile: Profile): Promise<string | null> => {
     if (view.name !== "review") return null;
     const problem = await write(
-      { profile, consent: view.consent, questions: view.isNew ? [] : (latest()?.questions ?? []) },
+      { profile, consent: view.consent },
       { reason: "approved", cv: view.isNew ? view.file : null },
     );
     if (problem) return problem;
-    if (view.isNew) {
-      go({ name: "questions", afterUpload: true });
-      void loadQuestions(profile);
-    } else {
-      go({ name: "home" }, "Your changes are saved.");
-    }
+    go({ name: "home" }, view.isNew ? "Your profile is saved." : "Your changes are saved.");
     return null;
-  };
-
-  const handleAnswer = async (question: FollowUpQuestion, answer: string): Promise<string | null> => {
-    const current = latest();
-    if (!current) return "Your profile isn’t saved yet. Reload the page and try again.";
-    const profile = recordFollowUpAnswer(current.profile, question, answer, {
-      id: crypto.randomUUID(),
-      answeredAt: new Date(),
-    });
-    return write({ ...current, profile }, { reason: "answers" });
   };
 
   const handlePreferences = async (preferences: JobPreferences): Promise<string | null> => {
     const current = latest();
     if (!current) return "Your profile isn’t saved yet. Reload the page and try again.";
     return write({ ...current, profile: { ...current.profile, preferences } }, { reason: "preferences" });
-  };
-
-  const openQuestions = (current: SavedProfile) => {
-    go({ name: "questions", afterUpload: false });
-    if (current.questions.length === 0) void loadQuestions(current.profile);
-    else setQuestionsState({ status: "ready", demo: false });
   };
 
   const handleDelete = async (): Promise<string | null> => {
@@ -191,24 +144,30 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
       }
       if (!result.ok) return result.message;
       updateAccount(null);
-      go({ name: "home" }, "Your profile, your answers and your CV file are deleted from your account.");
+      go({ name: "home" }, "Your profile and your CV file are deleted from your account.");
       return null;
     }
     getBrowserProfileStore().clear();
-    go({ name: "home" }, "Your profile and your answers are deleted from this browser.");
+    go({ name: "home" }, "Your profile is deleted from this browser.");
     return null;
   };
 
   if (saved === undefined) {
     return (
-      <Card aria-busy="true">
-        <p className="text-text-muted">Loading your profile…</p>
-      </Card>
+      <div className="flex flex-col gap-6">
+        <BackLink href={PAGE_BACK} />
+        <Card aria-busy="true">
+          <p className="text-text-muted">Loading your profile…</p>
+        </Card>
+      </div>
     );
   }
 
+  // The step before this one, if the page has one; otherwise Back leaves the page.
+  let stepBack: (() => void) | undefined;
   let content: React.ReactNode;
   if (view.name === "review") {
+    stepBack = () => go(view.isNew ? { name: "upload" } : { name: "home" });
     content = (
       <ReviewStep
         draft={view.draft}
@@ -218,23 +177,11 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
         truncated={view.truncated}
         focusHeading={navigated}
         onSave={handleSave}
-        onCancel={() => go(view.isNew ? { name: "upload" } : { name: "home" })}
-      />
-    );
-  } else if (view.name === "questions" && saved) {
-    content = (
-      <QuestionsStep
-        questions={saved.questions}
-        answers={saved.profile.followUpAnswers}
-        state={questionsState}
-        showSteps={view.afterUpload}
-        focusHeading={navigated}
-        onAnswer={handleAnswer}
-        onRetry={() => void loadQuestions(saved.profile)}
-        onFinish={() => go({ name: "home" }, view.afterUpload ? "Your profile is saved." : null)}
+        onCancel={stepBack}
       />
     );
   } else if (view.name === "upload" || !saved) {
+    stepBack = saved ? () => go({ name: "home" }) : undefined;
     content = (
       <UploadStep
         replacing={saved !== null}
@@ -242,7 +189,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
         storage={where}
         focusHeading={navigated}
         onExtracted={handleExtracted}
-        onCancel={saved ? () => go({ name: "home" }) : undefined}
+        onCancel={stepBack}
       />
     );
   } else {
@@ -255,7 +202,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
         onEdit={() =>
           go({
             name: "review",
-            draft: draftFromProfile(saved.profile, { approved: true }),
+            draft: draftFromProfile(saved.profile),
             base: saved.profile,
             consent: saved.consent,
             file: null,
@@ -264,7 +211,6 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
             isNew: false,
           })
         }
-        onQuestions={() => openQuestions(saved)}
         onUploadNew={() => go({ name: "upload" })}
         onDelete={handleDelete}
         onSavePreferences={handlePreferences}
@@ -274,6 +220,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
 
   return (
     <div className="flex flex-col gap-6">
+      {stepBack ? <BackLink onClick={stepBack} /> : <BackLink href={PAGE_BACK} />}
       {message && <Notice tone="success">{message}</Notice>}
       {content}
     </div>

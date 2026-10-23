@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { ProfileSchema } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { CvExtractionSchema, extractionFromProfile, tidyExtraction } from "../cv-extraction";
-import { FollowUpQuestionListSchema } from "../follow-up";
 import { extractProfile, samplePersonaFor } from "./extract-profile";
 
 describe("extractProfile in mock mode", () => {
@@ -75,10 +74,7 @@ describe("samplePersonaFor", () => {
 });
 
 describe("the model's answer formats", () => {
-  it.each([
-    ["CvExtractionSchema", CvExtractionSchema],
-    ["FollowUpQuestionListSchema", FollowUpQuestionListSchema],
-  ])("%s converts to a structured output format", (_, schema) => {
-    expect(() => zodOutputFormat(schema)).not.toThrow();
+  it("CvExtractionSchema converts to a structured output format", () => {
+    expect(() => zodOutputFormat(CvExtractionSchema)).not.toThrow();
   });
 });

@@ -2,17 +2,15 @@ import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { DateTimeSchema, ProfileSchema } from "@/shared/contracts";
 import { ConsentRecordSchema } from "./consent";
-import { FollowUpQuestionSchema } from "./follow-up";
 
 // For now the approved profile lives in the user's browser only. Moving it to the profiles table is a separate card.
 // Nothing about the CV is kept on our servers. The user can download or delete it at any time (Your data is yours).
 
+// A copy saved before the follow-up questions were removed also has a "questions" list; reading drops it.
 export const StoredProfileSchema = z.object({
   version: z.literal(1),
   profile: ProfileSchema,
   consent: ConsentRecordSchema,
-  /** The latest follow-up questions, so they survive a reload. */
-  questions: z.array(FollowUpQuestionSchema),
   savedAt: DateTimeSchema,
 });
 export type StoredProfile = z.infer<typeof StoredProfileSchema>;

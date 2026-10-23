@@ -17,7 +17,6 @@ type ProfileOverviewProps = {
   persistent: boolean;
   focusHeading: boolean;
   onEdit: () => void;
-  onQuestions: () => void;
   onUploadNew: () => void;
   /** Each resolves to a message for the user if it couldn't be done. */
   onDelete: () => Promise<string | null>;
@@ -30,7 +29,6 @@ export function ProfileOverview({
   persistent,
   focusHeading,
   onEdit,
-  onQuestions,
   onUploadNew,
   onDelete,
   onSavePreferences,
@@ -43,9 +41,6 @@ export function ProfileOverview({
   const [editingPreferences, setEditingPreferences] = useState(false);
   const [preferencesSaved, setPreferencesSaved] = useState(false);
   const latestJob = profile.experience[0];
-  const unanswered = saved.questions.filter(
-    (question) => !profile.followUpAnswers.some((answer) => answer.question === question.question),
-  ).length;
   const preferences = describePreferences(profile.preferences);
 
   useEffect(() => {
@@ -87,19 +82,15 @@ export function ProfileOverview({
             {latestJob.title} at {latestJob.company} · {formatPeriod(latestJob.startDate, latestJob.endDate)}
           </p>
         )}
-        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
           <Fact label="Work history" value={count(profile.experience.length, "job")} />
           <Fact label="Education" value={count(profile.education.length, "qualification")} />
           <Fact label="Certificates" value={count(profile.certifications.length, "certificate")} />
           <Fact label="Skills" value={count(profile.skills.length, "skill")} />
-          <Fact label="Your answers" value={count(profile.followUpAnswers.length, "answer")} />
         </dl>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button onClick={onEdit}>Check and edit your details</Button>
-          <Button onClick={onQuestions}>
-            {unanswered > 0 ? `Answer follow-up questions (${unanswered})` : "Follow-up questions"}
-          </Button>
-        </div>
+        <Button className="mt-6" onClick={onEdit}>
+          Check and edit your details
+        </Button>
       </Card>
 
       <Card>
@@ -164,8 +155,8 @@ export function ProfileOverview({
           <div role="alertdialog" aria-labelledby="delete-question" className="mt-4 rounded-md border border-error p-4">
             <p id="delete-question" className="font-semibold">
               {storage === "account"
-                ? "Delete your profile, your answers and your CV file from your account?"
-                : "Delete your profile and your answers from this browser?"}
+                ? "Delete your profile and your CV file from your account?"
+                : "Delete your profile from this browser?"}
             </p>
             <p className="mt-1 text-sm text-text-muted">This can’t be undone. Download your data first to keep a copy.</p>
             {deleteProblem && <p className="mt-2 text-sm text-error">{deleteProblem}</p>}

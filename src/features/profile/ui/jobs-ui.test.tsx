@@ -10,8 +10,8 @@ import { fitLabel, MatchReport } from "./match-report";
 // Render checks for the jobs page: they catch crashes and missing content.
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
-    <a href={href} {...props}>
+  default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
+    <a href={href} className={className}>
       {children}
     </a>
   ),
@@ -125,6 +125,21 @@ describe("JobForm", () => {
     expect(html).toContain("Demo mode: the match uses sample data");
     expect(html).toContain("the match uses the sample person’s profile");
   });
+
+  it("shows the ad and its link again after Back from the report", () => {
+    const html = renderToStaticMarkup(
+      <JobForm
+        profile={personas.reza.profile}
+        demoMode={false}
+        initial={{ ad: "Maths Teacher at Riverside Academy", url: "https://example.com/jobs/42" }}
+        focusAd={false}
+        onChecked={noop}
+      />,
+    );
+
+    expect(html).toMatch(/<textarea[^>]*name="ad"[^>]*>Maths Teacher at Riverside Academy<\/textarea>/);
+    expect(html).toMatch(/<input(?=[^>]*name="url")(?=[^>]*value="https:\/\/example.com\/jobs\/42")[^>]*>/);
+  });
 });
 
 describe("JobChecker", () => {
@@ -137,6 +152,16 @@ describe("JobChecker", () => {
 
     expect(html).toContain("the profile you approved for Emma Walsh");
     expect(html).not.toContain("Loading your profile…");
+  });
+
+  it.each([
+    ["the ad form", { kind: "account", profile: personas.emma.profile }],
+    ["the profile-first message", { kind: "account", profile: null }],
+    ["the sign-in message", { kind: "signed-out" }],
+  ] as const)("puts Back first on %s, leading out of the page", (_, source) => {
+    const html = renderToStaticMarkup(<JobChecker demoMode={false} source={source} />);
+
+    expect(html).toMatch(/^<div[^>]*><a href="\/profile"[^>]*>.*?Back<\/a>/);
   });
 
   it("asks an account with no profile yet to upload a CV first", () => {

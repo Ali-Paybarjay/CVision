@@ -6,12 +6,19 @@ import { ButtonLink, Button, Card, Field, Input, Notice, Textarea } from "@/shar
 import { checkJobAction, type CheckJobResult } from "../job-actions";
 import { checkAdText, MAX_AD_CHARACTERS, parseAdUrl } from "../job-extraction";
 import { useStoredProfile } from "../profile-store";
+import { BackLink } from "./back-link";
 import { MatchReport } from "./match-report";
 import { SignInNotice } from "./upload-step";
 
 type CheckJobSuccess = Extract<CheckJobResult, { ok: true }>;
 
-type View = { name: "form" } | { name: "report"; result: CheckJobSuccess };
+/** What the user pasted, so Back from the report shows it again. */
+export type AdInput = { ad: string; url: string };
+
+type View = { name: "form"; input: AdInput | null } | { name: "report"; result: CheckJobSuccess; input: AdInput };
+
+/** Where Back goes from this page when the page before it isn't on this site: the profile, the step before. */
+const PAGE_BACK = "/profile";
 
 /**
  * Where the profile to compare with comes from: the signed-in user's account (read on the server), this browser
@@ -21,59 +28,69 @@ export type JobProfileSource = { kind: "account"; profile: Profile | null } | { 
 
 /**
  * The jobs page: paste an ad (and its link, if the user has one), then see the match report.
- * The ad is compared with the profile the user approved on /profile.
+ * The ad is compared with the profile the user approved on /profile. Back on the report returns to the ad as pasted.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before the check.
  */
 export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMode: boolean; source?: JobProfileSource }) {
   const stored = useStoredProfile();
-  const [view, setView] = useState<View>({ name: "form" });
+  const [view, setView] = useState<View>({ name: "form", input: null });
   // Focus moves to each new view, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
+
+  const show = (next: View) => {
+    setView(next);
+    setNavigated(true);
+  };
 
   let profile: Profile | null | undefined;
   if (source.kind === "account") profile = source.profile;
   else if (source.kind === "signed-out") profile = null;
   else profile = stored === undefined ? undefined : (stored?.profile ?? null);
 
+  let back = <BackLink href={PAGE_BACK} />;
+  let content: React.ReactNode;
   if (profile === undefined) {
-    return (
+    content = (
       <Card aria-busy="true">
         <p className="text-text-muted">Loading your profile…</p>
       </Card>
     );
-  }
-
-  if (view.name === "report") {
+  } else if (view.name === "report") {
     const { job, match, saved, demo } = view.result;
-    return (
+    const { input } = view;
+    back = <BackLink onClick={() => show({ name: "form", input })} />;
+    content = (
       <MatchReport
         job={job}
         match={match}
         saved={saved}
         demo={demo}
         focusHeading={navigated}
-        onCheckAnother={() => {
-          setView({ name: "form" });
-          setNavigated(true);
-        }}
+        onCheckAnother={() => show({ name: "form", input: null })}
+      />
+    );
+  } else if (source.kind === "signed-out" && !demoMode) {
+    // In the demo a signed-out visitor can try it with a sample profile; otherwise they sign in first.
+    content = <SignInNotice title="Sign in to check a job against your profile" />;
+  } else if (!profile && !demoMode) {
+    content = <ProfileFirst />;
+  } else {
+    content = (
+      <JobForm
+        profile={profile}
+        demoMode={demoMode}
+        initial={view.input}
+        focusAd={navigated}
+        onChecked={(result, input) => show({ name: "report", result, input })}
       />
     );
   }
 
-  // In the demo a signed-out visitor can try it with a sample profile; otherwise they sign in first.
-  if (source.kind === "signed-out" && !demoMode) return <SignInNotice title="Sign in to check a job against your profile" />;
-  if (!profile && !demoMode) return <ProfileFirst />;
-
   return (
-    <JobForm
-      profile={profile}
-      demoMode={demoMode}
-      focusAd={navigated}
-      onChecked={(result) => {
-        setView({ name: "report", result });
-        setNavigated(true);
-      }}
-    />
+    <div className="flex flex-col gap-6">
+      {back}
+      {content}
+    </div>
   );
 }
 
@@ -83,12 +100,14 @@ type JobFormProps = {
   /** The user's approved profile; null only in demo mode, where a sample profile is used instead. */
   profile: Profile | null;
   demoMode: boolean;
-  /** Moves focus to the ad box, after "Check another job". */
+  /** The ad and link to show again, after Back from the report. */
+  initial?: AdInput | null;
+  /** Moves focus to the ad box, after Back or "Check another job". */
   focusAd: boolean;
-  onChecked: (result: CheckJobSuccess) => void;
+  onChecked: (result: CheckJobSuccess, input: AdInput) => void;
 };
 
-export function JobForm({ profile, demoMode, focusAd, onChecked }: JobFormProps) {
+export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobFormProps) {
   // The shared Input and Textarea take no ref, so fields are found by name inside the form.
   const formRef = useRef<HTMLFormElement>(null);
   const focusField = (name: "ad" | "url") => formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`)?.focus();
@@ -121,7 +140,7 @@ export function JobForm({ profile, demoMode, focusAd, onChecked }: JobFormProps)
         result = { ok: false, code: "ai-unavailable", message: "We couldn’t reach CVision. Check your connection and try again." };
       }
       if (result.ok) {
-        onChecked(result);
+        onChecked(result, { ad: String(form.get("ad") ?? ""), url: String(form.get("url") ?? "") });
         return;
       }
       if (result.code === "ad") setErrors({ ad: result.message });
@@ -157,6 +176,7 @@ export function JobForm({ profile, demoMode, focusAd, onChecked }: JobFormProps)
                 name="ad"
                 rows={12}
                 maxLength={MAX_AD_CHARACTERS}
+                defaultValue={initial?.ad}
                 disabled={pending}
                 className="min-h-64"
               />
@@ -176,6 +196,7 @@ export function JobForm({ profile, demoMode, focusAd, onChecked }: JobFormProps)
                 inputMode="url"
                 autoComplete="url"
                 placeholder="https://"
+                defaultValue={initial?.url}
                 disabled={pending}
               />
             )}

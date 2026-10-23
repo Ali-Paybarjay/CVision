@@ -48,11 +48,10 @@ describe("handleSaveRequest", () => {
     expect(JSON.stringify(track.mock.calls)).not.toContain(profile.fullName);
   });
 
-  it("saves an edit or an answer without a file, and records only approvals", async () => {
-    await handleSaveRequest(form({ profile, reason: "answers" }), account);
+  it("saves new preferences without a file, and records only approvals", async () => {
     await handleSaveRequest(form({ profile, reason: "preferences" }), account);
 
-    expect(vi.mocked(saveAccountProfile).mock.calls.map((call) => call[3])).toEqual([undefined, undefined]);
+    expect(vi.mocked(saveAccountProfile).mock.calls.map((call) => call[3])).toEqual([undefined]);
     expect(track).not.toHaveBeenCalled();
   });
 

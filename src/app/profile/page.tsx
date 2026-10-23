@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/features/account/current-user";
 import { loadAccountProfile } from "@/features/profile/server/profile-account";
+import { BackLink } from "@/features/profile/ui/back-link";
 import { ProfileBuilder } from "@/features/profile/ui/profile-builder";
 import { SignInToStart } from "@/features/profile/ui/sign-in-to-start";
 import { getAiMode } from "@/shared/ai";
@@ -22,9 +23,12 @@ export default function ProfilePage() {
     >
       <Suspense
         fallback={
-          <Card aria-busy="true">
-            <p className="text-text-muted">Loading your profile…</p>
-          </Card>
+          <div className="flex flex-col gap-6">
+            <BackLink href="/dashboard" />
+            <Card aria-busy="true">
+              <p className="text-text-muted">Loading your profile…</p>
+            </Card>
+          </div>
         }
       >
         <ProfileForVisitor demoMode={getAiMode() === "mock"} />

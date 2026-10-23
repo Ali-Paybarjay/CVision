@@ -30,6 +30,6 @@ describe("saveProfileToAccount", () => {
   it("turns a network failure into a message", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
 
-    expect(await saveProfileToAccount(personas.sara.profile, { reason: "answers" })).toMatchObject({ ok: false, code: "failed" });
+    expect(await saveProfileToAccount(personas.sara.profile, { reason: "preferences" })).toMatchObject({ ok: false, code: "failed" });
   });
 });

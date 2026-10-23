@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/features/account/current-user";
 import { loadAccountProfile } from "@/features/profile/server/profile-account";
+import { BackLink } from "@/features/profile/ui/back-link";
 import { JobChecker } from "@/features/profile/ui/job-checker";
 import { getAiMode } from "@/shared/ai";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
@@ -24,9 +25,12 @@ export default function JobsPage() {
     >
       <Suspense
         fallback={
-          <Card aria-busy="true">
-            <p className="text-text-muted">Loading your profile…</p>
-          </Card>
+          <div className="flex flex-col gap-6">
+            <BackLink href="/profile" />
+            <Card aria-busy="true">
+              <p className="text-text-muted">Loading your profile…</p>
+            </Card>
+          </div>
         }
       >
         <JobsForVisitor demoMode={getAiMode() === "mock"} />

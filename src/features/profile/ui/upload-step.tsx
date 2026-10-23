@@ -81,7 +81,7 @@ export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtra
 
       {replacing && (
         <Notice tone="info" title="This replaces your current profile">
-          Your answers to follow-up questions are kept.
+          Nothing changes until you check the new details and approve them.
         </Notice>
       )}
 

@@ -3,9 +3,9 @@ import { ProfileSchema, type JobPreferences, type Profile, type WorkExperience }
 import { uniqueLines, type CvExtraction } from "./cv-extraction";
 import { phoneProblem, tidyPhone } from "./phone";
 
-// The review step: the user checks every item read from their CV, corrects it if needed and approves it.
-// Nothing is saved until every item is approved (You approve everything). Pure functions, so the
-// page only renders this state, and tests cover the rules without a browser.
+// The review step: the user checks every item read from their CV, corrects what is wrong, then approves the
+// whole page at once. Nothing is saved until they approve and every item passes its checks (You approve
+// everything). Pure functions, so the page only renders this state, and tests cover the rules without a browser.
 
 export type ContactDraft = { fullName: string; email: string; phone: string; location: string; linkedIn: string };
 export type SummaryDraft = { text: string };
@@ -42,7 +42,7 @@ export type CertificationDraft = { name: string; issuer: string; year: string };
 /** Error messages by field name, written for the user. */
 export type FieldErrors = Record<string, string>;
 
-export type ReviewEntry<T> = { key: string; value: T; approved: boolean; errors: FieldErrors };
+export type ReviewEntry<T> = { key: string; value: T; errors: FieldErrors };
 
 export type ReviewDraft = {
   contact: ReviewEntry<ContactDraft>;
@@ -62,32 +62,14 @@ export type ReviewAction =
   | { type: "edit-experience"; key: string; change: Partial<ExperienceDraft> }
   | { type: "edit-education"; key: string; change: Partial<EducationDraft> }
   | { type: "edit-certification"; key: string; change: Partial<CertificationDraft> }
-  /** Approves the item if it is valid; otherwise shows its errors. */
-  | { type: "approve"; key: string }
-  | { type: "unapprove"; key: string }
+  /** Checks every item before the page is approved, and shows each problem. */
+  | { type: "check" }
   | { type: "remove"; key: string }
   /** `key` comes from the caller, so the reducer stays pure. */
   | { type: "add"; section: ListSection; key: string };
 
-/**
- * The draft for a saved profile. With `approved`, every item starts approved (the user approved them before),
- * so editing one item only needs that item approved again.
- */
-export function draftFromProfile(profile: Profile, options: { approved?: boolean } = {}): ReviewDraft {
-  const draft = savedProfileDraft(profile);
-  if (!options.approved) return draft;
-  const approved = <T>(item: ReviewEntry<T>): ReviewEntry<T> => ({ ...item, approved: true });
-  return {
-    contact: approved(draft.contact),
-    summary: approved(draft.summary),
-    skills: approved(draft.skills),
-    experience: draft.experience.map(approved),
-    education: draft.education.map(approved),
-    certifications: draft.certifications.map(approved),
-  };
-}
-
-function savedProfileDraft(profile: Profile): ReviewDraft {
+/** The draft for a saved profile, to change it and approve it again. */
+export function draftFromProfile(profile: Profile): ReviewDraft {
   return {
     contact: entry("contact", {
       fullName: profile.fullName,
@@ -237,10 +219,8 @@ export function reviewReducer(draft: ReviewDraft, action: ReviewAction): ReviewD
       return { ...draft, education: editInList(draft.education, action.key, withoutGuess(action.change)) };
     case "edit-certification":
       return { ...draft, certifications: editInList(draft.certifications, action.key, action.change) };
-    case "approve":
-      return approve(draft, action.key);
-    case "unapprove":
-      return mapEntries(draft, action.key, (item) => ({ ...item, approved: false }));
+    case "check":
+      return checkAll(draft);
     case "remove":
       return {
         ...draft,
@@ -259,20 +239,23 @@ export function reviewReducer(draft: ReviewDraft, action: ReviewAction): ReviewD
   }
 }
 
-/** How many items are approved, out of how many. */
-export function reviewProgress(draft: ReviewDraft): { approved: number; total: number } {
-  const items = allEntries(draft);
-  return { approved: items.filter((item) => item.approved).length, total: items.length };
-}
-
-export function isFullyApproved(draft: ReviewDraft): boolean {
-  const { approved, total } = reviewProgress(draft);
-  return approved === total;
+/** The keys of the items with a problem to fix, in the order the page shows them. Empty until the draft is checked. */
+export function itemsWithProblems(draft: ReviewDraft): string[] {
+  return [
+    draft.contact,
+    draft.summary,
+    ...draft.experience,
+    ...draft.education,
+    ...draft.certifications,
+    draft.skills,
+  ]
+    .filter((item) => Object.keys(item.errors).length > 0)
+    .map((item) => item.key);
 }
 
 /**
  * The approved draft as a Profile. `base` supplies what the review does not show
- * (id, job preferences and follow-up answers). Throws if an item is invalid, which approval prevents.
+ * (id, job preferences and follow-up answers). Throws if an item is invalid, which checking first prevents.
  */
 export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile {
   const contact = draft.contact.value;
@@ -382,52 +365,34 @@ export function validateCertification(value: CertificationDraft): FieldErrors {
 // --- Helpers ----------------------------------------------------------------------------------
 
 function entry<T>(key: string, value: T): ReviewEntry<T> {
-  return { key, value, approved: false, errors: {} };
+  return { key, value, errors: {} };
 }
 
-/** An edit means the item needs checking again, and clears the errors of the fields it changed. */
+/** An edit clears the errors of the fields it changed; the next check looks at them again. */
 function edited<T extends object>(item: ReviewEntry<T>, change: Partial<T>): ReviewEntry<T> {
   const errors = { ...item.errors };
   for (const field of Object.keys(change)) delete errors[field];
-  return { ...item, value: { ...item.value, ...change }, approved: false, errors };
+  return { ...item, value: { ...item.value, ...change }, errors };
 }
 
 function editInList<T extends object>(items: ReviewEntry<T>[], key: string, change: Partial<T>): ReviewEntry<T>[] {
   return items.map((item) => (item.key === key ? edited(item, change) : item));
 }
 
-function approve(draft: ReviewDraft, key: string): ReviewDraft {
-  const check = <T>(item: ReviewEntry<T>, validate: (value: T) => FieldErrors): ReviewEntry<T> => {
-    const errors = validate(item.value);
-    return { ...item, errors, approved: Object.keys(errors).length === 0 };
-  };
+function checkAll(draft: ReviewDraft): ReviewDraft {
+  const check = <T>(item: ReviewEntry<T>, validate: (value: T) => FieldErrors): ReviewEntry<T> => ({
+    ...item,
+    errors: validate(item.value),
+  });
   return {
-    ...draft,
-    contact: draft.contact.key === key ? check(draft.contact, validateContact) : draft.contact,
-    summary: draft.summary.key === key ? check(draft.summary, () => ({})) : draft.summary,
-    skills: draft.skills.key === key ? check(draft.skills, () => ({})) : draft.skills,
-    experience: draft.experience.map((item) => (item.key === key ? check(item, validateExperience) : item)),
-    education: draft.education.map((item) => (item.key === key ? check(item, validateEducation) : item)),
-    certifications: draft.certifications.map((item) => (item.key === key ? check(item, validateCertification) : item)),
+    contact: check(draft.contact, validateContact),
+    // The personal statement and the skills have nothing to check: either may be empty.
+    summary: draft.summary,
+    skills: draft.skills,
+    experience: draft.experience.map((item) => check(item, validateExperience)),
+    education: draft.education.map((item) => check(item, validateEducation)),
+    certifications: draft.certifications.map((item) => check(item, validateCertification)),
   };
-}
-
-type AnyEntry = ReviewEntry<unknown>;
-
-function mapEntries(draft: ReviewDraft, key: string, change: (item: AnyEntry) => AnyEntry): ReviewDraft {
-  const apply = <T>(item: ReviewEntry<T>): ReviewEntry<T> => (item.key === key ? (change(item) as ReviewEntry<T>) : item);
-  return {
-    contact: apply(draft.contact),
-    summary: apply(draft.summary),
-    skills: apply(draft.skills),
-    experience: draft.experience.map(apply),
-    education: draft.education.map(apply),
-    certifications: draft.certifications.map(apply),
-  };
-}
-
-function allEntries(draft: ReviewDraft): AnyEntry[] {
-  return [draft.contact, draft.summary, draft.skills, ...draft.experience, ...draft.education, ...draft.certifications];
 }
 
 function emptyExperience(): ExperienceDraft {
