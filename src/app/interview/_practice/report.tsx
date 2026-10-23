@@ -4,7 +4,8 @@ import type { AnswerEvaluation, InterviewReport, InterviewSession } from "@/feat
 import { readinessLabels } from "@/features/interview/engine/scoring";
 import { evaluationFor, followUpAnswer, followUpQuestion, mainAnswer } from "@/features/interview/engine/session";
 import { technicalV1 } from "@/features/interview/rubrics";
-import { Card, Notice, Status, type Tone } from "./ui";
+import { Card, Notice } from "@/shared/ui";
+import { Status, type Tone } from "./ui";
 
 const readinessTone: Record<InterviewReport["readiness"], Tone> = { ready: "accent", "nearly-ready": "warning", "not-yet-ready": "error" };
 
@@ -41,8 +42,7 @@ export function FeedbackReport({ session }: { session: InterviewSession }) {
         <p className="mt-3">{report.verdict}</p>
         {report.levelGapNote && (
           <div className="mt-3">
-            <Notice tone="warning">
-              <strong>Level: </strong>
+            <Notice tone="warning" title="Level">
               {report.levelGapNote}
             </Notice>
           </div>
@@ -88,8 +88,7 @@ export function FeedbackReport({ session }: { session: InterviewSession }) {
           <h2 className="text-xl">Check these points with a practitioner</h2>
           <div className="mt-3 space-y-2">
             {report.uncertaintyNotes.map((note) => (
-              <Notice key={note.questionId} tone="warning">
-                <strong>Question {position(note.questionId)}: </strong>
+              <Notice key={note.questionId} tone="warning" title={`Question ${position(note.questionId)}`}>
                 {note.note}
               </Notice>
             ))}
