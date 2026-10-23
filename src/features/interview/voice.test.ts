@@ -1,8 +1,13 @@
 // The feedback follows prompts/_voice.md: UK English, no generic praise or advice, one specific thing to do next.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as ai from "@/shared/ai";
+import { addAnswer, applyFollowUpDecision, askQuestion } from "./engine/session";
+import { analyseStep, evaluateAnswer, generateStep, reviewStep } from "./engine/stages";
 import { evaluationProblems, genericFeedbackHits, reportProblems, usSpellingHits } from "./engine/checks";
 import { fixtures } from "./fixtures";
+import { dataAnalystSara } from "./fixtures/data-analyst-sara";
 import { processEngineer } from "./fixtures/process-engineer";
+import { inputsFor } from "./test-support";
 
 const sample = processEngineer.answers.q1;
 const context = { lookForIds: ["q1-l1", "q1-l2", "q1-l3", "q1-l4"], mainAnswer: sample.main, followUpAnswer: null, followUpAsked: false };
@@ -103,5 +108,28 @@ describe("report", () => {
     const verdict = `${report.verdict} Your Data Center experience shows.`;
     expect(reportProblems({ ...report, verdict }, reportContext).map((p) => p.message)).toContain("Use UK spelling in the report.");
     expect(reportProblems({ ...report, verdict }, { ...reportContext, quotable: '{"title":"Data Center Technician"}' })).toEqual([]);
+  });
+});
+
+describe("evaluate stage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("accepts US spelling quoted from a tool or standard the job ad names", async () => {
+    const inputs = inputsFor(dataAnalystSara);
+    let session = await analyseStep(inputs, { id: "s1", startedAt: "2026-10-21T09:00:00.000Z" });
+    session = await generateStep(session, inputs);
+    session = await reviewStep(session, inputs);
+    session = { ...session, roleProfile: { ...session.roleProfile!, namedItems: [{ text: "Data Center Monitor", kind: "tool" }] } };
+    session = askQuestion(session, "q3", "2026-10-21T09:01:00.000Z", "t1");
+    session = addAnswer(session, { questionId: "q3", kind: "main", text: "A plain answer.", startedAt: "2026-10-21T09:01:00.000Z", submittedAt: "2026-10-21T09:02:00.000Z", id: "t2" });
+    session = applyFollowUpDecision(session, { questionId: "q3", askFollowUp: false, gapType: "none", usedFallback: false, reason: "Clear enough." }, "2026-10-21T09:03:00.000Z", "t3");
+    const spy = vi.spyOn(ai, "askModel");
+    await evaluateAnswer(session, "q3");
+
+    const { schema, sample } = spy.mock.calls.at(-1)![0];
+    const output = { ...(sample as object), weaknesses: ["You did not say which Data Center Monitor alert you would check first."] };
+    expect(schema.safeParse(output).success).toBe(true);
   });
 });

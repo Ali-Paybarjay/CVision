@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { askGapQuestions } from "@/features/tailor/gap-questions";
+import { askGapQuestions, defaultGapQuestion } from "@/features/tailor/gap-questions";
 import { sampleForGap } from "@/features/tailor/samples";
-import { getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
+import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
+import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
+import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
+import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
+import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { ButtonLink, Card, Notice, Page } from "@/shared/ui";
 import { TailorWorkspace } from "./tailor-workspace";
 
@@ -25,7 +29,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   const requested = (await searchParams).job;
   const jobId = typeof requested === "string" ? requested : null;
 
-  const profile = await getMyProfile();
+  const profile = await getMyProfile(jobId ? { jobId } : {});
   if (!profile) {
     return (
       <Notice tone="info" title="Upload your CV first">
@@ -36,21 +40,23 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
 
   if (!jobId) return <JobPicker />;
 
-  const [job, match] = await Promise.all([getMyJob(jobId), getMyMatch(jobId)]);
+  const [job, match, source] = await Promise.all([getMyJob(jobId), getMyMatch(jobId), getMyDataSource()]);
   if (!job) {
     return (
-      <Notice tone="error" title="We could not find this job">
-        Choose one of your jobs below.
-      </Notice>
+      <>
+        <Notice tone="error" title="We could not find this job">
+          Choose one of your jobs below.
+        </Notice>
+        <JobPicker />
+      </>
     );
   }
 
+  const label = [source === "sample" && "Sample data", getAiMode() === "mock" && "mock mode"].filter(Boolean).join(" · ");
   const header = (
     <p className="text-lg">
       <span className="font-semibold">{job.title}</span> at {job.company}
-      {getAiMode() === "mock" && (
-        <span className="ml-3 rounded-full border border-line px-2 py-0.5 align-middle text-xs text-text-muted">Sample data · mock mode</span>
-      )}
+      {label && <span className="ml-3 rounded-full border border-line px-2 py-0.5 align-middle text-xs text-text-muted">{label}</span>}
     </p>
   );
 
@@ -68,7 +74,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
     );
   }
 
-  const questions = await askGapQuestions({ profile, job, match });
+  const [{ questions, notice }, savedChanges] = await Promise.all([questionsFor({ profile, job, match }), getMySavedChanges(job.id)]);
   const showSamples = getAiMode() === "mock";
   const prompts = questions.flatMap(({ gapId, question }) => {
     const gap = match.gaps.find((item) => item.id === gapId);
@@ -80,9 +86,33 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   return (
     <>
       {header}
-      <TailorWorkspace jobId={job.id} jobUrl={webLink(job.url)} company={job.company} profile={profile} prompts={prompts} />
+      {notice && <Notice tone="info">{notice}</Notice>}
+      <TailorWorkspace
+        jobId={job.id}
+        jobUrl={webLink(job.url)}
+        company={job.company}
+        profile={profile}
+        prompts={prompts}
+        savedChanges={savedChanges}
+      />
     </>
   );
+}
+
+/**
+ * The gap questions, written by the model for a signed-in user. The page always opens: for a visitor in live mode,
+ * or when the model fails (the daily limit included), each gap gets its plain default question instead.
+ */
+async function questionsFor(input: { profile: Profile; job: Job; match: MatchResult }): Promise<{ questions: GapQuestion[]; notice: string | null }> {
+  const fallback = input.match.gaps.map(defaultGapQuestion);
+  const access = await tailorModelAccess();
+  if (!access.allowed) return { questions: fallback, notice: access.message };
+  try {
+    return { questions: await askGapQuestions({ ...input, requester: access.requester }), notice: null };
+  } catch (error) {
+    const message = modelFailureMessage(error, "write the gap questions", "");
+    return { questions: fallback, notice: message || null };
+  }
 }
 
 /** Only an http(s) link may open from the Apply button; anything else in a pasted ad counts as no link. */

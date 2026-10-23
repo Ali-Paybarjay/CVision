@@ -2,7 +2,7 @@
 // in their own words (Sounds like you). The user edits and approves it before it is used anywhere.
 import { z } from "zod";
 import type { Gap, Job, Profile, TailoringChange } from "@/shared/contracts";
-import { askModel, loadPrompt } from "@/shared/ai";
+import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { normalise, requirementTerms } from "./nothing-invented";
 import { buildTailoredCv } from "./tailored-cv";
 import type { GapAnswer } from "./types";
@@ -20,6 +20,8 @@ export type CoverLetterInput = {
   /** Only approved changes are used; anything else is ignored. */
   changes: TailoringChange[];
   answers: GapAnswer[];
+  /** Whose daily limit the request counts against: { userId } for a signed-in user. */
+  requester?: Requester;
 };
 
 /** The letter as plain text, the form the user edits and the export uses. */
@@ -103,5 +105,11 @@ export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLe
     answers: JSON.stringify(answers, null, 2),
   });
 
-  return askModel({ feature: "tailor-cover-letter", prompt, schema: CoverLetterSchema, sample: sampleCoverLetter(input) });
+  return askModel({
+    feature: "tailor-cover-letter",
+    prompt,
+    schema: CoverLetterSchema,
+    sample: sampleCoverLetter(input),
+    requester: input.requester,
+  });
 }
