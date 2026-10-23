@@ -1,8 +1,10 @@
 # PR titles read "#<number> · <name> · <goal>" (CLAUDE.md, Language). The author writes the goal;
 # this puts the right number and the author's name in front, so nobody does it by hand.
+# It also wraps the title in invisible right-to-left marks, so the Persian title reads right to left on GitHub.
 # A PR with no assignee is assigned to its author, its one owner (CLAUDE.md, rule 13), so the board shows whose it is.
 # - when a PR is opened, reopened, retitled or gets new commits: that PR;
-# - after every merge into main, and on a manual run: every open PR to main.
+# - after every merge into main: every open PR to main;
+# - on a manual run: every PR to main, merged and closed ones too, for a change to the title format.
 # It edits only titles and assignees, so it runs for documentation-only PRs too and takes a few seconds.
 name: PR title and owner
 
@@ -41,9 +43,19 @@ jobs:
         run: |
           if [ -n "$ONE_PR" ]; then
             numbers="$ONE_PR"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # Merged and closed PRs are fixed only from here. A person's edit to one of them runs the copy of this
+            # workflow that PR was tested with, which may be older; an edit made with this token starts no run.
+            numbers=$(gh pr list --base main --state all --limit 500 --json number --jq '.[].number')
           else
             numbers=$(gh pr list --base main --state open --limit 100 --json number --jq '.[].number')
           fi
+
+          # GitHub shows titles in a left-to-right box, which puts "#57" at the far left of a Persian title and
+          # jumbles it around English words. RIGHT-TO-LEFT EMBEDDING (U+202B) ... POP DIRECTIONAL FORMATTING (U+202C)
+          # around the title makes it read right to left; the box itself stays left-aligned.
+          rle=$'\xe2\x80\xab'
+          pdf=$'\xe2\x80\xac'
 
           for number in $numbers; do
             read -r author assignees < <(gh pr view "$number" --json author,assignees --jq '"\(.author.login) \(.assignees | length)"')
@@ -56,13 +68,15 @@ jobs:
               *) name="$author" ;;
             esac
 
-            # Drop a number-and-name prefix that is already there, even a wrong one, then add the right one.
-            goal="$title"
+            # Drop the direction marks and a number-and-name prefix that are already there, even a wrong prefix,
+            # then add the right ones.
+            goal="${title//"$rle"/}"
+            goal="${goal//"$pdf"/}"
             if [[ "$goal" == "#"[0-9]*" · "*" · "* ]]; then
               goal="${goal#*" · "}"
               goal="${goal#*" · "}"
             fi
-            wanted="#$number · $name · $goal"
+            wanted="$rle#$number · $name · $goal$pdf"
 
             if [ "$title" = "$wanted" ]; then
               echo "#$number: title already right."

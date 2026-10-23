@@ -36,7 +36,7 @@ export async function recordApplication(jobId: unknown): Promise<RecordApplicati
     return { ok: false, reason: "sample-job", message: "This is a sample job, so it is not added to your tracker." };
   }
 
-  // Row-level security only checks user_id, so a job id from another account must be refused here (issue #28).
+  // The database refuses a job from another account too (issue #28); checking first gives the user a clear answer.
   const job = await supabase.from("jobs").select("id").eq("id", parsed.data).maybeSingle();
   if (job.error) return failed("read the job", job.error.code);
   if (!job.data) return notFound();
@@ -64,6 +64,8 @@ export async function recordApplication(jobId: unknown): Promise<RecordApplicati
 
   const application: Application = { id: randomUUID(), jobId: parsed.data, date: londonToday(), status: "applied", nextStep: null };
   const { error } = await supabase.from("applications").insert({ id: application.id, job_id: application.jobId, data: application });
+  // Apply pressed in another tab saved this job a moment earlier (one application per job): answer as for a second press.
+  if (error?.code === "23505") return recordApplication(parsed.data);
   if (error) return failed("add to the tracker", error.code);
   revalidatePath("/dashboard");
   return { ok: true, application, created: true };
