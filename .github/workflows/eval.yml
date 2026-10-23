@@ -1,0 +1,74 @@
+# Prompt evals (npm run eval) against the real model, so every run costs money: manual runs only.
+# The key lives only in GitHub Secrets, never on anyone's computer. Run it from Actions → eval → Run workflow.
+name: eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "One eval file to run, e.g. src/features/interview/interview.eval.ts. Leave empty to run them all."
+        required: false
+        type: string
+        default: ""
+
+# A new run cancels the previous one for the same branch (CLAUDE.md, rule 11).
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    name: Prompt evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # No Git token is left on disk while the evals run.
+          persist-credentials: false
+
+      - name: Check the eval file and the key
+        env:
+          # The input reaches the script only as a variable, never pasted into it.
+          EVAL_FILE: ${{ inputs.file }}
+          # Only whether a key is set reaches this step, never the key itself.
+          HAS_KEY: ${{ secrets.OPENROUTER_API_KEY != '' || secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          # The same files npm run eval picks up: a path under src/ or tests/ ending in .eval.ts.
+          pattern='^(src|tests)/[A-Za-z0-9_./-]+\.eval\.ts$'
+          if [ -n "$EVAL_FILE" ]; then
+            if ! [[ $EVAL_FILE =~ $pattern ]] || [[ $EVAL_FILE == *..* ]]; then
+              echo "::error title=Wrong eval file::Give a path under src/ or tests/ that ends in .eval.ts, e.g. src/features/interview/interview.eval.ts."
+              exit 1
+            fi
+            if [ ! -f "$EVAL_FILE" ]; then
+              echo "::error title=Eval file not found::That file is not on this branch. Check the path and the branch you ran the workflow on."
+              exit 1
+            fi
+          fi
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error title=No API key::Add OPENROUTER_API_KEY (or ANTHROPIC_API_KEY) under Settings → Secrets and variables → Actions, then run again."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Run the evals
+        env:
+          EVAL_FILE: ${{ inputs.file }}
+          # The keys reach this step only. An unset secret is an empty string, which getAiProvider ignores.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$EVAL_FILE" ]; then
+            npm run eval -- "$EVAL_FILE"
+          else
+            npm run eval
+          fi
