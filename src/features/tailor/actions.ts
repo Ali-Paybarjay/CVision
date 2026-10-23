@@ -10,15 +10,25 @@ import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { defaultGapQuestion } from "./gap-questions";
 import { proposeChanges } from "./propose-changes";
 import { sampleForGap } from "./samples";
+import { modelFailureMessage, tailorModelAccess } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
-import type { NextStep } from "./types";
+import { fitsCv } from "./tailored-cv";
+import type { GapAnswer, NextStep } from "./types";
 
 // Anyone can call a Server Action, so every input is checked before use.
+const EarlierAnswerSchema = z.object({
+  gapId: z.string().min(1).max(100),
+  answer: z.string().max(2000),
+  hasExperience: z.boolean(),
+});
+
 const AnswerGapSchema = z.object({
   jobId: z.string().min(1).max(100),
   gapId: z.string().min(1).max(100),
   answer: z.string().max(2000),
   hasExperience: z.boolean(),
+  /** The user's answers to the job's other gaps, so a "no" there still counts here (Nothing invented). */
+  earlierAnswers: z.array(EarlierAnswerSchema).max(30).optional(),
 });
 export type AnswerGapInput = z.infer<typeof AnswerGapSchema>;
 
@@ -37,9 +47,20 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
   const answer = parsed.data.answer.trim();
   if (hasExperience && answer === "") return { ok: false, message: "Write your answer first, or choose “I haven’t done this”." };
 
-  const [profile, job, match] = await Promise.all([getMyProfile(), getMyJob(jobId), getMyMatch(jobId)]);
+  const access = await tailorModelAccess();
+  if (!access.allowed) return { ok: false, message: access.message };
+
+  const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   const gap = match?.gaps.find((item) => item.id === gapId);
   if (!profile || !job || !match || !gap) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
+
+  // Only answers to this job's real gaps count; the current gap's answer is the one just sent.
+  const earlier: GapAnswer[] = (parsed.data.earlierAnswers ?? []).flatMap((item) => {
+    const other = match.gaps.find((candidate) => candidate.id === item.gapId);
+    if (!other || other.id === gapId) return [];
+    const text = item.answer.trim() || "I haven't done this.";
+    return [{ gapId: other.id, question: defaultGapQuestion(other).question, answer: text, hasExperience: item.hasExperience }];
+  });
 
   try {
     const result = await proposeChanges({
@@ -54,10 +75,14 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
           hasExperience,
         },
       ],
+      context: { gaps: match.gaps.filter((item) => item.id !== gapId), answers: earlier },
       sample: sampleForGap(jobId, gapId).proposal,
+      requester: access.requester,
     });
 
-    const changes = result.changes.filter((change) => change.gapId === gapId);
+    // A change whose `before` is not a line of this CV could never be placed, so it is not offered at all.
+    const forGap = result.changes.filter((change) => change.gapId === gapId);
+    const changes = forGap.filter((change) => fitsCv(profile, change));
     const nextSteps = result.nextSteps.filter((step) => step.gapId === gapId);
     if (changes.length === 0 && nextSteps.length === 0) {
       nextSteps.push({
@@ -68,9 +93,9 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
           : "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
       });
     }
-    return { ok: true, changes, nextSteps, removed: result.removed.length };
-  } catch {
-    return { ok: false, message: "We could not write a suggestion just now. Try again in a moment." };
+    return { ok: true, changes, nextSteps, removed: result.removed.length + forGap.length - changes.length };
+  } catch (error) {
+    return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
   }
 }
 
@@ -86,13 +111,15 @@ const StoredIdSchema = z.uuid();
 /**
  * Saves the user's decision on one change (and any edit they made to its text) in tailoring_changes,
  * and records tailor.change_approved or tailor.change_rejected without any CV text.
+ * `replaced` marks a change withdrawn because the user changed their answer: it is saved as rejected, but
+ * it is not the user's decision, so no event is recorded.
  */
-export async function decideChange(change: TailoringChange): Promise<DecideChangeResult> {
+export async function decideChange(change: TailoringChange, options: { replaced?: boolean } = {}): Promise<DecideChangeResult> {
   const parsed = DecisionSchema.safeParse(change);
   if (!parsed.success) return { saved: false, reason: "invalid", message: "We could not read this change." };
   const decision = parsed.data;
 
-  if (decision.status !== "proposed") {
+  if (decision.status !== "proposed" && options.replaced !== true) {
     const name = decision.status === "approved" ? "tailor.change_approved" : "tailor.change_rejected";
     const properties = { section: decision.section, evidenceSource: decision.evidenceSource };
     after(async () => {

@@ -10,6 +10,12 @@ import { CvPreview } from "./cv-preview";
 
 export type GapPrompt = { gap: Gap; question: string; sampleAnswer: string | null };
 
+/** The user's last answer to one gap, sent with later answers so the Nothing invented check sees every "no". */
+type GivenAnswer = { gapId: string; answer: string; hasExperience: boolean };
+
+/** Shown when a Server Action can't be reached: offline, or a new version was deployed mid-session. */
+export const unreachableMessage = "We could not reach CVision. Check your connection and try again.";
+
 type GapState =
   | { phase: "open" }
   | { phase: "working" }
@@ -28,10 +34,25 @@ const sectionNames: Record<TailoringChange["section"], string> = {
  * The Tailor workspace for one job: a question per gap, the suggested changes with Approve, Reject and Edit,
  * and the CV preview, which shows approved changes only.
  */
-export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; profile: Profile; prompts: GapPrompt[] }) {
-  const [gapStates, setGapStates] = useState<Record<string, GapState>>({});
-  const [changes, setChanges] = useState<TailoringChange[]>([]);
+export function TailorWorkspace({
+  jobId,
+  profile,
+  prompts,
+  savedChanges = [],
+}: {
+  jobId: string;
+  profile: Profile;
+  prompts: GapPrompt[];
+  /** The decisions the user saved on an earlier visit. */
+  savedChanges?: TailoringChange[];
+}) {
+  const [gapStates, setGapStates] = useState<Record<string, GapState>>(() =>
+    Object.fromEntries(savedChanges.flatMap((change) => (change.gapId ? [[change.gapId, { phase: "answered", nextSteps: [] }]] : []))),
+  );
+  const [changes, setChanges] = useState<TailoringChange[]>(savedChanges);
+  const [answers, setAnswers] = useState<Record<string, GivenAnswer>>({});
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const cv = buildTailoredCv(profile, changes);
 
   const counts = {
     approved: changes.filter((change) => change.status === "approved").length,
@@ -39,15 +60,27 @@ export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; pr
     waiting: changes.filter((change) => change.status === "proposed").length,
   };
 
-  const onAnswered = (gapId: string, newChanges: TailoringChange[], nextSteps: NextStep[]) => {
+  const onAnswered = (given: GivenAnswer, newChanges: TailoringChange[], nextSteps: NextStep[]) => {
+    const { gapId } = given;
+    // A new answer replaces the gap's earlier suggestions, in the saved decisions too, so an old approval
+    // never stays on the CV after the user says something different.
+    const replaced = changes.filter((change) => change.gapId === gapId && change.status !== "rejected");
     setChanges((current) => [...current.filter((change) => change.gapId !== gapId), ...newChanges]);
+    setAnswers((current) => ({ ...current, [gapId]: given }));
     setGapStates((current) => ({ ...current, [gapId]: { phase: "answered", nextSteps } }));
+    for (const change of replaced) {
+      decideChange({ ...change, status: "rejected" }, { replaced: true }).catch(() => setSaveNote(unreachableMessage));
+    }
   };
 
   const update = async (next: TailoringChange) => {
     setChanges((current) => current.map((change) => (change.id === next.id ? next : change)));
-    const result = await decideChange(next);
-    setSaveNote(result.saved ? null : result.message);
+    try {
+      const result = await decideChange(next);
+      setSaveNote(result.saved ? null : result.message);
+    } catch {
+      setSaveNote(unreachableMessage);
+    }
   };
 
   return (
@@ -76,6 +109,7 @@ export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; pr
               state={gapStates[prompt.gap.id] ?? { phase: "open" }}
               setState={(state) => setGapStates((current) => ({ ...current, [prompt.gap.id]: state }))}
               onAnswered={onAnswered}
+              earlierAnswers={Object.values(answers).filter((item) => item.gapId !== prompt.gap.id)}
               changes={changes.filter((change) => change.gapId === prompt.gap.id)}
               onDecide={update}
             />
@@ -88,7 +122,14 @@ export function TailorWorkspace({ jobId, profile, prompts }: { jobId: string; pr
           Your CV for this job
         </h2>
         <p className="text-sm text-text-muted">Highlighted lines are the changes you approved.</p>
-        <CvPreview cv={buildTailoredCv(profile, changes)} />
+        {cv.unplaced.length > 0 && (
+          <Notice tone="error" title="Some approved changes are not in your CV">
+            We could not find the line {cv.unplaced.length === 1 ? "this change replaces" : "these changes replace"}:{" "}
+            {cv.unplaced.map((change) => `“${change.after}”`).join(", ")}. Reject {cv.unplaced.length === 1 ? "it" : "them"}, then
+            answer the question again for a new suggestion.
+          </Notice>
+        )}
+        <CvPreview cv={cv} />
       </aside>
     </div>
   );
@@ -99,12 +140,13 @@ type GapCardProps = {
   prompt: GapPrompt;
   state: GapState;
   setState: (state: GapState) => void;
-  onAnswered: (gapId: string, changes: TailoringChange[], nextSteps: NextStep[]) => void;
+  onAnswered: (given: GivenAnswer, changes: TailoringChange[], nextSteps: NextStep[]) => void;
+  earlierAnswers: GivenAnswer[];
   changes: TailoringChange[];
   onDecide: (change: TailoringChange) => Promise<void>;
 };
 
-function GapCard({ jobId, prompt, state, setState, onAnswered, changes, onDecide }: GapCardProps) {
+function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide }: GapCardProps) {
   const [answer, setAnswer] = useState(prompt.sampleAnswer ?? "");
   const [pending, startTransition] = useTransition();
   const { gap } = prompt;
@@ -112,9 +154,13 @@ function GapCard({ jobId, prompt, state, setState, onAnswered, changes, onDecide
   const submit = (hasExperience: boolean) => {
     setState({ phase: "working" });
     startTransition(async () => {
-      const result = await answerGap({ jobId, gapId: gap.id, answer, hasExperience });
-      if (result.ok) onAnswered(gap.id, result.changes, result.nextSteps);
-      else setState({ phase: "error", message: result.message });
+      try {
+        const result = await answerGap({ jobId, gapId: gap.id, answer, hasExperience, earlierAnswers });
+        if (result.ok) onAnswered({ gapId: gap.id, answer, hasExperience }, result.changes, result.nextSteps);
+        else setState({ phase: "error", message: result.message });
+      } catch {
+        setState({ phase: "error", message: unreachableMessage });
+      }
     });
   };
 
@@ -144,6 +190,16 @@ function GapCard({ jobId, prompt, state, setState, onAnswered, changes, onDecide
               I haven’t done this
             </Button>
           </div>
+          {changes.length > 0 && (
+            <>
+              <p className="text-sm text-text-muted">
+                Your earlier suggestions stay as they are until you send a new answer. You can still reject them.
+              </p>
+              {changes.map((change) => (
+                <ChangeCard key={change.id} change={change} onDecide={onDecide} />
+              ))}
+            </>
+          )}
         </>
       )}
 

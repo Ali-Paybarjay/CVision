@@ -1,23 +1,41 @@
 import "server-only";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
-import { personas } from "@/shared/sample-data";
+import { personas, type PersonaName } from "@/shared/sample-data";
 
-// The sample user until Shayan's server reads land (#48): Sara, with her two jobs. Same names and shapes as
-// his functions, so my-data.ts swaps them in one line. Only her first job has a MatchResult.
-const sample = personas.sara;
+// The sample user until Shayan's server reads land (#48). Same names, signatures and sample behaviour as his
+// functions in src/features/profile/my-data.ts, so my-data.ts swaps them in one line: the persona who owns the
+// job id answers, and any other id falls back to Sara's first job.
 
-export async function getMyProfile(): Promise<Profile | null> {
-  return sample.profile;
+/** Where the answers come from: the signed-in user's account, or the sample personas. */
+export type DataSource = "account" | "sample";
+
+export async function getMyDataSource(): Promise<DataSource> {
+  return "sample";
+}
+
+export async function getMyProfile(options: { jobId?: string } = {}): Promise<Profile | null> {
+  return personas[sampleFor(options.jobId).persona].profile;
 }
 
 export async function listMyJobs(): Promise<Job[]> {
-  return sample.jobs;
+  return personas.sara.jobs;
 }
 
 export async function getMyJob(jobId: string): Promise<Job | null> {
-  return sample.jobs.find((job) => job.id === jobId) ?? null;
+  return sampleFor(jobId).job;
 }
 
+/** Each persona has a written match for their first job only; Shayan's version also matches the second. */
 export async function getMyMatch(jobId: string): Promise<MatchResult | null> {
-  return sample.match.jobId === jobId ? sample.match : null;
+  const { persona, job } = sampleFor(jobId);
+  const { match } = personas[persona];
+  return match.jobId === job.id ? match : null;
+}
+
+function sampleFor(jobId: string | undefined): { persona: PersonaName; job: Job } {
+  for (const persona of Object.keys(personas) as PersonaName[]) {
+    const job = personas[persona].jobs.find((candidate) => candidate.id === jobId);
+    if (job) return { persona, job };
+  }
+  return { persona: "sara", job: personas.sara.jobs[0] };
 }
