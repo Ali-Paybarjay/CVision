@@ -1,18 +1,19 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { getAiProvider } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { extractProfile } from "./extract-profile";
 import { readCvText } from "./read-cv";
 import { sampleCvFileName, samplePersonaNames } from "./sample-cvs";
 
 // Prompt evals for prompts/profile-extract.md: real requests to the model, so they cost money.
-// Run with `npm run eval` (needs ANTHROPIC_API_KEY). Each sample CV in sample-data/cvs is built from a persona,
-// so the persona is the right answer.
+// Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY).
+// Each sample CV in sample-data/cvs is built from a persona, so the persona is the right answer.
 
 const normalise = (text: string) => text.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").replace(/[.;]$/, "").trim();
 
-describe.skipIf(!process.env.ANTHROPIC_API_KEY)("profile-extract on the sample CVs", () => {
+describe.skipIf(!getAiProvider())("profile-extract on the sample CVs", () => {
   describe.each(samplePersonaNames)("%s", (name) => {
     const expected = personas[name].profile;
     // One model call per CV, made by the first test that needs it (never while tests are being collected).
