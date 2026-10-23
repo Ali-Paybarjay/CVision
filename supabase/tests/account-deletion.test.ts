@@ -1,20 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { userTables } from "@/features/account/user-tables";
 import { asUser, createTestDatabase } from "./test-database";
 
 // "Delete my account" deletes the user from auth.users and relies on on delete cascade for everything else
-// (issue #43). These are the eight tables it promises to empty, as in src/features/account/data-rights.ts.
-const userTables = [
-  "profiles",
-  "jobs",
-  "match_results",
-  "tailoring_changes",
-  "interview_sessions",
-  "applications",
-  "events",
-  "ai_usage",
-] as const;
+// (issue #43). userTables is the app's own list: the tables it counts, downloads and promises to empty.
 
 const sara = randomUUID();
 const reza = randomUUID();
@@ -58,6 +49,29 @@ async function counts(userId: string) {
   }
   return result;
 }
+
+describe("the app's list of user tables", () => {
+  it("is every public table with a user_id, so a new one cannot be left out of the download and the deletion", async () => {
+    const { rows } = await db.query<{ table_name: string }>(
+      "select table_name from information_schema.columns where table_schema = 'public' and column_name = 'user_id' order by table_name",
+    );
+    expect(rows.map((row) => row.table_name)).toEqual([...userTables].sort());
+  });
+
+  it("deletes with the user: every foreign key to auth.users cascades, one from each of these tables", async () => {
+    const { rows } = await db.query<{ table: string; on_delete: string }>(
+      `select c.relname as table, k.confdeltype as on_delete
+         from pg_constraint k
+         join pg_class c on c.oid = k.conrelid
+         join pg_namespace n on n.oid = c.relnamespace
+        where k.contype = 'f' and k.confrelid = 'auth.users'::regclass and n.nspname = 'public'
+        order by c.relname`,
+    );
+    // confdeltype "c" is on delete cascade.
+    expect(rows.filter((row) => row.on_delete !== "c")).toEqual([]);
+    expect([...new Set(rows.map((row) => row.table))]).toEqual([...userTables].sort());
+  });
+});
 
 describe("deleting a user from auth.users", () => {
   it("leaves no row of theirs in any of the eight tables, and keeps everyone else's", async () => {

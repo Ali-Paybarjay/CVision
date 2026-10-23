@@ -2,7 +2,7 @@ import { isValidElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { brand } from "@/shared/brand";
-import { AccountDeletedView, notDeletedStraightAway } from "./account-deleted";
+import { AccountDeleted, AccountDeletedView, notDeletedStraightAway } from "./account-deleted";
 import { signOut } from "./actions";
 import { userTables, type DataSummary } from "./data-rights";
 import { DeleteAccountForm } from "./delete-account-form";
@@ -10,8 +10,14 @@ import { SignOutButton } from "./sign-out-button";
 import { DataRightsView } from "./your-data";
 
 // Render checks for the data-rights screens (issue #43). Deleting, downloading and clearing are tested in
-// data-rights.test.ts, data-rights-actions.test.ts and the download route's test.
+// data-rights.test.ts, data-rights-actions.test.ts, browser-data.test.ts and the download route's test.
 
+const { accountJustDeleted, redirect } = vi.hoisted(() => ({
+  accountJustDeleted: vi.fn(),
+  redirect: vi.fn((path: string) => {
+    throw new Error(`NEXT_REDIRECT ${path}`);
+  }),
+}));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...props}>
@@ -19,9 +25,11 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("./actions", () => ({ signOut: vi.fn() }));
 vi.mock("./data-rights-actions", () => ({ deleteMyAccount: vi.fn() }));
 vi.mock("./current-user", () => ({ getCurrentUser: vi.fn() }));
+vi.mock("./deleted-flag", () => ({ accountJustDeleted }));
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 
@@ -32,6 +40,7 @@ const summary: DataSummary = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe("the Your data page", () => {
@@ -65,6 +74,12 @@ describe("the Your data page", () => {
     expect(text(failed)).toContain("We could not prepare your download");
   });
 
+  it("says the download lists what it leaves out, and offers no browser data until the browser is read", () => {
+    expect(text(html)).toContain("data.json also lists what it leaves out");
+    // BrowserDataDownload reads localStorage only in the browser, so the server renders nothing for it.
+    expect(text(html)).not.toContain("Download this browser");
+  });
+
   it("uses no words the brand bans", () => {
     for (const phrase of brand.bannedPhrases) expect(text(html).toLowerCase()).not.toContain(phrase.toLowerCase());
   });
@@ -89,8 +104,32 @@ describe("the confirmation page", () => {
     expect(html).toContain("up to 30 days");
   });
 
+  it("gives OpenRouter's exceptions, as the Privacy page does", () => {
+    expect(html).toContain("unless the law requires it to keep it or it detects misuse");
+    expect(html).toContain("categorise a small sample of requests anonymously");
+  });
+
+  it("says the record of the deletion itself is kept, without the email address or account ID", () => {
+    expect(html).toContain("A record that an account was deleted");
+    expect(html).toContain("It does not include your email address or account ID");
+  });
+
   it("uses no words the brand bans", () => {
     for (const phrase of brand.bannedPhrases) expect(html.toLowerCase()).not.toContain(phrase.toLowerCase());
+  });
+
+  it("sends anyone who has not just deleted their account back to Your data, so nothing is cleared", async () => {
+    accountJustDeleted.mockResolvedValue(false);
+
+    await expect(AccountDeleted()).rejects.toThrow("NEXT_REDIRECT /dashboard/your-data");
+  });
+
+  it("shows the confirmation, which clears this browser's data, straight after a deletion", async () => {
+    accountJustDeleted.mockResolvedValue(true);
+
+    const page = text(renderToStaticMarkup(await AccountDeleted()));
+    expect(page).toContain("Your account is deleted");
+    expect(redirect).not.toHaveBeenCalled();
   });
 });
 

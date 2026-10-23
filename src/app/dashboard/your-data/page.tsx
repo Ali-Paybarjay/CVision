@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Your data" };
 // Your data is yours (issue #43): see what we hold, download all of it, or delete the account.
 export default function YourDataPage({ searchParams }: PageProps<"/dashboard/your-data">) {
   return (
-    <Page title="Your data" description="Your data is yours. See what we hold about you, download all of it, or delete it for good.">
+    <Page title="Your data" description="Your data is yours. See what we hold about you, download a copy, or delete it for good.">
       <Suspense fallback={<YourDataFallback />}>
         <YourDataSection searchParams={searchParams} />
       </Suspense>

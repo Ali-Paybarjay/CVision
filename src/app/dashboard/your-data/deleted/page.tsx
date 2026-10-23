@@ -4,8 +4,8 @@ import { AccountDeleted, AccountDeletedFallback } from "@/features/account/accou
 
 export const metadata: Metadata = { title: "Account deleted" };
 
-// Where "Delete my account" lands (issue #43). The whole page waits for the session check, so nobody still signed
-// in sees it, even for a moment.
+// Where "Delete my account" lands (issue #43). The whole page waits for the check that this browser has just deleted
+// its account, so nobody else sees it or has their browser's data cleared, even for a moment.
 export default function AccountDeletedPage() {
   return (
     <Suspense fallback={<AccountDeletedFallback />}>

@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { brand } from "@/shared/brand";
-import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { ButtonLink, Card, Page } from "@/shared/ui";
 import { ClearBrowserData } from "./clear-browser-data";
-import { getCurrentUser } from "./current-user";
+import { yourDataPath } from "./data-rights-paths";
+import { accountJustDeleted } from "./deleted-flag";
 
 /**
  * What is not deleted straight away, and for how long (issue #43). Only checked facts: the research for the
- * Privacy page, which has the full version at /privacy#not-deleted-straight-away. Change both together.
+ * Privacy page, which has the same list at /privacy#not-deleted-straight-away. Change both together.
  */
 export const notDeletedStraightAway = [
   {
@@ -25,11 +25,15 @@ export const notDeletedStraightAway = [
   },
   {
     where: "OpenRouter, which passes your text to the AI model",
-    what: "Its terms say it deletes the text of your CV, job ads and answers promptly after the answer is ready. It keeps technical details of each request, such as its size and how long it took, without the text, and does not say for how long. Apart from the text itself, we send it nothing that identifies you, such as your account ID or sign-in email.",
+    what: "Its terms say it deletes the text of your CV, job ads and answers promptly after the answer is ready, unless the law requires it to keep it or it detects misuse. It keeps technical details of each request, such as its size and how long it took, without the text, and does not say for how long. It may also categorise a small sample of requests anonymously, without linking them to our account. Apart from the text itself, we send it nothing that identifies you, such as your account ID or sign-in email.",
   },
   {
     where: "Records from before you signed in",
     what: `If you used ${brand.name} without an account, a few usage records, such as which button you pressed or how many free checks you used, are kept against a code made from your IP address that changes every day. The address itself is never stored. We can't link these records to you, so they are not deleted with your account. They have no set end date yet.`,
+  },
+  {
+    where: "A record that an account was deleted",
+    what: "We keep one usage record that an account was deleted, with how many records and CV files went. It does not include your email address or account ID. It has no set end date yet.",
   },
   {
     where: "Other browsers and devices",
@@ -38,12 +42,13 @@ export const notDeletedStraightAway = [
 ] as const;
 
 /**
- * The page after "Delete my account": the action has deleted the account and signed this browser out.
- * Anyone still signed in goes back to the data page, so the browser is cleared only after a deletion.
- * Reads the session, so render it inside <Suspense>.
+ * The page after "Delete my account": the action has deleted the account, signed this browser out and set a
+ * two-minute flag cookie for this page only. Without that flag, anyone who opens this address (from history, a link
+ * or autocomplete) goes to the data page instead, so the browser's data is cleared only straight after a deletion.
+ * Reads cookies, so render it inside <Suspense>.
  */
 export async function AccountDeleted() {
-  if (!isSupabaseConfigured() || (await getCurrentUser())) redirect("/dashboard/your-data");
+  if (!(await accountJustDeleted())) redirect(yourDataPath);
   return <AccountDeletedView />;
 }
 

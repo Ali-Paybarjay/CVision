@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearBrowserData } from "./browser-data";
+import { browserDataFile, clearBrowserData, readBrowserData } from "./browser-data";
 
 /** Just enough of localStorage: keys in the order they were set, like a browser. */
 function fakeStorage(entries: Record<string, string>) {
@@ -10,9 +10,19 @@ function fakeStorage(entries: Record<string, string>) {
       return items.size;
     },
     key: (index: number) => [...items.keys()][index] ?? null,
+    getItem: (key: string) => items.get(key) ?? null,
     removeItem: (key: string) => void items.delete(key),
   };
 }
+
+const blocked = {
+  get length(): number {
+    throw new DOMException("The operation is insecure.", "SecurityError");
+  },
+  key: () => null,
+  getItem: () => null,
+  removeItem: () => {},
+};
 
 describe("clearBrowserData", () => {
   it("removes every CVision key and keeps everything else", () => {
@@ -37,18 +47,49 @@ describe("clearBrowserData", () => {
   });
 
   it("returns null instead of throwing when the browser blocks storage", () => {
-    const blocked = {
-      get length(): number {
-        throw new DOMException("The operation is insecure.", "SecurityError");
-      },
-      key: () => null,
-      removeItem: () => {},
-    };
-
     expect(clearBrowserData(blocked)).toBeNull();
   });
 
   it("returns null outside a browser", () => {
     expect(clearBrowserData()).toBeNull();
+  });
+});
+
+describe("readBrowserData", () => {
+  it("reads every CVision key with its value, in key order, without the storage check", () => {
+    const storage = fakeStorage({
+      "cvision.profile": '{"name":"Sara"}',
+      "other-site.theme": "dark",
+      "cvision.storage-check": "1",
+      "cvision.interview.v1:sara-job-2": '{"answers":[]}',
+    });
+
+    expect(readBrowserData(storage)).toEqual([
+      ["cvision.interview.v1:sara-job-2", '{"answers":[]}'],
+      ["cvision.profile", '{"name":"Sara"}'],
+    ]);
+  });
+
+  it("finds nothing when the browser blocks storage, or outside a browser", () => {
+    expect(readBrowserData(blocked)).toEqual([]);
+    expect(readBrowserData()).toEqual([]);
+  });
+});
+
+describe("browserDataFile", () => {
+  it("saves each key with its value, parsed when it is JSON, in a dated file", () => {
+    const file = browserDataFile(
+      [
+        ["cvision.interview.v1:sara-job-2", '{"answers":[]}'],
+        ["cvision.profile", "not json"],
+      ],
+      new Date("2026-10-23T10:00:00Z"),
+    );
+
+    expect(file.fileName).toBe("cvision-browser-data-2026-10-23.json");
+    const json = JSON.parse(file.json);
+    expect(json.exportedAt).toBe("2026-10-23T10:00:00.000Z");
+    expect(json.about).toContain("not in your account");
+    expect(json.items).toEqual({ "cvision.interview.v1:sara-job-2": { answers: [] }, "cvision.profile": "not json" });
   });
 });

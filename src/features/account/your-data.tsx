@@ -2,12 +2,12 @@ import { brand } from "@/shared/brand";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { Button, ButtonLink, Card, Notice } from "@/shared/ui";
 import { accountsOffNotice } from "./account-panel";
+import { BrowserDataDownload } from "./browser-data-download";
 import { getCurrentUser } from "./current-user";
 import { summariseUserData, userTables, type DataSummary, type UserTable } from "./data-rights";
+import { downloadPath, yourDataPath } from "./data-rights-paths";
 import { DeleteAccountForm } from "./delete-account-form";
-
-/** Where "Download my data" posts. A failed download comes back to the page with ?download=failed. */
-export const downloadPath = "/dashboard/your-data/download";
+import { withNext } from "./safe-redirect";
 
 const tableLabels: Record<UserTable, { label: string; detail: string }> = {
   profiles: { label: "Profile", detail: "Your approved profile, from your CV and your answers." },
@@ -83,7 +83,9 @@ export function DataRightsView({ email, summary, downloadFailed }: { email: stri
           Download my data
         </h2>
         <p className="mt-1 max-w-[65ch] text-text-muted">
-          One ZIP file with everything listed above: your account and records in data.json, and your original CV files.
+          One ZIP file with everything listed above: your account’s details and records in data.json, and your
+          original CV files. data.json also lists what it leaves out, such as the IP address and browser details kept
+          for each device you sign in on.
         </p>
         {/* A plain form post, not a link: a link could be prefetched, and the download is built fresh each time. */}
         <form action={downloadPath} method="post" className="mt-5">
@@ -91,6 +93,7 @@ export function DataRightsView({ email, summary, downloadFailed }: { email: stri
             Download my data
           </Button>
         </form>
+        <BrowserDataDownload />
       </Card>
 
       <Card aria-labelledby="delete-title">
@@ -117,9 +120,9 @@ function SignInToSeeYourData() {
     <Card>
       <h2 className="text-xl">Sign in to download or delete your data</h2>
       <p className="mt-1 max-w-[65ch] text-text-muted">
-        Once you are signed in, you can download everything {brand.name} holds about your account, or delete it for good.
+        Once you are signed in, you can download what {brand.name} holds about your account, or delete it for good.
       </p>
-      <ButtonLink href="/sign-in?next=/dashboard/your-data" variant="primary" className="mt-5">
+      <ButtonLink href={withNext("/sign-in", yourDataPath)} variant="primary" className="mt-5">
         Sign in
       </ButtonLink>
     </Card>

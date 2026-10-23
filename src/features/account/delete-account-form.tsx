@@ -7,11 +7,18 @@ import { Button, Field, Input, Notice } from "@/shared/ui";
 import { deleteMyAccount, type DeleteAccountState } from "./data-rights-actions";
 
 const idle: DeleteAccountState = { status: "idle" };
-const cancelledHere: DeleteAccountState = {
-  status: "cancelled",
-  title: "Nothing was deleted",
-  message: "You cancelled, so your account and data are unchanged.",
-};
+
+/** What Cancel says. After a try that already deleted some CV files, "unchanged" would not be true. */
+function cancelledHere(partial: boolean): DeleteAccountState {
+  return partial
+    ? {
+        status: "cancelled",
+        title: "Nothing more was deleted",
+        message: "You cancelled. Your account and the rest of your data are still here.",
+        partial,
+      }
+    : { status: "cancelled", title: "Nothing was deleted", message: "You cancelled, so your account and data are unchanged.", partial };
+}
 
 /**
  * "Delete my account" with two confirmations: the button opens the form, then only typing DELETE deletes.
@@ -24,7 +31,8 @@ export function DeleteAccountForm() {
   const [seen, setSeen] = useState<DeleteAccountState>(idle);
   const [cancelled, setCancelled] = useState(false);
 
-  const notice = cancelled ? cancelledHere : state !== seen && state.status !== "idle" ? state : null;
+  const partial = state.status !== "idle" && state.partial;
+  const notice = cancelled ? cancelledHere(partial) : state !== seen && state.status !== "idle" ? state : null;
 
   return (
     <div className="flex flex-col gap-4">

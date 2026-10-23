@@ -3,14 +3,16 @@ import { userTables } from "@/features/account/data-rights";
 import { fakeAdmin, readZip, type FakeData } from "@/features/account/test-support";
 import { POST } from "./route";
 
-const { getCurrentUser, getSupabaseAdmin, track, deferred } = vi.hoisted(() => ({
-  getCurrentUser: vi.fn(),
+const { getVerifiedUser, getSupabaseAdmin, createSupabaseServerClient, track, deferred } = vi.hoisted(() => ({
+  getVerifiedUser: vi.fn(),
   getSupabaseAdmin: vi.fn(),
+  createSupabaseServerClient: vi.fn(),
   track: vi.fn(),
   deferred: [] as (() => unknown)[],
 }));
-vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
+vi.mock("@/features/account/verified-user", () => ({ getVerifiedUser }));
 vi.mock("@/shared/supabase/admin", () => ({ getSupabaseAdmin }));
+vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("@/shared/analytics/track", () => ({ track }));
 vi.mock("next/server", () => ({ after: (work: () => unknown) => deferred.push(work) }));
 
@@ -30,9 +32,11 @@ beforeEach(() => {
       [`${sara}/cv.pdf`, new TextEncoder().encode("%PDF sara")],
       [`${reza}/cv.pdf`, new TextEncoder().encode("%PDF reza")],
     ]),
+    users: { [sara]: { id: sara, email: "sara@example.com", created_at: "2026-10-21T09:00:00Z", user_metadata: {} } },
   };
   getSupabaseAdmin.mockReturnValue(fakeAdmin(data).client);
-  getCurrentUser.mockResolvedValue({ id: sara, email: "sara@example.com" });
+  createSupabaseServerClient.mockResolvedValue(fakeAdmin(data).client);
+  getVerifiedUser.mockResolvedValue({ id: sara, email: "sara@example.com" });
 });
 
 afterEach(() => {
@@ -56,6 +60,7 @@ describe("POST /dashboard/your-data/download", () => {
     const json = JSON.parse(new TextDecoder().decode(files[0].data));
     expect(Object.keys(json.tables)).toEqual([...userTables]);
     for (const table of userTables) expect(json.tables[table]).toEqual([{ id: `${table}-1`, user_id: sara }]);
+    expect(json.account).toMatchObject({ id: sara, email: "sara@example.com", created_at: "2026-10-21T09:00:00Z" });
   });
 
   it("records the download with counts only", async () => {
@@ -65,13 +70,14 @@ describe("POST /dashboard/your-data/download", () => {
     expect(track).toHaveBeenCalledWith("account.data_downloaded", { rows: 8, cvFiles: 1 }, { userId: sara });
   });
 
-  it("sends a signed-out visitor to sign in", async () => {
-    getCurrentUser.mockResolvedValue(null);
+  it("sends a visitor Supabase Auth does not confirm as signed in to sign in, and back here afterwards", async () => {
+    // Signed out, or a token from a signed-out session or a deleted account that has not expired yet.
+    getVerifiedUser.mockResolvedValue(null);
 
     const response = await post();
 
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/sign-in?next=/dashboard/your-data");
+    expect(response.headers.get("location")).toBe("http://localhost:3000/sign-in?next=%2Fdashboard%2Fyour-data");
     expect(getSupabaseAdmin).not.toHaveBeenCalled();
   });
 
@@ -93,13 +99,13 @@ describe("POST /dashboard/your-data/download", () => {
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("http://localhost:3000/dashboard/your-data");
-    expect(getCurrentUser).not.toHaveBeenCalled();
+    expect(getVerifiedUser).not.toHaveBeenCalled();
   });
 
   it("refuses a post from another site", async () => {
     const response = await post({ origin: "https://evil.example" });
 
     expect(response.status).toBe(403);
-    expect(getCurrentUser).not.toHaveBeenCalled();
+    expect(getVerifiedUser).not.toHaveBeenCalled();
   });
 });

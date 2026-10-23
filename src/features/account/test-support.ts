@@ -4,11 +4,25 @@ import { crc32 } from "./zip";
 
 type Row = Record<string, unknown>;
 
-/** What the fake admin client holds: rows by table, and the cvs bucket's files by path ("<user id>/cv.pdf"). */
-export type FakeData = { tables: Record<string, Row[]>; files: Map<string, Uint8Array> };
+/**
+ * What the fake client holds: rows by table, the cvs bucket's files by path ("<user id>/cv.pdf"), and Supabase Auth
+ * users by id (a user missing here is not found).
+ */
+export type FakeData = { tables: Record<string, Row[]>; files: Map<string, Uint8Array>; users?: Record<string, Row> };
 
-/** Calls the fake can be made to fail, e.g. "count:jobs", "read:events", "list", "download", "remove", "deleteUser". */
-export type FakeFailure = `count:${string}` | `read:${string}` | "list" | "download" | "remove" | "deleteUser";
+/**
+ * Calls the fake can be made to fail, e.g. "count:jobs", "read:events", "list", "download", "remove", "getUserById",
+ * "deleteUser", or "deleteUser:not-found" (the user is already gone).
+ */
+export type FakeFailure =
+  | `count:${string}`
+  | `read:${string}`
+  | "list"
+  | "download"
+  | "remove"
+  | "getUserById"
+  | "deleteUser"
+  | "deleteUser:not-found";
 
 export type FakeAdminOptions = {
   fail?: FakeFailure[];
@@ -17,16 +31,24 @@ export type FakeAdminOptions = {
 };
 
 /**
- * Just enough of the Supabase admin client (secret key) for data-rights.ts: filtered reads with counts and pages,
- * Storage list (one folder level per call, with folders as id null, like the real list()), download and remove,
- * and auth.admin.deleteUser. Deleting a user deletes their rows in every table, like on delete cascade.
+ * Just enough of a Supabase client for data-rights.ts, as the admin client (secret key) or as the user's own:
+ * filtered reads with counts and pages, Storage list (one folder level per call, with folders as id null, like the
+ * real list()), download and remove, and auth.admin.getUserById and deleteUser. Deleting a user deletes their rows
+ * in every table, like on delete cascade. calls.from records each table read, to check which client read what.
  */
 export function fakeAdmin(data: FakeData, options: FakeAdminOptions = {}) {
   const fails = (what: FakeFailure) => options.fail?.includes(what) ?? false;
-  const calls = { deleteUser: [] as string[], removed: [] as string[][], listed: [] as string[], downloaded: [] as string[] };
+  const calls = {
+    from: [] as string[],
+    deleteUser: [] as string[],
+    removed: [] as string[][],
+    listed: [] as string[],
+    downloaded: [] as string[],
+  };
 
   const client = {
     from(table: string) {
+      calls.from.push(table);
       const filters: [string, unknown][] = [];
       let countOnly = false;
       let range: [number, number] | null = null;
@@ -99,9 +121,16 @@ export function fakeAdmin(data: FakeData, options: FakeAdminOptions = {}) {
 
     auth: {
       admin: {
+        async getUserById(id: string) {
+          if (fails("getUserById")) return { data: { user: null }, error: { code: "unexpected_failure", status: 500 } };
+          const user = data.users?.[id];
+          if (!user) return { data: { user: null }, error: { code: "user_not_found", status: 404 } };
+          return { data: { user: { ...user } }, error: null };
+        },
         async deleteUser(id: string) {
           calls.deleteUser.push(id);
           if (fails("deleteUser")) return { data: { user: null }, error: { code: "unexpected_failure", status: 500 } };
+          if (fails("deleteUser:not-found")) return { data: { user: null }, error: { code: "user_not_found", status: 404 } };
           for (const table of Object.keys(data.tables)) data.tables[table] = data.tables[table].filter((row) => row.user_id !== id);
           return { data: { user: null }, error: null };
         },

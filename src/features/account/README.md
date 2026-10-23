@@ -1,9 +1,21 @@
 علی · حساب کاربری: ورود، حریم خصوصی و رضایت، دانلود و حذف کامل داده (Your data is yours).
 
-- `data-rights.ts`: فقط سرور، با کلاینت admin و فیلتر `user_id` همان کاربرِ نشست. `summariseUserData` تعداد ردیف‌های کاربر در هشت جدول (`userTables`: شش جدول قرارداد به‌علاوهٔ `events` و `ai_usage`) و تعداد فایل‌های رزومه در `cvs/<user_id>/` (با پوشه‌های تو در تو و صفحه‌به‌صفحه) را می‌شمارد. `exportUserData` همهٔ این‌ها را در یک ZIP می‌گذارد: `data.json` و فایل‌های اصلی رزومه زیر `cv-files/`. `deleteAccount` اول فایل‌های رزومه را پاک می‌کند (Supabase کاربری را که فایل دارد پاک نمی‌کند)، بعد کاربر را با `auth.admin.deleteUser`؛ بقیهٔ ردیف‌ها با `on delete cascade` می‌روند. اگر وسط کار خطا بدهد، می‌گوید تا کجا پیش رفته. در لاگ فقط مرحله و کد خطا می‌آید.
+- `user-tables.ts`: فهرست هشت جدولی که ردیف کاربر را دارند (`userTables`: شش جدول قرارداد به‌علاوهٔ `events` و `ai_usage`). آزمون `supabase/tests/account-deletion.test.ts` همین فهرست را با schema مقایسه می‌کند. اگر جدول تازه‌ای با `user_id` اضافه شود، آن آزمون رد می‌شود تا جدول به این فهرست، و در نتیجه به شمارش و دانلود و حذف، اضافه شود.
+- `data-rights.ts`: فقط سرور و با فیلتر `user_id` همان کاربرِ نشست.
+  - شش جدول خود کاربر با کلاینت خود او خوانده می‌شوند، پس RLS هم شناسه را چک می‌کند. کلاینت admin فقط `events`، `ai_usage`، جزئیات حساب در Supabase Auth و فایل‌های رزومه را می‌خواند و حذف را انجام می‌دهد.
+  - `summariseUserData` تعداد ردیف‌ها و تعداد فایل‌های رزومه در `cvs/<user_id>/` را می‌شمارد (با پوشه‌های تو در تو و صفحه‌به‌صفحه).
+  - `exportUserData` یک ZIP می‌سازد: `data.json` و فایل‌های اصلی رزومه زیر `cv-files/`. در `data.json` جزئیات حساب از `auth.admin.getUserById` با فهرست سفید فیلدها می‌آید (بدون رمز و توکن). فهرست `notIncluded` هم می‌گوید چه چیزی در فایل نیست: IP و مرورگر هر نشست ورود، دادهٔ فقط‌مرورگر، و پشتیبان‌ها و لاگ‌ها.
+  - `deleteAccount` اول فایل‌های رزومه را پاک می‌کند (Supabase کاربری را که فایل دارد پاک نمی‌کند)، بعد کاربر را با `auth.admin.deleteUser`. بقیهٔ ردیف‌ها با `on delete cascade` می‌روند. کاربری که از قبل نیست (`user_not_found`) حذف‌شده حساب می‌شود. اگر وسط کار خطا بدهد، می‌گوید تا کجا پیش رفته (`cvFilesRemoved` و `removeAttempted`). در لاگ فقط مرحله و کد خطا می‌آید.
+- `verified-user.ts`: `getVerifiedUser` کاربر را از خود Supabase Auth می‌پرسد (`auth.getUser`). دانلود و حذف از این استفاده می‌کنند، نه از `getCurrentUser`: `getCurrentUser` فقط امضای توکن را چک می‌کند و توکن نشستِ خارج‌شده یا کاربرِ حذف‌شده را تا انقضا قبول دارد.
 - `zip.ts`: نویسندهٔ کوچک ZIP بدون فشرده‌سازی، با CRC-32، تا وابستگی تازه لازم نباشد.
-- `data-rights-actions.ts`: `deleteMyAccount`، که فقط با تایپ دقیق `DELETE` جلو می‌رود؛ هر چیز دیگری یعنی «Nothing was deleted». بعد از حذف، این مرورگر را خارج می‌کند، رویداد `account.deleted` را فقط با شمارش‌ها و بدون شناسهٔ کاربر ثبت می‌کند و به `/dashboard/your-data/deleted` می‌رود.
+- `data-rights-actions.ts`: `deleteMyAccount`، که فقط با تایپ دقیق `DELETE` جلو می‌رود؛ هر چیز دیگری یعنی «Nothing was deleted».
+  - اگر تلاش قبلی بخشی از فایل‌ها را پاک کرده باشد، به‌جای آن «Nothing more was deleted» می‌گوید و صفحه را `refresh()` می‌کند تا شمارش‌ها درست شوند.
+  - بعد از حذف، این مرورگر را خارج می‌کند. اگر خروج خطا بدهد، کوکی‌های `sb-…-auth-token` را خودش پاک می‌کند.
+  - رویداد `account.deleted` را فقط با شمارش‌ها و بدون شناسهٔ کاربر ثبت می‌کند و به `/dashboard/your-data/deleted` می‌رود.
+- `deleted-flag.ts`: کوکی دودقیقه‌ای `cvision-account-deleted` (httpOnly، فقط برای مسیر صفحهٔ تأیید). صفحهٔ تأیید فقط با این کوکی باز می‌شود و دادهٔ مرورگر را پاک می‌کند. هر کس دیگری که آدرس را باز کند، به `/dashboard/your-data` می‌رود و چیزی پاک نمی‌شود.
+- `data-rights-paths.ts`: مسیرهای سه صفحه و route دانلود.
 - `your-data.tsx` و `delete-account-form.tsx`: صفحهٔ `/dashboard/your-data`: چه چیزی از کاربر داریم، بعد Download my data، بعد Delete my account با دو تأیید. تا Supabase وصل نیست، به‌جای این‌ها پیام می‌دهد.
-- `account-deleted.tsx`: صفحهٔ تأیید حذف، با دادهٔ مرورگر پاک‌شده و فهرست چیزهایی که فوراً پاک نمی‌شوند و تا کی می‌مانند (`notDeletedStraightAway`). متنش با بخش `not-deleted-straight-away` صفحهٔ Privacy یکی است؛ هر دو را با هم عوض کن.
-- `browser-data.ts` و `sign-out-button.tsx`: موقع خروج و بعد از حذف، همهٔ کلیدهای `cvision.` در localStorage پاک می‌شوند (بخش علی از #35).
-- `test-support.ts`: کلاینت admin ساختگی و خوانندهٔ ZIP، فقط برای آزمون‌ها.
+- `browser-data-download.tsx`: اگر این مرورگر دادهٔ `cvision.` دارد که در حساب نیست، مثل پروفایل یا تمرین مصاحبه، زیر Download my data می‌گوید که در ZIP نیست و آن را جدا به‌صورت JSON دانلود می‌کند.
+- `account-deleted.tsx`: صفحهٔ تأیید حذف، با دادهٔ مرورگر پاک‌شده و فهرست چیزهایی که فوراً پاک نمی‌شوند و تا کی می‌مانند (`notDeletedStraightAway`). فهرستش با بخش `not-deleted-straight-away` صفحهٔ Privacy یکی است؛ هر دو را با هم عوض کن.
+- `browser-data.ts` و `sign-out-button.tsx`: موقع خروج و بعد از حذف، همهٔ کلیدهای `cvision.` در localStorage پاک می‌شوند (بخش علی از #35). خروج (`signOut` در `actions.ts`) فقط همین مرورگر را خارج می‌کند (`scope: "local"`)، تا هر دستگاه موقع خروج خودش دادهٔ خودش را پاک کند.
+- `test-support.ts`: کلاینت Supabase ساختگی و خوانندهٔ ZIP، فقط برای آزمون‌ها.
