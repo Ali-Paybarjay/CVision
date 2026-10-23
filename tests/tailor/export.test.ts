@@ -2,7 +2,7 @@ import JSZip from "jszip";
 import { extractText, getDocumentProxy } from "unpdf";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { exportDocument } from "@/features/tailor/actions";
-import { blocksToFile, cvBlocks, exportFileName, letterBlocks, pdfSafe, type ExportFormat } from "@/features/tailor/export";
+import { blocksToFile, cvBlocks, exportFileName, letterBlocks, pdfLosesLetters, pdfSafe, type ExportFormat } from "@/features/tailor/export";
 import { buildTailoredCv } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
@@ -96,9 +96,29 @@ describe("pdfSafe", () => {
     expect(pdfSafe("Łukasz Świątek")).toBe("Lukasz Swiatek");
     expect(pdfSafe("日本")).toBe("??");
   });
+
+  it("splits ligatures and subscripts from PDF text instead of dropping them", () => {
+    expect(pdfSafe("Certiﬁed")).toBe("Certified");
+    expect(pdfSafe("CO₂")).toBe("CO2");
+  });
+
+  it("knows when the PDF would show letters as ?", () => {
+    const meta = { title: "CV", author: "Sara Khan" };
+    expect(pdfLosesLetters(letterBlocks("Fluent in Persian (فارسی)"), meta)).toBe(true);
+    expect(pdfLosesLetters(letterBlocks("I spoke to the team."), { ...meta, author: "Иван Петров" })).toBe(true);
+    expect(pdfLosesLetters(letterBlocks("A Certiﬁed café in Łódź, “naïve” CO₂"), meta)).toBe(false);
+  });
 });
 
 describe("exportDocument", () => {
+  it("warns when the PDF cannot show some letters, and not for the Word file", async () => {
+    const letter = "Dear Hiring Manager,\n\nI speak English and Persian (فارسی).";
+    const pdf = await exportDocument({ jobId: job.id, document: "cover-letter", format: "pdf", changes: [], letter });
+    const word = await exportDocument({ jobId: job.id, document: "cover-letter", format: "docx", changes: [], letter });
+    expect(pdf).toMatchObject({ ok: true, warning: expect.stringContaining("Download the Word file instead") });
+    expect(word).toMatchObject({ ok: true, warning: null });
+  });
+
   it("rebuilds the CV from approved changes only and records the format", async () => {
     const result = await exportDocument({ jobId: job.id, document: "cv", format: "pdf", changes, letter: null });
     if (!result.ok) throw new Error(result.message);

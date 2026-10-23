@@ -99,17 +99,26 @@ const winAnsiExtras = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜
 // Letters with a stroke have no accent to drop, so they are mapped by hand.
 const plainLetters: Record<string, string> = { Ł: "L", ł: "l", Đ: "D", đ: "d", Ħ: "H", ħ: "h", ı: "i" };
 
+/** One character as the standard fonts can draw it, or null when they cannot draw it at all. */
+function pdfChar(char: string): string | null {
+  const code = char.charCodeAt(0);
+  if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || winAnsiExtras.includes(char)) return char;
+  if (plainLetters[char]) return plainLetters[char];
+  // NFKD also splits ligatures and subscripts from PDF text: "ﬁ" becomes "fi" and "₂" becomes "2".
+  const plain = char.normalize("NFKD").replace(/[̀-ͯ]/g, "");
+  return /^[\x20-\x7e]+$/.test(plain) ? plain : null;
+}
+
 /** Text the standard fonts can draw: accents are kept where the font has them and dropped where it does not. */
 export function pdfSafe(text: string): string {
   return Array.from(text.replace(/\s+/g, " "))
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || winAnsiExtras.includes(char)) return char;
-      if (plainLetters[char]) return plainLetters[char];
-      const plain = char.normalize("NFD").replace(/[̀-ͯ]/g, "");
-      return /^[\x20-\x7e]+$/.test(plain) ? plain : "?";
-    })
+    .map((char) => pdfChar(char) ?? "?")
     .join("");
+}
+
+/** True when the PDF would show some letters of these blocks as "?" (Persian or Cyrillic, for example). */
+export function pdfLosesLetters(blocks: Block[], meta: Meta): boolean {
+  return [meta.author, ...blocks.map((block) => block.text)].some((text) => Array.from(text).some((char) => pdfChar(char) === null));
 }
 
 function wrap(text: string, font: PDFFont, size: number, width: number): string[] {

@@ -10,7 +10,7 @@ import { TailoringChangeSchema, type TailoringChange } from "@/shared/contracts"
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
 import { coverLetterText, inventedTerms, writeCoverLetter } from "./cover-letter";
-import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes } from "./export";
+import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters } from "./export";
 import { defaultGapQuestion } from "./gap-questions";
 import { proposeChanges } from "./propose-changes";
 import { sampleForGap } from "./samples";
@@ -241,7 +241,8 @@ const ExportRequestSchema = z.object({
 export type ExportRequest = z.infer<typeof ExportRequestSchema>;
 
 export type ExportResult =
-  | { ok: true; fileName: string; mimeType: string; base64: string }
+  /** `warning` tells the user when the file is not quite what they see, e.g. letters the PDF cannot show. */
+  | { ok: true; fileName: string; mimeType: string; base64: string; warning: string | null }
   | { ok: false; message: string };
 
 /**
@@ -250,16 +251,20 @@ export type ExportResult =
  */
 export async function exportDocument(request: ExportRequest): Promise<ExportResult> {
   const parsed = ExportRequestSchema.safeParse(request);
-  if (!parsed.success) return { ok: false, message: "We could not read your changes. Reload the page and try again." };
+  if (!parsed.success) return { ok: false, message: "We could not read your changes. Try again." };
   const { jobId, document, format, letter } = parsed.data;
 
-  const [profile, job] = await Promise.all([getMyProfile(), getMyJob(jobId)]);
+  const [profile, job] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId)]);
   if (!profile || !job) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
   if (document === "cover-letter" && !letter?.trim()) return { ok: false, message: "Approve your cover letter first, then download it." };
 
   const changes = parsed.data.changes.filter((change) => change.jobId === jobId);
   const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes)) : letterBlocks(letter ?? "");
   const title = `${document === "cv" ? "CV" : "Cover letter"}: ${job.title}, ${job.company}`;
+  const warning =
+    format === "pdf" && pdfLosesLetters(blocks, { title, author: profile.fullName })
+      ? `Some letters in your ${document === "cv" ? "CV" : "cover letter"} cannot be shown in the PDF, so they appear as ?. Download the Word file instead.`
+      : null;
 
   try {
     const bytes = await blocksToFile(blocks, format, { title, author: profile.fullName });
@@ -273,6 +278,7 @@ export async function exportDocument(request: ExportRequest): Promise<ExportResu
       fileName: exportFileName(profile.fullName, job.title, document, format),
       mimeType: mimeTypes[format],
       base64: Buffer.from(bytes).toString("base64"),
+      warning,
     };
   } catch {
     return { ok: false, message: "We could not make your file just now. Try again in a moment." };

@@ -6,6 +6,7 @@ import type { ExportDocument, ExportFormat } from "@/features/tailor/export";
 import type { TailoringChange } from "@/shared/contracts";
 import { Button, Card, Notice } from "@/shared/ui";
 import type { LetterState } from "./cover-letter-panel";
+import { unreachableMessage } from "./messages";
 
 type ExportPanelProps = {
   jobId: string;
@@ -26,16 +27,26 @@ export function ExportPanel({ jobId, changes, letter }: ExportPanelProps) {
   const [pending, startTransition] = useTransition();
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const waiting = changes.filter((change) => change.status === "proposed").length;
   const approvedLetter = letter?.approved ? letter.text : null;
 
   const download = (kind: ExportDocument, format: ExportFormat) => {
     setWorking(`${kind}-${format}`);
     setError(null);
+    setWarning(null);
     startTransition(async () => {
-      const result = await exportDocument({ jobId, document: kind, format, changes, letter: approvedLetter });
-      if (result.ok) save(result.base64, result.mimeType, result.fileName);
-      else setError(result.message);
+      try {
+        const result = await exportDocument({ jobId, document: kind, format, changes, letter: approvedLetter });
+        if (result.ok) {
+          save(result.base64, result.mimeType, result.fileName);
+          setWarning(result.warning);
+        } else {
+          setError(result.message);
+        }
+      } catch {
+        setError(unreachableMessage);
+      }
       setWorking(null);
     });
   };
@@ -60,6 +71,7 @@ export function ExportPanel({ jobId, changes, letter }: ExportPanelProps) {
         </Notice>
       )}
       {error && <Notice tone="error">{error}</Notice>}
+      {warning && <Notice tone="warning">{warning}</Notice>}
 
       <div className="flex flex-col gap-2">
         <p className="text-sm font-semibold">Your CV</p>
