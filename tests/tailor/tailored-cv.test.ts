@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTailoredCv, formatMonth } from "@/features/tailor/tailored-cv";
+import { buildTailoredCv, fitsCv, formatMonth } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 
@@ -71,6 +71,40 @@ describe("the tailored CV (You approve everything)", () => {
     const text = allText(buildTailoredCv(profile, [rejected, approved]));
     expect(text).toContain("Approved version");
     expect(text).not.toContain("Rejected version");
+  });
+
+  it("places a change whose line ends with a full stop or differs in quotes and spaces", () => {
+    const approved = change("approved", { before: "Built Tableau dashboards for the regional sales team." });
+    const cv = buildTailoredCv(profile, [approved]);
+    expect(cv.experience[0].lines).toContainEqual({ text: approved.after, tailored: true });
+    expect(cv.unplaced).toEqual([]);
+  });
+
+  it("places a change to an education line written the way the CV shows it", () => {
+    const approved = change("approved", {
+      section: "education",
+      before: "MSc, Data Science, University of Manchester, Merit",
+      after: "MSc, Data Science, University of Manchester, Merit (dissertation on churn prediction)",
+    });
+    const cv = buildTailoredCv(profile, [approved]);
+    expect(cv.education[0]).toEqual({ text: approved.after, tailored: true });
+    expect(cv.unplaced).toEqual([]);
+  });
+
+  it("never drops an approved change silently: one it cannot place is listed in unplaced", () => {
+    const nowhere = change("approved", { section: "education", before: "MSc Data Science", after: "MSc Data Science (Merit)" });
+    const first = change("approved", { after: "First version" });
+    const second = { ...change("approved", { after: "Second version" }), id: "second" };
+    const cv = buildTailoredCv(profile, [nowhere, first, second]);
+    expect(allText(cv)).toContain("First version");
+    expect(cv.unplaced.map((item) => item.after)).toEqual(["MSc Data Science (Merit)", "Second version"]);
+  });
+
+  it("knows which changes fit the CV", () => {
+    expect(fitsCv(profile, { section: "experience", before: "Built Tableau dashboards for the regional sales team." })).toBe(true);
+    expect(fitsCv(profile, { section: "skills", before: null })).toBe(true);
+    expect(fitsCv(profile, { section: "education", before: "MSc Data Science" })).toBe(false);
+    expect(fitsCv(profile, { section: "skills", before: "Built Tableau dashboards for the regional sales team" })).toBe(false);
   });
 
   it("writes CV dates in UK style", () => {
