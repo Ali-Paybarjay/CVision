@@ -1,18 +1,14 @@
-# Lean CI (CLAUDE.md, rule 11): push and PRs to main, manual runs, no docs-only runs.
+# Lean CI (CLAUDE.md, rule 11): push and PRs to main, manual runs.
+# A docs-only change still starts a run, but its check skips the work and passes, so "Lint, typecheck, test and
+# build" can be a required check in main's branch rules without holding up a docs-only PR (#30).
 name: CI
 
 on:
   push:
     branches: [main]
-    paths-ignore: &docs-only
-      - "docs/**"
-      - "**/README.md"
-      - "CLAUDE.md"
-      - "AGENTS.md"
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, labeled]
-    paths-ignore: *docs-only
   workflow_dispatch:
 
 # A new run cancels the previous one for the same branch or PR.
@@ -28,22 +24,72 @@ jobs:
     name: Lint, typecheck, test and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      docs_only: ${{ steps.changes.outputs.docs_only }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The whole history, so the next step can compare the commits of a PR or a push.
+          fetch-depth: 0
+      - name: Check whether only documentation changed
+        id: changes
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        # Only commit SHAs come in, through env, never pasted into the script.
+        run: |
+          # A PR: what it changes since it left main, as GitHub lists its files. A push: what its commits changed.
+          # A first push (no "before", or all zeros) and a manual run check everything.
+          range=""
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE...$PR_HEAD"
+          elif [ "$GITHUB_EVENT_NAME" = "push" ] && [[ "$PUSH_BEFORE" =~ ^[0-9a-f]+$ && "$PUSH_BEFORE" =~ [1-9a-f] ]]; then
+            range="$PUSH_BEFORE..$PUSH_AFTER"
+          fi
+
+          # Documentation is what paths-ignore used to skip: docs/**, a README.md in any folder, CLAUDE.md, AGENTS.md.
+          # A rename counts as a deletion and an addition, so moving code into docs/ still checks everything.
+          # A name git has to quote (a quote, a backslash or a control character in it) counts as code.
+          # No changed files, or a git error such as a commit that is not there, also checks everything.
+          docs_only=false
+          if [ -n "$range" ] && files=$(git -c core.quotePath=false diff --no-renames --name-only "$range") && [ -n "$files" ]; then
+            docs_only=true
+            # Each name is printed after a label, so a file name can never be read as a workflow command.
+            while IFS= read -r file; do
+              case "$file" in
+                docs/* | README.md | */README.md | CLAUDE.md | AGENTS.md) echo "docs: $file" ;;
+                *) echo "code: $file"; docs_only=false ;;
+              esac
+            done <<< "$files"
+          fi
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          if [ "$docs_only" = "true" ]; then
+            echo "::notice::Documentation only: lint, typecheck, test and build are skipped, and the check passes."
+          fi
+      # Every step below runs only when something other than documentation changed.
       - uses: actions/setup-node@v5
+        if: &code-changed steps.changes.outputs.docs_only != 'true'
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+        if: *code-changed
       - run: npm run lint
+        if: *code-changed
       - run: npm run typecheck
+        if: *code-changed
       - run: npm test
+        if: *code-changed
       - run: npm run build
+        if: *code-changed
 
   e2e:
     name: End-to-end tests
-    # Only on main, or on a PR labelled e2e.
-    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'e2e')
+    # Only on main, or on a PR labelled e2e, and never for a docs-only change.
+    if: needs.check.outputs.docs_only != 'true' && (github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'e2e'))
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 20
