@@ -1,8 +1,38 @@
-import { describe, expect, it } from "vitest";
-import { extractPdfText, MAX_PDF_PAGES, PdfTooSlowError } from "./pdf";
-import { makeTestPdf, makeTestPdfPages } from "./test-pdf";
+import type { ResourceLimits, Worker } from "node:worker_threads";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { extractPdfText, MAX_PDF_PAGES, PDF_MEMORY_LIMITS, PdfOutOfMemoryError, PdfTooSlowError } from "./pdf";
+import { makePasswordProtectedTestPdf, makeTestPdf, makeTestPdfPages } from "./test-pdf";
+
+// Lets a test give the reading thread less memory than the real limit, to see what happens when it runs out.
+const memory = vi.hoisted(() => ({ limits: undefined as ResourceLimits | undefined }));
+vi.mock("node:worker_threads", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:worker_threads")>();
+  class LimitedWorker extends actual.Worker {
+    constructor(...[filename, options]: ConstructorParameters<typeof actual.Worker>) {
+      super(filename, memory.limits ? { ...options, resourceLimits: memory.limits } : options);
+    }
+  }
+  return { ...actual, Worker: LimitedWorker };
+});
 
 const numberedPages = (count: number) => Array.from({ length: count }, (_, index) => [`Page ${index + 1}`]);
+/** One page with 100,000 lines: PDF.js takes over a second to read it and about 40 MB of memory. */
+const slowPdf = () => makeTestPdf(Array.from({ length: 100_000 }, (_, index) => `Line ${index}`));
+
+// Every reading thread started in a test, with the limits it started with, to check none is left running.
+let threads: Array<{ worker: Worker; limits: ResourceLimits }> = [];
+const onWorker = (worker: Worker) => threads.push({ worker, limits: worker.resourceLimits ?? {} });
+beforeEach(() => {
+  threads = [];
+  process.on("worker", onWorker);
+});
+afterEach(() => {
+  process.off("worker", onWorker);
+  memory.limits = undefined;
+});
+
+/** True once every reading thread started in this test has ended. */
+const allThreadsEnded = () => threads.length > 0 && threads.every(({ worker }) => worker.threadId === -1);
 
 describe("extractPdfText", () => {
   it("reads each line of a PDF", async () => {
@@ -42,12 +72,34 @@ describe("extractPdfText", () => {
     expect(text).not.toContain("Page 2");
   });
 
+  it("reads in its own thread, with a memory limit, and ends the thread once the text is back", async () => {
+    await extractPdfText(makeTestPdf(["Daniel Brooks"]));
+
+    expect(threads).toHaveLength(1);
+    expect(threads[0].limits.maxOldGenerationSizeMb).toBe(PDF_MEMORY_LIMITS.maxOldGenerationSizeMb);
+    expect(allThreadsEnded()).toBe(true);
+  });
+
   it("gives up on a PDF that takes too long to read, even in the middle of a page", async () => {
-    // One page with 100,000 lines takes PDF.js a few seconds to read.
-    const slow = makeTestPdf(Array.from({ length: 100_000 }, (_, index) => `Line ${index}`));
+    const pdf = slowPdf();
+    const timeLimitMs = 700;
     const started = performance.now();
 
-    await expect(extractPdfText(slow, { timeLimitMs: 50 })).rejects.toBeInstanceOf(PdfTooSlowError);
-    expect(performance.now() - started).toBeLessThan(2000);
+    await expect(extractPdfText(pdf, { timeLimitMs })).rejects.toBeInstanceOf(PdfTooSlowError);
+    // The thread is ended as soon as the time is up, wherever PDF.js is in the page.
+    expect(performance.now() - started).toBeLessThan(timeLimitMs + 1000);
+    expect(allThreadsEnded()).toBe(true);
+  });
+
+  it("gives up on a PDF that needs far more memory than a CV", async () => {
+    memory.limits = { maxOldGenerationSizeMb: 8 };
+
+    await expect(extractPdfText(slowPdf(), { timeLimitMs: 30_000 })).rejects.toBeInstanceOf(PdfOutOfMemoryError);
+    expect(allThreadsEnded()).toBe(true);
+  });
+
+  it("keeps the name of an error from PDF.js, so a password-protected PDF is recognised", async () => {
+    await expect(extractPdfText(makePasswordProtectedTestPdf())).rejects.toMatchObject({ name: "PasswordException" });
+    expect(allThreadsEnded()).toBe(true);
   });
 });
