@@ -101,6 +101,25 @@ describe("recordApplication", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
+  it("adds nothing when Apply in another tab saved the job a moment earlier", async () => {
+    const elsewhere: Application = { id: "c5d6e7f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", jobId, date: "2026-10-22", status: "applied", nextStep: null };
+    const supabase = fakeSupabase(tables, userId);
+    // The other tab's application lands after this press looked for one, so the unique key refuses this insert.
+    createSupabaseServerClient.mockImplementationOnce(async () => ({
+      from: (table: keyof Tables) => ({
+        ...supabase.from(table),
+        insert: async () => {
+          tables.applications.push({ id: elsewhere.id, job_id: jobId, data: elsewhere, user_id: userId });
+          return { error: { code: "23505" } };
+        },
+      }),
+    }));
+
+    expect(await recordApplication(jobId)).toEqual({ ok: true, application: elsewhere, created: false });
+    expect(tables.applications).toHaveLength(1);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("keeps a status the user has already moved on", async () => {
     const interview: Application = { id: "a7e4c2b1-0d3f-4e5a-9b6c-1d2e3f4a5b6c", jobId, date: "2026-10-15", status: "interview", nextStep: "Prepare for Tuesday" };
     tables.applications.push({ id: interview.id, job_id: jobId, data: interview, user_id: userId });
