@@ -55,22 +55,29 @@ describe("privacy page", () => {
     expect(text).toContain("sb-…-auth-token");
     expect(text).toContain("code-verifier");
 
+    // This scans every owner's folders, so it also runs in teammates' PRs. Only Ali edits src/app/privacy (rule 2).
     const keys = new Set(
       sourceFiles(join(process.cwd(), "src")).flatMap((file) =>
-        [...readFileSync(file, "utf8").matchAll(/["'`](cvision\.[a-z0-9.-]*[a-z0-9])/g)].map((match) => match[1]),
+        [...readFileSync(file, "utf8").matchAll(/["'`](cvision\.[A-Za-z0-9._:-]*[A-Za-z0-9])/g)].map(
+          (match) => match[1],
+        ),
       ),
     );
     expect(keys).toContain("cvision.profile");
     for (const key of keys) {
       if (labOnlyKeys.includes(key)) continue;
-      expect(text, `List the browser storage key ${key} on /privacy (src/app/privacy/page.tsx)`).toContain(key);
+      expect(
+        text,
+        `New browser storage key ${key}: ask Ali to list it on /privacy (his PR must merge first; do not edit src/app/privacy)`,
+      ).toContain(key);
     }
   });
 
   it("says how to use the rights in the app and how to complain to the ICO", () => {
-    expect(html).toContain('href="/dashboard"');
+    expect(html).toContain('href="/dashboard/your-data"');
     expect(text).toContain("Download my data");
     expect(text).toContain("Delete my account");
+    expect(text).toContain("To withdraw your consent.");
     expect(html).toContain('href="https://ico.org.uk/make-a-complaint/');
   });
 

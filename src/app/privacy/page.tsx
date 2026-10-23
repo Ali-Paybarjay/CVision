@@ -28,11 +28,14 @@ type SectionId = (typeof contents)[number]["id"];
 
 const link = "font-semibold text-accent hover:underline";
 
+/** Where Download my data and Delete my account are: the Your data page, linked from the dashboard. */
+const yourDataPath = "/dashboard/your-data";
+
 const inShort = [
   "We don’t keep your CV file. We read it, send its text to the AI and discard the file.",
   "Your profile is saved in this browser only, not on our servers.",
   "Your account and the applications you track are stored in London.",
-  "The AI services that read your text don’t keep it.",
+  "The AI services that read your text delete it once the answer is ready, apart from the few exceptions set out below.",
   "No advertising or analytics cookies, and no cookie banner: everything we store on your device is needed for CVision to work.",
   "You can download or delete your data at any time.",
 ];
@@ -157,7 +160,8 @@ const howLong: { what: string; until: string }[] = [
   { what: "Usage and AI use records made while you weren’t signed in", until: "We haven’t set an end date yet." },
   {
     what: "Your profile and interview practice in this browser",
-    until: "Until you delete your account or clear this browser’s data. You can also delete your profile on its own.",
+    until:
+      "Until you sign out, delete your account or clear this browser’s data. You can also delete your profile on its own.",
   },
 ];
 
@@ -191,10 +195,16 @@ const notDeletedStraightAway: { what: string; howLong: string; detail: string }[
       "Usage and AI use records made while you weren’t signed in are kept against a daily code, not your account, so they can’t be found and deleted with your account.",
   },
   {
-    what: "Other browsers and devices",
-    howLong: "Until you clear them",
+    what: "A record that an account was deleted",
+    howLong: "No end date yet",
     detail:
-      "Deleting your account clears CVision’s data from the browser you use. Data saved in other browsers or on other devices stays there until you clear it.",
+      "When you delete your account, we keep one usage record that an account was deleted, with how many records and CV files went. It doesn’t include your email address or account ID.",
+  },
+  {
+    what: "Other browsers and devices",
+    howLong: "Until you sign out there or clear them",
+    detail:
+      "Deleting your account clears CVision’s data from the browser you use. Data saved in other browsers or on other devices stays there until you sign out there or clear it. If you’re still signed in on another device, that sign-in stops working when it expires.",
   },
 ];
 
@@ -209,7 +219,7 @@ const cookies: { name: string; purpose: string; howLong: string }[] = [
     name: "sb-…-auth-token-code-verifier",
     purpose:
       "Set while you sign up, so the link in your confirmation email can finish signing you in. Related cookies end in -flow-…-code-verifier and -flows-code-verifier.",
-    howLong: "Removed when you use the confirmation link in this browser. Otherwise up to 400 days.",
+    howLong: "Usually removed once you confirm your email in this browser. Otherwise it expires after up to 400 days.",
   },
 ];
 
@@ -217,12 +227,13 @@ const browserStorage: { name: string; purpose: string; howLong: string }[] = [
   {
     name: "cvision.profile",
     purpose: "Your profile, the record of your consent, and your follow-up questions and answers.",
-    howLong: "Until you delete your profile or account, or clear this browser’s data.",
+    howLong: "Until you delete your profile, sign out, delete your account or clear this browser’s data.",
   },
   {
     name: "cvision.interview.v1:…",
-    purpose: "Interview practice in progress, one for each job, so you can pick up where you left off.",
-    howLong: "Until you delete your account or clear this browser’s data.",
+    purpose:
+      "Your interview practice for each job, including your answers and feedback, so you can pick up where you left off or see your report again.",
+    howLong: "Until you start that practice again, sign out, delete your account or clear this browser’s data.",
   },
   {
     name: "cvision.storage-check",
@@ -278,11 +289,14 @@ export default function PrivacyPage() {
             <div className="mt-1 flex flex-col gap-2">{item.body}</div>
           </div>
         ))}
-        <p>
-          If you use CVision without signing in, the last two kinds of record are kept against a code instead of an
-          account. The code is made by scrambling your IP address with a secret key and changes every day. We never
-          store your IP address itself.
-        </p>
+        <div>
+          <h3 className="text-lg">If you’re not signed in</h3>
+          <p className="mt-1">
+            If you use CVision without signing in, usage records and AI use records are kept against a code instead of
+            an account. The code is made by scrambling your IP address with a secret key and changes every day. These
+            records never contain your IP address itself, only the daily code.
+          </p>
+        </div>
       </Section>
 
       <Section id="where">
@@ -331,11 +345,11 @@ export default function PrivacyPage() {
           ))}
         </dl>
         <p>
-          When you use Delete my account on your{" "}
-          <Link href="/dashboard" className={link}>
-            dashboard
+          When you use Delete my account on the{" "}
+          <Link href={yourDataPath} className={link}>
+            Your data page
           </Link>
-          , we delete straight away:
+          , which you reach from your dashboard, we sign you out and delete straight away:
         </p>
         <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>your account, with your email address, password and sign-in sessions</li>
@@ -393,9 +407,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <span className="font-semibold">To get a copy of your data and take it elsewhere.</span> Use Download my
-            data on your{" "}
-            <Link href="/dashboard" className={link}>
-              dashboard
+            data on the{" "}
+            <Link href={yourDataPath} className={link}>
+              Your data page
             </Link>
             . Your profile has its own Download my data button on the{" "}
             <Link href="/profile" className={link}>
@@ -408,8 +422,13 @@ export default function PrivacyPage() {
             page, and update your applications on your dashboard.
           </li>
           <li>
-            <span className="font-semibold">To have it deleted.</span> Use Delete my account on your dashboard, or
-            Delete my profile on the Profile page.
+            <span className="font-semibold">To have it deleted.</span> Use Delete my account on the Your data page,
+            or Delete my profile on the Profile page.
+          </li>
+          <li>
+            <span className="font-semibold">To withdraw your consent.</span> You can withdraw your consent to us
+            reading your CV at any time: use Delete my profile on the Profile page. This doesn’t affect what we did
+            before you withdrew it.
           </li>
           <li>
             <span className="font-semibold">To ask us to limit how we use your data, or to object to how we use it.</span>

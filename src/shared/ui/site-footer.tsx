@@ -1,6 +1,6 @@
-import Link from "next/link";
+import { Suspense } from "react";
 import { brand } from "@/shared/brand";
-import { footerItems } from "@/shared/navigation";
+import { FooterNav, FooterNavFallback } from "./footer-nav";
 import { Wordmark } from "./wordmark";
 
 /** The footer on every page: the wordmark, the tagline and the footer links, such as Privacy. */
@@ -12,18 +12,10 @@ export function SiteFooter() {
           <Wordmark className="text-base" /> {brand.tagline}
         </p>
         <nav aria-label="Footer">
-          <ul className="flex flex-wrap gap-x-6">
-            {footerItems.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="inline-flex min-h-11 items-center text-sm font-semibold text-accent underline-offset-4 hover:underline"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {/* With Cache Components, usePathname can suspend on a page whose param is only known at request time. */}
+          <Suspense fallback={<FooterNavFallback />}>
+            <FooterNav />
+          </Suspense>
         </nav>
       </div>
     </footer>
