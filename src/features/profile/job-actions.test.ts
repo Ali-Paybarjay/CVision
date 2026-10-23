@@ -138,4 +138,31 @@ describe("checkJobAction", () => {
       message: "We couldn’t compare this job with your profile. Try again in a moment.",
     });
   });
+
+  it("points a demo report that isn't saved at the sample job the ad was read as, so /tailor can open it", async () => {
+    const emmaJob = personas.emma.jobs[1];
+    getCurrentUser.mockResolvedValue(null);
+    expect(await checkJobAction({ ad: emmaJob.description, url: "", profile: null })).toMatchObject({
+      ok: true,
+      saved: "signed-out",
+      job: { id: emmaJob.id },
+      match: { jobId: emmaJob.id },
+    });
+
+    getCurrentUser.mockResolvedValue(user);
+    isSupabaseConfigured.mockReturnValue(false);
+    expect(await checkJobAction({ ad: emmaJob.description, url: "", profile: null })).toMatchObject({
+      saved: "unavailable",
+      job: { id: emmaJob.id },
+    });
+  });
+
+  it("keeps the saved job's own id, which /tailor reads from the account", async () => {
+    const result = await checkJobAction({ ad, url: "", profile: sara.profile });
+
+    expect(result.ok && result.saved).toBe("saved");
+    if (!result.ok) return;
+    expect(result.job.id).not.toBe(sara.jobs[0].id);
+    expect(saveJobAndMatch).toHaveBeenCalledWith({}, result.job, result.match);
+  });
 });

@@ -15,7 +15,8 @@ export type Requester = AskModelOptions<z.ZodType>["requester"];
 export async function extractProfile(cvText: string, options: { requester?: Requester } = {}): Promise<Profile> {
   const extraction = await askModel({
     feature: "profile-extract",
-    prompt: await loadPrompt("profile-extract", { cv: cvText }),
+    // The CV is data, like a job ad: a <cv> tag inside it must not close the prompt's own section early.
+    prompt: await loadPrompt("profile-extract", { cv: cvText.replace(/<\s*\/?\s*cv\b[^>]*>/gi, "") }),
     schema: CvExtractionSchema,
     sample: sampleExtraction(cvText),
     // Pure data extraction: the brand voice would only invite rewording.

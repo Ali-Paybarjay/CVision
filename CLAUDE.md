@@ -20,6 +20,7 @@ Ask the user which of the four builders they are if it is not clear, then work o
 ## Language
 
 - **Persian (Farsi) for the team.** Everything teammates read on GitHub is written in Persian: issue and PR titles and descriptions, comments, review comments, and commit messages. Reply to the user in Persian too.
+- **PR titles:** `#<PR number> · <author> · <goal>`, where the goal is one short, plain Persian sentence on what the PR does for the app, e.g. `#27 · شایان · رزومه را می‌خواند، Profile می‌سازد و پرسش تکمیلی می‌پرسد`. When you open a PR, write only the goal as its title: the PR title workflow (`.github/workflows/pr-title.yml`) adds the number and the author's name, and corrects them if they are wrong. Nobody types them by hand.
 - **English for the product and the code.** Code, identifiers, file, folder and branch names (rule 12), prompts, and everything users see in the app stay in English; app copy and AI output are UK English, as the brand requires.
 
 ## Who owns what
@@ -46,12 +47,13 @@ Ask the user which of the four builders they are if it is not clear, then work o
 10. **Tests never call the real model.** Prompt evals run with a separate command.
 11. **CI stays lean:** GitHub Actions runs only on push to `main`, pull requests to `main`, and manual runs (`workflow_dispatch`). End-to-end tests run only on `main` or on PRs labelled `e2e`. A new run cancels the previous one (`concurrency`). Changes that touch only documentation do not run CI.
 12. **Every task has a GitHub Issue.** Name the branch `<area>/<issue number>-<short description>`, where area is `foundation`, `profile`, `tailor`, `cvcheck` or `interview` (e.g. `profile/3-cv-to-profile`), and put `Closes #<issue number>` in the PR description (or `Part of #<n>` when the PR finishes only part of it).
+13. **One owner per PR.** Every PR has one owner, its author, and sits on the team board, so everyone can see who is finishing what. The PR title workflow makes the author its assignee if nobody is. When a piece of work spans more than one person, each person opens and finishes only their own PR, linked to the same card (rule 12); nobody finishes or pushes to someone else's PR.
 
 ## Shared building blocks
 
 - **Contracts:** `import { ProfileSchema, type Profile } from "@/shared/contracts"`.
 - **Sample data:** `import { personas } from "@/shared/sample-data"` gives Sara, Reza, Emma and Daniel, each with a Profile, two Jobs and a MatchResult.
-- **AI:** `askModel({ feature, prompt, schema, sample })` from `@/shared/ai`, with `loadPrompt("profile-extract", { cv })` to read `prompts/profile-extract.md` and fill its `{{cv}}` placeholder. In mock mode it returns `sample`; in live mode it asks Claude Haiku 5.5 and checks the answer against `schema`. It adds `prompts/_voice.md` unless you pass `voice: false`.
+- **AI:** `askModel({ feature, prompt, schema, sample })` from `@/shared/ai`, with `loadPrompt("profile-extract", { cv })` to read `prompts/profile-extract.md` and fill its `{{cv}}` placeholder. In mock mode it returns `sample`; in live mode it asks Claude Haiku 5.5 and checks the answer against `schema`. It adds `prompts/_voice.md` unless you pass `voice: false`. Pass `onUsage` to get the real tokens and cost of each live request (a retry counts as a request of its own).
 - **UI kit:** `import { Page, Card, Button, ButtonLink, Field, Input, Textarea, Notice, CvPaper, FitLine } from "@/shared/ui"`. See them all at `/ui-kit`. One `variant="primary"` (Coral) button per page at most. Show the CV inside `CvPaper` (it stays light in dark mode) and mark tailored lines with `FitLine`.
 - **Signed-in user:** `getCurrentUser()` from `@/features/account/current-user` (null when signed out). It reads cookies, so call it inside a component wrapped in `<Suspense>`.
 - **Database:** `createSupabaseServerClient()` from `@/shared/supabase/server` (or `createSupabaseBrowserClient()` in Client Components) acts as the signed-in user, and row-level security limits them to their own rows. Tables: `profiles`, `jobs`, `match_results`, `tailoring_changes`, `interview_sessions`, `applications`, each with `user_id` and the contract object in `data`. Schema changes go in a new file in `supabase/migrations` (create it with `npx supabase migration new <name>`) and need the team's agreement. Both helpers return null until Supabase is connected, so keep a sample-data path.

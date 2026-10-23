@@ -23,6 +23,9 @@ export type UsageRecord = {
   ok: boolean;
 };
 
+/** What one request to the model used, as askModel's onUsage reports it. Thinking tokens are part of outputTokens. */
+export type ModelUsage = Omit<UsageRecord, "requester" | "feature">;
+
 type CountFilter = { userId: string } | { anonymousKey: string } | { allAnonymous: true };
 
 export interface UsageStore {

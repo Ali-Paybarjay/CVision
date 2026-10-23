@@ -105,6 +105,19 @@ describe("MatchReport", () => {
     const html = text(report({ demo: { sampleProfile: "Sara Khan" }, saved: "signed-out" })).toLowerCase();
     for (const phrase of brand.bannedPhrases) expect(html).not.toContain(phrase.toLowerCase());
   });
+
+  it("offers tailoring only for a job /tailor can open: a saved one, or the sample job in the demo", () => {
+    const tailor = /href="\/tailor\?job=/;
+    const demo = { sampleProfile: null };
+
+    expect(report({ saved: "saved" })).toMatch(tailor);
+    expect(report({ saved: "signed-out", demo })).toMatch(tailor);
+    expect(report({ saved: "unavailable", demo })).toMatch(tailor);
+    expect(report({ saved: "failed" })).not.toMatch(tailor);
+    expect(report({ saved: "failed", demo })).not.toMatch(tailor);
+    expect(report({ saved: "unavailable" })).not.toMatch(tailor);
+    expect(text(report({ saved: "failed" }))).toContain("To tailor your CV for this job, check it again in a minute.");
+  });
 });
 
 describe("JobForm", () => {
