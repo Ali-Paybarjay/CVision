@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InterviewSessionSchema as SharedInterviewSessionSchema } from "@/shared/contracts";
 import { stageConfig } from "./config";
-import { nextStep, parseSession, serialiseSession } from "./engine/session";
+import { isNewerSession, nextStep, parseSession, serialiseSession } from "./engine/session";
 import { fixtures } from "./fixtures";
 import { runMockSession } from "./test-support";
 
@@ -54,5 +54,17 @@ describe.each(fixtures)("a full mock session for $id", (fixture) => {
 describe("resuming a saved session", () => {
   it("rejects a saved session that does not match the contract", () => {
     expect(() => parseSession(JSON.stringify({ id: "x" }))).toThrow();
+  });
+});
+
+describe("two copies of a session from different devices", () => {
+  it("keeps the one that went further, or the later practice", async () => {
+    const finished = await runMockSession(fixtures[0]);
+    const earlier = { ...finished, turns: finished.turns?.slice(0, 4), evaluations: [], report: undefined };
+    expect(isNewerSession(finished, earlier)).toBe(true);
+    expect(isNewerSession(earlier, finished)).toBe(false);
+    expect(isNewerSession(finished, finished)).toBe(false);
+    const later = { ...earlier, id: "another", startedAt: "2026-10-23T09:00:00.000Z" };
+    expect(isNewerSession(later, finished)).toBe(true);
   });
 });

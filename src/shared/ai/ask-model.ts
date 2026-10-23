@@ -1,10 +1,26 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { io } from "next/cache";
 import type { z } from "zod";
-import { DEFAULT_MODEL, getAiMode } from "./config";
+import {
+  type AiProvider,
+  DEFAULT_MODEL,
+  getAiMode,
+  getAiProvider,
+  OPENROUTER_BASE_URL,
+  openRouterAppHeaders,
+  toOpenRouterModel,
+} from "./config";
 import { loadVoice } from "./prompts";
-import { assertWithinDailyLimit, estimateCostUsd, getUsageStore, LimitReachedError, type Requester } from "./usage";
+import {
+  assertWithinDailyLimit,
+  estimateCostUsd,
+  getUsageStore,
+  LimitReachedError,
+  type ModelUsage,
+  type Requester,
+} from "./usage";
 
 export type AskModelOptions<S extends z.ZodType> = {
   /** Who is asking, for usage logs and daily limits, e.g. "profile-extract" or "cv-check". */
@@ -23,6 +39,11 @@ export type AskModelOptions<S extends z.ZodType> = {
   model?: string;
   effort?: "low" | "medium" | "high";
   maxTokens?: number;
+  /**
+   * Live mode only: called after each request to the model, a retry included, with the tokens it really used.
+   * askModel waits for it, so an async callback that writes somewhere should be quick.
+   */
+  onUsage?: (usage: ModelUsage) => void | Promise<void>;
 };
 
 export class AskModelError extends Error {
@@ -38,7 +59,18 @@ export class AskModelError extends Error {
 const baseInstructions =
   "Answer only with JSON that matches the required format. Use only facts from the input; if something is unknown, leave it empty rather than guessing.";
 
-let client: Anthropic | undefined;
+const clients: Partial<Record<AiProvider, Anthropic>> = {};
+
+function createClient(provider: AiProvider): Anthropic {
+  if (provider === "anthropic") return new Anthropic();
+  // OpenRouter speaks the same Messages API, but wants its key as a Bearer token rather than x-api-key.
+  return new Anthropic({
+    baseURL: OPENROUTER_BASE_URL,
+    apiKey: null,
+    authToken: process.env.OPENROUTER_API_KEY,
+    defaultHeaders: openRouterAppHeaders(),
+  });
+}
 
 /**
  * The one way to ask a language model for anything in CVision.
@@ -51,17 +83,23 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
     return options.schema.parse(options.sample);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new AskModelError("AI_MODE is live but ANTHROPIC_API_KEY is not set.", "no-api-key");
+  const provider = getAiProvider();
+  if (!provider) {
+    throw new AskModelError("AI_MODE is live but neither ANTHROPIC_API_KEY nor OPENROUTER_API_KEY is set.", "no-api-key");
   }
+  // A live request reads the clock (daily limits) and spends tokens: never inside a prerender or prefetch.
+  await io();
   try {
     await assertWithinDailyLimit(options.requester);
   } catch (error) {
     if (error instanceof LimitReachedError) throw new AskModelError(error.message, "limit-reached");
+    // Without the usage log there is no daily limit, so nothing is sent; log why, since callers may not.
+    console.error("askModel: could not check the daily limit", error);
     throw error;
   }
-  client ??= new Anthropic();
+  const client = (clients[provider] ??= createClient(provider));
 
+  // Usage and cost are logged under Anthropic's model name, whichever provider serves it.
   const model = options.model ?? DEFAULT_MODEL;
   const system = options.voice === false ? baseInstructions : `${baseInstructions}\n\n${await loadVoice()}`;
   const format = zodOutputFormat(options.schema);
@@ -71,7 +109,7 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
   for (let attempt = 1; attempt <= 2; attempt++) {
     // API errors (limits, outages) are retried by the SDK itself and reach the caller unchanged.
     const response = await client.messages.create({
-      model,
+      model: provider === "openrouter" ? toOpenRouterModel(model) : model,
       max_tokens: options.maxTokens ?? 16000,
       system,
       messages: [{ role: "user", content: prompt }],
@@ -120,18 +158,22 @@ async function logUsage(
   usage: Anthropic.Usage,
   ok: boolean,
 ): Promise<void> {
+  const used: ModelUsage = {
+    model,
+    inputTokens: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+    outputTokens: usage.output_tokens,
+    costUsd: estimateCostUsd(model, usage),
+    ok,
+  };
+  // A logging failure must never break the user's request, and neither must the caller's onUsage.
   try {
-    await getUsageStore().record({
-      requester: options.requester,
-      feature: options.feature,
-      model,
-      inputTokens: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
-      outputTokens: usage.output_tokens,
-      costUsd: estimateCostUsd(model, usage),
-      ok,
-    });
+    await getUsageStore().record({ requester: options.requester, feature: options.feature, ...used });
   } catch (error) {
-    // A logging failure must never break the user's request.
     console.error("askModel: could not record usage", error);
+  }
+  try {
+    await options.onUsage?.(used);
+  } catch (error) {
+    console.error("askModel: onUsage failed", error);
   }
 }
