@@ -52,6 +52,9 @@ describe("profile screens", () => {
     expect(text(html)).toContain(cvConsent.label);
     for (const point of consentPoints("account")) expect(text(html)).toContain(point);
     expect(text(html)).toContain("we save it and your CV file to your CVision account");
+    expect(text(html)).toContain("through OpenRouter on Google Cloud or Amazon Web Services");
+    expect(text(html)).not.toContain("don’t keep");
+    expect(html).toMatch(/<a href="\/privacy"[^>]*>Privacy page<\/a>/);
     expect(html).toMatch(new RegExp(`<input type="checkbox"[^>]*name="consent" value="${cvConsent.version}"`));
     expect(html).not.toMatch(/name="consent"[^>]*checked/);
     expect(html).toContain('accept=".pdf,.docx');

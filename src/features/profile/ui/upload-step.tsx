@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, cn, ErrorIcon, Field, Notice } from "@/shared/ui";
-import { consentPoints, cvConsent, type ConsentRecord, type ProfileStorageKind } from "../consent";
+import { consentPoints, cvConsent, privacyPage, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
 import { Steps } from "./steps";
@@ -107,7 +107,7 @@ export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtra
             <legend className="px-1 text-sm font-semibold">Before we read your CV</legend>
             <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-text-muted">
               {consentPoints(storage).map((point) => (
-                <li key={point}>{point}</li>
+                <li key={point}>{linkPrivacyPage(point)}</li>
               ))}
             </ul>
             <label className="mt-4 flex cursor-pointer items-start gap-3">
@@ -152,6 +152,21 @@ export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtra
         </form>
       </Card>
     </section>
+  );
+}
+
+/** Shows the Privacy page's name in a consent point as a link to that page. */
+function linkPrivacyPage(point: string): React.ReactNode {
+  const at = point.indexOf(privacyPage.name);
+  if (at === -1) return point;
+  return (
+    <>
+      {point.slice(0, at)}
+      <Link href={privacyPage.href} className="font-semibold text-accent hover:underline">
+        {privacyPage.name}
+      </Link>
+      {point.slice(at + privacyPage.name.length)}
+    </>
   );
 }
 
