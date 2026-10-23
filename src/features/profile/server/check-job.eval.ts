@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { getAiProvider } from "@/shared/ai";
 import { brand } from "@/shared/brand";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { matchJob, parseJob } from "./check-job";
 
 // Prompt evals for prompts/profile-job.md and prompts/profile-match.md: real requests to the model, so they cost money.
-// Run with `npm run eval` (needs ANTHROPIC_API_KEY).
+// Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY).
 
 /** Requirements each persona clearly lacks: the match must never list them as strengths (Nothing invented). */
 const neverMet: Record<PersonaName, [RegExp[], RegExp[]]> = {
@@ -42,7 +43,7 @@ function expectOnBrand(match: MatchResult) {
   expect(match.reasoning).not.toMatch(/\d+\s*(%|percent|out of 100|\/\s*100)/i);
 }
 
-describe.skipIf(!process.env.ANTHROPIC_API_KEY)("profile-job and profile-match on the sample ads", () => {
+describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample ads", () => {
   it.each(cases)("$name, job $number ($title)", async ({ name, number, job: expected, neverMet: lacking }) => {
     const job = await parseJob(expected.description, { url: null });
 

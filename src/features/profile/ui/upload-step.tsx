@@ -174,11 +174,24 @@ export function SignInNotice({ title = "Sign in to upload your CV" }: { title?: 
   );
 }
 
-async function uploadCv(form: FormData): Promise<ExtractResponse> {
+/**
+ * Sends the CV to POST /profile/extract. Never throws: a lost connection, and an answer that isn't ours (the host
+ * stopping a request that ran out of time, for example), each come back as a message the user can act on.
+ */
+export async function uploadCv(form: FormData): Promise<ExtractResponse> {
+  let response: Response;
   try {
-    const response = await fetch("/profile/extract", { method: "POST", body: form });
-    return (await response.json()) as ExtractResponse;
+    response = await fetch("/profile/extract", { method: "POST", body: form });
   } catch {
     return { ok: false, code: "ai-unavailable", message: "We couldn’t reach CVision. Check your connection and try again." };
   }
+  const body: unknown = await response.json().catch(() => null);
+  if (body !== null && typeof body === "object" && "ok" in body && typeof body.ok === "boolean") {
+    return body as ExtractResponse;
+  }
+  if (response.status === 413) return { ok: false, code: "too-large", message: cvFileMessages.tooLarge };
+  if (response.status === 504) {
+    return { ok: false, code: "ai-unavailable", message: "Reading your CV took too long. Try again in a minute." };
+  }
+  return { ok: false, code: "ai-unavailable", message: "Something went wrong on our side. Try again in a minute." };
 }

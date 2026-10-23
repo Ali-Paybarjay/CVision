@@ -99,6 +99,86 @@ export function brandPhraseHits(text: string): string[] {
   return brand.bannedPhrases.filter((phrase) => lower.includes(phrase.toLowerCase()));
 }
 
+/**
+ * US spellings that break the voice's UK English rule (prompts/_voice.md). Whole words only, and only words
+ * with no UK meaning: "program" (software) and "license" (the verb) are left out on purpose.
+ */
+export const usSpellings = [
+  "color",
+  "colors",
+  "organization",
+  "organizations",
+  "organize",
+  "organized",
+  "analyze",
+  "analyzed",
+  "analyzing",
+  "behavior",
+  "behaviors",
+  "favor",
+  "favorite",
+  "center",
+  "centers",
+  "optimize",
+  "optimized",
+  "prioritize",
+  "prioritized",
+  "summarize",
+  "summarized",
+  "recognize",
+  "recognized",
+  "practicing",
+  "modeling",
+  "labor",
+  "résumé",
+] as const;
+
+/** Praise or advice that fits any answer. The voice asks for feedback tied to this answer and this job. */
+export const genericFeedbackPhrases = [
+  "great answer",
+  "good answer",
+  "excellent answer",
+  "well done",
+  "good job",
+  "nice job",
+  "great job",
+  "keep it up",
+  "keep practising",
+  "keep practicing",
+  "practise more",
+  "practice more",
+  "be more confident",
+] as const;
+
+function wholePhrase(term: string): RegExp {
+  return new RegExp(`(?<!\\p{L})${term.replace(/ /g, "\\s+")}(?!\\p{L})`, "iu");
+}
+
+const usSpellingPatterns = usSpellings.map((term) => [term, wholePhrase(term)] as const);
+const genericFeedbackPatterns = genericFeedbackPhrases.map((term) => [term, wholePhrase(term)] as const);
+
+/**
+ * The US spellings that appear in a text, as whole words. Feedback quotes the candidate, the job title and the
+ * question, so a spelling inside double quotes, or one that `quotable` also uses, is the source's, not the model's.
+ */
+export function usSpellingHits(text: string, quotable = ""): string[] {
+  const own = text.replace(/"[^"\n]*"|“[^”\n]*”/g, " ");
+  return usSpellingPatterns.filter(([, pattern]) => pattern.test(own) && !pattern.test(quotable)).map(([term]) => term);
+}
+
+/** The generic praise or advice phrases that appear in a text. */
+export function genericFeedbackHits(text: string): string[] {
+  return genericFeedbackPatterns.filter(([, pattern]) => pattern.test(text)).map(([term]) => term);
+}
+
+/** Sentences end at . ! or ? before a capital letter, so "e.g. vibration" or "etc. and" do not end one. */
+function sentenceCount(text: string): number {
+  return text
+    .trim()
+    .split(/(?<!\b(?:e\.g|i\.e|etc|vs|approx|incl|cf)\.)(?<=[.!?])\s+(?=["“(]?\p{Lu})/u)
+    .filter(Boolean).length;
+}
+
 /** Exactly one question mark, at the end. */
 export function isSingleQuestion(text: string): boolean {
   const trimmed = text.trim();
@@ -112,8 +192,7 @@ export function isSingleQuestion(text: string): boolean {
 export function isCleanFollowUp(text: string): boolean {
   const trimmed = text.trim();
   if (!isSingleQuestion(trimmed) || countWords(trimmed) > limits.followUpMaxWords || trimmed.includes("\n")) return false;
-  const sentences = trimmed.split(/(?<=[.!?])\s+/).filter(Boolean);
-  if (sentences.length > 2) return false;
+  if (sentenceCount(trimmed) > 2) return false;
   return !/\b(the candidate|candidate's|I should|I will ask|I'll ask|let me|planned follow-up|follow-up question|gap type)\b/i.test(trimmed);
 }
 
@@ -345,6 +424,8 @@ export type EvaluationContext = {
   mainAnswer: string;
   followUpAnswer: string | null;
   followUpAsked: boolean;
+  /** Other text the feedback may quote: the role title and the question. */
+  quotable?: string;
 };
 
 export function evaluationProblems(output: EvaluationDraft, context: EvaluationContext): Problem[] {
@@ -383,6 +464,14 @@ export function evaluationProblems(output: EvaluationDraft, context: EvaluationC
     ...Object.values(output.justifications),
   ].join("\n");
   if (brandPhraseHits(feedback).length) problems.push({ path: ["strengths"], message: "Feedback uses a phrase the brand bans." });
+  const quotable = [context.mainAnswer, context.followUpAnswer ?? "", context.quotable ?? ""].join("\n");
+  if (usSpellingHits(feedback, quotable).length) problems.push({ path: ["strengths"], message: "Use UK spelling in the feedback." });
+  if (genericFeedbackHits([...output.strengths, ...output.weaknesses, output.improvement].join("\n")).length) {
+    problems.push({ path: ["strengths"], message: "Feedback must be specific to this answer: no generic praise or advice." });
+  }
+  if (sentenceCount(output.improvement) > 2 || countWords(output.improvement) > limits.improvementMaxWords) {
+    problems.push({ path: ["improvement"], message: `Give one specific action in at most 2 sentences and ${limits.improvementMaxWords} words.` });
+  }
   return problems;
 }
 
@@ -393,7 +482,14 @@ export type ReportDraft = {
   uncertaintyNotes: { questionId: string; note: string }[];
 };
 
-export function reportProblems(output: ReportDraft, context: { levelGap: boolean; lowConfidenceIds: string[] }): Problem[] {
+export type ReportContext = {
+  levelGap: boolean;
+  lowConfidenceIds: string[];
+  /** Text the report may quote: the role, the questions and the candidate's answers. */
+  quotable?: string;
+};
+
+export function reportProblems(output: ReportDraft, context: ReportContext): Problem[] {
   const problems: Problem[] = [];
   if (output.priorities.length !== 3) problems.push({ path: ["priorities"], message: "Give exactly 3 priorities." });
   if (context.levelGap && !output.levelGapNote) problems.push({ path: ["levelGapNote"], message: "Write the level gap note." });
@@ -404,5 +500,13 @@ export function reportProblems(output: ReportDraft, context: { levelGap: boolean
   }
   const text = [output.verdict, output.levelGapNote ?? "", ...output.priorities.flatMap((p) => [p.title, p.detail]), ...output.uncertaintyNotes.map((n) => n.note)].join("\n");
   if (brandPhraseHits(text).length) problems.push({ path: ["verdict"], message: "The report uses a phrase the brand bans." });
+  if (usSpellingHits(text, context.quotable).length) problems.push({ path: ["verdict"], message: "Use UK spelling in the report." });
+  if (genericFeedbackHits(output.priorities.flatMap((p) => [p.title, p.detail]).join("\n")).length) {
+    problems.push({ path: ["priorities"], message: "Priorities must be specific to this job and these answers: no generic advice." });
+  }
+  // The voice never puts "redundant" in a heading, and each priority title is shown as one.
+  if (output.priorities.some((p) => /redundan/i.test(p.title))) {
+    problems.push({ path: ["priorities"], message: 'Never use "redundant" in a priority title.' });
+  }
   return problems;
 }

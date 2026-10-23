@@ -12,9 +12,10 @@ import { track } from "@/shared/analytics/track";
 
 /**
  * Reading the file takes a second or two, and a slow PDF is stopped after 15 seconds (see pdf.ts).
- * In live mode the model can take half a minute on a long CV, and twice that if it has to answer again.
+ * In live mode the model can take half a minute on a long CV, and twice that if it has to answer again,
+ * so 60 seconds could stop a request that was about to succeed.
  */
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /** The file plus the form around it. */
 const MAX_REQUEST_BYTES = MAX_CV_BYTES + 64 * 1024;

@@ -20,6 +20,7 @@ import {
   type EvaluationContext,
   type Problem,
   type QuestionSetContext,
+  type ReportContext,
 } from "./checks";
 import { IdSchema } from "@/shared/contracts";
 import { limits } from "../config";
@@ -152,6 +153,6 @@ export const ReportOutputSchema = z.object({
 });
 export type ReportOutput = z.infer<typeof ReportOutputSchema>;
 
-export function reportOutputSchema(context: { levelGap: boolean; lowConfidenceIds: string[] }) {
+export function reportOutputSchema(context: ReportContext) {
   return withProblems(ReportOutputSchema, (value) => reportProblems(value, context));
 }
