@@ -3,12 +3,11 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { getAiMode, type Requester } from "@/shared/ai";
-import { track } from "@/shared/analytics/track";
 import { getCurrentUser } from "@/features/account/current-user";
 import { applyReport } from "@/features/interview/engine/session";
 import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, writeReport } from "@/features/interview/engine/stages";
 import { interviewInputsFor } from "@/features/interview/engine/text";
-import { sessionCompletedEvent, sessionCompletedProperties } from "@/features/interview/server/completion-event";
+import { trackSessionCompleted } from "@/features/interview/server/completion-event";
 import { getMyJob, getMyProfile } from "@/features/interview/server/my-data";
 import { saveInterviewSession } from "@/features/interview/server/session-store";
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
@@ -39,19 +38,24 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "This practice session belongs to another job." }, { status: 400 });
   }
 
-  // Only the user's own job and Profile: another user's job id finds nothing.
-  const [job, profile] = await Promise.all([getMyJob(body.jobId), getMyProfile()]);
-  if (!job || !profile) return Response.json({ error: "We could not find this job or your Profile." }, { status: 404 });
-  const inputs = interviewInputsFor(job, profile);
+  // Only the user's own job: another user's job id finds nothing.
+  const job = await getMyJob(body.jobId);
+  if (!job) return Response.json({ error: "We could not find this job." }, { status: 404 });
+  // The job ad and CV are read only by the first three steps; later steps work from the session.
+  const inputs = async () => {
+    const profile = await getMyProfile();
+    if (!profile) throw new MissingProfileError();
+    return interviewInputsFor(job, profile);
+  };
 
   try {
     switch (body.step) {
       case "analyse":
-        return Response.json({ session: await analyseStep(inputs, { id: body.id, startedAt: body.startedAt, requester }) });
+        return Response.json({ session: await analyseStep(await inputs(), { id: body.id, startedAt: body.startedAt, requester }) });
       case "generate":
-        return Response.json({ session: await generateStep(body.session, inputs, { requester }) });
+        return Response.json({ session: await generateStep(body.session, await inputs(), { requester }) });
       case "review":
-        return Response.json({ session: await reviewStep(body.session, inputs, { requester }) });
+        return Response.json({ session: await reviewStep(body.session, await inputs(), { requester }) });
       case "follow-up":
         return Response.json(await decideFollowUp(body.session, body.questionId, { requester }));
       case "evaluate":
@@ -59,7 +63,8 @@ export async function POST(request: Request): Promise<Response> {
       case "report": {
         const result = await writeReport(body.session, { requester });
         const completed = applyReport(body.session, result.report);
-        after(() => track(sessionCompletedEvent, sessionCompletedProperties(completed, result.report), user ? { userId: user.id } : undefined));
+        // Only signed-in practice counts in the usage funnel (#44); mock mode without an account is a demo.
+        if (user) after(() => trackSessionCompleted(completed, result.report, user.id));
         return Response.json(result);
       }
       case "save":
@@ -67,6 +72,9 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json(await saveInterviewSession(body.session));
     }
   } catch (error) {
+    if (error instanceof MissingProfileError) return Response.json({ error: "We could not find your Profile." }, { status: 404 });
     return stepFailed("interview", body.step, error);
   }
 }
+
+class MissingProfileError extends Error {}
