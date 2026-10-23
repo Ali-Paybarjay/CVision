@@ -93,6 +93,8 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
     await assertWithinDailyLimit(options.requester);
   } catch (error) {
     if (error instanceof LimitReachedError) throw new AskModelError(error.message, "limit-reached");
+    // Without the usage log there is no daily limit, so nothing is sent; log why, since callers may not.
+    console.error("askModel: could not check the daily limit", error);
     throw error;
   }
   const client = (clients[provider] ??= createClient(provider));
