@@ -98,10 +98,15 @@ export async function checkJobAction(input: { ad: unknown; url: unknown; profile
     ),
   );
 
+  // A job that isn't kept (a signed-out demo visitor, or no accounts) can only be tailored from the sample data,
+  // so in the demo the report points at the sample job this ad was read as, not at an id nothing knows.
+  const noAccount = saved === "signed-out" || saved === "unavailable";
+  const id = mode === "mock" && noAccount ? sampleJobFor(ad.text).job.id : job.id;
+
   return {
     ok: true,
-    job,
-    match,
+    job: { ...job, id },
+    match: { ...match, jobId: id },
     saved,
     demo: mode === "mock" ? { sampleProfile: profile ? null : matchedProfile.fullName } : null,
   };

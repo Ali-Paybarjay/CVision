@@ -23,6 +23,9 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
   const hasRequirements = match.strengths.length + match.gaps.length > 0;
   const essentialGaps = match.gaps.filter((gap) => gap.importance === "essential");
   const desirableGaps = match.gaps.filter((gap) => gap.importance === "desirable");
+  // /tailor reads the job from the user's account, or in the demo from the sample data (see checkJobAction).
+  // A job that wasn't saved isn't in either, so the button would open a different job.
+  const canTailor = saved === "saved" || (demo !== null && saved !== "failed");
 
   useEffect(() => {
     if (focusHeading) headingRef.current?.focus();
@@ -108,14 +111,17 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
       {saved === "signed-out" && <SignInNotice title="Sign in to keep this job" />}
       {saved === "failed" && (
         <Notice tone="warning" title="This job isn’t saved to your account">
-          We couldn’t save it just now. Your report is still here; check the job again later to save it.
+          We couldn’t save it just now. Your report is still here. To tailor your CV for this job, check it again in a
+          minute.
         </Notice>
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <ButtonLink href={`/tailor?job=${encodeURIComponent(job.id)}`} variant="primary">
-          Tailor my CV for this job
-        </ButtonLink>
+        {canTailor && (
+          <ButtonLink href={`/tailor?job=${encodeURIComponent(job.id)}`} variant="primary">
+            Tailor my CV for this job
+          </ButtonLink>
+        )}
         <Button onClick={onCheckAnother}>Check another job</Button>
         {job.url && (
           <a
