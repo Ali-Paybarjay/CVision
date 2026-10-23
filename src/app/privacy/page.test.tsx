@@ -51,9 +51,17 @@ describe("privacy page", () => {
     expect(text).toContain("in the EU or the US");
   });
 
+  // Since #94 the approved profile and its CV file are saved to the account (src/features/profile/server/profile-account.ts).
+  it("says the approved profile and CV file are kept in the account, not that the file is discarded", () => {
+    expect(text).toContain("we save it and the CV file you uploaded (PDF or Word) to your account");
+    expect(text).not.toContain("We don’t keep your CV file");
+    expect(text).not.toContain("saved in this browser only");
+  });
+
   it("lists every cookie and every browser storage key the app uses", () => {
     expect(text).toContain("sb-…-auth-token");
     expect(text).toContain("code-verifier");
+    expect(text).toContain("cvision-account-deleted");
 
     // This scans every owner's folders, so it also runs in teammates' PRs. Only Ali edits src/app/privacy (rule 2).
     const keys = new Set(

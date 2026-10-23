@@ -32,9 +32,8 @@ const link = "font-semibold text-accent hover:underline";
 const yourDataPath = "/dashboard/your-data";
 
 const inShort = [
-  "We don’t keep your CV file. We read it, send its text to the AI and discard the file.",
-  "Your profile is saved in this browser only, not on our servers.",
-  "Your account and the applications you track are stored in London.",
+  "We save your profile and the CV file you uploaded to your account, and only once you’ve approved your profile.",
+  "Your account and everything saved with it, your CV file included, are stored in London.",
   "The AI services that read your text delete it once the answer is ready, apart from the few exceptions set out below.",
   "No advertising or analytics cookies, and no cookie banner: everything we store on your device is needed for CVision to work.",
   "You can download or delete your data at any time.",
@@ -59,14 +58,15 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          When you upload your CV, our server reads the file, sends its text to the AI to build your profile, and then
-          discards the file. We don’t keep your CV file.
+          When you upload your CV, our server reads the file and sends its text to the AI to build your profile.
+          Nothing is saved at this point: you check and approve every item first, and if you stop before approving, we
+          don’t keep the file.
         </p>
         <p>
-          We read your CV only with your explicit consent, which you give when you upload it. You check and approve
-          every item of your profile before it’s saved, and for now it’s saved in this browser only, not on our
-          servers.
+          When you approve your profile, we save it and the CV file you uploaded (PDF or Word) to your account. You need
+          to be signed in to build a profile. If you upload a new CV later, the new file replaces the old one.
         </p>
+        <p>We read your CV only with your explicit consent, which you give when you upload it.</p>
       </>
     ),
   },
@@ -83,9 +83,9 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     title: "Jobs and interview practice",
     body: (
       <p>
-        When you save a job ad to your account, we keep it with your account, together with its match result, the CV
-        changes suggested for it and your interview practice for it. Interview practice is also saved in this browser,
-        so you can pick up where you left off.
+        When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
+        match result, the CV changes suggested for it and your interview practice for it. Interview practice is also
+        saved in this browser, so you can pick up where you left off.
       </p>
     ),
   },
@@ -155,13 +155,16 @@ const services: { name: string; body: React.ReactNode }[] = [
 ];
 
 const howLong: { what: string; until: string }[] = [
-  { what: "Your account and everything saved with it", until: "Until you delete your account." },
+  {
+    what: "Your account and everything saved with it, your profile and CV file included",
+    until:
+      "Until you delete your account. You can also delete your profile and CV file on their own, on the Profile page.",
+  },
   { what: "Usage and AI use records linked to your account", until: "Until you delete your account." },
   { what: "Usage and AI use records made while you weren’t signed in", until: "We haven’t set an end date yet." },
   {
-    what: "Your profile and interview practice in this browser",
-    until:
-      "Until you sign out, delete your account or clear this browser’s data. You can also delete your profile on its own.",
+    what: "Interview practice in this browser",
+    until: "Until you sign out, delete your account or clear this browser’s data.",
   },
 ];
 
@@ -221,13 +224,20 @@ const cookies: { name: string; purpose: string; howLong: string }[] = [
       "Set while you sign up, so the link in your confirmation email can finish signing you in. Related cookies end in -flow-…-code-verifier and -flows-code-verifier.",
     howLong: "Usually removed once you confirm your email in this browser. Otherwise it expires after up to 400 days.",
   },
+  {
+    name: "cvision-account-deleted",
+    purpose:
+      "Set when you delete your account, so the confirmation page can clear CVision’s data from this browser. It holds nothing about you.",
+    howLong: "2 minutes.",
+  },
 ];
 
 const browserStorage: { name: string; purpose: string; howLong: string }[] = [
   {
     name: "cvision.profile",
-    purpose: "Your profile, the record of your consent, and your follow-up questions and answers.",
-    howLong: "Until you delete your profile, sign out, delete your account or clear this browser’s data.",
+    purpose:
+      "A copy of your profile and the record of your consent, from before profiles were saved to accounts. We remove it when you save your profile to your account.",
+    howLong: "Until you save your profile to your account, sign out, delete your account or clear this browser’s data.",
   },
   {
     name: "cvision.interview.v1:…",
@@ -411,11 +421,11 @@ export default function PrivacyPage() {
             <Link href={yourDataPath} className={link}>
               Your data page
             </Link>
-            . Your profile has its own Download my data button on the{" "}
+            . Your profile also has its own Download my data button on the{" "}
             <Link href="/profile" className={link}>
               Profile
             </Link>{" "}
-            page, because it’s saved in this browser.
+            page.
           </li>
           <li>
             <span className="font-semibold">To have it corrected.</span> Check and edit your profile on the Profile
@@ -423,12 +433,12 @@ export default function PrivacyPage() {
           </li>
           <li>
             <span className="font-semibold">To have it deleted.</span> Use Delete my account on the Your data page,
-            or Delete my profile on the Profile page.
+            or Delete my profile on the Profile page to delete your profile and CV file on their own.
           </li>
           <li>
             <span className="font-semibold">To withdraw your consent.</span> You can withdraw your consent to us
-            reading your CV at any time: use Delete my profile on the Profile page. This doesn’t affect what we did
-            before you withdrew it.
+            reading your CV at any time: use Delete my profile on the Profile page, which deletes your profile and your
+            CV file. This doesn’t affect what we did before you withdrew it.
           </li>
           <li>
             <span className="font-semibold">To ask us to limit how we use your data, or to object to how we use it.</span>
