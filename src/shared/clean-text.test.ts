@@ -38,7 +38,7 @@ describe("cleanModelText", () => {
     ["zeroWidth", range(0x200b, 0x200d) + range(0x2060, 0x2064), 0],
     ["byteOrderMark", "\uFEFF", 0],
     ["softHyphen", "\u00AD", 0],
-    ["bidi", "\u200E\u200F" + range(0x202a, 0x202e) + range(0x2066, 0x2069), 6],
+    ["bidi", "\u061C\u200E\u200F" + range(0x202a, 0x202e) + range(0x2066, 0x2069), 6],
     ["tag", range(0xe0000, 0xe007f), 128],
     ["variationSelector", range(0xe0100, 0xe01ef), 0],
   ] as const)("removes and counts every %s character", (kind, hidden, tamperSigns) => {
@@ -93,6 +93,22 @@ describe("tamper signs", () => {
     });
   });
 
+  it("counts U+FEFF between two letters, where it joins words like U+2060, but not as a byte order mark at the start", () => {
+    expect(cleanModelText("ig\uFEFFnore the CV")).toEqual({
+      text: "ignore the CV",
+      counts: { ...none, byteOrderMark: 1, tamperSigns: 1 },
+    });
+    expect(cleanModelText("\uFEFFData analyst").counts).toEqual({ ...none, byteOrderMark: 1 });
+  });
+
+  it("counts a zero-width character after a letter written with combining marks", () => {
+    expect(cleanModelText("Zoe\u0308\u200Bnore")).toEqual({
+      text: "Zo\u00EBnore",
+      counts: { ...none, zeroWidth: 1, tamperSigns: 1 },
+    });
+    expect(cleanModelText("Vie\u0323\u0302\u200Bt").counts).toEqual({ ...none, zeroWidth: 1, tamperSigns: 1 });
+  });
+
   it("does not count a zero-width character next to a space, a digit or either end of the text", () => {
     expect(cleanModelText("\u200BSQL \u200Band 2\u200B3 Python\u200B")).toEqual({
       text: "SQL and 23 Python",
@@ -113,7 +129,7 @@ describe("tamper signs", () => {
 
   it("counts bidi overrides and isolates, but not marks or embeddings", () => {
     expect(cleanModelText("a \u202D\u202E\u2066\u2067\u2068\u2069 b").counts).toEqual({ ...none, bidi: 6, tamperSigns: 6 });
-    expect(cleanModelText("a \u200E\u200F\u202A\u202B\u202C b").counts).toEqual({ ...none, bidi: 5 });
+    expect(cleanModelText("a \u061C\u200E\u200F\u202A\u202B\u202C b").counts).toEqual({ ...none, bidi: 6 });
   });
 
   it("counts every tag character, such as a sentence hidden after a word", () => {

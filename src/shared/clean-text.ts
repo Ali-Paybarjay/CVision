@@ -10,7 +10,10 @@ export type HiddenCharacterCounts = {
   byteOrderMark: number;
   /** U+00AD. */
   softHyphen: number;
-  /** Bidi marks, embeddings, overrides and isolates: U+200E, U+200F, U+202A to U+202E and U+2066 to U+2069. */
+  /**
+   * Bidi marks, embeddings, overrides and isolates, Unicode's whole Bidi_Control set: U+061C, U+200E, U+200F,
+   * U+202A to U+202E and U+2066 to U+2069.
+   */
   bidi: number;
   /** U+E0000 to U+E007F, except inside the flags of England, Scotland and Wales. */
   tag: number;
@@ -19,8 +22,9 @@ export type HiddenCharacterCounts = {
   /** U+2028 and U+2029: turned into "\n", not removed, so the words either side stay apart. */
   lineSeparator: number;
   /**
-   * Removed characters that rarely turn up by accident: a zero-width character between two letters, a bidi
-   * override or isolate, and every tag character. Each is also counted under its own kind above.
+   * Removed characters that rarely turn up by accident: a zero-width character or U+FEFF between two letters (inside
+   * a word U+FEFF is a word joiner, like U+2060), a bidi override or isolate, and every tag character. Each is also
+   * counted under its own kind above. A letter may end in combining marks, as in a decomposed "e" plus U+0308.
    */
   tamperSigns: number;
 };
@@ -48,11 +52,13 @@ const nationFlags = ["gbeng", "gbsct", "gbwls"].map((region) => BLACK_FLAG + asT
 // or a run of hidden characters (removed). The u flag makes it step by code point, not UTF-16 unit.
 const hiddenPattern = new RegExp(
   `(${nationFlags.join("|")})|([\\u2028\\u2029])|` +
-    "[\\u00AD\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF\\u{E0000}-\\u{E007F}\\u{E0100}-\\u{E01EF}]+",
+    "[\\u00AD\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF\\u{E0000}-\\u{E007F}\\u{E0100}-\\u{E01EF}]+",
   "gu",
 );
 
-const endsWithLetter = /\p{L}$/u;
+// Tested at a run's offset: does a letter end right there, with any combining marks that belong to it (a decomposed
+// "ë" is "e" plus U+0308)? It steps back only over the marks just before the run, so the whole pass stays linear.
+const letterBefore = /(?<=\p{L}\p{M}*)/uy;
 const startsWithLetter = /^\p{L}/u;
 
 /** The kind of a character hiddenPattern already matched as hidden. */
@@ -94,19 +100,22 @@ export function cleanModelText(text: string): CleanedText {
       return "\n";
     }
 
-    let zeroWidth = 0;
+    // Zero-width characters and U+FEFF: the ones that can split a word without a reader seeing it.
+    let wordSplitters = 0;
     for (const char of run) {
       const code = char.codePointAt(0) ?? 0;
       const kind = kindOf(code);
       counts[kind]++;
-      if (kind === "zeroWidth") zeroWidth++;
+      if (kind === "zeroWidth" || kind === "byteOrderMark") wordSplitters++;
       else if (kind === "tag" || isOverrideOrIsolate(code)) counts.tamperSigns++;
     }
     // A run takes every hidden character in a row, so the characters either side of it are ones that stay.
     // Two UTF-16 units hold any one code point, even a letter outside the Basic Multilingual Plane.
-    const before = text.slice(Math.max(0, offset - 2), offset);
+    letterBefore.lastIndex = offset;
     const after = text.slice(offset + run.length, offset + run.length + 2);
-    if (zeroWidth > 0 && endsWithLetter.test(before) && startsWithLetter.test(after)) counts.tamperSigns += zeroWidth;
+    if (wordSplitters > 0 && letterBefore.test(text) && startsWithLetter.test(after)) {
+      counts.tamperSigns += wordSplitters;
+    }
     return "";
   });
 
