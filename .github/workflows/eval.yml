@@ -61,14 +61,51 @@ jobs:
       - run: npm ci
 
       - name: Run the evals
+        id: evals
         env:
           EVAL_FILE: ${{ inputs.file }}
           # The keys reach this step only. An unset secret is an empty string, which getAiProvider ignores.
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          # Vitest's usual reporters on GitHub, plus a JSON report for the next step.
+          args=(--reporter=default --reporter=github-actions --reporter=json --outputFile.json=eval-report.json)
           if [ -n "$EVAL_FILE" ]; then
-            npm run eval -- "$EVAL_FILE"
-          else
-            npm run eval
+            args+=("$EVAL_FILE")
           fi
+          npm run eval -- "${args[@]}"
+
+      # A skipped eval passes, so a run can be green while nothing reached the model: say so out loud.
+      - name: Check that the evals really ran
+        if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
+        run: |
+          node <<'EOF'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          if (!fs.existsSync("eval-report.json")) {
+            console.log("::warning title=No eval report::The evals left no report, so this step cannot tell which ones ran.");
+            process.exit(0);
+          }
+          const report = JSON.parse(fs.readFileSync("eval-report.json", "utf8"));
+          const ran = report.numPassedTests + report.numFailedTests;
+          const skipped = report.numTotalTests - ran;
+          console.log(`Evals: ${report.numPassedTests} passed, ${report.numFailedTests} failed, ${skipped} skipped.`);
+          const files = report.testResults
+            .map((file) => ({
+              name: path.relative(process.cwd(), file.name).split(path.sep).join("/"),
+              skipped: file.assertionResults.filter((test) => test.status !== "passed" && test.status !== "failed").length,
+            }))
+            .filter((file) => file.skipped > 0)
+            .map((file) => `${file.name} (${file.skipped})`)
+            .sort()
+            .join("; ");
+          const why = "A file usually skips because it checks only ANTHROPIC_API_KEY: wrap its suite in describe.skipIf(!getAiProvider()) instead.";
+          if (ran === 0) {
+            const what = skipped > 0 ? `All ${skipped} eval tests were skipped: ${files}. ${why}` : "No eval tests were found.";
+            console.log(`::error title=No evals ran::Nothing reached the model, so this run checked nothing. ${what}`);
+            process.exit(1);
+          }
+          if (skipped > 0) {
+            console.log(`::warning title=Some evals skipped::${skipped} eval tests were skipped and checked nothing: ${files}. ${why}`);
+          }
+          EOF
