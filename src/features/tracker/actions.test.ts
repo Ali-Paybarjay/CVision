@@ -1,15 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Application } from "@/shared/contracts";
-import { recordApplication } from "./actions";
+import { recordApplication, updateApplication } from "./actions";
 
-const { getCurrentUser, createSupabaseServerClient, revalidatePath } = vi.hoisted(() => ({
+const { getCurrentUser, createSupabaseServerClient, revalidatePath, track, deferred } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   revalidatePath: vi.fn(),
+  track: vi.fn(),
+  deferred: [] as (() => unknown)[],
 }));
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
 vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
+vi.mock("@/shared/analytics/track", () => ({ track }));
 vi.mock("next/cache", () => ({ revalidatePath }));
+vi.mock("next/server", () => ({ after: (work: () => unknown) => deferred.push(work) }));
 
 type Row = Record<string, unknown>;
 type Tables = { jobs: Row[]; applications: Row[] };
@@ -18,7 +22,7 @@ type Tables = { jobs: Row[]; applications: Row[] };
  * Just enough of the Supabase client for recordApplication, acting as one user: like row-level security,
  * every read and write sees only that user's rows.
  */
-function fakeSupabase(tables: Tables, userId: string, options: { failInsert?: boolean } = {}) {
+function fakeSupabase(tables: Tables, userId: string, options: { failInsert?: boolean; failUpdate?: boolean } = {}) {
   const own = (table: keyof Tables) => tables[table].filter((row) => row.user_id === userId);
   return {
     from(table: keyof Tables) {
@@ -36,6 +40,7 @@ function fakeSupabase(tables: Tables, userId: string, options: { failInsert?: bo
         },
         update: (patch: Row) => ({
           eq: async (column: string, value: unknown) => {
+            if (options.failUpdate) return { error: { code: "42501" } };
             for (const row of own(table)) if (row[column] === value) Object.assign(row, patch);
             return { error: null };
           },
@@ -68,6 +73,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+  deferred.length = 0;
 });
 
 describe("recordApplication", () => {
@@ -97,6 +103,25 @@ describe("recordApplication", () => {
     const second = await recordApplication(jobId);
 
     expect(second).toEqual({ ok: true, application: first.ok && first.application, created: false });
+    expect(tables.applications).toHaveLength(1);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("adds nothing when Apply in another tab saved the job a moment earlier", async () => {
+    const elsewhere: Application = { id: "c5d6e7f8-1a2b-4c3d-8e9f-0a1b2c3d4e5f", jobId, date: "2026-10-22", status: "applied", nextStep: null };
+    const supabase = fakeSupabase(tables, userId);
+    // The other tab's application lands after this press looked for one, so the unique key refuses this insert.
+    createSupabaseServerClient.mockImplementationOnce(async () => ({
+      from: (table: keyof Tables) => ({
+        ...supabase.from(table),
+        insert: async () => {
+          tables.applications.push({ id: elsewhere.id, job_id: jobId, data: elsewhere, user_id: userId });
+          return { error: { code: "23505" } };
+        },
+      }),
+    }));
+
+    expect(await recordApplication(jobId)).toEqual({ ok: true, application: elsewhere, created: false });
     expect(tables.applications).toHaveLength(1);
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -160,6 +185,104 @@ describe("recordApplication", () => {
     expect(result).toMatchObject({ ok: false, reason: "failed" });
     expect(consoleError).toHaveBeenCalledWith("tracker: could not add to the tracker (42501)");
     expect(revalidatePath).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});
+
+describe("updateApplication", () => {
+  const applicationId = "a7e4c2b1-0d3f-4e5a-9b6c-1d2e3f4a5b6c";
+  const applied: Application = { id: applicationId, jobId, date: "2026-10-15", status: "applied", nextStep: null };
+
+  beforeEach(() => {
+    tables.applications.push({ id: applicationId, job_id: jobId, data: { ...applied }, user_id: userId });
+  });
+
+  async function runDeferred() {
+    for (const work of deferred.splice(0)) await work();
+  }
+
+  it("saves a new status with today's date and records the change", async () => {
+    const result = await updateApplication(applicationId, { status: "interview", nextStep: "Prepare for Tuesday" });
+
+    const expected = { ...applied, status: "interview", nextStep: "Prepare for Tuesday", date: "2026-10-22" };
+    expect(result).toEqual({ ok: true, application: expected });
+    expect(tables.applications[0].data).toEqual(expected);
+    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
+
+    await runDeferred();
+    expect(track).toHaveBeenCalledWith("tracker.status_changed", { from: "applied", to: "interview" }, { userId });
+  });
+
+  it("keeps the date and records no event when only the next step changes", async () => {
+    const result = await updateApplication(applicationId, { status: "applied", nextStep: "  Follow up on Friday  " });
+
+    expect(result).toEqual({ ok: true, application: { ...applied, nextStep: "Follow up on Friday" } });
+    await runDeferred();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  it("saves an empty next step as none", async () => {
+    tables.applications[0].data = { ...applied, nextStep: "Call back" };
+
+    const result = await updateApplication(applicationId, { status: "applied", nextStep: "   " });
+
+    expect(result.ok && result.application.nextStep).toBeNull();
+  });
+
+  it("writes nothing when nothing changed", async () => {
+    const result = await updateApplication(applicationId, { status: "applied", nextStep: "" });
+
+    expect(result).toEqual({ ok: true, application: applied });
+    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(deferred).toHaveLength(0);
+  });
+
+  it("does not find an application from another account", async () => {
+    const othersId = "b8f5d3c2-1e4a-4f6b-8c7d-2e3f4a5b6c7d";
+    tables.applications.push({ id: othersId, job_id: othersJobId, data: { ...applied, id: othersId }, user_id: "user-2" });
+
+    const result = await updateApplication(othersId, { status: "offer", nextStep: "" });
+
+    expect(result).toMatchObject({ ok: false, reason: "not-found" });
+    expect(tables.applications[1].data).toMatchObject({ status: "applied" });
+  });
+
+  it("refuses a status or next step outside the contract", async () => {
+    for (const change of [{ status: "hired", nextStep: "" }, { status: "applied", nextStep: "x".repeat(201) }, { status: "applied" }, "interview", null]) {
+      expect(await updateApplication(applicationId, change)).toMatchObject({ ok: false, reason: "invalid" });
+    }
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  it("refuses anything that is not an application id", async () => {
+    for (const value of [undefined, 42, "sara-application-1", ""]) {
+      expect(await updateApplication(value, { status: "offer", nextStep: "" })).toMatchObject({ ok: false, reason: "not-found" });
+    }
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  it("asks a signed-out visitor to sign in", async () => {
+    getCurrentUser.mockResolvedValue(null);
+
+    expect(await updateApplication(applicationId, { status: "offer", nextStep: "" })).toMatchObject({ ok: false, reason: "signed-out" });
+    expect(tables.applications[0].data).toEqual(applied);
+  });
+
+  it("says so when Supabase is not connected yet", async () => {
+    createSupabaseServerClient.mockResolvedValue(null);
+
+    expect(await updateApplication(applicationId, { status: "offer", nextStep: "" })).toMatchObject({ ok: false, reason: "not-connected" });
+  });
+
+  it("reports a database error without logging what the user wrote", async () => {
+    createSupabaseServerClient.mockImplementation(async () => fakeSupabase(tables, userId, { failUpdate: true }));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await updateApplication(applicationId, { status: "offer", nextStep: "Negotiate the start date" });
+
+    expect(result).toMatchObject({ ok: false, reason: "failed" });
+    expect(consoleError).toHaveBeenCalledWith("tracker: could not update the tracker (42501)");
+    expect(deferred).toHaveLength(0);
     consoleError.mockRestore();
   });
 });
