@@ -65,5 +65,5 @@ Ask the user which of the four builders they are if it is not clear, then work o
 
 - `npm run dev`: start the app at http://localhost:3000
 - `npm run lint`, `npm run typecheck`, `npm test`: run all three before every PR
-- `npm run eval`: prompt evals (`*.eval.ts`) against the real model; needs `ANTHROPIC_API_KEY` and costs money
+- `npm run eval`: prompt evals (`*.eval.ts`) against the real model; needs `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` and costs money
 - `npm run build`: production build
