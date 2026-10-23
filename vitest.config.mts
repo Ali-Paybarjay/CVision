@@ -14,5 +14,7 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}", "supabase/**/*.test.ts"],
     environment: "node",
     env: { AI_MODE: "mock" },
+    // No fetch beyond this computer and no API key in unit tests. Not in vitest.eval.config.mts.
+    setupFiles: ["./src/shared/testing/no-network.ts"],
   },
 });
