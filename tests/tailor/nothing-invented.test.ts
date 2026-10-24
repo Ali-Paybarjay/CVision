@@ -81,6 +81,17 @@ describe("Nothing invented check", () => {
     expect(unsupportedReason(change, saraSources)).not.toBeNull();
   });
 
+  it("keeps a faithful quote when the user's text has hidden characters the model never saw", () => {
+    const answers = sampleAnswers.sara.map((answer) =>
+      answer.gapId === supported.gapId
+        ? { ...answer, answer: answer.answer.replace("regional managers", "regi\u00ADonal\u200B managers") }
+        : answer,
+    );
+    const profile = { ...sara.profile, followUpAnswers: [] };
+    expect(answers).not.toEqual(sampleAnswers.sara);
+    expect(unsupportedReason(supported, { ...saraSources, profile, answers })).toBeNull();
+  });
+
   it("splits changes into kept and removed", () => {
     const invented = { ...supported, evidence: "I led a team of ten analysts" };
     const { kept, removed } = enforceNothingInvented([supported, invented], saraSources);
