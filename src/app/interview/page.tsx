@@ -48,7 +48,7 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     );
   }
 
-  const [profile, job] = await Promise.all([getMyProfile(), jobId ? getMyJob(jobId) : null]);
+  const [profile, job] = await Promise.all([getMyProfile({ jobId: jobId ?? undefined }), jobId ? getMyJob(jobId) : null]);
 
   if (!job) {
     return (
