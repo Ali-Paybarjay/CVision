@@ -94,7 +94,7 @@ afterEach(() => {
 });
 
 describe("summariseUserData", () => {
-  it("counts the user's rows in all eight tables and their CV files, in nested folders too", async () => {
+  it("counts the user's rows in every table and their CV files, in nested folders too", async () => {
     const result = await summariseUserData(sara);
 
     expect(result).toEqual({
@@ -105,6 +105,7 @@ describe("summariseUserData", () => {
           jobs: 2,
           match_results: 1,
           tailoring_changes: 1,
+          tailored_cvs: 1,
           interview_sessions: 1,
           applications: 1,
           events: 1,
@@ -113,7 +114,7 @@ describe("summariseUserData", () => {
         cvFiles: 3,
       },
     });
-    expect(result.ok && totalRows(result.summary)).toBe(10);
+    expect(result.ok && totalRows(result.summary)).toBe(11);
   });
 
   it("counts CV files across pages of the Storage listing", async () => {
@@ -155,7 +156,7 @@ describe("summariseUserData", () => {
 describe("exportUserData", () => {
   const user = { id: sara, email: "sara@example.com" };
 
-  it("puts every row of the user in all eight tables, and their CV files, in one ZIP", async () => {
+  it("puts every row of the user in every table, and their CV files, in one ZIP", async () => {
     const result = await exportUserData(user, now);
     if (!result.ok) throw new Error("export failed");
 
@@ -179,7 +180,7 @@ describe("exportUserData", () => {
 
     expect(result.fileName).toBe("cvision-data-2026-10-23.zip");
     expect(result.summary.cvFiles).toBe(3);
-    expect(totalRows(result.summary)).toBe(10);
+    expect(totalRows(result.summary)).toBe(11);
   });
 
   it("includes the account's details from Supabase Auth, and says what it leaves out", async () => {
