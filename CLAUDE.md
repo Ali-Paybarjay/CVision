@@ -27,7 +27,7 @@ Ask the user which of the four builders they are if it is not clear, then work o
 
 | Folder | Owner | What is built there |
 |---|---|---|
-| `src/app/page.tsx`, `src/app/dashboard`, `src/app/sign-in`, `src/app/sign-up`, `src/app/auth`, `src/app/ui-kit`, `src/features/tracker`, `src/features/account`, `src/shared`, `src/proxy.ts`, `supabase`, `.github`, `tests/e2e` | Ali | Landing page, dashboard, application tracker, account and data rights, shared code, database, CI, end-to-end tests |
+| `src/app/page.tsx`, `src/app/dashboard`, `src/app/privacy`, `src/app/sign-in`, `src/app/sign-up`, `src/app/auth`, `src/app/ui-kit`, `src/features/tracker`, `src/features/account`, `src/shared`, `src/proxy.ts`, `supabase`, `.github`, `tests/e2e` | Ali | Landing page, dashboard, privacy page, application tracker, account and data rights, shared code, database, CI, end-to-end tests |
 | `src/app/profile`, `src/app/jobs`, `src/features/profile`, `prompts/profile-*` | Shayan | CV upload, Profile, follow-up questions, job ad parsing, matching |
 | `src/app/tailor`, `src/features/tailor`, `tests/tailor`, `prompts/tailor-*` | Nazanin | Gap questions, tailored CV and cover letter, export, Apply |
 | `src/app/cv-check`, `src/app/interview`, `src/features/cvcheck`, `src/features/interview`, `prompts/cvcheck-*`, `prompts/interview-*` | Marzieh | Free 2-minute CV check, interview practice |
