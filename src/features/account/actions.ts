@@ -65,8 +65,13 @@ export async function signIn(_: AuthFormState, formData: FormData): Promise<Auth
   redirect(readNext(formData));
 }
 
+/**
+ * Signs out this browser only. SignOutButton clears CVision's data from this browser on the way (issue #35), and
+ * each other device does the same when the user signs out there. Signing out everywhere (Supabase's default)
+ * would sign the other devices out with nothing to clear their data.
+ */
 export async function signOut(): Promise<void> {
   const supabase = await createSupabaseServerClient();
-  await supabase?.auth.signOut();
+  await supabase?.auth.signOut({ scope: "local" });
   redirect("/");
 }

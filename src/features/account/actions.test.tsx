@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { signIn, signUp } from "./actions";
+import { signIn, signOut, signUp } from "./actions";
 import { AuthForm } from "./auth-form";
 
 const { createSupabaseServerClient, redirect, auth } = vi.hoisted(() => ({
@@ -9,7 +9,7 @@ const { createSupabaseServerClient, redirect, auth } = vi.hoisted(() => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`redirect ${url}`);
   }),
-  auth: { signInWithPassword: vi.fn(), signUp: vi.fn() },
+  auth: { signInWithPassword: vi.fn(), signUp: vi.fn(), signOut: vi.fn() },
 }));
 vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("next/navigation", () => ({ redirect }));
@@ -70,6 +70,14 @@ describe("signUp", () => {
   it("sends the user straight back when no confirmation is needed", async () => {
     auth.signUp.mockResolvedValue({ data: { session: {} }, error: null });
     await expect(signUp({}, form({ next: "/interview?job=1" }))).rejects.toThrow("redirect /interview?job=1");
+  });
+});
+
+describe("signOut", () => {
+  it("signs out this browser only, so each device clears its own data when it signs out", async () => {
+    auth.signOut.mockResolvedValue({ error: null });
+    await expect(signOut()).rejects.toThrow("redirect /");
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 });
 
