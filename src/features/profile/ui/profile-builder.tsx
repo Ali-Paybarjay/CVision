@@ -1,16 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import type { Profile } from "@/shared/contracts";
-import { suggestFollowUpQuestionsAction } from "../actions";
-import type { ConsentRecord } from "../consent";
-import { recordFollowUpAnswer, type FollowUpQuestion } from "../follow-up";
-import { getBrowserProfileStore, useStorageIsPersistent, useStoredProfile, type StoredProfile } from "../profile-store";
+import { useRef, useState } from "react";
+import type { JobPreferences, Profile } from "@/shared/contracts";
+import { deleteMyProfileAction } from "../actions";
+import type { ConsentRecord, ProfileStorageKind } from "../consent";
+import { getBrowserProfileStore, useStorageIsPersistent, useStoredProfile } from "../profile-store";
+import { draftFromExtraction, draftFromProfile, newProfileBase, type ProfileBase, type ReviewDraft } from "../review-draft";
+import { fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
+import type { SaveReason } from "../server/save-request";
+import type { AccountProfile } from "../server/profile-account";
 import { Card, Notice } from "@/shared/ui";
+import { BackLink } from "./back-link";
 import { ProfileOverview } from "./profile-overview";
-import { QuestionsStep, type QuestionsState } from "./questions-step";
 import { ReviewStep } from "./review-step";
+import { saveProfileToAccount } from "./save-profile";
 import { UploadStep, type ExtractSuccess } from "./upload-step";
+
+/**
+ * Where this page keeps the approved profile: in the signed-in user's account (loaded on the server),
+ * or in this browser when accounts are not switched on.
+ */
+export type ProfileStorage = { kind: "browser" } | { kind: "account"; initial: AccountProfile | null };
 
 type View =
   /** The saved profile, or the upload step when there is none. */
@@ -18,28 +28,43 @@ type View =
   | { name: "upload" }
   | {
       name: "review";
-      profile: Profile;
-      consent: ConsentRecord;
+      draft: ReviewDraft;
+      base: ProfileBase;
+      /** The consent given with a new CV, or the saved one when editing. */
+      consent: ConsentRecord | null;
+      /** The CV file just read, saved with the profile once the user approves it. */
+      file: File | null;
       demo: ExtractSuccess["demo"];
       truncated: boolean;
       /** True for a CV just read; false when editing the saved profile. */
       isNew: boolean;
-    }
-  | { name: "questions"; afterUpload: boolean };
+    };
+
+/** Where Back goes from this page when the page before it isn't on this site. */
+const PAGE_BACK = "/dashboard";
 
 /**
- * The profile page: upload a CV (with consent), check and approve what was read,
- * answer follow-up questions, then see and manage the saved profile.
+ * The profile page: upload a CV (with consent), check what was read and approve it all at once, then see and manage
+ * the saved profile. Nothing is saved before the user approves it (You approve everything). Back goes to the step
+ * before, or from the first step to the page before.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before an upload.
  */
-export function ProfileBuilder({ demoMode }: { demoMode: boolean }) {
-  const stored = useStoredProfile();
+export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { demoMode: boolean; storage?: ProfileStorage }) {
+  const browserStored = useStoredProfile();
   const persistent = useStorageIsPersistent();
+  const [account, setAccount] = useState<SavedProfile | null>(() =>
+    storage.kind === "account" && storage.initial ? fromAccount(storage.initial) : null,
+  );
+  // The latest account profile, for handlers that run after an await.
+  const accountRef = useRef(account);
   const [view, setView] = useState<View>({ name: "home" });
   // Focus moves to each new step's heading, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [questionsState, setQuestionsState] = useState<QuestionsState>({ status: "ready", demo: false });
+
+  const where: ProfileStorageKind = storage.kind;
+  const saved: SavedProfile | null | undefined =
+    where === "account" ? account : browserStored === undefined ? undefined : browserStored && fromBrowser(browserStored);
 
   const go = (next: View, note: string | null = null) => {
     setView(next);
@@ -47,139 +72,155 @@ export function ProfileBuilder({ demoMode }: { demoMode: boolean }) {
     setMessage(note);
   };
 
-  const loadQuestions = async (profile: Profile) => {
-    setQuestionsState({ status: "loading" });
-    let result: Awaited<ReturnType<typeof suggestFollowUpQuestionsAction>>;
-    try {
-      result = await suggestFollowUpQuestionsAction(profile);
-    } catch {
-      result = { ok: false, message: "We couldn’t reach CVision. Check your connection and try again." };
-    }
-    if (!result.ok) {
-      setQuestionsState({ status: "error", message: result.message });
-      return;
-    }
-    const store = getBrowserProfileStore();
-    const current = store.read();
-    if (current) store.save({ ...current, questions: result.questions, savedAt: new Date().toISOString() });
-    setQuestionsState({ status: "ready", demo: result.demo });
+  const updateAccount = (next: SavedProfile | null) => {
+    accountRef.current = next;
+    setAccount(next);
   };
 
-  const handleExtracted = (result: ExtractSuccess, consent: ConsentRecord) => {
-    // A new CV keeps the earlier follow-up answers: they are still the user's own words.
-    const profile = { ...result.profile, followUpAnswers: stored?.profile.followUpAnswers ?? [] };
-    go({ name: "review", profile, consent, demo: result.demo, truncated: result.truncated, isNew: true });
+  /** The saved profile as it is now, even inside a handler that started before the last change. */
+  const latest = (): SavedProfile | null => {
+    if (where === "account") return accountRef.current;
+    const stored = getBrowserProfileStore().read();
+    return stored && fromBrowser(stored);
   };
 
-  const handleSave = (profile: Profile) => {
-    if (view.name !== "review") return;
-    const record: StoredProfile = {
-      version: 1,
-      profile,
-      consent: view.consent,
-      questions: view.isNew ? [] : (stored?.questions ?? []),
-      savedAt: new Date().toISOString(),
-    };
-    getBrowserProfileStore().save(record);
-    if (view.isNew) {
-      go({ name: "questions", afterUpload: true });
-      void loadQuestions(profile);
-    } else {
-      go({ name: "home" }, "Your changes are saved.");
+  /** Keeps the profile where this page keeps it. Resolves to a message for the user, or null once it is saved. */
+  const write = async (
+    next: Pick<SavedProfile, "profile" | "consent">,
+    options: { reason: SaveReason; cv?: File | null },
+  ): Promise<string | null> => {
+    if (where === "browser") {
+      if (!next.consent) return "Upload your CV again to save your profile.";
+      getBrowserProfileStore().save({ version: 1, ...next, consent: next.consent, savedAt: new Date().toISOString() });
+      return null;
     }
-  };
 
-  const handleAnswer = (question: FollowUpQuestion, answer: string) => {
-    const store = getBrowserProfileStore();
-    const current = store.read();
-    if (!current) return;
-    const profile = recordFollowUpAnswer(current.profile, question, answer, {
-      id: crypto.randomUUID(),
-      answeredAt: new Date(),
+    const result = await saveProfileToAccount(next.profile, {
+      reason: options.reason,
+      cv: options.cv ?? undefined,
+      consentVersion: options.cv ? next.consent?.version : undefined,
     });
-    store.save({ ...current, profile, savedAt: new Date().toISOString() });
+    if (!result.ok) return result.message;
+    updateAccount({ ...next, savedAt: result.savedAt, cvFormat: result.cvFormat });
+    // An older copy from before accounts were switched on is no longer needed in this browser.
+    if (getBrowserProfileStore().read()) getBrowserProfileStore().clear();
+    return null;
   };
 
-  const openQuestions = (current: StoredProfile) => {
-    go({ name: "questions", afterUpload: false });
-    if (current.questions.length === 0) void loadQuestions(current.profile);
-    else setQuestionsState({ status: "ready", demo: false });
+  const handleExtracted = (result: ExtractSuccess, consent: ConsentRecord, file: File) => {
+    // A new CV keeps the earlier follow-up answers: they are still the user's own words.
+    const base = newProfileBase(result.extraction, {
+      id: crypto.randomUUID(),
+      followUpAnswers: saved?.profile.followUpAnswers ?? [],
+    });
+    const draft = draftFromExtraction(result.extraction);
+    go({ name: "review", draft, base, consent, file, demo: result.demo, truncated: result.truncated, isNew: true });
   };
 
-  const handleDelete = () => {
+  const handleSave = async (profile: Profile): Promise<string | null> => {
+    if (view.name !== "review") return null;
+    const problem = await write(
+      { profile, consent: view.consent },
+      { reason: "approved", cv: view.isNew ? view.file : null },
+    );
+    if (problem) return problem;
+    go({ name: "home" }, view.isNew ? "Your profile is saved." : "Your changes are saved.");
+    return null;
+  };
+
+  const handlePreferences = async (preferences: JobPreferences): Promise<string | null> => {
+    const current = latest();
+    if (!current) return "Your profile isn’t saved yet. Reload the page and try again.";
+    return write({ ...current, profile: { ...current.profile, preferences } }, { reason: "preferences" });
+  };
+
+  const handleDelete = async (): Promise<string | null> => {
+    if (where === "account") {
+      let result: Awaited<ReturnType<typeof deleteMyProfileAction>>;
+      try {
+        result = await deleteMyProfileAction();
+      } catch {
+        result = { ok: false, message: "We couldn’t reach CVision. Check your connection and try again." };
+      }
+      if (!result.ok) return result.message;
+      updateAccount(null);
+      go({ name: "home" }, "Your profile and your CV file are deleted from your account.");
+      return null;
+    }
     getBrowserProfileStore().clear();
-    go({ name: "home" }, "Your profile and your answers are deleted from this browser.");
+    go({ name: "home" }, "Your profile is deleted from this browser.");
+    return null;
   };
 
-  if (stored === undefined) {
+  if (saved === undefined) {
     return (
-      <Card aria-busy="true">
-        <p className="text-text-muted">Loading your profile…</p>
-      </Card>
+      <div className="flex flex-col gap-6">
+        <BackLink href={PAGE_BACK} />
+        <Card aria-busy="true">
+          <p className="text-text-muted">Loading your profile…</p>
+        </Card>
+      </div>
     );
   }
 
+  // The step before this one, if the page has one; otherwise Back leaves the page.
+  let stepBack: (() => void) | undefined;
   let content: React.ReactNode;
   if (view.name === "review") {
+    stepBack = () => go(view.isNew ? { name: "upload" } : { name: "home" });
     content = (
       <ReviewStep
-        profile={view.profile}
+        draft={view.draft}
+        base={view.base}
         isNew={view.isNew}
         demo={view.demo}
         truncated={view.truncated}
         focusHeading={navigated}
         onSave={handleSave}
-        onCancel={() => go(view.isNew ? { name: "upload" } : { name: "home" })}
+        onCancel={stepBack}
       />
     );
-  } else if (view.name === "questions" && stored) {
-    content = (
-      <QuestionsStep
-        questions={stored.questions}
-        answers={stored.profile.followUpAnswers}
-        state={questionsState}
-        showSteps={view.afterUpload}
-        focusHeading={navigated}
-        onAnswer={handleAnswer}
-        onRetry={() => void loadQuestions(stored.profile)}
-        onFinish={() => go({ name: "home" }, view.afterUpload ? "Your profile is saved." : null)}
-      />
-    );
-  } else if (view.name === "upload" || !stored) {
+  } else if (view.name === "upload" || !saved) {
+    stepBack = saved ? () => go({ name: "home" }) : undefined;
     content = (
       <UploadStep
-        replacing={stored !== null}
+        replacing={saved !== null}
         demoMode={demoMode}
+        storage={where}
         focusHeading={navigated}
         onExtracted={handleExtracted}
-        onCancel={stored ? () => go({ name: "home" }) : undefined}
+        onCancel={stepBack}
       />
     );
   } else {
     content = (
       <ProfileOverview
-        stored={stored}
+        saved={saved}
+        storage={where}
         persistent={persistent}
         focusHeading={navigated}
         onEdit={() =>
           go({
             name: "review",
-            profile: stored.profile,
-            consent: stored.consent,
+            draft: draftFromProfile(saved.profile),
+            base: saved.profile,
+            consent: saved.consent,
+            file: null,
             demo: null,
             truncated: false,
             isNew: false,
           })
         }
-        onQuestions={() => openQuestions(stored)}
         onUploadNew={() => go({ name: "upload" })}
         onDelete={handleDelete}
+        onSavePreferences={handlePreferences}
       />
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
+      {stepBack ? <BackLink onClick={stepBack} /> : <BackLink href={PAGE_BACK} />}
       {message && <Notice tone="success">{message}</Notice>}
       {content}
     </div>

@@ -1,8 +1,8 @@
 import { isSupabaseConfigured } from "@/shared/supabase/env";
-import { Button, ButtonLink, Card, Notice } from "@/shared/ui";
+import { ButtonLink, Card, Notice } from "@/shared/ui";
 import { brand } from "@/shared/brand";
-import { signOut } from "./actions";
 import { getCurrentUser } from "./current-user";
+import { SignOutButton } from "./sign-out-button";
 
 export const accountsOffNotice = (
   <Notice tone="info" title="Accounts are not switched on yet">
@@ -36,11 +36,14 @@ export async function AccountPanel() {
   return (
     <Card className="flex flex-wrap items-center justify-between gap-4">
       <p>
-        Signed in as <span className="font-semibold">{user.email}</span>
+        Signed in as <span className="font-semibold wrap-anywhere">{user.email}</span>
       </p>
-      <form action={signOut}>
-        <Button type="submit">Sign out</Button>
-      </form>
+      <div className="flex flex-wrap items-center gap-3">
+        <ButtonLink href="/dashboard/your-data" variant="quiet">
+          Download or delete your data
+        </ButtonLink>
+        <SignOutButton />
+      </div>
     </Card>
   );
 }

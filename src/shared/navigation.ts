@@ -8,3 +8,6 @@ export const navItems = [
   { href: "/cv-check", label: "CV check" },
   { href: "/interview", label: "Interview" },
 ] as const;
+
+// Pages linked from the footer on every page.
+export const footerItems = [{ href: "/privacy", label: "Privacy" }] as const;

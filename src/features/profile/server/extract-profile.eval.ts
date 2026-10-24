@@ -1,18 +1,19 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { getAiProvider } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { extractProfile } from "./extract-profile";
 import { readCvText } from "./read-cv";
 import { sampleCvFileName, samplePersonaNames } from "./sample-cvs";
 
 // Prompt evals for prompts/profile-extract.md: real requests to the model, so they cost money.
-// Run with `npm run eval` (needs ANTHROPIC_API_KEY). Each sample CV in sample-data/cvs is built from a persona,
-// so the persona is the right answer.
+// Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY).
+// Each sample CV in sample-data/cvs is built from a persona, so the persona is the right answer.
 
 const normalise = (text: string) => text.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").replace(/[.;]$/, "").trim();
 
-describe.skipIf(!process.env.ANTHROPIC_API_KEY)("profile-extract on the sample CVs", () => {
+describe.skipIf(!getAiProvider())("profile-extract on the sample CVs", () => {
   describe.each(samplePersonaNames)("%s", (name) => {
     const expected = personas[name].profile;
     // One model call per CV, made by the first test that needs it (never while tests are being collected).
@@ -34,9 +35,9 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("profile-extract on the sample C
 
     it("reads every job, with its dates, newest first", async () => {
       const { profile } = await result();
-      const summary = (jobs: typeof expected.experience) =>
-        jobs.map((job) => [normalise(job.title), normalise(job.company), job.startDate, job.endDate]);
-      expect(summary(profile.experience)).toEqual(summary(expected.experience));
+      const read = profile.experience.map((job) => [normalise(job.title), normalise(job.company), job.startDate, job.current ? null : job.endDate]);
+      const right = expected.experience.map((job) => [normalise(job.title), normalise(job.company), job.startDate, job.endDate]);
+      expect(read).toEqual(right);
     });
 
     it("keeps every duty and achievement in the user's own words", async () => {
