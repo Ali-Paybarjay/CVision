@@ -9,9 +9,9 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 | Name | GitHub | Part of the app | Second hat | Reviews the PRs of |
 |---|---|---|---|---|
 | Ali | `Ali-Paybarjay` | Foundation, brand and dashboard | Tech lead and release: merges into `main` daily | Marzieh |
-| Shayan | `shsheytan` | Profile and match | Quality and testing: test checklist, bug priority, banned-words and UK English test | Nazanin |
+| Shayan | `shsheytan` | Profile and match | Quality and testing: test checklist, bug severity, banned-words and UK English test | Nazanin |
 | Nazanin | `nazaninpnhi89-oss` | Tailored CV and cover letter | Pilot programme and user feedback: pilot users, invites, feedback form, usability tests | Shayan |
-| Marzieh | `Marzieh-Manager` | CV check and interview practice | Team coordination and the pitch | Ali |
+| Marzieh | `Marzieh-Manager` | CV check and interview practice | Product, experience and pitch: app walkthroughs as a new user, feedback and bug-fix priority, demo and slides; plus team coordination (daily call, board, organiser) | Ali |
 
 **Advisor: Niusha.** Writes no code and owns no folders. Niusha gives feedback at each station (in the comments of that station's report card), on any issue or PR labelled `needs-advisor`, and on the pitch and rehearsals.
 
