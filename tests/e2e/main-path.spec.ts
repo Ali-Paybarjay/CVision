@@ -53,17 +53,32 @@ test.fixme("step 2: paste a job ad and see the match (#46)", async ({ page }) =>
 });
 
 test("step 3, for now: approve a suggested change on the sample job", async ({ page }) => {
-  // Until Jobs hands over a real job, /tailor works on the sample personas (Nazanin, #49).
-  await page.goto("/tailor?persona=sara");
-  await expect(page.getByRole("heading", { name: "Suggested changes" })).toBeVisible();
+  // Until Jobs hands over a real job, /tailor works on Sara's sample jobs (Nazanin, #49): it asks which job,
+  // then asks a question per gap, with the sample answer already filled in.
+  await page.goto("/tailor");
+  await expect(page.getByRole("heading", { name: "Which job is this CV for?" })).toBeVisible();
+  await page.getByRole("link", { name: "Junior Data Analyst at Pennine Health Analytics" }).click();
 
-  const approve = page.getByRole("button", { name: "Approve", exact: true });
-  const changes = await approve.count();
-  expect(changes).toBeGreaterThan(0);
+  await expect(page).toHaveURL(/\/tailor\?job=sara-job-1$/);
+  await expect(page.getByText("Sample data · mock mode")).toBeVisible();
+
+  const gap = page
+    .getByRole("region", { name: "Questions about your experience" })
+    .getByRole("article")
+    .filter({ hasText: "Clear communication with non-technical stakeholders" });
+  await expect(gap.getByLabel("Your answer")).not.toHaveValue("");
+  await gap.getByRole("button", { name: "Suggest a change" }).click();
+
+  // The suggestion waits for the user: nothing goes into the CV until they approve it.
+  const approve = gap.getByRole("button", { name: "Approve", exact: true });
+  const tailoredLines = page.getByRole("complementary", { name: "Your CV for this job" }).getByText("(tailored for this job)");
+  await expect(approve.first()).toBeVisible();
+  await expect(tailoredLines).toHaveCount(0);
   await approve.first().click();
 
   await expect(approve.first()).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText(`1 of ${changes} changes approved.`)).toBeVisible();
+  await expect(page.getByText("✓ Approved: 1")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(1);
 });
 
 test.fixme("step 3: get the tailored CV for the pasted job, with each change marked (#49)", async ({ page }) => {
