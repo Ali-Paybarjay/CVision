@@ -112,7 +112,7 @@ order by steps.step;
 2. آدرس پایه کافی است: `name@…` همهٔ `name+…@…`ها را هم کنار می‌گذارد.
 3. فهرست فقط در SQL Editor می‌ماند و هرگز در مخزن، PR، کارت، شیت یا گروه تیم نمی‌آید. کوئری با همان placeholder هم اجرا می‌شود، ولی آن وقت حساب‌های تیم هم شمرده می‌شوند.
 
-خروجی فقط عدد است و هیچ ستونی به کاربری نمی‌رسد: یک ردیف `Total` و یک ردیف برای هر روز به وقت لندن، از اولین رویداد (نه فقط ۳۰ روز اخیر). `active_users` شمار کاربرهای فعال آن روز است و `new_active_users` کسانی که آن روز برای اولین بار فعال شدند. عدد ایستگاه ۴ و ارائه `active_users` در ردیف `Total` است.
+خروجی فقط عدد است و هیچ ستونی به کاربری نمی‌رسد: یک ردیف `Total` و یک ردیف برای هر روز به وقت لندن، از روز اولین کاربر فعال تا امروز (نه فقط ۳۰ روز اخیر). روزی که کاربر فعالی نداشته هم ردیف دارد، با صفر. پس ردیف زیر `Total` همیشه امروز است، که تا آخر روز هنوز کامل نیست. `active_users` شمار کاربرهای فعال آن روز است و `new_active_users` کسانی که آن روز برای اولین بار فعال شدند. عدد ایستگاه ۴ و ارائه `active_users` در ردیف `Total` است.
 
 **کاربر فعال، روزانه و کل:**
 
@@ -151,17 +151,27 @@ active as (
 with_first_day as (
   select user_id, day, min(day) over (partition by user_id) as first_day
   from active
+),
+-- Every London day from the first active one to today, so a day with no active users still shows 0.
+days as (
+  select d::date as day
+  from generate_series(
+    (select min(day) from active)::timestamp,
+    (now() at time zone 'Europe/London')::date::timestamp,
+    interval '1 day'
+  ) as d
 )
 select
-  case when grouping(a.day) = 1 then 'Total' else a.day::text end as day,
+  case when grouping(d.day) = 1 then 'Total' else d.day::text end as day,
   count(distinct a.user_id) as active_users,
   count(distinct a.user_id) filter (where a.day = a.first_day) as new_active_users
-from with_first_day a
-group by grouping sets ((a.day), ())
-order by grouping(a.day) desc, a.day desc;
+from days d
+left join with_first_day a on a.day = d.day
+group by grouping sets ((d.day), ())
+order by grouping(d.day) desc, d.day desc;
 ```
 
-**چک رزومه، جدا:** همان فهرست `excluded_emails` را اینجا هم بگذارید. `checks` شمار چک‌هاست، `signed_in_people` کاربرهای واردشده و `anonymous_visitors` بازدیدکننده‌های بی‌حساب، با `anonymous_id`.
+**چک رزومه، جدا:** همان فهرست `excluded_emails` را اینجا هم بگذارید. ردیف‌ها مثل بالا از روز اولین چک تا امروزند و روز بی‌چک صفر می‌گیرد. `checks` شمار چک‌هاست، `signed_in_people` کاربرهای واردشده و `anonymous_visitors` بازدیدکننده‌های بی‌حساب، با `anonymous_id`.
 
 - `anonymous_id` کلیدی روزانه از IP است. پس در ردیف `Total` کسی که چند روز آمده چند بار شمرده می‌شود و چند نفر پشت یک IP یک نفرند؛ آن عدد تخمین است.
 - الان چک رزومه رویداد را برای همه، حتی کاربر واردشده، با `anonymous_id` ثبت می‌کند. پس `signed_in_people` فعلاً صفر است و چک‌های تیم با فهرست کنار نمی‌روند: شمار چک‌هایی را که تیم گزارش می‌دهد (مثل اجراهای #140) دستی از `checks` کم کنید. اگر روزی `user_id` هم ثبت شود، همین کوئری بی‌تغییر کار می‌کند.
@@ -186,13 +196,24 @@ checks as (
   from public.events e
   where e.name = 'cvcheck.completed'
     and (e.user_id is null or e.user_id not in (select id from excluded_users))
+),
+-- Every London day from the first check to today, so a day with no checks still shows 0.
+days as (
+  select d::date as day
+  from generate_series(
+    (select min(day) from checks)::timestamp,
+    (now() at time zone 'Europe/London')::date::timestamp,
+    interval '1 day'
+  ) as d
 )
 select
-  case when grouping(c.day) = 1 then 'Total' else c.day::text end as day,
-  count(*) as checks,
+  case when grouping(d.day) = 1 then 'Total' else d.day::text end as day,
+  -- count(c.day), not count(*): a day with no checks has one empty row from the left join.
+  count(c.day) as checks,
   count(distinct c.user_id) as signed_in_people,
   count(distinct c.anonymous_id) filter (where c.user_id is null) as anonymous_visitors
-from checks c
-group by grouping sets ((c.day), ())
-order by grouping(c.day) desc, c.day desc;
+from days d
+left join checks c on c.day = d.day
+group by grouping sets ((d.day), ())
+order by grouping(d.day) desc, d.day desc;
 ```
