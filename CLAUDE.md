@@ -9,13 +9,13 @@ CVision is a job-application tailoring app for the UK. A user uploads their CV, 
 | Name | GitHub | Part of the app | Second hat | Reviews the PRs of |
 |---|---|---|---|---|
 | Ali | `Ali-Paybarjay` | Foundation, brand and dashboard | Tech lead and release: merges into `main` daily | Marzieh |
-| Shayan | `shsheytan` | Profile and match | User recruitment and feedback | Nazanin |
-| Nazanin | `nazaninpnhi89-oss` | Tailored CV and cover letter | Quality and testing | Shayan |
+| Shayan | `shsheytan` | Profile and match | Quality and testing: test checklist, bug priority, banned-words and UK English test | Nazanin |
+| Nazanin | `nazaninpnhi89-oss` | Tailored CV and cover letter | Pilot programme and user feedback: pilot users, invites, feedback form, usability tests | Shayan |
 | Marzieh | `Marzieh-Manager` | CV check and interview practice | Team coordination and the pitch | Ali |
 
 **Advisor: Niusha.** Writes no code and owns no folders. Niusha gives feedback at each station (in the comments of that station's report card), on any issue or PR labelled `needs-advisor`, and on the pitch and rehearsals.
 
-Ask the user which of the four builders they are if it is not clear, then work only in that person's folders.
+Ask the user which of the four builders they are if it is not clear, then work only in that person's folders. Work for a second hat goes on a branch in its owner's own area, e.g. `tailor/<n>-pilot-feedback-form`.
 
 ## Language
 
@@ -28,8 +28,8 @@ Ask the user which of the four builders they are if it is not clear, then work o
 | Folder | Owner | What is built there |
 |---|---|---|
 | `src/app/page.tsx`, `src/app/dashboard`, `src/app/privacy`, `src/app/sign-in`, `src/app/sign-up`, `src/app/auth`, `src/app/ui-kit`, `src/features/tracker`, `src/features/account`, `src/shared`, `src/proxy.ts`, `supabase`, `.github`, `tests/e2e` | Ali | Landing page, dashboard, privacy page, application tracker, account and data rights, shared code, database, CI, end-to-end tests |
-| `src/app/profile`, `src/app/jobs`, `src/features/profile`, `prompts/profile-*` | Shayan | CV upload, Profile, follow-up questions, job ad parsing, matching |
-| `src/app/tailor`, `src/features/tailor`, `tests/tailor`, `prompts/tailor-*` | Nazanin | Gap questions, tailored CV and cover letter, export, Apply |
+| `src/app/profile`, `src/app/jobs`, `src/features/profile`, `prompts/profile-*`, `tests/quality` | Shayan | CV upload, Profile, follow-up questions, job ad parsing, matching; the test checklist and app-wide quality tests |
+| `src/app/tailor`, `src/features/tailor`, `tests/tailor`, `prompts/tailor-*`, `docs/pilot` | Nazanin | Gap questions, tailored CV and cover letter, export, Apply; pilot programme guides (blank templates, no real data) |
 | `src/app/cv-check`, `src/app/interview`, `src/features/cvcheck`, `src/features/interview`, `prompts/cvcheck-*`, `prompts/interview-*` | Marzieh | Free 2-minute CV check, interview practice |
 | `prompts`, `sample-data`, `docs` | Shared | Each person adds or edits only their own files |
 
