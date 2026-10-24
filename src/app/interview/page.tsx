@@ -4,6 +4,7 @@ import type { Job } from "@/shared/contracts";
 import { getAiMode } from "@/shared/ai";
 import { ButtonLink, Card, Notice, Page } from "@/shared/ui";
 import { getCurrentUser } from "@/features/account/current-user";
+import { withNext } from "@/features/account/safe-redirect";
 import { fixtureForJob } from "@/features/interview/fixtures";
 import { getMyJob, getMyProfile, listMyJobs } from "@/features/interview/server/my-data";
 import { isStoredJobId, loadLatestInterviewSession } from "@/features/interview/server/session-store";
@@ -33,12 +34,14 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
   const user = await getCurrentUser();
   // First, so a signed-out visitor is asked to sign in rather than told their job cannot be found.
   if (mode === "live" && !user) {
+    // Brings them back to this job once they have signed in.
+    const here = jobId ? `/interview?${new URLSearchParams({ job: jobId })}` : "/interview";
     return (
       <>
         <Notice tone="info" title="Sign in to practise">
           Practice uses AI on your CV and answers, so it needs an account.
         </Notice>
-        <ButtonLink href="/sign-in" variant="primary" className="self-start">
+        <ButtonLink href={withNext("/sign-in", here)} variant="primary" className="self-start">
           Sign in
         </ButtonLink>
       </>

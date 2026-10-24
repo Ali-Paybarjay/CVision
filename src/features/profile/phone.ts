@@ -8,13 +8,15 @@
  */
 export function tidyPhone(raw: string): string {
   const typed = raw.trim().replace(/\s+/g, " ");
-  const uk = readUkNumber(typed);
+  const { number, extension } = splitExtension(typed);
+  const uk = readUkNumber(number);
   if (!uk) return typed;
 
   const groups = ukGroups(uk.national);
-  if (!uk.international) return groups.join(" ");
   // +44 drops the leading 0: "020 7946 0018" → "+44 20 7946 0018".
-  return ["+44", groups[0].slice(1), ...groups.slice(1)].join(" ");
+  const tidy = uk.international ? ["+44", groups[0].slice(1), ...groups.slice(1)].join(" ") : groups.join(" ");
+  // An extension stays exactly as typed: "020 7946 0018 ext 45".
+  return extension ? `${tidy} ${extension}` : tidy;
 }
 
 /** A message for the user if the number can't be right, or undefined if it looks fine (or is empty). */
@@ -23,38 +25,44 @@ export function phoneProblem(raw: string): string | undefined {
   if (!typed) return undefined;
 
   const message = "Check the phone number, for example 07700 900101.";
+  const { number } = splitExtension(typed);
   // Digits, spaces and the usual separators only, with + at the start for a country code.
-  if (!/^\+?[\d\s\-().]+$/.test(typed)) return message;
+  if (!/^\+?[\d\s\-().]+$/.test(number)) return message;
 
-  const digits = typed.replace(/\D/g, "");
-  if (looksUk(typed)) return readUkNumber(typed) ? undefined : message;
-  // Any other country: the international format allows up to 15 digits.
-  return digits.length >= 8 && digits.length <= 15 ? undefined : message;
+  if (looksUk(number)) return readUkNumber(number) ? undefined : message;
+  // Any other country, after "+" or "00": the international format allows up to 15 digits.
+  const digits = compactDigits(number).replace(/^(\+|00)/, "");
+  return /^\d{8,15}$/.test(digits) ? undefined : message;
 }
 
 type UkNumber = { national: string; international: boolean };
 
-function looksUk(typed: string): boolean {
-  const compact = compactDigits(typed);
-  return compact.startsWith("+44") || compact.startsWith("0044") || compact.startsWith("0");
+/** A UK number starts +44, 0044 or a single 0. Any other 00 is the international prefix, like +. */
+function looksUk(number: string): boolean {
+  const compact = compactDigits(number);
+  return compact.startsWith("+44") || compact.startsWith("0044") || /^0[^0]/.test(compact);
 }
 
 /** The number in national form ("07700900101"), or null if it isn't a UK number of a valid length. */
-function readUkNumber(typed: string): UkNumber | null {
-  const compact = compactDigits(typed);
-  let national: string;
-  let international = false;
-  if (compact.startsWith("+44")) {
-    national = `0${compact.slice(3)}`;
-    international = true;
-  } else if (compact.startsWith("0044")) {
-    national = `0${compact.slice(4)}`;
-    international = true;
-  } else {
-    national = compact;
-  }
-  // UK numbers are 0 then 9 or 10 digits, and never start 00 once the country code is gone.
-  return /^0[1-9]\d{8,9}$/.test(national) ? { national, international } : null;
+function readUkNumber(number: string): UkNumber | null {
+  const compact = compactDigits(number);
+  const countryCode = /^(\+44|0044)/.exec(compact);
+  // After +44 the 0 is dropped, but people often keep it: "+44 020 7946 0018".
+  const national = countryCode ? `0${compact.slice(countryCode[0].length).replace(/^0/, "")}` : compact;
+  const valid =
+    // Most UK numbers: 0 then 10 digits.
+    /^0[1-9]\d{9}$/.test(national) ||
+    // Only some 01 area codes and 0800 numbers have 0 then 9 digits.
+    /^01\d{8}$/.test(national) ||
+    /^0800\d{6}$/.test(national);
+  return valid ? { national, international: countryCode !== null } : null;
+}
+
+/** "020 7946 0018 ext 45" → the number, and "ext 45" as typed. */
+function splitExtension(typed: string): { number: string; extension: string } {
+  const match = /\s*\b(?:ext\.?|extension)\s*\d{1,6}$/i.exec(typed);
+  if (!match) return { number: typed, extension: "" };
+  return { number: typed.slice(0, match.index).trim(), extension: match[0].trim() };
 }
 
 /** Removes separators, and the "(0)" people write after +44. */
