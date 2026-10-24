@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "typecheck": "next typegen && tsc --noEmit",
     "eval": "vitest run --config vitest.eval.config.mts --passWithNoTests"
   },
@@ -16,7 +17,9 @@
     "@anthropic-ai/sdk": "^0.137.0",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.118.0",
+    "docx": "9.8.1",
     "next": "16.4.2",
+    "pdf-lib": "1.17.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
@@ -24,12 +27,15 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.4.6",
+    "@playwright/test": "1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "jszip": "3.10.2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.5"

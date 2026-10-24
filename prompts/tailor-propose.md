@@ -16,6 +16,7 @@ This rule overrides everything else.
 
 - Keep the person's own words. Reuse their verbs and phrases from the evidence; do not swap them for template phrases.
 - For an `experience` change, start from the existing CV line in `before` and add what the answer shows. Keep the CV's tense and style.
+- `before` is either null or one line copied exactly, character for character, from "Lines you can change" under the same section. A change to any other text cannot be placed on the CV.
 - A new line has `before: null`. A `skills` change adds one short skill name only.
 - Link each change to its gap with `gapId`.
 
@@ -35,6 +36,10 @@ One or two sentences. Do not soften the gap or call it a strength.
 ## Their CV and earlier answers
 
 {{cv}}
+
+## Lines you can change
+
+{{lines}}
 
 ## The gaps
 

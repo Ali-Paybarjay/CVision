@@ -5,8 +5,10 @@ import { cvConsent } from "@/features/profile/consent";
 import { handleExtractRequest } from "@/features/profile/server/extract-request";
 import { POST } from "./route";
 
-const { getCurrentUser } = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
+const { getCurrentUser, track } = vi.hoisted(() => ({ getCurrentUser: vi.fn(), track: vi.fn() }));
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
+vi.mock("@/shared/analytics/track", () => ({ track }));
+vi.mock("next/server", () => ({ after: (callback: () => unknown) => void callback() }));
 vi.mock("@/features/profile/server/extract-request", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/profile/server/extract-request")>();
   return { ...actual, handleExtractRequest: vi.fn(actual.handleExtractRequest) };
@@ -56,7 +58,23 @@ describe("POST /profile/extract", () => {
     const response = await POST(upload({ consent: cvConsent.version }));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true, profile: { fullName: "Sara Khan" } });
+    expect(await response.json()).toMatchObject({ ok: true, extraction: { fullName: "Sara Khan" } });
+  });
+
+  it("records the upload without anything from the CV", async () => {
+    getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
+
+    await POST(upload({ consent: cvConsent.version }));
+
+    expect(track).toHaveBeenCalledWith("profile.cv_uploaded", { format: "docx", truncated: false, demo: true }, { userId: "user-1" });
+  });
+
+  it("records nothing when the upload is refused", async () => {
+    getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
+
+    await POST(upload());
+
+    expect(track).not.toHaveBeenCalled();
   });
 
   it("refuses an upload from another site", async () => {

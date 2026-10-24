@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { brand } from "@/shared/brand";
-import { SiteHeader } from "@/shared/ui";
+import { SiteFooter, SiteHeader } from "@/shared/ui";
 import "./globals.css";
 
 const inter = Inter({
@@ -21,6 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <SiteHeader />
         {children}
+        <SiteFooter />
       </body>
     </html>
   );

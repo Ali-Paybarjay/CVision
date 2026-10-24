@@ -1,58 +1,127 @@
 import { z } from "zod";
-import { ProfileSchema, type JobPreferences, type Profile } from "@/shared/contracts";
+import type { Profile } from "@/shared/contracts";
 
-/**
- * What the model reads from a CV: a Profile without the id, the job preferences and the follow-up answers,
- * which a CV does not hold. profileFromExtraction() adds them back.
- */
-export const CvExtractionSchema = ProfileSchema.omit({ id: true, preferences: true, followUpAnswers: true });
+// What the model reads from a CV. It is looser than the Profile contract on purpose: a freelance job with no
+// employer, a course with no dates or a name the model can't find stays empty, instead of the model having to
+// invent something or the whole reading failing. The review step then asks the user to fill each gap,
+// and only a complete, approved profile is saved (You approve everything).
+
+/** A date as the CV gives it: "2021-09", "2021" when it gives only the year, or "" when it gives none. */
+const CvDateSchema = z.string();
+
+const CvJobSchema = z.object({
+  title: z.string(),
+  company: z.string(),
+  location: z.string().optional(),
+  startDate: CvDateSchema,
+  endDate: CvDateSchema,
+  /** True when the CV says the user still works there ("present", "current", "to date"). */
+  current: z.boolean(),
+  duties: z.array(z.string()),
+  achievements: z.array(z.string()),
+});
+
+const CvCourseSchema = z.object({
+  institution: z.string(),
+  qualification: z.string(),
+  subject: z.string().optional(),
+  startDate: CvDateSchema,
+  endDate: CvDateSchema,
+  /** True when the CV says the user is still studying for it. */
+  current: z.boolean(),
+  grade: z.string().optional(),
+});
+
+const CvCertificateSchema = z.object({
+  name: z.string(),
+  issuer: z.string().optional(),
+  year: z.number().int().optional(),
+});
+
+/** What the model reads from a CV (see prompts/profile-extract.md), and what the review step starts from. */
+export const CvExtractionSchema = z.object({
+  fullName: z.string(),
+  contact: z.object({
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    location: z.string().optional(),
+    linkedIn: z.string().optional(),
+  }),
+  summary: z.string(),
+  skills: z.array(z.string()),
+  experience: z.array(CvJobSchema),
+  education: z.array(CvCourseSchema),
+  certifications: z.array(CvCertificateSchema),
+});
 export type CvExtraction = z.infer<typeof CvExtractionSchema>;
 
-/** Turns what was read from a CV into a tidy Profile, with empty preferences for the user to fill in later. */
-export function profileFromExtraction(extraction: CvExtraction, id: string): Profile {
-  const location = optional(extraction.contact.location);
-  const preferences: JobPreferences = {
-    salary: null,
-    location: location ?? "",
-    workModes: [],
-    contractTypes: [],
-    hours: [],
-  };
-
-  return ProfileSchema.parse({
-    id,
-    fullName: extraction.fullName.trim(),
+/** Trims every field and drops empty and repeated lines, so the review step starts tidy. */
+export function tidyExtraction(extraction: CvExtraction): CvExtraction {
+  const text = (value: string | undefined) => value?.trim() ?? "";
+  const optional = (value: string | undefined) => value?.trim() || undefined;
+  return {
+    fullName: text(extraction.fullName),
     contact: {
       email: optional(extraction.contact.email),
       phone: optional(extraction.contact.phone),
-      location,
+      location: optional(extraction.contact.location),
       linkedIn: optional(extraction.contact.linkedIn),
     },
-    summary: extraction.summary.trim(),
+    summary: text(extraction.summary),
     skills: uniqueLines(extraction.skills),
     experience: extraction.experience.map((job) => ({
-      ...job,
-      title: job.title.trim(),
-      company: job.company.trim(),
+      title: text(job.title),
+      company: text(job.company),
       location: optional(job.location),
+      startDate: text(job.startDate),
+      endDate: job.current ? "" : text(job.endDate),
+      current: job.current,
       duties: uniqueLines(job.duties),
       achievements: uniqueLines(job.achievements),
     })),
     education: extraction.education.map((course) => ({
-      ...course,
-      institution: course.institution.trim(),
-      qualification: course.qualification.trim(),
+      institution: text(course.institution),
+      qualification: text(course.qualification),
       subject: optional(course.subject),
+      startDate: text(course.startDate),
+      endDate: course.current ? "" : text(course.endDate),
+      current: course.current,
       grade: optional(course.grade),
     })),
-    certifications: extraction.certifications.map((certificate) => ({
-      ...certificate,
-      name: certificate.name.trim(),
-      issuer: optional(certificate.issuer),
+    certifications: extraction.certifications
+      .map((certificate) => ({ name: text(certificate.name), issuer: optional(certificate.issuer), year: certificate.year }))
+      .filter((certificate) => certificate.name !== "" || certificate.issuer !== undefined),
+  };
+}
+
+/** A profile written the way the model answers: the mock answer for a sample CV. */
+export function extractionFromProfile(profile: Profile): CvExtraction {
+  return {
+    fullName: profile.fullName,
+    contact: { ...profile.contact },
+    summary: profile.summary,
+    skills: profile.skills,
+    experience: profile.experience.map((job) => ({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      startDate: job.startDate,
+      endDate: job.endDate ?? "",
+      current: job.endDate === null,
+      duties: job.duties,
+      achievements: job.achievements,
     })),
-    preferences,
-    followUpAnswers: [],
-  });
+    education: profile.education.map((course) => ({
+      institution: course.institution,
+      qualification: course.qualification,
+      subject: course.subject,
+      startDate: course.startDate ?? "",
+      endDate: course.endDate ?? "",
+      current: course.endDate === null,
+      grade: course.grade,
+    })),
+    certifications: profile.certifications.map((certificate) => ({ ...certificate })),
+  };
 }
 
 /** Trims each line, drops empty ones and repeats (ignoring case), and keeps the order. */
@@ -68,8 +137,4 @@ export function uniqueLines(lines: string[]): string[] {
     }
   }
   return result;
-}
-
-function optional(value: string | undefined): string | undefined {
-  return value?.trim() || undefined;
 }
