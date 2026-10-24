@@ -1,4 +1,5 @@
 // Pure text helpers: CV and job text for the prompts, untrusted-input wrapping, word counts and quote checks.
+import { cleanModelText } from "@/shared/clean-text";
 import type { Job, Profile } from "@/shared/contracts";
 import type { InterviewInputs } from "./schemas";
 
@@ -49,9 +50,10 @@ export function firstWords(text: string, max: number): string {
   return text.trim().split(/\s+/).slice(0, max).join(" ");
 }
 
+// cleanModelText first, so a quote from the model (which never saw the hidden characters) still matches the raw text (#68).
 function normalise(text: string): string {
-  return text
-    .toLowerCase()
+  return cleanModelText(text)
+    .text.toLowerCase()
     .replace(/[‘’‛′]/g, "'")
     .replace(/[“”‟″]/g, '"')
     .replace(/[–—−]/g, "-")
@@ -65,8 +67,9 @@ function stripQuoteEdges(quote: string): string {
 }
 
 /**
- * True when the quote appears word for word in the source. Case, whitespace, curly quotes and dashes are
- * normalised, and quotation marks or ellipses at the edges of the quote are ignored; the words must match.
+ * True when the quote appears word for word in the source. Hidden characters are removed; case, whitespace, curly
+ * quotes and dashes are normalised; and quotation marks or ellipses at the edges of the quote are ignored. The words
+ * must match.
  */
 export function isVerbatim(quote: string, source: string): boolean {
   const needle = normalise(stripQuoteEdges(quote));
