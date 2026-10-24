@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { withNext } from "@/features/account/safe-redirect";
 import { Button, Card, cn, ErrorIcon, Field, Notice } from "@/shared/ui";
-import { cvConsent, type ConsentRecord } from "../consent";
+import { consentPoints, cvConsent, privacyPage, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
 import { Steps } from "./steps";
@@ -15,14 +16,17 @@ type UploadStepProps = {
   replacing: boolean;
   /** True while the AI is in mock mode: say so before the upload, not only after it. */
   demoMode: boolean;
+  /** Where the approved profile will be kept, so the consent says so. */
+  storage: ProfileStorageKind;
   focusHeading: boolean;
-  onExtracted: (result: ExtractSuccess, consent: ConsentRecord) => void;
+  /** `file` is the uploaded CV, kept in the page until the user approves their profile. */
+  onExtracted: (result: ExtractSuccess, consent: ConsentRecord, file: File) => void;
   onCancel?: () => void;
 };
 
 type Errors = { file?: string; consent?: string; form?: string; signIn?: boolean };
 
-export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onCancel }: UploadStepProps) {
+export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtracted, onCancel }: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
@@ -51,7 +55,7 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
     try {
       const result = await uploadCv(form);
       if (result.ok) {
-        onExtracted(result, { version: cvConsent.version, givenAt: new Date().toISOString() });
+        onExtracted(result, { version: cvConsent.version, givenAt: new Date().toISOString() }, file as File);
         return;
       }
       if (result.code === "consent") setErrors({ consent: result.message });
@@ -78,7 +82,7 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
 
       {replacing && (
         <Notice tone="info" title="This replaces your current profile">
-          Your answers to follow-up questions are kept.
+          Nothing changes until you check the new details and approve them.
         </Notice>
       )}
 
@@ -103,8 +107,8 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
           >
             <legend className="px-1 text-sm font-semibold">Before we read your CV</legend>
             <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-text-muted">
-              {cvConsent.points.map((point) => (
-                <li key={point}>{point}</li>
+              {consentPoints(storage).map((point) => (
+                <li key={point}>{linkPrivacyPage(point)}</li>
               ))}
             </ul>
             <label className="mt-4 flex cursor-pointer items-start gap-3">
@@ -152,27 +156,58 @@ export function UploadStep({ replacing, demoMode, focusHeading, onExtracted, onC
   );
 }
 
-/** Shown when the upload needs a signed-in user: with the AI switched on, each CV read counts against the user's daily limit. */
-export function SignInNotice() {
+/** Shows the Privacy page's name in a consent point as a link to that page. */
+function linkPrivacyPage(point: string): React.ReactNode {
+  const at = point.indexOf(privacyPage.name);
+  if (at === -1) return point;
   return (
-    <Notice tone="info" title="Sign in to upload your CV">
-      <Link href="/sign-in" className="font-semibold text-accent hover:underline">
+    <>
+      {point.slice(0, at)}
+      <Link href={privacyPage.href} className="font-semibold text-accent hover:underline">
+        {privacyPage.name}
+      </Link>
+      {point.slice(at + privacyPage.name.length)}
+    </>
+  );
+}
+
+/**
+ * Shown when a step needs a signed-in user: with the AI switched on, each request counts against the user's daily limit.
+ * `title` says what signing in is for; the upload's wording is the default. `next` is the page the user comes back to.
+ */
+export function SignInNotice({ title = "Sign in to upload your CV", next = "/profile" }: { title?: string; next?: string }) {
+  return (
+    <Notice tone="info" title={title}>
+      <Link href={withNext("/sign-in", next)} className="font-semibold text-accent hover:underline">
         Sign in
       </Link>{" "}
       or{" "}
-      <Link href="/sign-up" className="font-semibold text-accent hover:underline">
+      <Link href={withNext("/sign-up", next)} className="font-semibold text-accent hover:underline">
         create a free account
       </Link>
-      , then come back to this page.
+      , and you’ll come back to this page.
     </Notice>
   );
 }
 
-async function uploadCv(form: FormData): Promise<ExtractResponse> {
+/**
+ * Sends the CV to POST /profile/extract. Never throws: a lost connection, and an answer that isn't ours (the host
+ * stopping a request that ran out of time, for example), each come back as a message the user can act on.
+ */
+export async function uploadCv(form: FormData): Promise<ExtractResponse> {
+  let response: Response;
   try {
-    const response = await fetch("/profile/extract", { method: "POST", body: form });
-    return (await response.json()) as ExtractResponse;
+    response = await fetch("/profile/extract", { method: "POST", body: form });
   } catch {
     return { ok: false, code: "ai-unavailable", message: "We couldn’t reach CVision. Check your connection and try again." };
   }
+  const body: unknown = await response.json().catch(() => null);
+  if (body !== null && typeof body === "object" && "ok" in body && typeof body.ok === "boolean") {
+    return body as ExtractResponse;
+  }
+  if (response.status === 413) return { ok: false, code: "too-large", message: cvFileMessages.tooLarge };
+  if (response.status === 504) {
+    return { ok: false, code: "ai-unavailable", message: "Reading your CV took too long. Try again in a minute." };
+  }
+  return { ok: false, code: "ai-unavailable", message: "Something went wrong on our side. Try again in a minute." };
 }

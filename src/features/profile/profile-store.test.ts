@@ -16,7 +16,6 @@ const record: StoredProfile = {
   version: 1,
   profile: personas.sara.profile,
   consent: { version: "2026-10-20", givenAt: "2026-10-20T18:00:00.000Z" },
-  questions: [],
   savedAt: "2026-10-20T18:05:00.000Z",
 };
 
@@ -73,6 +72,15 @@ describe("profile store", () => {
 
     storage.items.set(PROFILE_STORAGE_KEY, JSON.stringify({ ...record, version: 0 }));
     expect(store.read()).toBeNull();
+  });
+
+  it("still reads a profile saved with the follow-up questions, which are gone now", () => {
+    const storage = memoryStorage();
+    const store = createProfileStore(storage);
+
+    storage.items.set(PROFILE_STORAGE_KEY, JSON.stringify({ ...record, questions: [{ id: "q1", question: "What changed?" }] }));
+
+    expect(store.read()).toEqual(record);
   });
 
   it("refuses to save a record that breaks the contract", () => {

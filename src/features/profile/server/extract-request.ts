@@ -1,7 +1,7 @@
 import "server-only";
 import { AskModelError, getAiMode } from "@/shared/ai";
-import type { Profile } from "@/shared/contracts";
 import { cvConsent } from "../consent";
+import type { CvExtraction } from "../cv-extraction";
 import { extractProfile, type Requester } from "./extract-profile";
 import { CvFileError, cvFileMessages, MAX_CV_BYTES, readCvText, type CvFileErrorCode, type CvFormat } from "./read-cv";
 
@@ -9,7 +9,8 @@ import { CvFileError, cvFileMessages, MAX_CV_BYTES, readCvText, type CvFileError
 export type ExtractResponse =
   | {
       ok: true;
-      profile: Profile;
+      /** What was read, for the review step. Empty where the CV doesn't say. */
+      extraction: CvExtraction;
       format: CvFormat;
       /** True when only the start of a very long CV was read. */
       truncated: boolean;
@@ -45,9 +46,9 @@ export async function handleExtractRequest(
 
   try {
     const cv = await readCvText({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
-    const profile = await extractProfile(cv.text, { requester: options.requester });
-    const demo = getAiMode() === "mock" ? { persona: profile.fullName, text: cv.text } : null;
-    return { ok: true, profile, format: cv.format, truncated: cv.truncated, demo };
+    const extraction = await extractProfile(cv.text, { requester: options.requester });
+    const demo = getAiMode() === "mock" ? { persona: extraction.fullName, text: cv.text } : null;
+    return { ok: true, extraction, format: cv.format, truncated: cv.truncated, demo };
   } catch (error) {
     if (error instanceof CvFileError) {
       return { ok: false, code: error.code, message: error.message };

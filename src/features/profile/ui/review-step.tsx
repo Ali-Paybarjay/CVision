@@ -4,9 +4,8 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
 import {
-  draftFromProfile,
+  itemsWithProblems,
   profileFromDraft,
-  reviewProgress,
   reviewReducer,
   type CertificationDraft,
   type ContactDraft,
@@ -14,33 +13,37 @@ import {
   type ExperienceDraft,
   type FieldErrors,
   type ListSection,
+  type ProfileBase,
   type ReviewAction,
   type ReviewDraft,
 } from "../review-draft";
-import { tidyPhone } from "../phone";
-import { count, formatPeriod } from "./format";
-import { Button, CheckIcon, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
+import { count } from "./format";
+import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
 import { Steps } from "./steps";
 
 type ReviewStepProps = {
-  profile: Profile;
+  /** What to check: read from a new CV (draftFromExtraction) or from the saved profile (draftFromProfile). */
+  draft: ReviewDraft;
+  /** What the saved profile keeps besides the reviewed items: its id, preferences and follow-up answers. */
+  base: ProfileBase;
   /** True for a CV just read; false when editing a saved profile. */
   isNew: boolean;
   /** Set in mock mode: whose sample profile is shown, and the text read from the user's own file. */
   demo: { persona: string; text: string } | null;
   truncated: boolean;
   focusHeading: boolean;
-  onSave: (profile: Profile) => void;
+  /** Saves the approved profile; resolves to a message for the user if it couldn't. */
+  onSave: (profile: Profile) => Promise<string | null> | void;
   onCancel: () => void;
 };
 
-export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSave, onCancel }: ReviewStepProps) {
-  const [draft, dispatch] = useReducer(reviewReducer, profile, draftFromProfile);
+export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, focusHeading, onSave, onCancel }: ReviewStepProps) {
+  const [draft, dispatch] = useReducer(reviewReducer, initialDraft);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const cards = useRef(new Map<string, HTMLElement>());
   const added = useRef(0);
-  const { approved, total } = reviewProgress(draft);
 
   useEffect(() => {
     if (focusHeading) headingRef.current?.focus();
@@ -59,25 +62,6 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
     flushSync(() => dispatch(action));
   };
 
-  const approveItem = (key: string) => {
-    const next = reviewReducer(draft, { type: "approve", key });
-    act({ type: "approve", key });
-    const order = entryOrder(next);
-    if (!isApproved(next, key)) {
-      focusIn(key, '[aria-invalid="true"]');
-      return;
-    }
-    const start = order.indexOf(key);
-    const following = [...order.slice(start + 1), ...order.slice(0, start)].find((other) => !isApproved(next, other));
-    if (following) focusIn(following, "[data-card-heading]");
-    else document.getElementById("save-profile")?.focus();
-  };
-
-  const editItem = (key: string) => {
-    act({ type: "unapprove", key });
-    focusIn(key, "input, textarea");
-  };
-
   const removeItem = (key: string, section: ListSection) => {
     act({ type: "remove", key });
     document.getElementById(`review-${section}`)?.focus();
@@ -90,20 +74,31 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
     focusIn(key, "input");
   };
 
-  const save = () => {
-    if (approved < total) {
-      const left = total - approved;
-      setSaveError(`Approve every item first: ${count(left, "item")} still to check.`);
+  /** One approval for the whole page: every item is checked, and the first problem gets focus. */
+  const approve = async () => {
+    const checked = reviewReducer(draft, { type: "check" });
+    act({ type: "check" });
+    const problems = itemsWithProblems(checked);
+    if (problems.length > 0) {
+      setSaveError(`Fix the ${count(problems.length, "item")} marked above, then approve again.`);
+      focusIn(problems[0], '[aria-invalid="true"]');
       return;
     }
+    let profile: Profile;
     try {
-      onSave(profileFromDraft(draft, profile));
+      profile = profileFromDraft(checked, base);
     } catch {
-      setSaveError("Some details are not valid. Check each item, then approve it again.");
+      setSaveError("Some details are not valid. Check them, then approve again.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const problem = await onSave(profile);
+      if (problem) setSaveError(problem);
+    } finally {
+      setSaving(false);
     }
   };
-
-  const shared = { registerCard, onApprove: approveItem, onEdit: editItem };
 
   return (
     <section aria-labelledby="review-heading" className="flex flex-col gap-8">
@@ -113,8 +108,8 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
           Check your details
         </h2>
         <p className="mt-2 text-text-muted">
-          Compare each item with your CV. Correct anything that’s wrong, then approve it. Nothing is saved until every
-          item is approved.
+          {isNew ? "Compare each section with your CV and correct anything that’s wrong." : "Change anything that’s wrong or out of date."}{" "}
+          Then approve it all at the end of the page. Nothing is saved until you do.
         </p>
       </div>
 
@@ -139,13 +134,7 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
       )}
 
       <ReviewSection id="review-contact" title="Name and contact">
-        <ItemCard
-          {...shared}
-          itemKey={draft.contact.key}
-          title="Your details"
-          approved={draft.contact.approved}
-          summary={contactSummary(draft.contact.value)}
-        >
+        <ItemCard registerCard={registerCard} item={draft.contact} title="Your details">
           <ContactFields
             value={draft.contact.value}
             errors={draft.contact.errors}
@@ -155,13 +144,7 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
       </ReviewSection>
 
       <ReviewSection id="review-summary" title="Personal statement">
-        <ItemCard
-          {...shared}
-          itemKey={draft.summary.key}
-          title="Your summary"
-          approved={draft.summary.approved}
-          summary={draft.summary.value.text.trim() ? shorten(draft.summary.value.text, 220) : "No personal statement."}
-        >
+        <ItemCard registerCard={registerCard} item={draft.summary} title="Your summary">
           <Field
             label="Personal statement"
             hint="Your CV’s own summary, word for word. Leave it empty if your CV doesn’t have one."
@@ -187,12 +170,10 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
       >
         {draft.experience.map((item) => (
           <ItemCard
-            {...shared}
             key={item.key}
-            itemKey={item.key}
+            registerCard={registerCard}
+            item={item}
             title={jobTitle(item.value)}
-            approved={item.approved}
-            summary={experienceSummary(item.value)}
             onRemove={() => removeItem(item.key, "experience")}
             removeLabel="Remove this job"
           >
@@ -214,12 +195,10 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
       >
         {draft.education.map((item) => (
           <ItemCard
-            {...shared}
             key={item.key}
-            itemKey={item.key}
+            registerCard={registerCard}
+            item={item}
             title={courseTitle(item.value)}
-            approved={item.approved}
-            summary={educationSummary(item.value)}
             onRemove={() => removeItem(item.key, "education")}
             removeLabel="Remove this qualification"
           >
@@ -241,12 +220,10 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
       >
         {draft.certifications.map((item) => (
           <ItemCard
-            {...shared}
             key={item.key}
-            itemKey={item.key}
+            registerCard={registerCard}
+            item={item}
             title={item.value.name.trim() || "New certificate"}
-            approved={item.approved}
-            summary={[item.value.issuer, item.value.year].filter(Boolean).join(" · ") || "No issuer or year."}
             onRemove={() => removeItem(item.key, "certifications")}
             removeLabel="Remove this certificate"
           >
@@ -260,41 +237,35 @@ export function ReviewStep({ profile, isNew, demo, truncated, focusHeading, onSa
       </ReviewSection>
 
       <ReviewSection id="review-skills" title="Skills">
-        <ItemCard
-          {...shared}
-          itemKey={draft.skills.key}
-          title="Your skills"
-          approved={draft.skills.approved}
-          summary={draft.skills.value.list.join(", ") || "No skills listed."}
-        >
+        <ItemCard registerCard={registerCard} item={draft.skills} title="Your skills">
           <SkillsEditor list={draft.skills.value.list} onChange={(list) => act({ type: "edit-skills", list })} />
         </ItemCard>
       </ReviewSection>
 
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-line bg-surface px-4 py-4 sm:mx-0 sm:rounded-lg sm:border">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm" aria-live="polite">
-            <strong>
-              {approved} of {total}
-            </strong>{" "}
-            items approved
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="quiet" onClick={onCancel}>
-              {isNew ? "Start again" : "Cancel"}
-            </Button>
-            <Button id="save-profile" variant="primary" onClick={save}>
-              Save my profile
-            </Button>
-          </div>
-        </div>
+      <Card aria-labelledby="approve-heading">
+        <h3 id="approve-heading" className="text-xl">
+          {isNew ? "Approve your profile" : "Approve your changes"}
+        </h3>
+        <p className="mt-2 text-text-muted">
+          {isNew
+            ? "Approving saves everything above as your profile. You can change it at any time."
+            : "Approving saves everything above to your profile."}
+        </p>
         {saveError && (
-          <p role="alert" className="mt-2 flex items-center gap-1.5 text-sm text-error">
+          <p role="alert" className="mt-3 flex items-center gap-1.5 text-sm text-error">
             <ErrorIcon className="size-4 shrink-0" />
             {saveError}
           </p>
         )}
-      </div>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <Button variant="primary" onClick={() => void approve()} disabled={saving} aria-busy={saving}>
+            {saving ? "Saving…" : "Approve and save"}
+          </Button>
+          <Button variant="quiet" onClick={onCancel} disabled={saving}>
+            {isNew ? "Start again" : "Cancel"}
+          </Button>
+        </div>
+      </Card>
     </section>
   );
 }
@@ -328,60 +299,29 @@ function ReviewSection({ id, title, children, empty, addLabel, onAdd }: ReviewSe
 }
 
 type ItemCardProps = {
-  itemKey: string;
+  item: { key: string; errors: FieldErrors };
   title: string;
-  approved: boolean;
-  /** The one-line view of an approved item. */
-  summary: string;
   children: React.ReactNode;
   registerCard: (key: string, element: HTMLElement | null) => void;
-  onApprove: (key: string) => void;
-  onEdit: (key: string) => void;
   onRemove?: () => void;
   removeLabel?: string;
 };
 
-/** One item to check: its fields and an Approve button, or a one-line summary once approved. */
-function ItemCard({ itemKey, title, approved, summary, children, registerCard, onApprove, onEdit, onRemove, removeLabel }: ItemCardProps) {
+/** One item to check: its fields, edged in the error colour while one of them has a problem. */
+function ItemCard({ item, title, children, registerCard, onRemove, removeLabel }: ItemCardProps) {
+  const hasProblem = Object.keys(item.errors).length > 0;
   return (
     <article
-      ref={(element) => registerCard(itemKey, element)}
-      className={cn("rounded-lg border bg-surface p-5 sm:p-6", approved ? "border-fit-bar" : "border-line")}
+      ref={(element) => registerCard(item.key, element)}
+      className={cn("rounded-lg border bg-surface p-5 sm:p-6", hasProblem ? "border-error" : "border-line")}
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-        <h4 data-card-heading tabIndex={-1} className="text-lg">
-          {title}
-        </h4>
-        {approved && (
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-accent">
-            <CheckIcon className="size-5" />
-            Approved
-          </p>
-        )}
-      </div>
-
-      {approved ? (
-        <>
-          <p className="mt-2 text-sm break-words text-text-muted">{summary}</p>
-          {/* The negative margin lines the text up with the summary above (quiet buttons keep their padding). */}
-          <Button variant="quiet" className="mt-2 -ml-5" onClick={() => onEdit(itemKey)}>
-            Edit<span className="sr-only"> {title}</span>
-          </Button>
-        </>
-      ) : (
-        <>
-          <div className="mt-4 flex flex-col gap-4">{children}</div>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button onClick={() => onApprove(itemKey)}>
-              Approve<span className="sr-only"> {title}</span>
-            </Button>
-            {onRemove && (
-              <Button variant="quiet" onClick={onRemove}>
-                {removeLabel ?? "Remove"}
-              </Button>
-            )}
-          </div>
-        </>
+      <h4 className="text-lg">{title}</h4>
+      <div className="mt-4 flex flex-col gap-4">{children}</div>
+      {onRemove && (
+        // The negative margin lines the text up with the fields above (quiet buttons keep their padding).
+        <Button variant="quiet" className="mt-4 -ml-5" onClick={onRemove}>
+          {removeLabel ?? "Remove"}
+        </Button>
       )}
     </article>
   );
@@ -445,6 +385,8 @@ function ExperienceFields({ value, errors, onChange }: FieldsProps<ExperienceDra
         start={value.startDate}
         end={value.endDate}
         current={value.current}
+        startGuessed={value.startGuessed}
+        endGuessed={value.endGuessed}
         currentLabel="I still work here"
         errors={errors}
         onChange={onChange}
@@ -497,6 +439,8 @@ function EducationFields({ value, errors, onChange }: FieldsProps<EducationDraft
         start={value.startDate}
         end={value.endDate}
         current={value.current}
+        startGuessed={value.startGuessed}
+        endGuessed={value.endGuessed}
         currentLabel="I’m still studying for this"
         optional
         errors={errors}
@@ -535,18 +479,23 @@ type MonthRangeProps = {
   start: string;
   end: string;
   current: boolean;
+  /** True when the month is our guess, because the CV gave only the year. */
+  startGuessed: boolean;
+  endGuessed: boolean;
   currentLabel: string;
   optional?: boolean;
   errors: FieldErrors;
   onChange: (change: { startDate?: string; endDate?: string; current?: boolean }) => void;
 };
 
-function MonthRange({ start, end, current, currentLabel, optional, errors, onChange }: MonthRangeProps) {
+function MonthRange({ start, end, current, startGuessed, endGuessed, currentLabel, optional, errors, onChange }: MonthRangeProps) {
   const suffix = optional ? " (optional)" : "";
+  const hint = (guessed: boolean, month: string) =>
+    guessed ? `Your CV gives only the year, so we put ${month}. Check the month.` : "Month and year";
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={`Started${suffix}`} hint="Month and year" error={errors.startDate}>
+        <Field label={`Started${suffix}`} hint={hint(startGuessed, "January")} error={errors.startDate}>
           {(props) => (
             <Input
               {...props}
@@ -558,7 +507,7 @@ function MonthRange({ start, end, current, currentLabel, optional, errors, onCha
           )}
         </Field>
         {!current && (
-          <Field label={`Finished${suffix}`} hint="Month and year" error={errors.endDate}>
+          <Field label={`Finished${suffix}`} hint={hint(endGuessed, "December")} error={errors.endDate}>
             {(props) => (
               <Input
                 {...props}
@@ -641,67 +590,13 @@ function SkillsEditor({ list, onChange }: { list: string[]; onChange: (list: str
   );
 }
 
-// --- Summaries --------------------------------------------------------------------------------
-
-function contactSummary(value: ContactDraft): string {
-  // Non-breaking spaces keep the phone number on one line on a narrow screen.
-  const phone = tidyPhone(value.phone).replace(/ /g, " ");
-  return [value.fullName, value.email, phone, value.location, value.linkedIn].filter((part) => part.trim()).join(" · ");
-}
+// --- Titles -----------------------------------------------------------------------------------
 
 function jobTitle(value: ExperienceDraft): string {
   const title = value.title.trim() || "New job";
   return value.company.trim() ? `${title} at ${value.company.trim()}` : title;
 }
 
-function experienceSummary(value: ExperienceDraft): string {
-  const lines = (text: string) => text.split("\n").filter((line) => line.trim()).length;
-  return [
-    formatPeriod(value.startDate, value.current ? null : value.endDate),
-    count(lines(value.duties), "duty", "duties"),
-    count(lines(value.achievements), "achievement"),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
 function courseTitle(value: EducationDraft): string {
   return `${value.qualification.trim()} ${value.subject.trim()}`.trim() || "New qualification";
-}
-
-function educationSummary(value: EducationDraft): string {
-  return (
-    [
-      value.institution,
-      formatPeriod(value.startDate || undefined, value.current ? null : value.endDate || undefined),
-      // Labelled, so "2:1" or "Merit" on its own isn't a puzzle.
-      value.grade.trim() && `Grade: ${value.grade.trim()}`,
-    ]
-      .filter((part) => part?.trim())
-      .join(" · ") || "No details."
-  );
-}
-
-function shorten(text: string, length: number): string {
-  const clean = text.trim();
-  return clean.length > length ? `${clean.slice(0, length - 1).trimEnd()}…` : clean;
-}
-
-// --- Order and lookup -------------------------------------------------------------------------
-
-/** The items in the order they appear on the page. */
-function entryOrder(draft: ReviewDraft): string[] {
-  return [
-    draft.contact.key,
-    draft.summary.key,
-    ...draft.experience.map((item) => item.key),
-    ...draft.education.map((item) => item.key),
-    ...draft.certifications.map((item) => item.key),
-    draft.skills.key,
-  ];
-}
-
-function isApproved(draft: ReviewDraft, key: string): boolean {
-  const all = [draft.contact, draft.summary, draft.skills, ...draft.experience, ...draft.education, ...draft.certifications];
-  return all.find((item) => item.key === key)?.approved ?? false;
 }

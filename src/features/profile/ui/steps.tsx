@@ -1,9 +1,9 @@
 import { CheckIcon, cn } from "@/shared/ui";
 
-const steps = ["Upload your CV", "Check your details", "Add the detail"] as const;
+const steps = ["Upload your CV", "Check your details"] as const;
 
-/** Where the user is in the three steps of building a profile. */
-export function Steps({ current }: { current: 0 | 1 | 2 }) {
+/** Where the user is in the two steps of building a profile. */
+export function Steps({ current }: { current: 0 | 1 }) {
   return (
     <ol aria-label="Steps" className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
       {steps.map((label, index) => {
