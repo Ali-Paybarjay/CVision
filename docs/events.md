@@ -160,3 +160,39 @@ from with_first_day a
 group by grouping sets ((a.day), ())
 order by grouping(a.day) desc, a.day desc;
 ```
+
+**چک رزومه، جدا:** همان فهرست `excluded_emails` را اینجا هم بگذارید. `checks` شمار چک‌هاست، `signed_in_people` کاربرهای واردشده و `anonymous_visitors` بازدیدکننده‌های بی‌حساب، با `anonymous_id`.
+
+- `anonymous_id` کلیدی روزانه از IP است. پس در ردیف `Total` کسی که چند روز آمده چند بار شمرده می‌شود و چند نفر پشت یک IP یک نفرند؛ آن عدد تخمین است.
+- الان چک رزومه رویداد را برای همه، حتی کاربر واردشده، با `anonymous_id` ثبت می‌کند. پس `signed_in_people` فعلاً صفر است و چک‌های تیم با فهرست کنار نمی‌روند: شمار چک‌هایی را که تیم گزارش می‌دهد (مثل اجراهای #140) دستی از `checks` کم کنید. اگر روزی `user_id` هم ثبت شود، همین کوئری بی‌تغییر کار می‌کند.
+
+```sql
+with excluded_emails (email) as (
+  values
+    -- The same list as above.
+    ('paste-team-email-here@example.com')
+),
+excluded_users as (
+  select u.id
+  from auth.users u
+  join excluded_emails x
+    on regexp_replace(lower(trim(u.email)), '\+[^@]*@', '@') = regexp_replace(lower(trim(x.email)), '\+[^@]*@', '@')
+),
+checks as (
+  select
+    e.user_id,
+    e.anonymous_id,
+    (e.created_at at time zone 'Europe/London')::date as day
+  from public.events e
+  where e.name = 'cvcheck.completed'
+    and (e.user_id is null or e.user_id not in (select id from excluded_users))
+)
+select
+  case when grouping(c.day) = 1 then 'Total' else c.day::text end as day,
+  count(*) as checks,
+  count(distinct c.user_id) as signed_in_people,
+  count(distinct c.anonymous_id) filter (where c.user_id is null) as anonymous_visitors
+from checks c
+group by grouping sets ((c.day), ())
+order by grouping(c.day) desc, c.day desc;
+```
