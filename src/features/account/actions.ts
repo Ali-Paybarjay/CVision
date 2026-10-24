@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
+import { safeRedirectPath } from "./safe-redirect";
 
 export type AuthFormState = {
   error?: string;
@@ -26,6 +27,11 @@ function readCredentials(formData: FormData) {
   return { state: { fieldErrors: { email: errors.email?.[0], password: errors.password?.[0] } } satisfies AuthFormState };
 }
 
+/** The page the user came from (the form's hidden `next` field), if it is on this site. */
+function readNext(formData: FormData) {
+  return safeRedirectPath(formData.get("next"));
+}
+
 export async function signUp(_: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const { credentials, state } = readCredentials(formData);
   if (!credentials) return state;
@@ -33,16 +39,17 @@ export async function signUp(_: AuthFormState, formData: FormData): Promise<Auth
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: notConnected };
 
+  const next = readNext(formData);
   const origin = (await headers()).get("origin") ?? "";
   const { data, error } = await supabase.auth.signUp({
     ...credentials,
-    options: { emailRedirectTo: `${origin}/auth/confirm?next=/dashboard` },
+    options: { emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}` },
   });
   if (error) return { error: error.message };
 
   // With email confirmation on, there is no session until the link is opened.
   if (!data.session) return { checkEmail: credentials.email };
-  redirect("/dashboard");
+  redirect(next);
 }
 
 export async function signIn(_: AuthFormState, formData: FormData): Promise<AuthFormState> {
@@ -55,7 +62,7 @@ export async function signIn(_: AuthFormState, formData: FormData): Promise<Auth
   const { error } = await supabase.auth.signInWithPassword(credentials);
   if (error) return { error: "That email and password do not match an account." };
 
-  redirect("/dashboard");
+  redirect(readNext(formData));
 }
 
 export async function signOut(): Promise<void> {
