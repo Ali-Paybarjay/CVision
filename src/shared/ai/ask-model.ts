@@ -14,12 +14,14 @@ import {
 } from "./config";
 import { loadVoice } from "./prompts";
 import {
-  assertWithinDailyLimit,
   estimateCostUsd,
   getUsageStore,
   LimitReachedError,
   type ModelUsage,
+  releaseReservation,
   type Requester,
+  reserveWithinDailyLimit,
+  type UsageRowId,
 } from "./usage";
 
 export type AskModelOptions<S extends z.ZodType> = {
@@ -75,8 +77,9 @@ function createClient(provider: AiProvider): Anthropic {
 /**
  * The one way to ask a language model for anything in CVision.
  * In mock mode (the default) it sends nothing and returns `sample`.
- * In live mode it checks the daily limit, asks Claude for JSON, logs the usage,
- * checks the answer against `schema`, and asks once more if it does not fit.
+ * In live mode it reserves a place within the daily limit, asks Claude for JSON, logs the usage,
+ * checks the answer against `schema`, and asks once more if it does not fit. If the model never answers,
+ * the place is given back.
  */
 export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>): Promise<z.output<S>> {
   if (getAiMode() === "mock") {
@@ -89,41 +92,54 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
   }
   // A live request reads the clock (daily limits) and spends tokens: never inside a prerender or prefetch.
   await io();
+
+  // Usage and cost are logged under Anthropic's model name, whichever provider serves it.
+  const model = options.model ?? DEFAULT_MODEL;
+  // Everything is ready before the reservation, so a reserved row always means a request was sent.
+  const client = (clients[provider] ??= createClient(provider));
+  const system = options.voice === false ? baseInstructions : `${baseInstructions}\n\n${await loadVoice()}`;
+  const format = zodOutputFormat(options.schema);
+
+  let reserved: UsageRowId;
   try {
-    await assertWithinDailyLimit(options.requester);
+    reserved = await reserveWithinDailyLimit({ requester: options.requester, feature: options.feature, model }, getUsageStore());
   } catch (error) {
     if (error instanceof LimitReachedError) throw new AskModelError(error.message, "limit-reached");
     // Without the usage log there is no daily limit, so nothing is sent; log why, since callers may not.
     console.error("askModel: could not check the daily limit", error);
     throw error;
   }
-  const client = (clients[provider] ??= createClient(provider));
-
-  // Usage and cost are logged under Anthropic's model name, whichever provider serves it.
-  const model = options.model ?? DEFAULT_MODEL;
-  const system = options.voice === false ? baseInstructions : `${baseInstructions}\n\n${await loadVoice()}`;
-  const format = zodOutputFormat(options.schema);
   let prompt = options.prompt;
   let problem = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    // API errors (limits, outages) are retried by the SDK itself and reach the caller unchanged.
-    const response = await client.messages.create({
-      model: provider === "openrouter" ? toOpenRouterModel(model) : model,
-      max_tokens: options.maxTokens ?? 16000,
-      system,
-      messages: [{ role: "user", content: prompt }],
-      output_config: { effort: options.effort ?? "medium", format },
-    });
+    // The first request fills in the row reserved for it; a retry counts as a request of its own.
+    const row = attempt === 1 ? reserved : undefined;
+    let response: Anthropic.Message;
+    try {
+      response = await client.messages.create({
+        model: provider === "openrouter" ? toOpenRouterModel(model) : model,
+        max_tokens: options.maxTokens ?? 16000,
+        system,
+        messages: [{ role: "user", content: prompt }],
+        output_config: { effort: options.effort ?? "medium", format },
+      });
+    } catch (error) {
+      // API errors (limits, outages, timeouts) are retried by the SDK itself and reach the caller unchanged.
+      // With no answer there is nothing to log, and the request gives its place back, so an outage uses up
+      // nobody's daily requests, such as a visitor's free checks. A failed retry had no place to give back.
+      if (row !== undefined) await releaseReservation(row, getUsageStore());
+      throw error;
+    }
 
     if (response.stop_reason === "refusal") {
-      await logUsage(options, model, response.usage, false);
+      await logUsage(options, row, model, response.usage, false);
       throw new AskModelError(`The model declined the ${options.feature} request.`, "refused");
     }
 
     const text = response.content.find((block) => block.type === "text")?.text;
     const result = text === undefined ? null : parseJson(options.schema, text);
-    await logUsage(options, model, response.usage, result?.success === true);
+    await logUsage(options, row, model, response.usage, result?.success === true);
 
     if (result?.success) {
       return result.data;
@@ -154,6 +170,7 @@ function parseJson<S extends z.ZodType>(
 
 async function logUsage(
   options: AskModelOptions<z.ZodType>,
+  row: UsageRowId | undefined,
   model: string,
   usage: Anthropic.Usage,
   ok: boolean,
@@ -166,14 +183,20 @@ async function logUsage(
     ok,
   };
   // A logging failure must never break the user's request, and neither must the caller's onUsage.
-  try {
-    await getUsageStore().record({ requester: options.requester, feature: options.feature, ...used });
-  } catch (error) {
-    console.error("askModel: could not record usage", error);
-  }
+  await saveUsage(options, row, used);
   try {
     await options.onUsage?.(used);
   } catch (error) {
     console.error("askModel: onUsage failed", error);
+  }
+}
+
+/** Fills in the request's reserved row, or adds a row for a retry. Failures are logged, never thrown. */
+async function saveUsage(options: AskModelOptions<z.ZodType>, row: UsageRowId | undefined, used: ModelUsage): Promise<void> {
+  try {
+    if (row === undefined) await getUsageStore().record({ requester: options.requester, feature: options.feature, ...used });
+    else await getUsageStore().update(row, used);
+  } catch (error) {
+    console.error("askModel: could not record usage", error);
   }
 }

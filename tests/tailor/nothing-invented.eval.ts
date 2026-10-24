@@ -2,10 +2,11 @@
 // Each case fails if the model adds a skill or line that the CV and the user's answers do not support.
 import { describe, expect, it } from "vitest";
 import { askForProposal, unsupportedReason } from "@/features/tailor";
+import { getAiProvider } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { nothingInventedCases } from "./nothing-invented.cases";
 
-describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Nothing invented (live)", () => {
+describe.skipIf(!getAiProvider())("Nothing invented (live)", () => {
   it.each(nothingInventedCases)("$name", async ({ persona, answers, forbidden, sample }) => {
     const { profile, jobs, match } = personas[persona];
     const proposal = await askForProposal({ profile, job: jobs[0], match, answers, sample });
