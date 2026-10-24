@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "23 October 2026";
+const lastUpdated = "24 October 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -301,11 +301,19 @@ export default function PrivacyPage() {
         ))}
         <div>
           <h3 className="text-lg">If you’re not signed in</h3>
-          <p className="mt-1">
-            If you use CVision without signing in, usage records and AI use records are kept against a code instead of
-            an account. The code is made by scrambling your IP address with a secret key and changes every day. These
-            records never contain your IP address itself, only the daily code.
-          </p>
+          <div className="mt-1 flex flex-col gap-2">
+            <p>
+              If you use CVision without signing in, usage records and AI use records are kept against a code instead
+              of an account. The code is made by scrambling your IP address with a secret key and changes every day.
+              These records never contain your IP address itself, only the daily code.
+            </p>
+            <p>
+              If you use the free CV check, our server sends your CV text to the AI to review it. We don’t save your CV
+              or the review, only a usage record with the score and how many issues were found, and an AI use record for
+              each request to the AI. The free CV check keeps these records against the daily code, not your account,
+              even if you’re signed in.
+            </p>
+          </div>
         </div>
       </Section>
 
