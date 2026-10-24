@@ -1,4 +1,5 @@
 import { pricesPerMillion } from "../config";
+import type { ModelUsage } from "@/shared/ai";
 import type { StageUsage } from "../contracts";
 
 /** About four characters per token in English text. Good enough for an estimate, not for billing. */
@@ -12,8 +13,8 @@ export function costUsd(model: string, inputTokens: number, outputTokens: number
 }
 
 /**
- * askModel does not report token usage yet, so usage is estimated from the request and answer text.
- * Thinking tokens are not included, so live costs will be higher.
+ * Usage estimated from the request and answer text, for mock mode where no request is sent.
+ * Thinking tokens are not included, so it is far below what a live request costs.
  */
 export function estimateUsage(options: {
   stage: string;
@@ -34,6 +35,19 @@ export function estimateUsage(options: {
     outputTokens,
     costUsd: costUsd(options.model, inputTokens, outputTokens),
     estimated: true,
+  };
+}
+
+/** The real usage of one stage, as askModel's onUsage reported it: the request plus any retry. */
+export function measuredUsage(options: { stage: string; model: string; reports: ModelUsage[]; questionId?: string }): StageUsage {
+  return {
+    stage: options.stage,
+    ...(options.questionId ? { questionId: options.questionId } : {}),
+    model: options.model,
+    inputTokens: options.reports.reduce((sum, r) => sum + r.inputTokens, 0),
+    outputTokens: options.reports.reduce((sum, r) => sum + r.outputTokens, 0),
+    costUsd: Math.round(options.reports.reduce((sum, r) => sum + r.costUsd, 0) * 1e6) / 1e6,
+    estimated: false,
   };
 }
 
