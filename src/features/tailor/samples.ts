@@ -57,6 +57,22 @@ export const sampleAnswers: Record<PersonaName, GapAnswer[]> = {
   ],
 };
 
+/**
+ * The mock material for one gap of a sample job: the sample answer (to pre-fill the form) and the part of
+ * the sample proposal for that gap. A job with no sample gives nothing, so mock mode suggests no change.
+ */
+export function sampleForGap(jobId: string, gapId: string): { answer: GapAnswer | null; proposal: Proposal } {
+  const name = (Object.keys(personas) as PersonaName[]).find((key) => personas[key].match.jobId === jobId);
+  if (!name) return { answer: null, proposal: { changes: [], nextSteps: [] } };
+  return {
+    answer: sampleAnswers[name].find((item) => item.gapId === gapId) ?? null,
+    proposal: {
+      changes: sampleProposals[name].changes.filter((change) => change.gapId === gapId),
+      nextSteps: sampleProposals[name].nextSteps.filter((step) => step.gapId === gapId),
+    },
+  };
+}
+
 export const sampleProposals: Record<PersonaName, Proposal> = {
   sara: {
     changes: [
