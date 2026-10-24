@@ -11,9 +11,10 @@ on:
         type: string
         default: ""
 
-# A new run cancels the previous one for the same branch (CLAUDE.md, rule 11).
+# A new run cancels only the same person's earlier run of the same file on the same branch (CLAUDE.md, rule 11),
+# so nobody's paid run is stopped halfway by someone else's.
 concurrency:
-  group: eval-${{ github.ref }}
+  group: eval-${{ github.ref }}-${{ github.actor }}-${{ inputs.file || 'all' }}
   cancel-in-progress: true
 
 permissions:
@@ -68,12 +69,55 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          # Vitest's usual reporters on GitHub, plus a JSON report for the next step.
+          # Vitest's usual reporters on GitHub, plus a JSON report for the next steps.
           args=(--reporter=default --reporter=github-actions --reporter=json --outputFile.json=eval-report.json)
           if [ -n "$EVAL_FILE" ]; then
             args+=("$EVAL_FILE")
           fi
           npm run eval -- "${args[@]}"
+
+      # The numbers on the run's page, ready to copy onto a PR. Counts and times only: no key, test message or model output.
+      - name: Write the eval summary
+        if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
+        run: |
+          node <<'EOF'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const lines = ["## Prompt evals", ""];
+          const write = () => fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
+          if (!fs.existsSync("eval-report.json")) {
+            lines.push("The evals left no report, so this run has no numbers.");
+            write();
+            process.exit(0);
+          }
+          const report = JSON.parse(fs.readFileSync("eval-report.json", "utf8"));
+          const seconds = (ms) => `${(Math.max(0, ms) / 1000).toFixed(1)} s`;
+          const rows = report.testResults
+            .map((file) => {
+              const passed = file.assertionResults.filter((test) => test.status === "passed").length;
+              const failed = file.assertionResults.filter((test) => test.status === "failed").length;
+              return {
+                name: path.relative(process.cwd(), file.name).split(path.sep).join("/").replace(/\|/g, "\\|"),
+                passed,
+                // A file that fails before its tests start (an import error, say) has no failed test of its own.
+                failed: failed === 0 && file.status === "failed" ? "0 (file failed)" : failed,
+                skipped: file.assertionResults.length - passed - failed,
+                duration: seconds(file.endTime - file.startTime),
+              };
+            })
+            .sort((a, b) => a.name.localeCompare(b.name));
+          const ran = report.numPassedTests + report.numFailedTests;
+          // Files run side by side, so the total is the time from the start of the run to the end of its last test.
+          const end = Math.max(report.startTime, ...report.testResults.map((file) => file.endTime));
+          lines.push("| File | Passed | Failed | Skipped | Duration |", "| --- | ---: | ---: | ---: | ---: |");
+          for (const row of rows) {
+            lines.push(`| \`${row.name}\` | ${row.passed} | ${row.failed} | ${row.skipped} | ${row.duration} |`);
+          }
+          lines.push(
+            `| **Total** | **${report.numPassedTests}** | **${report.numFailedTests}** | **${report.numTotalTests - ran}** | **${seconds(end - report.startTime)}** |`,
+          );
+          write();
+          EOF
 
       # A skipped eval passes, so a run can be green while nothing reached the model: say so out loud.
       - name: Check that the evals really ran
