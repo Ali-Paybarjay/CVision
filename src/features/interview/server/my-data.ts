@@ -1,3 +1,3 @@
-// Where interview practice reads the signed-in user's Profile and jobs. Sample data for now; once Shayan's
-// server reads are merged (#48), change only this line to import them from src/features/profile.
-export { getMyJob, getMyProfile, listMyJobs } from "./sample-my-data";
+// Where interview practice reads the signed-in user's Profile and jobs: Shayan's server reads (#48). Signed out or
+// without Supabase, they answer with a sample persona, so the page still works.
+export { getMyJob, getMyProfile, listMyJobs } from "@/features/profile/my-data";
