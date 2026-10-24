@@ -4,6 +4,7 @@ import {
   createMemoryUsageStore,
   estimateCostUsd,
   LimitReachedError,
+  releaseReservation,
   type Requester,
   reserveWithinDailyLimit,
   startOfUtcDay,
@@ -119,7 +120,28 @@ describe("daily limits", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(use(store, { userId: "sara" })).rejects.toBeInstanceOf(LimitReachedError);
-    expect(consoleError).toHaveBeenCalledWith("askModel: could not remove an unused usage reservation", failure);
+    expect(consoleError).toHaveBeenCalledWith("askModel: could not take back a usage reservation", failure);
+  });
+
+  it("gives a place back when its request got no answer, so a later request can take it", async () => {
+    vi.stubEnv("AI_DAILY_LIMIT_PER_ANONYMOUS", "1");
+    const store = createMemoryUsageStore();
+    const visitor = { anonymousKey: "a" };
+
+    await releaseReservation(await use(store, visitor), store);
+    await expect(store.countSince(visitor, today())).resolves.toBe(0);
+    await expect(use(store, visitor)).resolves.toEqual(expect.any(Number));
+    await expect(use(store, visitor)).rejects.toBeInstanceOf(LimitReachedError);
+  });
+
+  it("only logs when a place cannot be given back", async () => {
+    const store = createMemoryUsageStore();
+    const failure = new Error("delete failed");
+    vi.spyOn(store, "delete").mockRejectedValueOnce(failure);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(releaseReservation(await use(store, { userId: "sara" }), store)).resolves.toBeUndefined();
+    expect(consoleError).toHaveBeenCalledWith("askModel: could not take back a usage reservation", failure);
   });
 });
 

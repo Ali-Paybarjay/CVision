@@ -83,7 +83,6 @@ const goLive = () => {
 };
 
 const sara = { userId: "sara" };
-const nothingUsed = { model: "claude-haiku-5-5", inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false };
 
 /** How many rows Sara has in the usage log today. */
 const saraToday = () => usage.store.countSince(sara, startOfUtcDay(new Date()));
@@ -192,7 +191,7 @@ describe("askModel and the daily limit", () => {
     await expect(saraToday()).resolves.toBe(2);
   });
 
-  it("marks the reserved row as failed when the request to the model throws, and still counts it", async () => {
+  it("takes back the reservation when the request to the model throws, so it does not count", async () => {
     goLive();
     const outage = new Error("overloaded");
     create.mockRejectedValueOnce(outage);
@@ -200,8 +199,53 @@ describe("askModel and the daily limit", () => {
 
     await expect(askOk(onUsage, sara)).rejects.toBe(outage);
     const reserved = await reservedId();
-    expect(usage.store.update.mock.calls).toEqual([[reserved, nothingUsed]]);
+    expect(usage.store.delete.mock.calls).toEqual([[reserved]]);
+    expect(usage.store.update).not.toHaveBeenCalled();
+    expect(usage.store.record).not.toHaveBeenCalled();
     expect(onUsage).not.toHaveBeenCalled();
+    await expect(saraToday()).resolves.toBe(0);
+  });
+
+  it("does not use up a visitor's free checks while the model is down", async () => {
+    goLive();
+    vi.stubEnv("AI_DAILY_LIMIT_PER_ANONYMOUS", "3");
+    const visitor = { anonymousKey: "visitor" };
+    const outage = new Error("overloaded");
+    create.mockRejectedValue(outage);
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await expect(askOk(undefined, visitor)).rejects.toBe(outage);
+    }
+    create.mockReset().mockResolvedValue(reply('{"ok":true}'));
+    for (let check = 0; check < 3; check++) {
+      await expect(askOk(undefined, visitor)).resolves.toEqual({ ok: true });
+    }
+    await expect(askOk(undefined, visitor)).rejects.toMatchObject({ reason: "limit-reached" });
+  });
+
+  it("keeps the row of an answer that does not fit the schema, with the tokens it used", async () => {
+    goLive();
+    create.mockResolvedValue(reply('{"ok":"yes"}'));
+
+    await expect(askOk(undefined, sara)).rejects.toMatchObject({ reason: "invalid-answer" });
+    const reserved = await reservedId();
+    const spent = { model: "claude-haiku-5-5", inputTokens: 1000, outputTokens: 200, costUsd: expect.closeTo(0.0002, 10), ok: false };
+    expect(usage.store.update.mock.calls).toEqual([[reserved, spent]]);
+    expect(usage.store.record).toHaveBeenCalledWith({ requester: sara, feature: "test", ...spent });
+    expect(usage.store.delete).not.toHaveBeenCalled();
+    await expect(saraToday()).resolves.toBe(2);
+  });
+
+  it("keeps the first answer's row when only the retry throws", async () => {
+    goLive();
+    const outage = new Error("overloaded");
+    create.mockResolvedValueOnce(reply('{"ok":"yes"}')).mockRejectedValueOnce(outage);
+
+    await expect(askOk(undefined, sara)).rejects.toBe(outage);
+    const reserved = await reservedId();
+    expect(usage.store.update).toHaveBeenCalledWith(reserved, expect.objectContaining({ inputTokens: 1000, ok: false }));
+    expect(usage.store.delete).not.toHaveBeenCalled();
+    expect(usage.store.record).not.toHaveBeenCalled();
     await expect(saraToday()).resolves.toBe(1);
   });
 
@@ -282,14 +326,16 @@ describe("askModel and the daily limit", () => {
     expect(consoleError).toHaveBeenCalledWith("askModel: could not record usage", failure);
   });
 
-  it("passes the model's own failure on when the failed row cannot be filled in either", async () => {
+  it("passes the model's own failure on when its reservation cannot be taken back either, and logs why", async () => {
     goLive();
     const outage = new Error("overloaded");
     create.mockRejectedValueOnce(outage);
-    usage.store.update.mockRejectedValueOnce(new UsageLogError("update", { message: "Service Unavailable" }, 503));
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = new UsageLogError("delete", { message: "Service Unavailable" }, 503);
+    usage.store.delete.mockRejectedValueOnce(failure);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(askOk(undefined, sara)).rejects.toBe(outage);
+    expect(consoleError).toHaveBeenCalledWith("askModel: could not take back a usage reservation", failure);
   });
 
   it("sends nothing and logs nothing in mock mode", async () => {

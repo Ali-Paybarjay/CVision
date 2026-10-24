@@ -35,7 +35,7 @@ export type UsageRowId = number;
 /** A row reserved for a request: its id, and when the usage log saved it, by the log's own clock (an ISO timestamp). */
 export type Reservation = { id: UsageRowId; createdAt: string };
 
-/** How a reserved row starts, and what is known about a request that failed before the model answered. */
+/** How a reserved row starts, before anything is known about what its request uses. */
 export function noUsage(model: string): ModelUsage {
   return { model, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false };
 }
@@ -49,7 +49,7 @@ export interface UsageStore {
   countSince(filter: CountFilter, since: string): Promise<number>;
   /** Fills in a reserved row with what its request really used. */
   update(id: UsageRowId, used: ModelUsage): Promise<void>;
-  /** Removes a reserved row whose request was never sent. */
+  /** Removes a reserved row whose request was turned away, or got no answer from the model. */
   delete(id: UsageRowId): Promise<void>;
   /** Adds a row for a request that had no reservation: a retry. */
   record(entry: UsageRecord): Promise<void>;
@@ -181,9 +181,15 @@ export function getUsageStore(): UsageStore {
  * day even when the count runs after midnight, and the two clocks do not need to agree.
  *
  * The cost is that rows of requests about to be turned away count too, so under heavy contention the limit
- * can stop a request a little early, but it never lets one too many through. A row can also be left behind:
- * if the answer to the reservation is lost on the way back, or the function stops before the row is filled
- * in or removed, the row stays and adds one to its day's count. That too only turns requests away early.
+ * can stop a request a little early. What it guarantees is about requests that pass this check and keep
+ * their row: never more of them on one day than the limit. A request whose call to the model fails gives
+ * its place back (askModel removes its row), so a provider outage uses up nobody's requests. The guarantee
+ * counts requests, not calls to the model: a retry inside askModel has no reservation of its own, so calls
+ * to the model can pass the limit by one for each request let through, as before reservations.
+ *
+ * A row can also be left behind: if the answer to the reservation is lost on the way back, or the function
+ * stops before the row is filled in or removed, the row stays and adds one to its day's count. That only
+ * turns requests away early.
  */
 export async function reserveWithinDailyLimit(request: UsageRequest, usage: UsageStore = getUsageStore()): Promise<UsageRowId> {
   const reserved = await usage.reserve(request);
@@ -192,11 +198,11 @@ export async function reserveWithinDailyLimit(request: UsageRequest, usage: Usag
     refusal = await limitReachedMessage(request.requester, usage, startOfUtcDay(reserved.createdAt));
   } catch (error) {
     // Without a count there is no limit, so the request will not be sent and needs no row.
-    await release(usage, reserved.id);
+    await releaseReservation(reserved.id, usage);
     throw error;
   }
   if (refusal) {
-    await release(usage, reserved.id);
+    await releaseReservation(reserved.id, usage);
     throw new LimitReachedError(refusal);
   }
   return reserved.id;
@@ -226,12 +232,15 @@ async function limitReachedMessage(
   return undefined;
 }
 
-/** Removes a reservation whose request will not be sent. A row left behind only adds one to its day's count, so it is logged, not thrown. */
-async function release(usage: UsageStore, id: UsageRowId): Promise<void> {
+/**
+ * Gives a reserved place back: its request was turned away, or the model never answered it.
+ * A row left behind only adds one to its day's count, so a failure here is logged, not thrown.
+ */
+export async function releaseReservation(id: UsageRowId, usage: UsageStore = getUsageStore()): Promise<void> {
   try {
     await usage.delete(id);
   } catch (error) {
-    console.error("askModel: could not remove an unused usage reservation", error);
+    console.error("askModel: could not take back a usage reservation", error);
   }
 }
 

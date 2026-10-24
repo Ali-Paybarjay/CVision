@@ -18,7 +18,7 @@ import {
   getUsageStore,
   LimitReachedError,
   type ModelUsage,
-  noUsage,
+  releaseReservation,
   type Requester,
   reserveWithinDailyLimit,
   type UsageRowId,
@@ -78,7 +78,8 @@ function createClient(provider: AiProvider): Anthropic {
  * The one way to ask a language model for anything in CVision.
  * In mock mode (the default) it sends nothing and returns `sample`.
  * In live mode it reserves a place within the daily limit, asks Claude for JSON, logs the usage,
- * checks the answer against `schema`, and asks once more if it does not fit.
+ * checks the answer against `schema`, and asks once more if it does not fit. If the model never answers,
+ * the place is given back.
  */
 export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>): Promise<z.output<S>> {
   if (getAiMode() === "mock") {
@@ -124,9 +125,10 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
         output_config: { effort: options.effort ?? "medium", format },
       });
     } catch (error) {
-      // API errors (limits, outages) are retried by the SDK itself and reach the caller unchanged.
-      // Nothing says what a failed request used, so its row records the failure with no tokens.
-      if (row !== undefined) await saveUsage(options, row, noUsage(model));
+      // API errors (limits, outages, timeouts) are retried by the SDK itself and reach the caller unchanged.
+      // With no answer there is nothing to log, and the request gives its place back, so an outage uses up
+      // nobody's daily requests, such as a visitor's free checks. A failed retry had no place to give back.
+      if (row !== undefined) await releaseReservation(row, getUsageStore());
       throw error;
     }
 
