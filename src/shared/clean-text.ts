@@ -4,7 +4,7 @@
 
 /** How many characters of each kind cleanModelText removed or changed. */
 export type HiddenCharacterCounts = {
-  /** U+200B to U+200D and U+2060 to U+2064. */
+  /** U+034F, U+180E, U+200B to U+200D and U+2060 to U+2064. */
   zeroWidth: number;
   /** U+FEFF. */
   byteOrderMark: number;
@@ -19,12 +19,17 @@ export type HiddenCharacterCounts = {
   tag: number;
   /** U+E0100 to U+E01EF. */
   variationSelector: number;
+  /** U+115F, U+1160, U+3164 and U+FFA0: Hangul letters that stand for a missing sound and show as nothing or a blank. */
+  hangulFiller: number;
+  /** U+FFF9 to U+FFFB, the interlinear annotation marks: meant for use inside one app, never in text passed on. */
+  annotation: number;
   /** U+2028 and U+2029: turned into "\n", not removed, so the words either side stay apart. */
   lineSeparator: number;
   /**
-   * Removed characters that rarely turn up by accident: a zero-width character or U+FEFF between two letters (inside
-   * a word U+FEFF is a word joiner, like U+2060), a bidi override or isolate, and every tag character. Each is also
-   * counted under its own kind above. A letter may end in combining marks, as in a decomposed "e" plus U+0308.
+   * Removed characters that rarely turn up by accident: a zero-width character, U+FEFF or a Hangul filler between two
+   * letters (inside a word U+FEFF is a word joiner, like U+2060), a bidi override or isolate, and every tag and
+   * annotation character. Each is also counted under its own kind above. A letter may end in combining marks, as in a
+   * decomposed "e" plus U+0308.
    */
   tamperSigns: number;
 };
@@ -48,17 +53,20 @@ function asTags(ascii: string): string {
  */
 const nationFlags = ["gbeng", "gbsct", "gbwls"].map((region) => BLACK_FLAG + asTags(region) + CANCEL_TAG);
 
+// Every character cleanModelText removes, by code point.
+const hiddenClass =
+  "[\\u00AD\\u034F\\u061C\\u115F\\u1160\\u180E\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069" +
+  "\\u3164\\uFEFF\\uFFA0\\uFFF9-\\uFFFB\\u{E0000}-\\u{E007F}\\u{E0100}-\\u{E01EF}]";
+
 // One pass over the text: a whole nation flag (kept), a line or paragraph separator (one "\n"),
 // or a run of hidden characters (removed). The u flag makes it step by code point, not UTF-16 unit.
-const hiddenPattern = new RegExp(
-  `(${nationFlags.join("|")})|([\\u2028\\u2029])|` +
-    "[\\u00AD\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF\\u{E0000}-\\u{E007F}\\u{E0100}-\\u{E01EF}]+",
-  "gu",
-);
+const hiddenPattern = new RegExp(`(${nationFlags.join("|")})|([\\u2028\\u2029])|${hiddenClass}+`, "gu");
 
 // Tested at a run's offset: does a letter end right there, with any combining marks that belong to it (a decomposed
-// "ë" is "e" plus U+0308)? It steps back only over the marks just before the run, so the whole pass stays linear.
-const letterBefore = /(?<=\p{L}\p{M}*)/uy;
+// "ë" is "e" plus U+0308)? It steps back only over the characters that stay just before the run, never into an
+// earlier run, so the whole pass stays linear: some hidden characters are marks (U+034F) or letters (Hangul fillers).
+const stays = `(?!${hiddenClass})`;
+const letterBefore = new RegExp(`(?<=${stays}\\p{L}(?:${stays}\\p{M})*)`, "uy");
 const startsWithLetter = /^\p{L}/u;
 
 /** The kind of a character hiddenPattern already matched as hidden. */
@@ -67,6 +75,9 @@ function kindOf(code: number): HiddenKind {
   if (code === 0xfeff) return "byteOrderMark";
   if (code >= 0xe0100) return "variationSelector";
   if (code >= 0xe0000) return "tag";
+  if (code >= 0xfff9) return "annotation";
+  if (code === 0x115f || code === 0x1160 || code === 0x3164 || code === 0xffa0) return "hangulFiller";
+  if (code === 0x034f || code === 0x180e) return "zeroWidth";
   if ((code >= 0x200b && code <= 0x200d) || (code >= 0x2060 && code <= 0x2064)) return "zeroWidth";
   return "bidi";
 }
@@ -89,6 +100,8 @@ export function cleanModelText(text: string): CleanedText {
     bidi: 0,
     tag: 0,
     variationSelector: 0,
+    hangulFiller: 0,
+    annotation: 0,
     lineSeparator: 0,
     tamperSigns: 0,
   };
@@ -100,14 +113,14 @@ export function cleanModelText(text: string): CleanedText {
       return "\n";
     }
 
-    // Zero-width characters and U+FEFF: the ones that can split a word without a reader seeing it.
+    // Zero-width characters, U+FEFF and Hangul fillers: the ones that can split a word without a reader seeing it.
     let wordSplitters = 0;
     for (const char of run) {
       const code = char.codePointAt(0) ?? 0;
       const kind = kindOf(code);
       counts[kind]++;
-      if (kind === "zeroWidth" || kind === "byteOrderMark") wordSplitters++;
-      else if (kind === "tag" || isOverrideOrIsolate(code)) counts.tamperSigns++;
+      if (kind === "zeroWidth" || kind === "byteOrderMark" || kind === "hangulFiller") wordSplitters++;
+      else if (kind === "tag" || kind === "annotation" || isOverrideOrIsolate(code)) counts.tamperSigns++;
     }
     // A run takes every hidden character in a row, so the characters either side of it are ones that stay.
     // Two UTF-16 units hold any one code point, even a letter outside the Basic Multilingual Plane.
