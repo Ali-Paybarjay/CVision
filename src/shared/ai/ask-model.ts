@@ -115,8 +115,6 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
     console.error("askModel: could not check the daily limit", error);
     throw error;
   }
-  // Only for requests let through, so the daily limit also bounds these events.
-  if (removedCount(hidden) > 0) recordHiddenText(options.feature, hidden, options.requester);
   let prompt = cleanPrompt;
   let problem = "";
 
@@ -139,6 +137,9 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
       if (row !== undefined) await releaseReservation(row, getUsageStore());
       throw error;
     }
+    // Once, when the first request has its answer and so keeps its row: the daily limit then bounds these events.
+    // A request turned away at the limit, or one the model never answered, records nothing.
+    if (attempt === 1 && removedCount(hidden) > 0) recordHiddenText(options.feature, hidden, options.requester);
 
     if (response.stop_reason === "refusal") {
       await logUsage(options, row, model, response.usage, false);
