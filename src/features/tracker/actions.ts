@@ -8,7 +8,15 @@ import { getCurrentUser } from "@/features/account/current-user";
 import { track } from "@/shared/analytics/track";
 import { ApplicationSchema, type Application } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
-import { ApplicationChangeSchema, applyChange, londonToday, type UpdateApplicationResult } from "./model";
+import {
+  ApplicationChangeSchema,
+  applyChange,
+  canCloseWithoutNews,
+  londonToday,
+  markNoResponse,
+  type CloseWithoutNewsResult,
+  type UpdateApplicationResult,
+} from "./model";
 
 export type RecordApplicationResult =
   | { ok: true; application: Application; created: boolean }
@@ -21,6 +29,9 @@ const StoredJobIdSchema = z.uuid();
 
 // Applications saved in the applications table have a uuid too.
 const StoredApplicationIdSchema = z.uuid();
+
+// The rows the user ticked to close at once. A hundred keeps the read to one short request.
+const ChosenApplicationIdsSchema = z.array(StoredApplicationIdSchema).min(1).max(100);
 
 /**
  * Adds the job to the signed-in user's tracker when they press Apply (Nazanin's button, #52), with status
@@ -118,6 +129,60 @@ export async function updateApplication(applicationId: unknown, change: unknown)
   }
   revalidatePath("/dashboard");
   return { ok: true, application };
+}
+
+/**
+ * Closes the applications the user ticked as No response (#69). The dashboard only suggests them; this runs
+ * when the user presses the button, with the rows they chose. Whatever is posted, only an applied or interview
+ * application with no news for 60 days or more changes, and only its status and date: the rest of its data stays.
+ * Records tracker.bulk_closed with the count.
+ */
+export async function closeWithoutNews(applicationIds: unknown): Promise<CloseWithoutNewsResult> {
+  const ids = ChosenApplicationIdsSchema.safeParse(applicationIds);
+  if (!ids.success) return { ok: false, reason: "invalid", message: "Tick the applications to close, up to 100 at a time." };
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { ok: false, reason: "not-connected", message: "Your tracker is not switched on yet, so nothing was closed." };
+  }
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, reason: "signed-out", message: "Sign in to update your applications." };
+
+  // Row-level security limits the read to the user's own rows, so another account's ids are simply not found.
+  const rows = await supabase.from("applications").select("id, data").in("id", [...new Set(ids.data)]);
+  if (rows.error) return closeFailed("read the tracker", rows.error.code);
+
+  const today = londonToday();
+  const closed: Application[] = [];
+  for (const row of rows.data) {
+    const saved = ApplicationSchema.safeParse(row.data);
+    // A ready or closed row, or one with news since the page loaded, is left as it is.
+    if (!saved.success || !canCloseWithoutNews(saved.data, today)) continue;
+
+    // The saved data as it is, so fields this version of the app does not know yet stay too.
+    const data = markNoResponse(row.data as Application, today);
+    const { error } = await supabase.from("applications").update({ data }).eq("id", row.id);
+    if (error) {
+      // The rows closed before the error stay closed: count them, and refresh the page so it shows where each stands.
+      if (closed.length > 0) afterClosing(closed.length, user.id);
+      return closeFailed("update the tracker", error.code);
+    }
+    closed.push(markNoResponse(saved.data, today));
+  }
+
+  if (closed.length > 0) afterClosing(closed.length, user.id);
+  return { ok: true, closed };
+}
+
+function afterClosing(count: number, userId: string) {
+  // The count only: never which jobs or companies.
+  after(() => track("tracker.bulk_closed", { count }, { userId }));
+  revalidatePath("/dashboard");
+}
+
+function closeFailed(step: string, code: string | undefined): CloseWithoutNewsResult {
+  logFailure(step, code);
+  return { ok: false, reason: "failed", message: "We could not close these applications. Refresh the page to see where each one stands." };
 }
 
 function notFound(): RecordApplicationResult {
