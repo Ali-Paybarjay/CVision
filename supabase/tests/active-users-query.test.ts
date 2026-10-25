@@ -181,6 +181,14 @@ describe("supabase/queries/active-users.sql", () => {
     expect(rows[0].count).toBeGreaterThan(0);
   });
 
+  it("gives the same London days whatever the database session's time zone", async () => {
+    const elsewhere = await db.transaction(async (tx) => {
+      await tx.exec("set local timezone = 'Pacific/Auckland'");
+      return runQuery(teamList, tx);
+    });
+    expect(elsewhere).toEqual(await runQuery(teamList));
+  });
+
   it("gives only a Total row of zeros before anyone is active or checks a CV", async () => {
     const rows = await db.transaction(async (tx) => {
       await tx.exec("delete from public.events");
