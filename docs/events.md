@@ -88,3 +88,132 @@ from (
 ) as steps (step, title)
 order by steps.step;
 ```
+
+## شمار رسمی کاربر فعال
+
+عدد رسمی ایستگاه ۴ (دست‌کم ۱۵)، هدف ارائه (۴۰) و وضعیت روزانهٔ پایلوت (#127) از این دو کوئری می‌آید. تا وقتی داشبورد قدم ۴ آماده شود، علی هر روز اجرایشان می‌کند و فقط عددها را در تماس روزانه می‌دهد.
+
+**کاربر فعال** طبق پلن کاربر واردشده‌ای است که دست‌کم یک رزومه یا کاورلتر اختصاصی ساخته، یا یک تمرین مصاحبهٔ کامل انجام داده. در کد یعنی دست‌کم یکی از این رویدادها با `user_id`:
+
+| کار | رویداد |
+|---|---|
+| رزومهٔ اختصاصی ساخت | `tailor.change_approved` (دست‌کم یک تغییر را تأیید کرد)، یا `tailor.cv_exported` با `document` برابر `cv` و `approvedChanges` بیشتر از صفر |
+| کاورلتر ساخت | `tailor.cover_letter_created`، یا `tailor.cv_exported` با `document` برابر `cover-letter` |
+| تمرین مصاحبه را تمام کرد | `interview.session_completed` |
+
+- شمرده نمی‌شود: `tailor.change_rejected`، `tailor.apply_clicked`، دانلود رزومه بدون هیچ تغییر تأییدشده (`approvedChanges` برابر صفر)، رویدادهای Profile و آگهی، و `cvcheck.completed` که پایین‌تر جدا شمرده می‌شود. پس این تعریف از قدم ۳ قیف، که هر `tailor.cv_exported` و هر بازدیدکنندهٔ بی‌حساب را می‌شمارد، سخت‌گیرتر است.
+- کار بی‌حساب (`anonymous_id`، مثلاً `/tailor` در حالت mock بدون ورود) کسی را فعال نمی‌کند.
+- رویدادهای `tailor.*` و جزئیات `document` و `approvedChanges` از ادغام #82 ثبت می‌شوند.
+- کسی که حسابش را حذف کرده دیگر شمرده نمی‌شود، چون رویدادهایش هم با حسابش پاک می‌شوند.
+
+**حساب‌های تیم، تست و دمو** کنار گذاشته می‌شوند، بی‌آنکه ایمیل یا شناسهٔ کسی در مخزن بیاید:
+
+1. در SQL Editor، جای `paste-team-email-here@example.com` در `excluded_emails` ایمیل هر حسابی را بگذارید که نباید شمرده شود، هر کدام در یک خط `('…'),` (خط آخر بدون ویرگول): حساب‌های تیم، حساب‌های تستی که هم‌تیمی‌ها می‌سازند (#140) و حساب دمو (#142).
+2. آدرس پایه کافی است: `name@…` همهٔ `name+…@…`ها را هم کنار می‌گذارد.
+3. فهرست فقط در SQL Editor می‌ماند و هرگز در مخزن، PR، کارت، شیت یا گروه تیم نمی‌آید. کوئری با همان placeholder هم اجرا می‌شود، ولی آن وقت حساب‌های تیم هم شمرده می‌شوند.
+
+خروجی فقط عدد است و هیچ ستونی به کاربری نمی‌رسد: یک ردیف `Total` و یک ردیف برای هر روز به وقت لندن، از روز اولین کاربر فعال تا امروز (نه فقط ۳۰ روز اخیر). روزی که کاربر فعالی نداشته هم ردیف دارد، با صفر. پس ردیف زیر `Total` همیشه امروز است، که تا آخر روز هنوز کامل نیست. `active_users` شمار کاربرهای فعال آن روز است و `new_active_users` کسانی که آن روز برای اولین بار فعال شدند. عدد ایستگاه ۴ و ارائه `active_users` در ردیف `Total` است.
+
+**کاربر فعال، روزانه و کل:**
+
+```sql
+with excluded_emails (email) as (
+  values
+    -- One line per team, test or demo account. Paste them here only, never in the repo.
+    ('paste-team-email-here@example.com')
+),
+-- The accounts on the list, with every name+…@ alias of each address.
+excluded_users as (
+  select u.id
+  from auth.users u
+  join excluded_emails x
+    on regexp_replace(lower(trim(u.email)), '\+[^@]*@', '@') = regexp_replace(lower(trim(x.email)), '\+[^@]*@', '@')
+),
+-- Every day each signed-in user did something that makes them active.
+active as (
+  select
+    e.user_id,
+    (e.created_at at time zone 'Europe/London')::date as day
+  from public.events e
+  where e.user_id is not null
+    and e.user_id not in (select id from excluded_users)
+    and (
+      e.name in ('tailor.change_approved', 'tailor.cover_letter_created', 'interview.session_completed')
+      or (
+        e.name = 'tailor.cv_exported'
+        and (
+          e.properties ->> 'document' = 'cover-letter'
+          or coalesce((e.properties ->> 'approvedChanges')::int, 0) > 0
+        )
+      )
+    )
+),
+with_first_day as (
+  select user_id, day, min(day) over (partition by user_id) as first_day
+  from active
+),
+-- Every London day from the first active one to today, so a day with no active users still shows 0.
+days as (
+  select d::date as day
+  from generate_series(
+    (select min(day) from active)::timestamp,
+    (now() at time zone 'Europe/London')::date::timestamp,
+    interval '1 day'
+  ) as d
+)
+select
+  case when grouping(d.day) = 1 then 'Total' else d.day::text end as day,
+  count(distinct a.user_id) as active_users,
+  count(distinct a.user_id) filter (where a.day = a.first_day) as new_active_users
+from days d
+left join with_first_day a on a.day = d.day
+group by grouping sets ((d.day), ())
+order by grouping(d.day) desc, d.day desc;
+```
+
+**چک رزومه، جدا:** همان فهرست `excluded_emails` را اینجا هم بگذارید. ردیف‌ها مثل بالا از روز اولین چک تا امروزند و روز بی‌چک صفر می‌گیرد. `checks` شمار چک‌هاست، `signed_in_people` کاربرهای واردشده و `anonymous_visitors` بازدیدکننده‌های بی‌حساب، با `anonymous_id`.
+
+- `anonymous_id` کلیدی روزانه از IP است. پس در ردیف `Total` کسی که چند روز آمده چند بار شمرده می‌شود و چند نفر پشت یک IP یک نفرند؛ آن عدد تخمین است.
+- الان چک رزومه رویداد را برای همه، حتی کاربر واردشده، با `anonymous_id` ثبت می‌کند. پس `signed_in_people` فعلاً صفر است و چک‌های تیم با فهرست کنار نمی‌روند: شمار چک‌هایی را که تیم گزارش می‌دهد (مثل اجراهای #140) دستی از `checks` کم کنید. اگر روزی `user_id` هم ثبت شود، همین کوئری بی‌تغییر کار می‌کند.
+
+```sql
+with excluded_emails (email) as (
+  values
+    -- The same list as above.
+    ('paste-team-email-here@example.com')
+),
+excluded_users as (
+  select u.id
+  from auth.users u
+  join excluded_emails x
+    on regexp_replace(lower(trim(u.email)), '\+[^@]*@', '@') = regexp_replace(lower(trim(x.email)), '\+[^@]*@', '@')
+),
+checks as (
+  select
+    e.user_id,
+    e.anonymous_id,
+    (e.created_at at time zone 'Europe/London')::date as day
+  from public.events e
+  where e.name = 'cvcheck.completed'
+    and (e.user_id is null or e.user_id not in (select id from excluded_users))
+),
+-- Every London day from the first check to today, so a day with no checks still shows 0.
+days as (
+  select d::date as day
+  from generate_series(
+    (select min(day) from checks)::timestamp,
+    (now() at time zone 'Europe/London')::date::timestamp,
+    interval '1 day'
+  ) as d
+)
+select
+  case when grouping(d.day) = 1 then 'Total' else d.day::text end as day,
+  -- count(c.day), not count(*): a day with no checks has one empty row from the left join.
+  count(c.day) as checks,
+  count(distinct c.user_id) as signed_in_people,
+  count(distinct c.anonymous_id) filter (where c.user_id is null) as anonymous_visitors
+from days d
+left join checks c on c.day = d.day
+group by grouping sets ((d.day), ())
+order by grouping(d.day) desc, d.day desc;
+```
