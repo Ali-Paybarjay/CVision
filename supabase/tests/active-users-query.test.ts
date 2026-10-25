@@ -8,6 +8,7 @@ import { createTestDatabase } from "./test-database";
 // pastes into the SQL Editor (card #155). These tests run the file itself on fictional accounts and events.
 
 const queryFile = new URL("../queries/active-users.sql", import.meta.url);
+const workflowFile = new URL("../../.github/workflows/daily-stats.yml", import.meta.url);
 const variable = ":'team_emails'";
 
 /** The columns the workflow reads, by name and in this order. */
@@ -120,6 +121,13 @@ describe("supabase/queries/active-users.sql", () => {
   it("gives the columns the daily-stats workflow reads, by name and in order", async () => {
     const rows = await runQuery(teamList);
     expect(Object.keys(rows[0])).toEqual(columns);
+  });
+
+  it("is in step with the daily-stats workflow: the same columns, and the list in the same variable", async () => {
+    const workflow = await readFile(workflowFile, "utf8");
+    expect(workflow).toContain(`expected="${columns.join(",")}"`);
+    expect(workflow).toContain('-v team_emails="$TEAM_ACCOUNT_EMAILS"');
+    expect(workflow).toContain("-f supabase/queries/active-users.sql");
   });
 
   it("gives a Total row, then every London day from the first active user or check to today, newest first", async () => {

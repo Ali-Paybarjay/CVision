@@ -1,0 +1,143 @@
+# Daily pilot numbers (card #155): every morning the active users and CV checks from supabase/queries/active-users.sql
+# go on card #127 (Nazanin's daily pilot status) as a Persian comment, so nobody runs the query by hand.
+# The one scheduled workflow CLAUDE.md rule 11 allows. Totals only: no email, user id or other personal detail reaches
+# the log, the run summary or the comment. The repo is public, and so are its run logs.
+# Needs two repository secrets: SUPABASE_DB_URL (the Session pooler connection string, as GitHub's runners have no
+# IPv6) and TEAM_ACCOUNT_EMAILS (the team, test and demo accounts to leave out, separated by commas).
+name: Daily stats
+
+on:
+  schedule:
+    # 08:00 UTC, which is 08:00 in London in winter (GMT). In British Summer Time it runs at 09:00 London: fine for this
+    # project, which ends in November. GitHub can start a scheduled run some minutes late.
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+# One run at a time. A second run waits instead of cancelling one that may be posting its comment.
+concurrency:
+  group: daily-stats
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  stats:
+    name: "Active users on card #127"
+    # Not in forks, which have neither the secrets nor card #127.
+    if: github.repository == 'Ali-Paybarjay/CVision'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # No Git token is left on disk while the database is queried.
+          persist-credentials: false
+
+      - name: Check the secrets
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          TEAM_ACCOUNT_EMAILS: ${{ secrets.TEAM_ACCOUNT_EMAILS }}
+        run: |
+          # Only whether each one is set: never echo them, and never add set -x to this workflow.
+          missing=()
+          [ -n "${SUPABASE_DB_URL//[[:space:]]/}" ] || missing+=(SUPABASE_DB_URL)
+          # A list of only commas or spaces would leave the team in the count.
+          [ -n "${TEAM_ACCOUNT_EMAILS//[[:space:],;]/}" ] || missing+=(TEAM_ACCOUNT_EMAILS)
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf -v names '%s and ' "${missing[@]}"
+            echo "::error title=Missing secrets::Add ${names% and } under Settings → Secrets and variables → Actions, then run again. Nothing was posted."
+            exit 1
+          fi
+
+      - name: Count active users and CV checks
+        env:
+          # The secrets reach this step as variables only, never pasted into the script.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          TEAM_ACCOUNT_EMAILS: ${{ secrets.TEAM_ACCOUNT_EMAILS }}
+          PGCONNECT_TIMEOUT: "30"
+          PGSSLMODE: require
+          PGAPPNAME: cvision-daily-stats
+        run: |
+          # GitHub's Ubuntu runners come with psql; install it only if an image ever drops it.
+          if ! command -v psql > /dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client > /dev/null
+          fi
+
+          result="$RUNNER_TEMP/active-users.csv"
+          errors="$RUNNER_TEMP/psql-errors.txt"
+          # - The team list goes in as the psql variable team_emails, which psql quotes as one SQL string: no SQL is
+          #   built from it.
+          # - VERBOSITY=terse keeps the query text, and with it the list, out of any error message.
+          # - The session is read-only, whichever role the connection string uses.
+          if ! psql "$SUPABASE_DB_URL" --no-psqlrc --quiet --csv \
+            -v ON_ERROR_STOP=1 -v VERBOSITY=terse -v team_emails="$TEAM_ACCOUNT_EMAILS" \
+            -c "set default_transaction_read_only = on" \
+            -f supabase/queries/active-users.sql > "$result" 2> "$errors"; then
+            # psql's own connection errors can quote part of the connection string, so the log gets a fixed hint
+            # instead. An error from the database itself is short (terse) and shown as it is.
+            if grep -q 'ERROR: ' "$errors"; then
+              sed -n 's/.*\(ERROR: .*\)/\1/p' "$errors" | head -n 3
+              hint="The query failed on the database (above)."
+            elif grep -qi 'password authentication failed' "$errors"; then
+              hint="The database refused the password in SUPABASE_DB_URL."
+            elif grep -qi 'tenant or user not found' "$errors"; then
+              hint="The pooler does not know the user in SUPABASE_DB_URL. It reads <role>.<project ref>, e.g. postgres.<project ref>."
+            else
+              hint="psql could not reach the database. Use the Session pooler connection string: GitHub's runners have no IPv6."
+            fi
+            echo "::error title=Query failed::$hint Nothing was posted."
+            exit 1
+          fi
+
+          # The query's own header, so a change to its columns stops here instead of posting wrong numbers.
+          expected="day,active_users,new_active_users,checks,signed_in_people,anonymous_visitors"
+          if [ "$(head -n 1 "$result")" != "$expected" ] || ! grep -q '^Total,' "$result"; then
+            echo "::error title=Unexpected result::supabase/queries/active-users.sql no longer gives a Total row and the columns $expected. Change the file and this workflow together. Nothing was posted."
+            exit 1
+          fi
+
+          # The last full London day: the run starts at 08:00 or 09:00 London time.
+          yesterday=$(TZ=Europe/London date -d yesterday +%F)
+          # number <day> <column>: that row's number, or 0 when the day has no row (before the first active user or check).
+          number() {
+            awk -F, -v day="$1" -v column="$2" '
+              NR == 1 { for (i = 1; i <= NF; i++) if ($i == column) c = i; next }
+              $1 == day { value = $c }
+              END { print (value == "" ? 0 : value) }
+            ' "$result"
+          }
+          active_yesterday=$(number "$yesterday" active_users)
+          active_total=$(number Total active_users)
+          checks_yesterday=$(number "$yesterday" checks)
+          checks_total=$(number Total checks)
+          for n in "$active_yesterday" "$active_total" "$checks_yesterday" "$checks_total"; do
+            if ! [[ $n =~ ^[0-9]+$ ]]; then
+              echo "::error title=Unexpected result::The query gave something other than a whole number. Nothing was posted."
+              exit 1
+            fi
+          done
+
+          # Numbers and a date only. The same table goes on the run's page.
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ### آمار روزانهٔ پایلوت · $yesterday
+
+          | | دیروز ($yesterday) | کل تا امروز صبح |
+          | --- | ---: | ---: |
+          | کاربر فعال | $active_yesterday | $active_total |
+          | چک رزومه | $checks_yesterday | $checks_total |
+
+          روزها به وقت لندن‌اند. کاربر فعال کاربر واردشده‌ای است که رزومه یا کاورلتر اختصاصی ساخته یا یک تمرین مصاحبه را تمام کرده، بدون حساب‌های تیم، تست و دمو. چک رزومه جدا شمرده می‌شود و چک‌های تیم هنوز در آن هست. تعریف‌ها در \`docs/events.md\`.
+
+          این کامنت را کار خودکار \`daily-stats\` هر صبح می‌گذارد ([این اجرا]($run_url)).
+          EOF
+          cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Post the numbers on card #127"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh issue comment 127 --body-file "$RUNNER_TEMP/comment.md"
