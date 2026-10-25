@@ -14,7 +14,7 @@
 -- The daily-stats workflow reads these six columns by name and in this order: change them together.
 with excluded_emails as (
   select distinct regexp_replace(lower(email), '\+[^@]*@', '@') as email
-  from regexp_split_to_table(:'team_emails', '[\s,;]+') as email -- team list
+  from regexp_split_to_table(:'team_emails', '[\s,;]+') as list (email) -- team list
   where email <> ''
 ),
 -- The accounts on the list, with every name+...@ alias of each address.

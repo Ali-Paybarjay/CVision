@@ -13,10 +13,11 @@ on:
     - cron: "0 8 * * *"
   workflow_dispatch:
 
-# One run at a time. A second run waits instead of cancelling one that may be posting its comment.
+# A new run cancels the one before it (CLAUDE.md, rule 11), so a manual run during the morning one leaves one comment,
+# not two. Posting is a single call: a cancelled run has either posted its comment or not.
 concurrency:
   group: daily-stats
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -79,7 +80,7 @@ jobs:
             # psql's own connection errors can quote part of the connection string, so the log gets a fixed hint
             # instead. An error from the database itself is short (terse) and shown as it is.
             if grep -q 'ERROR: ' "$errors"; then
-              sed -n 's/.*\(ERROR: .*\)/\1/p' "$errors" | head -n 3
+              grep -m 3 -o 'ERROR: .*' "$errors"
               hint="The query failed on the database (above)."
             elif grep -qi 'password authentication failed' "$errors"; then
               hint="The database refused the password in SUPABASE_DB_URL."
