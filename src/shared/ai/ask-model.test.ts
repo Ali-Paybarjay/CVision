@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { APIConnectionTimeoutError, APIError, RateLimitError } from "@anthropic-ai/sdk/error";
+import { APIConnectionTimeoutError, APIError, RateLimitError } from "@anthropic-ai/sdk/core/error";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -13,7 +13,7 @@ import { askModel, AskModelError, loadPrompt } from "./index";
 import { createMemoryUsageStore, type Requester, startOfUtcDay, UsageLogError, type UsageStore } from "./usage";
 
 // Live-mode tests talk to a fake client and an in-memory usage log: never the real API or Supabase. The SDK's error
-// classes (@anthropic-ai/sdk/error) stay real, so the fake client throws what the real one would.
+// classes (@anthropic-ai/sdk/core/error) stay real, so the fake client throws what the real one would.
 const create = vi.hoisted(() => vi.fn());
 const clientOptions = vi.hoisted(() => vi.fn());
 vi.mock("@anthropic-ai/sdk", () => ({

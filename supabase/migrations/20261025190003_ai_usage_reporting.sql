@@ -5,11 +5,13 @@ create schema reporting;
 
 -- Plain views, not security_invoker: they read the tables with their owner's rights, so ai_usage_reader needs no
 -- rights on the tables themselves. Days are UTC days, as the daily limits are, whatever the session's time zone.
+-- security_barrier keeps a reader's own WHERE above the view's: without it a cheap function of the reader's could
+-- run on every row of public.events first and see the names of all events, not only the AI ones.
 
 -- ai_usage_daily: one row per day, feature and model. ok = false is counted twice over: a request the model
 -- answered but refused, or whose answer did not fit, kept its tokens; a row reserved for a request and never filled
 -- in has none (reserveWithinDailyLimit in src/shared/ai/usage.ts).
-create view reporting.ai_usage_daily as
+create view reporting.ai_usage_daily with (security_barrier = true) as
 select
   (created_at at time zone 'utc')::date as day,
   feature,
@@ -25,7 +27,7 @@ group by day, feature, model;
 
 -- ai_events_daily: askModel's ai.failed and ai.limited events per day (docs/events.md). ai.failed has the error's
 -- class and HTTP status, ai.limited which daily limit turned the request away; neither says who asked.
-create view reporting.ai_events_daily as
+create view reporting.ai_events_daily with (security_barrier = true) as
 select
   (created_at at time zone 'utc')::date as day,
   name as event,

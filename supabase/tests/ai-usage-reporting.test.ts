@@ -237,6 +237,33 @@ describe("the ai_usage_reader role", () => {
     await expect(asReader((tx) => tx.query("delete from public.ai_usage"))).rejects.toMatchObject({ code: "42501" });
   });
 
+  it.each([
+    ["ai_usage_daily", "feature"],
+    ["ai_events_daily", "event"],
+  ] as const)("sees only the rows %s gives back, even through a function of its own", async (view, column) => {
+    // Like any role, the reader may make temporary functions. A cheap one in its WHERE that reports what it is given
+    // must only see the view's own rows (security_barrier), never every row of the table, such as other events.
+    const seen: string[] = [];
+    const returned = await asReader(async (tx) => {
+      await tx.exec(`
+        create function pg_temp.peek(value text) returns boolean language plpgsql immutable cost 0.0000001 as $$
+        begin
+          raise notice '%', value;
+          return true;
+        end;
+        $$;
+        set local enable_indexscan = off;
+        set local enable_bitmapscan = off;
+      `);
+      const { rows } = await tx.query<Record<string, string>>(`select ${column} from reporting.${view} where pg_temp.peek(${column})`, [], {
+        onNotice: (notice) => seen.push(notice.message ?? ""),
+      });
+      await tx.rollback();
+      return rows.map((row) => row[column]);
+    });
+    expect(seen.sort()).toEqual(returned.sort());
+  });
+
   it.each(["anon", "authenticated"])("is the only one: %s cannot read the views", async (role) => {
     for (const view of views) {
       await expect(asRole(role, (tx) => tx.query(`select * from reporting.${view}`))).rejects.toMatchObject({ code: "42501" });

@@ -1,6 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import * as sdkErrors from "@anthropic-ai/sdk/error";
+import * as sdkErrors from "@anthropic-ai/sdk/core/error";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { io } from "next/cache";
 import { after } from "next/server";
