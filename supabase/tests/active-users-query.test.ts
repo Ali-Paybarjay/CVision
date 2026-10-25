@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { PGlite } from "@electric-sql/pglite";
+import type { PGlite, Transaction } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase } from "./test-database";
 
 // supabase/queries/active-users.sql is what the daily-stats workflow runs with psql every morning, and what a person
-// pastes into the SQL Editor (card #155). These tests run the file itself on fictional accounts and events.
+// pastes into the SQL Editor (card #155). These tests run the file itself on fictional accounts and events, as the
+// workflow's role cvision_stats, so they also prove that role's rights are enough (issue #162).
 
 const queryFile = new URL("../queries/active-users.sql", import.meta.url);
 const workflowFile = new URL("../../.github/workflows/daily-stats.yml", import.meta.url);
@@ -26,10 +27,16 @@ function psqlLiteral(value: string): string {
 
 type Row = Record<(typeof columns)[number], string | number>;
 
-async function runQuery(teamEmails: string, database: Pick<PGlite, "query"> = db): Promise<Row[]> {
+/**
+ * Runs the file the way the daily-stats workflow does: as cvision_stats, in a read-only transaction. Given a
+ * transaction, runs it in that one, after whatever the test did there first.
+ */
+async function runQuery(teamEmails: string, tx?: Transaction): Promise<Row[]> {
+  if (!tx) return db.transaction((own) => runQuery(teamEmails, own));
   const sql = await readFile(queryFile, "utf8");
+  await tx.exec("set local role cvision_stats; set transaction read only");
   // A function, so a $ in the list is never read as a replacement pattern.
-  const { rows } = await database.query<Row>(sql.replace(variable, () => psqlLiteral(teamEmails)));
+  const { rows } = await tx.query<Row>(sql.replace(variable, () => psqlLiteral(teamEmails)));
   // count() is a bigint: compare plain numbers.
   return rows.map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, key === "day" ? value : Number(value)])));
 }
@@ -63,8 +70,6 @@ async function addEvent(name: string, at: string, who: { user?: string; anonymou
 
 beforeAll(async () => {
   db = await createTestDatabase();
-  // Supabase's auth.users has an email column; the shared stub keeps only id.
-  await db.exec("alter table auth.users add column email text");
   for (const [id, email] of [
     [amy, "amy@example.com"],
     [ben, "ben@example.com"],
