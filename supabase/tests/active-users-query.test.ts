@@ -45,7 +45,10 @@ const dan = randomUUID();
 const ella = randomUUID();
 const teamAli = randomUUID();
 const teamMarziehAlias = randomUUID();
-const teamList = "ali@team.example, Marzieh@Team.example";
+const teamDemo = randomUUID();
+// In another case than the accounts, with one entry as a + alias: the list side is made lower case and taken back to
+// base addresses too.
+const teamList = "ali@team.example, Marzieh@Team.example, demo+pilot@team.example";
 let db: PGlite;
 
 async function addEvent(name: string, at: string, who: { user?: string; anonymous?: string }, properties: object = {}) {
@@ -68,9 +71,12 @@ beforeAll(async () => {
     [cara, "cara@example.com"],
     [dan, "dan@example.com"],
     [ella, "Ella@Example.com"],
-    [teamAli, "ali@team.example"],
+    // Stored in another case than the list: left out all the same.
+    [teamAli, "Ali@Team.Example"],
     // A + alias of a listed address, in another case: left out through the base address.
     [teamMarziehAlias, "marzieh+test1@team.example"],
+    // The base address of an alias on the list: left out through it.
+    [teamDemo, "demo@team.example"],
   ]) {
     await db.query("insert into auth.users (id, email) values ($1, $2)", [id, email]);
   }
@@ -100,6 +106,7 @@ beforeAll(async () => {
   await addEvent("tailor.change_approved", "2026-07-15T12:00:00Z", { user: teamAli });
   await addEvent("cvcheck.completed", "2026-07-15T12:00:00Z", { user: teamAli });
   await addEvent("interview.session_completed", "2026-07-14T12:00:00Z", { user: teamMarziehAlias });
+  await addEvent("tailor.cover_letter_created", "2026-07-16T12:00:00Z", { user: teamDemo });
 
   // CV checks: Cara signed in, and two visitors without an account on both sides of London midnight.
   await addEvent("cvcheck.completed", "2026-07-14T12:00:00Z", { user: cara });
@@ -159,6 +166,7 @@ describe("supabase/queries/active-users.sql", () => {
     expect(day(rows, "2026-07-14")).toMatchObject({ active_users: 1, new_active_users: 1 });
     // Amy (back after midnight BST), Dan and Ella's cover letter; Dan and Ella for the first time. Not the team.
     expect(day(rows, "2026-07-15")).toMatchObject({ active_users: 3, new_active_users: 2 });
+    // Dan again; the demo account's cover letter is left out.
     expect(day(rows, "2026-07-16")).toMatchObject({ active_users: 1, new_active_users: 0 });
   });
 
@@ -170,8 +178,10 @@ describe("supabase/queries/active-users.sql", () => {
   });
 
   it("counts the team too when the list is empty, and reads a list split by new lines the same as by commas", async () => {
-    expect(day(await runQuery(""), "Total")).toMatchObject({ active_users: 6, checks: 5, signed_in_people: 2 });
-    expect(await runQuery("\n ali@team.example\r\nmarzieh@team.example \n")).toEqual(await runQuery(teamList));
+    expect(day(await runQuery(""), "Total")).toMatchObject({ active_users: 7, checks: 5, signed_in_people: 2 });
+    expect(await runQuery("\n ali@team.example\r\nmarzieh@team.example \n\tdemo+pilot@team.example\n")).toEqual(
+      await runQuery(teamList),
+    );
   });
 
   it("treats the list as data: a quote or a backslash in it changes nothing", async () => {

@@ -2,8 +2,10 @@
 # go on card #127 (Nazanin's daily pilot status) as a Persian comment, so nobody runs the query by hand.
 # The one scheduled workflow CLAUDE.md rule 11 allows. Totals only: no email, user id or other personal detail reaches
 # the log, the run summary or the comment. The repo is public, and so are its run logs.
-# Needs two repository secrets: SUPABASE_DB_URL (the Session pooler connection string, as GitHub's runners have no
-# IPv6) and TEAM_ACCOUNT_EMAILS (the team, test and demo accounts to leave out, separated by commas).
+# Needs two secrets in the GitHub environment daily-stats (Settings → Environments), which only main may use:
+# SUPABASE_DB_URL (the Session pooler connection string, as GitHub's runners have no IPv6) and TEAM_ACCOUNT_EMAILS (the
+# team, test and demo accounts to leave out, separated by commas). Environment secrets, not repository secrets: a
+# workflow on any branch of this repo can read a repository secret, so anyone who pushes a branch could print it.
 name: Daily stats
 
 on:
@@ -29,6 +31,9 @@ jobs:
     # Not in forks, which have neither the secrets nor card #127.
     if: github.repository == 'Ali-Paybarjay/CVision'
     runs-on: ubuntu-latest
+    # The secrets live in this environment, and its deployment branch rule lets only main use it: a run from any
+    # other branch, changed workflow or not, never gets them.
+    environment: daily-stats
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
@@ -48,7 +53,7 @@ jobs:
           [ -n "${TEAM_ACCOUNT_EMAILS//[[:space:],;]/}" ] || missing+=(TEAM_ACCOUNT_EMAILS)
           if [ ${#missing[@]} -gt 0 ]; then
             printf -v names '%s and ' "${missing[@]}"
-            echo "::error title=Missing secrets::Add ${names% and } under Settings → Secrets and variables → Actions, then run again. Nothing was posted."
+            echo "::error title=Missing secrets::Add ${names% and } as environment secrets under Settings → Environments → daily-stats (not as repository secrets), then run again. Nothing was posted."
             exit 1
           fi
 
@@ -92,6 +97,8 @@ jobs:
             echo "::error title=Query failed::$hint Nothing was posted."
             exit 1
           fi
+          # The Total row counts every event up to the query, today's included: the comment says up to when.
+          as_of=$(TZ=Europe/London date +'%F %H:%M')
 
           # The query's own header, so a change to its columns stops here instead of posting wrong numbers.
           expected="day,active_users,new_active_users,checks,signed_in_people,anonymous_visitors"
@@ -120,13 +127,18 @@ jobs:
               exit 1
             fi
           done
+          # The pilot already has events, so all zeros means the database role sees none of them, not a quiet day.
+          if [ "$active_total" = 0 ] && [ "$checks_total" = 0 ]; then
+            echo "::error title=No events seen::The query saw no active user and no CV check at all. If SUPABASE_DB_URL uses a role of its own, give it BYPASSRLS: public.events has row-level security with no policies. Nothing was posted."
+            exit 1
+          fi
 
           # Numbers and a date only. The same table goes on the run's page.
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           cat > "$RUNNER_TEMP/comment.md" <<EOF
           ### آمار روزانهٔ پایلوت · $yesterday
 
-          | | دیروز ($yesterday) | کل تا امروز صبح |
+          | | دیروز ($yesterday) | کل تا $as_of (لندن) |
           | --- | ---: | ---: |
           | کاربر فعال | $active_yesterday | $active_total |
           | چک رزومه | $checks_yesterday | $checks_total |
