@@ -46,7 +46,8 @@ function expectHonestAndOnVoice(result: CvCheckResult, cvText: string) {
   const written = [result.summary, ...result.issues.flatMap((issue) => [issue.title, issue.explanation, issue.fix])].join("\n");
   expect(brandPhraseHits(written), "banned brand phrases").toEqual([]);
   expect(usSpellingHits(written, cvText), "US spellings").toEqual([]);
-  // A quoted line must come from the CV, or from the prompt's own examples of lines to remove.
+  // A double-quoted line must come from the CV, or from the prompt's own examples of lines to remove.
+  // Suggested new wording goes in single quotes (prompts/cvcheck-review.md), so it is not checked here.
   const quotable = normalise(`${cvText}\nReferences available on request\nCurriculum Vitae\nPhoto attached`);
   for (const quote of quotesIn(written)) {
     expect(quotable, `"${quote}" is quoted but is not in the CV`).toContain(normalise(quote).replace(/[.,;]$/, ""));
