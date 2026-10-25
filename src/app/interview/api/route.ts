@@ -43,7 +43,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!job) return Response.json({ error: "We could not find this job." }, { status: 404 });
   // The job ad and CV are read only by the first three steps; later steps work from the session.
   const inputs = async () => {
-    const profile = await getMyProfile();
+    const profile = await getMyProfile({ jobId: body.jobId });
     if (!profile) throw new MissingProfileError();
     return interviewInputsFor(job, profile);
   };

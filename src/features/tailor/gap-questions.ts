@@ -1,5 +1,5 @@
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
-import { askModel, loadPrompt } from "@/shared/ai";
+import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
 /** A plain question for one gap, used as the mock answer and as a fallback. */
@@ -12,8 +12,14 @@ export function defaultGapQuestion(gap: Gap): GapQuestion {
 }
 
 /** One question about the user's real experience for every gap in the match. */
-export async function askGapQuestions(input: { profile: Profile; job: Job; match: MatchResult }): Promise<GapQuestion[]> {
-  const { profile, job, match } = input;
+export async function askGapQuestions(input: {
+  profile: Profile;
+  job: Job;
+  match: MatchResult;
+  /** Whose daily limit the request counts against: { userId } for a signed-in user. */
+  requester?: Requester;
+}): Promise<GapQuestion[]> {
+  const { profile, job, match, requester } = input;
   if (match.gaps.length === 0) return [];
 
   const prompt = await loadPrompt("tailor-gap-questions", {
@@ -28,6 +34,7 @@ export async function askGapQuestions(input: { profile: Profile; job: Job; match
     schema: GapQuestionListSchema,
     sample: { questions: match.gaps.map(defaultGapQuestion) },
     effort: "low",
+    requester,
   });
 
   // Exactly one question per gap, in the match's order, even if the model skips or repeats one.

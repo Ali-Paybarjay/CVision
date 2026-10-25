@@ -128,6 +128,13 @@ describe("text helpers", () => {
     expect(isVerbatim("", source)).toBe(false);
   });
 
+  it("matches quotes when the source or the quote hides invisible characters", () => {
+    const source = "Led a team​ of five­ engineers across two‮ sites.";
+    expect(isVerbatim("led a team of five engineers across two sites", source)).toBe(true);
+    expect(isVerbatim("led a﻿ team of five", "Led a team of five engineers.")).toBe(true);
+    expect(isVerbatim("led a team of six", source)).toBe(false);
+  });
+
   it("recognises non-answers but not honest attempts", () => {
     expect(isNonAnswer("")).toBe(true);
     expect(isNonAnswer("I don't know.")).toBe(true);

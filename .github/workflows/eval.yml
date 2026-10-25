@@ -1,0 +1,155 @@
+# Prompt evals (npm run eval) against the real model, so every run costs money: manual runs only.
+# The key lives only in GitHub Secrets, never on anyone's computer. Run it from Actions → eval → Run workflow.
+name: eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "One eval file to run, e.g. src/features/interview/interview.eval.ts. Leave empty to run them all."
+        required: false
+        type: string
+        default: ""
+
+# A new run cancels only the same person's earlier run of the same file on the same branch (CLAUDE.md, rule 11),
+# so nobody's paid run is stopped halfway by someone else's.
+concurrency:
+  group: eval-${{ github.ref }}-${{ github.actor }}-${{ inputs.file || 'all' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    name: Prompt evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # No Git token is left on disk while the evals run.
+          persist-credentials: false
+
+      - name: Check the eval file and the key
+        env:
+          # The input reaches the script only as a variable, never pasted into it.
+          EVAL_FILE: ${{ inputs.file }}
+          # Only whether a key is set reaches this step, never the key itself.
+          HAS_KEY: ${{ secrets.OPENROUTER_API_KEY != '' || secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          # The same files npm run eval picks up: a path under src/ or tests/ ending in .eval.ts.
+          pattern='^(src|tests)/[A-Za-z0-9_./-]+\.eval\.ts$'
+          if [ -n "$EVAL_FILE" ]; then
+            if ! [[ $EVAL_FILE =~ $pattern ]] || [[ $EVAL_FILE == *..* ]]; then
+              echo "::error title=Wrong eval file::Give a path under src/ or tests/ that ends in .eval.ts, e.g. src/features/interview/interview.eval.ts."
+              exit 1
+            fi
+            if [ ! -f "$EVAL_FILE" ]; then
+              echo "::error title=Eval file not found::That file is not on this branch. Check the path and the branch you ran the workflow on."
+              exit 1
+            fi
+          fi
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error title=No API key::Add OPENROUTER_API_KEY (or ANTHROPIC_API_KEY) under Settings → Secrets and variables → Actions, then run again."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Run the evals
+        id: evals
+        env:
+          EVAL_FILE: ${{ inputs.file }}
+          # The keys reach this step only. An unset secret is an empty string, which getAiProvider ignores.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Vitest's usual reporters on GitHub, plus a JSON report for the next steps.
+          args=(--reporter=default --reporter=github-actions --reporter=json --outputFile.json=eval-report.json)
+          if [ -n "$EVAL_FILE" ]; then
+            args+=("$EVAL_FILE")
+          fi
+          npm run eval -- "${args[@]}"
+
+      # The numbers on the run's page, ready to copy onto a PR. Counts and times only: no key, test message or model output.
+      - name: Write the eval summary
+        if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
+        run: |
+          node <<'EOF'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const lines = ["## Prompt evals", ""];
+          const write = () => fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
+          if (!fs.existsSync("eval-report.json")) {
+            lines.push("The evals left no report, so this run has no numbers.");
+            write();
+            process.exit(0);
+          }
+          const report = JSON.parse(fs.readFileSync("eval-report.json", "utf8"));
+          const seconds = (ms) => `${(Math.max(0, ms) / 1000).toFixed(1)} s`;
+          const rows = report.testResults
+            .map((file) => {
+              const passed = file.assertionResults.filter((test) => test.status === "passed").length;
+              const failed = file.assertionResults.filter((test) => test.status === "failed").length;
+              return {
+                name: path.relative(process.cwd(), file.name).split(path.sep).join("/").replace(/\|/g, "\\|"),
+                passed,
+                // A file that fails before its tests start (an import error, say) has no failed test of its own.
+                failed: failed === 0 && file.status === "failed" ? "0 (file failed)" : failed,
+                skipped: file.assertionResults.length - passed - failed,
+                duration: seconds(file.endTime - file.startTime),
+              };
+            })
+            .sort((a, b) => a.name.localeCompare(b.name));
+          const ran = report.numPassedTests + report.numFailedTests;
+          // Files run side by side, so the total is the time from the start of the run to the end of its last test.
+          const end = Math.max(report.startTime, ...report.testResults.map((file) => file.endTime));
+          lines.push("| File | Passed | Failed | Skipped | Duration |", "| --- | ---: | ---: | ---: | ---: |");
+          for (const row of rows) {
+            lines.push(`| \`${row.name}\` | ${row.passed} | ${row.failed} | ${row.skipped} | ${row.duration} |`);
+          }
+          lines.push(
+            `| **Total** | **${report.numPassedTests}** | **${report.numFailedTests}** | **${report.numTotalTests - ran}** | **${seconds(end - report.startTime)}** |`,
+          );
+          write();
+          EOF
+
+      # A skipped eval passes, so a run can be green while nothing reached the model: say so out loud.
+      - name: Check that the evals really ran
+        if: ${{ !cancelled() && (steps.evals.outcome == 'success' || steps.evals.outcome == 'failure') }}
+        run: |
+          node <<'EOF'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          if (!fs.existsSync("eval-report.json")) {
+            console.log("::warning title=No eval report::The evals left no report, so this step cannot tell which ones ran.");
+            process.exit(0);
+          }
+          const report = JSON.parse(fs.readFileSync("eval-report.json", "utf8"));
+          const ran = report.numPassedTests + report.numFailedTests;
+          const skipped = report.numTotalTests - ran;
+          console.log(`Evals: ${report.numPassedTests} passed, ${report.numFailedTests} failed, ${skipped} skipped.`);
+          const files = report.testResults
+            .map((file) => ({
+              name: path.relative(process.cwd(), file.name).split(path.sep).join("/"),
+              skipped: file.assertionResults.filter((test) => test.status !== "passed" && test.status !== "failed").length,
+            }))
+            .filter((file) => file.skipped > 0)
+            .map((file) => `${file.name} (${file.skipped})`)
+            .sort()
+            .join("; ");
+          const why = "A file usually skips because it checks only ANTHROPIC_API_KEY: wrap its suite in describe.skipIf(!getAiProvider()) instead.";
+          if (ran === 0) {
+            const what = skipped > 0 ? `All ${skipped} eval tests were skipped: ${files}. ${why}` : "No eval tests were found.";
+            console.log(`::error title=No evals ran::Nothing reached the model, so this run checked nothing. ${what}`);
+            process.exit(1);
+          }
+          if (skipped > 0) {
+            console.log(`::warning title=Some evals skipped::${skipped} eval tests were skipped and checked nothing: ${files}. ${why}`);
+          }
+          EOF
