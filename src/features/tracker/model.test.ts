@@ -5,13 +5,14 @@ import {
   addDays,
   applyChange,
   canCloseWithoutNews,
-  closedLast,
+  closeChosen,
   closingDate,
   daysBetween,
   daysWithoutNews,
   formatDate,
   londonToday,
   markNoResponse,
+  openAndClosed,
   suggestClosing,
   type TrackedApplication,
 } from "./model";
@@ -144,21 +145,43 @@ describe("markNoResponse", () => {
   });
 });
 
-describe("closedLast", () => {
-  it("puts every closed status at the bottom and keeps the order within each group", () => {
-    const statuses: ApplicationStatus[] = ["rejected", "applied", "no_response", "ready", "accepted", "interview", "withdrawn", "offer"];
-    const items = statuses.map((status) => tracked(application(status, "2026-10-20")));
+describe("closeChosen", () => {
+  const today = "2026-10-25";
+  const ticked = tracked(application("applied", "2026-08-24", "ticked"));
+  const unticked = tracked(application("interview", "2026-08-21", "unticked"));
 
-    expect(closedLast(items).map((item) => item.application.status)).toEqual([
-      "applied",
-      "ready",
-      "interview",
-      "offer",
-      "rejected",
-      "no_response",
-      "accepted",
-      "withdrawn",
-    ]);
+  it("closes only the ticked row, and the other suggested row stays as it was", () => {
+    const items = [ticked, unticked];
+    expect(suggestClosing(items, today)).toEqual(items);
+
+    expect(closeChosen(items, ["ticked"], today)).toEqual([{ ...ticked.application, status: "no_response", date: today }]);
+    expect(unticked.application).toEqual(application("interview", "2026-08-21", "unticked"));
+    expect(closeChosen(items, ["unticked"], today).map((item) => item.id)).toEqual(["unticked"]);
+  });
+
+  it("closes nothing when nothing is ticked", () => {
+    expect(closeChosen([ticked, unticked], [], today)).toEqual([]);
+  });
+
+  it("leaves out a ticked row the server would refuse: ready, offer, closed or with news within 60 days", () => {
+    const items = [
+      tracked(application("ready", "2025-01-01", "ready")),
+      tracked(application("offer", "2025-01-01", "offer")),
+      tracked(application("rejected", "2025-01-01", "closed")),
+      tracked(application("applied", "2026-08-27", "fifty-nine-days")),
+    ];
+
+    expect(closeChosen(items, items.map((item) => item.application.id), today)).toEqual([]);
+  });
+});
+
+describe("openAndClosed", () => {
+  it("puts every closed status in its own list and keeps the order within each", () => {
+    const statuses: ApplicationStatus[] = ["rejected", "applied", "no_response", "ready", "accepted", "interview", "withdrawn", "offer"];
+    const { open, closed } = openAndClosed(statuses.map((status) => tracked(application(status, "2026-10-20"))));
+
+    expect(open.map((item) => item.application.status)).toEqual(["applied", "ready", "interview", "offer"]);
+    expect(closed.map((item) => item.application.status)).toEqual(["rejected", "no_response", "accepted", "withdrawn"]);
   });
 });
 

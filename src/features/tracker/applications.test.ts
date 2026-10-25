@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Application } from "@/shared/contracts";
 import { loadTracker } from "./applications";
-import { closedLast, closingDate, isClosed, suggestClosing } from "./model";
+import { closingDate, isClosed, openAndClosed, suggestClosing } from "./model";
 import { sampleApplications, sampleApplicationsOn } from "./sample";
 
 const { getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
@@ -157,7 +157,7 @@ describe("sampleApplications", () => {
 
       expect(ready && closingDate(ready.application, ready.job, day)).toMatchObject({ alert: "soon", daysLeft: 5 });
       expect(suggestClosing(items, day).map((item) => item.application.id)).toEqual(["sara-application-5", "sara-application-6"]);
-      expect(closedLast(items).at(-1)?.application.status).toBe("rejected");
+      expect(openAndClosed(items).closed.map((item) => item.application.status)).toEqual(["rejected"]);
       expect(items.filter((item) => isClosed(item.application.status))).toHaveLength(1);
     }
   });

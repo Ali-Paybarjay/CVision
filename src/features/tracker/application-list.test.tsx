@@ -44,7 +44,7 @@ describe("the dashboard's application list", () => {
     expect(html).toContain("Closed on 9 Oct 2026 Status");
   });
 
-  it("puts closed applications at the bottom", () => {
+  it("lists closed applications apart, under a Closed heading below the open ones", () => {
     const html = render([
       row("1", "rejected", "2026-10-01", "Closed first"),
       row("2", "applied", "2026-10-20", "Open"),
@@ -52,8 +52,23 @@ describe("the dashboard's application list", () => {
       row("4", "ready", "2026-10-21", "Also open"),
     ]);
 
-    const titles = [...html.matchAll(/<h3[^>]*>([^<]+)<\/h3>/g)].map((match) => match[1]);
-    expect(titles).toEqual(["Open", "Also open", "Closed first", "Closed second"]);
+    const titles = (part: string, tag: string) => [...part.matchAll(new RegExp(`<${tag}[^>]*>([^<]+)</${tag}>`, "g"))].map((match) => match[1]);
+    const closedList = html.match(/<h3 id="closed-title"[^>]*>([^<]+)<\/h3><ul aria-labelledby="closed-title"[^>]*>(.*?)<\/ul>/);
+    expect(closedList?.[1]).toBe("Closed (2)");
+    // Closed rows are h4 under that heading; the open list above has only the open rows.
+    expect(titles(closedList?.[2] ?? "", "h4")).toEqual(["Closed first", "Closed second"]);
+    expect(titles(html.slice(0, closedList?.index), "h3")).toEqual(["Open", "Also open"]);
+    expect(titles(html, "h3")).toEqual(["Open", "Also open", "Closed (2)"]);
+  });
+
+  it("has no Closed heading while nothing is closed, and no open list once everything is", () => {
+    const open = render([row("1", "applied", "2026-10-20", "Open")]);
+    expect(open).not.toContain("closed-title");
+    expect(open.match(/<ul /g)).toHaveLength(1);
+
+    const closed = render([row("1", "rejected", "2026-10-20", "Closed")]);
+    expect(closed.match(/<ul /g)).toHaveLength(1);
+    expect(closed).toContain('<ul aria-labelledby="closed-title"');
   });
 
   it("warns a ready application in words and with an icon when its closing date is a week away or less", () => {
@@ -103,6 +118,23 @@ describe("the suggestion to close applications with no news", () => {
     expect(text(html)).toContain("Sixty days Etherow Freight · No news for 60 days");
     // Nothing is ticked, so the one button cannot close anything yet.
     expect(html).toMatch(/<button type="submit"[^>]* disabled=""[^>]*>Close as No response<\/button>/);
+    expect(html).not.toContain('aria-disabled="');
+  });
+
+  it("says that closing dates each one today and does not keep its earlier date", () => {
+    const html = text(render([row("1", "applied", "2026-08-26", "Sixty days")]));
+
+    expect(html).toContain(
+      "Nothing changes until you press the button. Each one you close is dated today, and its earlier date is not kept, even if you change the status back later.",
+    );
+    expect(html).not.toContain("at any time");
+  });
+
+  it("keeps the message after closing on the page and able to take the focus", () => {
+    const html = render([row("1", "applied", "2026-08-26", "Sixty days")]);
+
+    // The button can go with the suggestion once every row is closed, so the focus moves to this message instead.
+    expect(html).toMatch(/<p role="status" tabindex="-1" class="sr-only"><\/p><ul /);
   });
 
   it("is not shown when no row has gone 60 days without news", () => {

@@ -59,7 +59,7 @@ export function applyChange(saved: Application, change: ApplicationChange, today
   return { ...saved, status: change.status, nextStep: change.nextStep, date: statusChanged ? today : saved.date };
 }
 
-/** Statuses that end an application. They sit at the bottom of the list and never count days. */
+/** Statuses that end an application. They are listed apart, under Closed, and never count days. */
 const closedStatuses: readonly ApplicationStatus[] = ["accepted", "rejected", "no_response", "withdrawn"];
 
 /** Statuses that wait on the employer. Not "ready": nothing has been sent yet. Not "offer": the user answers next. */
@@ -75,9 +75,12 @@ export function isClosed(status: ApplicationStatus): boolean {
   return closedStatuses.includes(status);
 }
 
-/** Open applications first and closed ones at the bottom, each group in the order it came. */
-export function closedLast(items: TrackedApplication[]): TrackedApplication[] {
-  return [...items.filter((item) => !isClosed(item.application.status)), ...items.filter((item) => isClosed(item.application.status))];
+/** Open applications and closed ones apart, each in the order it came. The dashboard lists closed ones under their own heading below. */
+export function openAndClosed(items: TrackedApplication[]): { open: TrackedApplication[]; closed: TrackedApplication[] } {
+  return {
+    open: items.filter((item) => !isClosed(item.application.status)),
+    closed: items.filter((item) => isClosed(item.application.status)),
+  };
 }
 
 /**
@@ -99,6 +102,16 @@ export function canCloseWithoutNews(application: Application, today: string): bo
 /** The rows the dashboard suggests closing as No response. Only a suggestion: nothing is written until the user picks. */
 export function suggestClosing(items: TrackedApplication[], today: string): TrackedApplication[] {
   return items.filter((item) => canCloseWithoutNews(item.application, today));
+}
+
+/**
+ * The ticked applications closed as No response today, with the server's rule: a row that was not ticked is never
+ * closed, and a ticked one that is ready, closed or has had news within 60 days is left out. The sample uses it.
+ */
+export function closeChosen(items: readonly TrackedApplication[], ids: readonly string[], today: string): Application[] {
+  return items
+    .filter(({ application }) => ids.includes(application.id) && canCloseWithoutNews(application, today))
+    .map(({ application }) => markNoResponse(application, today));
 }
 
 /** The application closed as No response today. Only the status and the date change; every other field stays. */

@@ -1,21 +1,21 @@
 "use client";
 
-import { startTransition, useActionState, useState } from "react";
+import { startTransition, useActionState, useLayoutEffect, useRef, useState } from "react";
 import { ApplicationStatusSchema, type Application } from "@/shared/contracts";
 import { Button, ButtonLink, CheckIcon, ErrorIcon, Field, InfoIcon, Input, Select, WarningIcon } from "@/shared/ui";
 import { closeWithoutNews, updateApplication } from "./actions";
 import {
   ApplicationChangeSchema,
   applyChange,
-  canCloseWithoutNews,
-  closedLast,
+  closeChosen,
   closingDate,
   dayCount,
   daysWithoutNews,
   formatDate,
-  markNoResponse,
+  isClosed,
   nextStepMaxLength,
   noNewsDays,
+  openAndClosed,
   statusDateLabels,
   statusLabels,
   suggestClosing,
@@ -34,43 +34,72 @@ type ApplicationListProps = {
 };
 
 /**
- * The user's applications, one row each, with the status and next step they can change, and closed ones at the
- * bottom. Above them, applied and interview rows with no news for 60 days or more are suggested for closing.
+ * The user's applications, one row each, with the status and next step they can change. Closed ones sit in their
+ * own list under a Closed heading. Above them, applied and interview rows with no news for 60 days or more are
+ * suggested for closing.
  */
 export function ApplicationList({ items, today, sample = false }: ApplicationListProps) {
   // What this page has saved since it loaded, by id. Every row reads from it, so a row closed here moves to the
-  // bottom at once, in sample mode too, and the suggestion and the rows always agree.
+  // closed list at once, in sample mode too, and the suggestion and the rows always agree.
   const [changed, setChanged] = useState<Record<string, Application>>({});
+  // The row whose own save just moved it between the open and closed lists. It is drawn afresh in its new list, so
+  // there it says it moved and takes the focus.
+  const [moved, setMoved] = useState<string | null>(null);
   const current = items.map((item) => ({ ...item, application: changed[item.application.id] ?? item.application }));
   const keep = (applications: Application[]) =>
     setChanged((previous) => ({ ...previous, ...Object.fromEntries(applications.map((application) => [application.id, application])) }));
+  const { open, closed } = openAndClosed(current);
+
+  const row = (item: TrackedApplication, heading: "h3" | "h4") => (
+    <ApplicationRow
+      key={item.application.id}
+      item={item}
+      heading={heading}
+      today={today}
+      sample={sample}
+      moved={moved === item.application.id}
+      onSaved={(application) => {
+        if (isClosed(application.status) !== isClosed(item.application.status)) setMoved(application.id);
+        keep([application]);
+      }}
+    />
+  );
 
   return (
     <>
       <CloseWithoutNews items={suggestClosing(current, today)} today={today} sample={sample} onClosed={keep} />
-      <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-        {closedLast(current).map((item) => (
-          <ApplicationRow
-            key={item.application.id}
-            item={item}
-            today={today}
-            sample={sample}
-            onSaved={(application) => keep([application])}
-          />
-        ))}
-      </ul>
+      {open.length > 0 && (
+        <ul className="divide-y divide-line rounded-lg border border-line bg-surface">{open.map((item) => row(item, "h3"))}</ul>
+      )}
+      {closed.length > 0 && (
+        <div className="mt-4 flex flex-col gap-3">
+          <h3 id="closed-title" className="text-lg leading-snug">
+            {`Closed (${closed.length})`}
+          </h3>
+          <ul aria-labelledby="closed-title" className="divide-y divide-line rounded-lg border border-line bg-surface">
+            {closed.map((item) => row(item, "h4"))}
+          </ul>
+        </div>
+      )}
     </>
   );
 }
 
 type ApplicationRowProps = {
   item: TrackedApplication;
+  /** h3 in the open list, h4 under the Closed heading. */
+  heading: "h3" | "h4";
   today: string;
   sample: boolean;
+  /** True when this row's own save just moved it into this list. */
+  moved: boolean;
   onSaved: (application: Application) => void;
 };
 
-function ApplicationRow({ item, today, sample, onSaved }: ApplicationRowProps) {
+/** A save's outcome. `moved` marks the one that moved the row between the open and closed lists. */
+type RowResult = UpdateApplicationResult & { moved?: boolean };
+
+function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved }: ApplicationRowProps) {
   const { application: saved, job } = item;
   const [status, setStatus] = useState(saved.status);
   const [nextStep, setNextStep] = useState(saved.nextStep ?? "");
@@ -81,11 +110,21 @@ function ApplicationRow({ item, today, sample, onSaved }: ApplicationRowProps) {
     setStatus(saved.status);
     setNextStep(saved.nextStep ?? "");
   }
-  const [result, save, pending] = useActionState<UpdateApplicationResult | null, { status: string; nextStep: string }>(async (_previous, change) => {
-    const outcome = sample ? changeSample(saved, change, today) : await updateApplication(saved.id, change);
-    if (outcome.ok) onSaved(outcome.application);
-    return outcome;
-  }, null);
+  const [result, save, pending] = useActionState<RowResult | null, { status: string; nextStep: string }>(
+    async (_previous, change) => {
+      const outcome = sample ? changeSample(saved, change, today) : await updateApplication(saved.id, change);
+      if (outcome.ok) onSaved(outcome.application);
+      return outcome;
+    },
+    // Drawn here by the save that moved it, so it starts with that save's message.
+    moved ? { ok: true, application: saved, moved: true } : null,
+  );
+
+  // The row left the list the keyboard was in: the focus follows it to its message, so it is not lost.
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    if (moved) messageRef.current?.focus();
+  }, [moved]);
 
   const unsaved = status !== saved.status || nextStep.trim() !== (saved.nextStep ?? "");
   // Both worked out on each render from today's date, never saved.
@@ -96,7 +135,7 @@ function ApplicationRow({ item, today, sample, onSaved }: ApplicationRowProps) {
     <li className="flex flex-col gap-5 p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="flex flex-col gap-1">
-          <h3 className="text-lg leading-snug">{job ? job.title : "Job details unavailable"}</h3>
+          <Heading className="text-lg leading-snug">{job ? job.title : "Job details unavailable"}</Heading>
           {job && <p className="text-text-muted">{job.company}</p>}
           <p className="text-sm text-text-muted">
             {statusDateLabels[saved.status]} <time dateTime={saved.date}>{formatDate(saved.date)}</time>
@@ -143,7 +182,7 @@ function ApplicationRow({ item, today, sample, onSaved }: ApplicationRowProps) {
         <Button type="submit" disabled={!unsaved || pending}>
           {pending ? "Saving…" : "Save"}
         </Button>
-        <SaveMessage result={pending ? null : result} unsaved={unsaved} />
+        <SaveMessage ref={messageRef} result={pending ? null : result} unsaved={unsaved} closed={isClosed(saved.status)} />
       </form>
     </li>
   );
@@ -213,13 +252,20 @@ type CloseWithoutNewsProps = {
 function CloseWithoutNews({ items, today, sample, onClosed }: CloseWithoutNewsProps) {
   const [ticked, setTicked] = useState<string[]>([]);
   const [result, close, pending] = useActionState<CloseWithoutNewsResult | null, string[]>(async (_previous, ids) => {
-    const outcome = sample ? closeSample(items, ids, today) : await closeWithoutNews(ids);
+    const outcome: CloseWithoutNewsResult = sample ? { ok: true, closed: closeChosen(items, ids, today) } : await closeWithoutNews(ids);
     if (outcome.ok) onClosed(outcome.closed);
     return outcome;
   }, null);
 
   // Only rows still suggested count: one closed or moved on in its own row drops out of the choice.
   const chosen = ticked.filter((id) => items.some((item) => item.application.id === id));
+
+  // Once closed, the button has gone with the suggestion or has nothing left ticked, so the focus moves to the
+  // message, which stays on the page. After an error it stays on the button.
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    if (result?.ok) messageRef.current?.focus();
+  }, [result]);
 
   return (
     <>
@@ -229,12 +275,14 @@ function CloseWithoutNews({ items, today, sample, onClosed }: CloseWithoutNewsPr
             No news for {noNewsDays} days or more
           </h3>
           <p className="mt-1 max-w-[65ch] text-sm text-text-muted">
-            Tick any you want to close as No response. Nothing changes until you press the button, and you can change a
-            status back at any time.
+            Tick any you want to close as No response. Nothing changes until you press the button. Each one you close is
+            dated today, and its earlier date is not kept, even if you change the status back later.
           </p>
           <form
             onSubmit={(event) => {
               event.preventDefault();
+              // While closing, the controls are aria-disabled rather than disabled, so the focus stays where it is.
+              if (pending || chosen.length === 0) return;
               startTransition(() => close(chosen));
             }}
             className="mt-4 flex flex-col items-start gap-4">
@@ -249,8 +297,9 @@ function CloseWithoutNews({ items, today, sample, onClosed }: CloseWithoutNewsPr
                         name="close"
                         value={application.id}
                         checked={chosen.includes(application.id)}
-                        disabled={pending}
+                        aria-disabled={pending || undefined}
                         onChange={(event) => {
+                          if (pending) return;
                           const on = event.target.checked;
                           setTicked((previous) => (on ? [...previous, application.id] : previous.filter((id) => id !== application.id)));
                         }}
@@ -267,28 +316,32 @@ function CloseWithoutNews({ items, today, sample, onClosed }: CloseWithoutNewsPr
                 ))}
               </ul>
             </fieldset>
-            <Button type="submit" disabled={chosen.length === 0 || pending}>
+            <Button
+              type="submit"
+              disabled={chosen.length === 0}
+              aria-disabled={pending || undefined}
+              className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
               {pending ? "Closing…" : chosen.length === 0 ? "Close as No response" : `Close ${chosen.length} as No response`}
             </Button>
           </form>
         </section>
       )}
-      <CloseMessage result={pending ? null : result} />
+      <CloseMessage ref={messageRef} result={pending ? null : result} />
     </>
   );
 }
 
 /** What closing did. Stays on the page when the suggestion has gone, so it is still read out. Icon and words. */
-function CloseMessage({ result }: { result: CloseWithoutNewsResult | null }) {
+function CloseMessage({ result, ref }: { result: CloseWithoutNewsResult | null; ref: React.Ref<HTMLParagraphElement> }) {
   const count = result?.ok ? result.closed.length : null;
   return (
     <>
-      <p role="status" className={count === null ? "sr-only" : "flex items-start gap-1.5 text-sm font-semibold text-accent"}>
+      <p ref={ref} role="status" tabIndex={-1} className={count === null ? "sr-only" : "flex items-start gap-1.5 text-sm font-semibold text-accent"}>
         {count !== null && count > 0 && (
           <>
             <CheckIcon className="mt-px size-4 shrink-0" />
-            Closed {count} {count === 1 ? "application" : "applications"} as No response. Closed applications sit at the bottom
-            of your list.
+            Closed {count} {count === 1 ? "application" : "applications"} as No response. {count === 1 ? "It is" : "They are"} now
+            under Closed, below your open applications.
           </>
         )}
         {count === 0 && (
@@ -308,17 +361,30 @@ function CloseMessage({ result }: { result: CloseWithoutNewsResult | null }) {
   );
 }
 
+type SaveMessageProps = {
+  result: RowResult | null;
+  unsaved: boolean;
+  /** Whether the row is in the closed list, for the message of a save that moved it. */
+  closed: boolean;
+  ref: React.Ref<HTMLParagraphElement>;
+};
+
 /** "Saved" after a save, or what went wrong, across the whole form. Icon and words, never colour alone. */
-function SaveMessage({ result, unsaved }: { result: UpdateApplicationResult | null; unsaved: boolean }) {
+function SaveMessage({ result, unsaved, closed, ref }: SaveMessageProps) {
   const saved = result?.ok && !unsaved;
+  const words = !result?.moved ? "Saved" : closed ? "Saved and moved to Closed" : "Saved and moved to your open applications";
   // The status line stays on the page (hidden while empty), so screen readers announce "Saved" when it appears.
   return (
     <>
-      <p role="status" className={saved ? "flex items-center gap-1.5 text-sm font-semibold text-accent sm:col-span-3" : "sr-only"}>
+      <p
+        ref={ref}
+        role="status"
+        tabIndex={-1}
+        className={saved ? "flex items-center gap-1.5 text-sm font-semibold text-accent sm:col-span-3" : "sr-only"}>
         {saved && (
           <>
             <CheckIcon className="size-4 shrink-0" />
-            Saved
+            {words}
           </>
         )}
       </p>
@@ -338,12 +404,4 @@ function changeSample(saved: Application, change: unknown, today: string): Updat
     return { ok: false, reason: "invalid", message: "Choose a status and keep the next step under 200 characters." };
   }
   return { ok: true, application: applyChange(saved, parsed.data, today) };
-}
-
-/** Closes the ticked sample rows on this page only, with the same rule as the server. */
-function closeSample(items: TrackedApplication[], ids: string[], today: string): CloseWithoutNewsResult {
-  const closed = items
-    .filter(({ application }) => ids.includes(application.id) && canCloseWithoutNews(application, today))
-    .map(({ application }) => markNoResponse(application, today));
-  return { ok: true, closed };
 }
