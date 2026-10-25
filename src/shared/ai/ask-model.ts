@@ -1,5 +1,6 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import * as sdkErrors from "@anthropic-ai/sdk/error";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { io } from "next/cache";
 import { after } from "next/server";
@@ -82,7 +83,8 @@ function createClient(provider: AiProvider): Anthropic {
  * In mock mode (the default) it sends nothing and returns `sample`.
  * In live mode it removes hidden characters from the prompt (cleanModelText), reserves a place within the daily
  * limit, asks Claude for JSON, logs the usage, checks the answer against `schema`, and asks once more if it does
- * not fit. If the model never answers, the place is given back.
+ * not fit. If the model never answers, the place is given back. A request the model never answers, and one turned
+ * away at a daily limit, are recorded as events (ai.failed, ai.limited) that never say who asked.
  */
 export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>): Promise<z.output<S>> {
   if (getAiMode() === "mock") {
@@ -110,7 +112,11 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
   try {
     reserved = await reserveWithinDailyLimit({ requester: options.requester, feature: options.feature, model }, getUsageStore());
   } catch (error) {
-    if (error instanceof LimitReachedError) throw new AskModelError(error.message, "limit-reached");
+    if (error instanceof LimitReachedError) {
+      const { limit } = error;
+      recordAfterResponse(() => track("ai.limited", { feature: options.feature, limit }));
+      throw new AskModelError(error.message, "limit-reached");
+    }
     // Without the usage log there is no daily limit, so nothing is sent; log why, since callers may not.
     console.error("askModel: could not check the daily limit", error);
     throw error;
@@ -134,11 +140,13 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
       // API errors (limits, outages, timeouts) are retried by the SDK itself and reach the caller unchanged.
       // With no answer there is nothing to log, and the request gives its place back, so an outage uses up
       // nobody's daily requests, such as a visitor's free checks. A failed retry had no place to give back.
+      // Either way the failure is recorded as an event, since the usage log keeps no row for it.
+      recordFailure(options.feature, error);
       if (row !== undefined) await releaseReservation(row, getUsageStore());
       throw error;
     }
     // Once, when the first request has its answer and so keeps its row: the daily limit then bounds these events.
-    // A request turned away at the limit, or one the model never answered, records nothing.
+    // A request turned away at the limit, or one the model never answered, records none.
     if (attempt === 1 && removedCount(hidden) > 0) recordHiddenText(options.feature, hidden, options.requester);
 
     if (response.stop_reason === "refusal") {
@@ -176,12 +184,34 @@ function removedCount(counts: HiddenCharacterCounts): number {
  * tamperSigns is only recorded, never used to turn a request away: a Persian name written with U+200C raises it too.
  */
 function recordHiddenText(feature: string, counts: HiddenCharacterCounts, requester: Requester | undefined): void {
-  const record = () => track("ai.hidden_text_removed", { feature, removed: removedCount(counts), ...counts }, requester);
+  recordAfterResponse(() => track("ai.hidden_text_removed", { feature, removed: removedCount(counts), ...counts }, requester));
+}
+
+/**
+ * Records that a request to the model threw: the feature, the error's class (such as RateLimitError) and its HTTP
+ * status when it has one. Never the error's message, which can quote the request, and never who asked.
+ */
+function recordFailure(feature: string, error: unknown): void {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  const properties = { feature, error: errorClass(error), ...(typeof status === "number" && { status }) };
+  recordAfterResponse(() => track("ai.failed", properties));
+}
+
+/**
+ * The name of what was thrown, such as RateLimitError. A production build renames the SDK's classes, so their
+ * constructor names are useless there: the SDK's errors are named by their exports, any other error by its own name.
+ */
+function errorClass(error: unknown): string {
+  if (!(error instanceof Error)) return typeof error;
+  return Object.entries(sdkErrors).find(([, value]) => value === error.constructor)?.[0] ?? error.name;
+}
+
+/** Records an event after the response is sent, so the user never waits for it. track never throws. */
+function recordAfterResponse(record: () => Promise<void>): void {
   try {
-    // After the response is sent, so the user never waits for it.
     after(record);
   } catch {
-    // Outside a request, as in a prompt eval, after() throws and there is no response to wait for. track never throws.
+    // Outside a request, as in a prompt eval, after() throws and there is no response to wait for.
     void record();
   }
 }

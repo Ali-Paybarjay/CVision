@@ -110,7 +110,10 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
           One record for each request to the AI: which feature and model it was for, how much text was processed, what
           it cost and whether it worked. Never the text itself.
         </p>
-        <p>We use these to set daily limits on AI use.</p>
+        <p>
+          We use these to set daily limits on AI use. We also add them up by day, without saying whose they are, to see
+          what the AI costs and how often it fails.
+        </p>
       </>
     ),
   },
