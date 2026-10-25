@@ -2,7 +2,10 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { io } from "next/cache";
+import { after } from "next/server";
 import type { z } from "zod";
+import { track } from "@/shared/analytics/track";
+import { cleanModelText, type HiddenCharacterCounts } from "@/shared/clean-text";
 import {
   type AiProvider,
   DEFAULT_MODEL,
@@ -27,7 +30,7 @@ import {
 export type AskModelOptions<S extends z.ZodType> = {
   /** Who is asking, for usage logs and daily limits, e.g. "profile-extract" or "cv-check". */
   feature: string;
-  /** The full request text, usually from loadPrompt(). */
+  /** The full request text, usually from loadPrompt(). In live mode its hidden characters are removed before it is sent. */
   prompt: string;
   /** The shape the answer must have (from src/shared/contracts or your own). */
   schema: S;
@@ -77,9 +80,9 @@ function createClient(provider: AiProvider): Anthropic {
 /**
  * The one way to ask a language model for anything in CVision.
  * In mock mode (the default) it sends nothing and returns `sample`.
- * In live mode it reserves a place within the daily limit, asks Claude for JSON, logs the usage,
- * checks the answer against `schema`, and asks once more if it does not fit. If the model never answers,
- * the place is given back.
+ * In live mode it removes hidden characters from the prompt (cleanModelText), reserves a place within the daily
+ * limit, asks Claude for JSON, logs the usage, checks the answer against `schema`, and asks once more if it does
+ * not fit. If the model never answers, the place is given back.
  */
 export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>): Promise<z.output<S>> {
   if (getAiMode() === "mock") {
@@ -99,6 +102,9 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
   const client = (clients[provider] ??= createClient(provider));
   const system = options.voice === false ? baseInstructions : `${baseInstructions}\n\n${await loadVoice()}`;
   const format = zodOutputFormat(options.schema);
+  // Text copied from a job board or a file can hide an instruction in characters a reader cannot see.
+  // Cleaned once, so the retry sends the same clean text. Mock mode never reads the prompt, so it needs no cleaning.
+  const { text: cleanPrompt, counts: hidden } = cleanModelText(options.prompt);
 
   let reserved: UsageRowId;
   try {
@@ -109,7 +115,7 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
     console.error("askModel: could not check the daily limit", error);
     throw error;
   }
-  let prompt = options.prompt;
+  let prompt = cleanPrompt;
   let problem = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -131,6 +137,9 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
       if (row !== undefined) await releaseReservation(row, getUsageStore());
       throw error;
     }
+    // Once, when the first request has its answer and so keeps its row: the daily limit then bounds these events.
+    // A request turned away at the limit, or one the model never answered, records nothing.
+    if (attempt === 1 && removedCount(hidden) > 0) recordHiddenText(options.feature, hidden, options.requester);
 
     if (response.stop_reason === "refusal") {
       await logUsage(options, row, model, response.usage, false);
@@ -146,10 +155,35 @@ export async function askModel<S extends z.ZodType>(options: AskModelOptions<S>)
     }
 
     problem = result ? result.problem : `the answer stopped early (${response.stop_reason})`;
-    prompt = `${options.prompt}\n\nYour previous answer did not match the required format: ${problem}\nAnswer again with complete JSON that matches it exactly.`;
+    prompt = `${cleanPrompt}\n\nYour previous answer did not match the required format: ${problem}\nAnswer again with complete JSON that matches it exactly.`;
   }
 
   throw new AskModelError(`The ${options.feature} answer did not match its schema: ${problem}`, "invalid-answer");
+}
+
+/**
+ * How many characters cleanModelText removed. Line separators became "\n" and stay, and every tamper sign is already
+ * counted under its own kind.
+ */
+function removedCount(counts: HiddenCharacterCounts): number {
+  return Object.entries(counts)
+    .filter(([kind]) => kind !== "lineSeparator" && kind !== "tamperSigns")
+    .reduce((sum, [, count]) => sum + count, 0);
+}
+
+/**
+ * Records that hidden characters were removed from a prompt: the feature and how many of each kind, never the text.
+ * tamperSigns is only recorded, never used to turn a request away: a Persian name written with U+200C raises it too.
+ */
+function recordHiddenText(feature: string, counts: HiddenCharacterCounts, requester: Requester | undefined): void {
+  const record = () => track("ai.hidden_text_removed", { feature, removed: removedCount(counts), ...counts }, requester);
+  try {
+    // After the response is sent, so the user never waits for it.
+    after(record);
+  } catch {
+    // Outside a request, as in a prompt eval, after() throws and there is no response to wait for. track never throws.
+    void record();
+  }
 }
 
 function parseJson<S extends z.ZodType>(
