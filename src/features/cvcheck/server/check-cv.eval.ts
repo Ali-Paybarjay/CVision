@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { getAiProvider } from "@/shared/ai";
+import { cleanModelText } from "@/shared/clean-text";
 import type { CvCheckResult } from "@/shared/contracts";
 import { readCvText } from "@/features/profile/server/read-cv";
 import { sampleCvFileName, samplePersonaNames } from "@/features/profile/server/sample-cvs";
@@ -40,13 +41,16 @@ function quotesIn(text: string): string[] {
   return [...text.matchAll(/"([^"\n]{4,})"|“([^”\n]{4,})”/g)].map((match) => match[1] ?? match[2]);
 }
 
-const normalise = (text: string) => text.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
+// cleanModelText first, so a quote from the model (which never sees hidden characters) still matches the raw CV (#68).
+const normalise = (text: string) =>
+  cleanModelText(text).text.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
 
 function expectHonestAndOnVoice(result: CvCheckResult, cvText: string) {
   const written = [result.summary, ...result.issues.flatMap((issue) => [issue.title, issue.explanation, issue.fix])].join("\n");
   expect(brandPhraseHits(written), "banned brand phrases").toEqual([]);
   expect(usSpellingHits(written, cvText), "US spellings").toEqual([]);
-  // A quoted line must come from the CV, or from the prompt's own examples of lines to remove.
+  // A double-quoted line must come from the CV, or from the prompt's own examples of lines to remove.
+  // Suggested new wording goes in single quotes (prompts/cvcheck-review.md), so it is not checked here.
   const quotable = normalise(`${cvText}\nReferences available on request\nCurriculum Vitae\nPhoto attached`);
   for (const quote of quotesIn(written)) {
     expect(quotable, `"${quote}" is quoted but is not in the CV`).toContain(normalise(quote).replace(/[.,;]$/, ""));
