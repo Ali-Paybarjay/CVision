@@ -1,7 +1,7 @@
 // The six stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
-// against the stage's schema (askModel retries once, then fails clearly) and records estimated usage.
+// against the stage's schema (askModel retries once, then fails clearly) and records what it used.
 import "server-only";
-import { askModel, AskModelError, getAiMode, loadPrompt, type Requester } from "@/shared/ai";
+import { askModel, getAiMode, loadPrompt, type ModelUsage, type Requester } from "@/shared/ai";
 import {
   answerGuide,
   defaultComposition,
@@ -51,7 +51,7 @@ import {
   type Provenance,
 } from "./session";
 import { isNonAnswer, neutraliseTags, wrapUntrusted } from "./text";
-import { estimateUsage } from "./usage";
+import { estimateUsage, measuredUsage } from "./usage";
 
 /** Overrides for one stage's settings, used by the eval to compare models. */
 export type StageOverrides = Partial<Record<StageName, Partial<StageSettings>>>;
@@ -95,8 +95,11 @@ async function callStage<T>(options: {
   voice: boolean;
   run: StageRun;
   questionId?: string;
+  /** Collects what each live request used, so a caller can still record it when askModel throws. */
+  reports?: ModelUsage[];
 }): Promise<{ output: T; usage: StageUsage; provenance: Provenance }> {
   const settings = settingsFor(options.stage, options.run.overrides);
+  const reports = options.reports ?? [];
   const prompt = await loadInterviewPrompt(settings.prompt, options.values);
   const output = (await askModel({
     feature: settings.prompt,
@@ -108,16 +111,22 @@ async function callStage<T>(options: {
     effort: settings.effort,
     maxTokens: settings.maxTokens,
     requester: options.run.requester,
+    onUsage: (used) => {
+      reports.push(used);
+    },
   })) as T;
-  const system = options.voice ? await loadPrompt("_voice") : "";
-  const usage = estimateUsage({
-    stage: options.stage,
-    model: settings.model,
-    input: prompt.text + system,
-    extraInputChars: askModelInstructionsChars,
-    output,
-    questionId: options.questionId,
-  });
+  // Live requests report their real tokens, thinking and any retry included; mock mode has nothing to report.
+  const usage =
+    reports.length > 0
+      ? measuredUsage({ stage: options.stage, model: settings.model, reports, questionId: options.questionId })
+      : estimateUsage({
+          stage: options.stage,
+          model: settings.model,
+          input: prompt.text + (options.voice ? await loadPrompt("_voice") : ""),
+          extraInputChars: askModelInstructionsChars,
+          output,
+          questionId: options.questionId,
+        });
   return { output, usage, provenance: { stage: options.stage, prompt: settings.prompt, version: prompt.version, model: settings.model } };
 }
 
@@ -342,6 +351,7 @@ export async function decideFollowUp(
     planned_follow_ups: data(question.followUps),
     candidate_answer: neutraliseTags(main),
   };
+  const reports: ModelUsage[] = [];
   try {
     const { output, usage, provenance } = await callStage<FollowUpOutput>({
       stage: "followUp",
@@ -351,19 +361,19 @@ export async function decideFollowUp(
       voice: false,
       run,
       questionId,
+      reports,
     });
     return { decision: settleFollowUp(question, output), usage, provenance };
   } catch (error) {
     // Logs the kind of failure only, never the answer text.
     console.error(`interview follow-up: falling back to the planned text (${error instanceof Error ? error.name : "unknown error"})`);
     const decision = settleFollowUp(question, null);
-    if (!(error instanceof AskModelError) || error.reason !== "invalid-answer") return { decision };
-    // The model was asked twice and both answers were rejected: record what that cost and which prompt ran.
+    if (reports.length === 0) return { decision };
+    // The model answered but its answers were rejected: record what that cost and which prompt ran.
     const settings = settingsFor("followUp", run.overrides);
     const prompt = await loadInterviewPrompt(settings.prompt, followUpValues).catch(() => null);
     if (!prompt) return { decision };
-    const once = estimateUsage({ stage: "followUp", model: settings.model, input: prompt.text, extraInputChars: askModelInstructionsChars, output: {}, questionId });
-    const usage = { ...once, inputTokens: once.inputTokens * 2, costUsd: once.costUsd * 2 };
+    const usage = measuredUsage({ stage: "followUp", model: settings.model, reports, questionId });
     return { decision, usage, provenance: { stage: "followUp", prompt: settings.prompt, version: prompt.version, model: settings.model } };
   }
 }
