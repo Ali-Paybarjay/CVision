@@ -119,6 +119,18 @@ describe("MatchReport", () => {
     expect(report({ saved: "unavailable" })).not.toMatch(tailor);
     expect(text(report({ saved: "failed" }))).toContain("To tailor your CV for this job, check it again in a minute.");
   });
+
+  it("offers LinkedIn lines for the same jobs as tailoring, never as a second main button", () => {
+    const linkedin = new RegExp(`href="/jobs/linkedin\\?job=${job.id}"`);
+    const demo = { sampleProfile: null };
+
+    expect(report({ saved: "saved" })).toMatch(linkedin);
+    expect(report({ saved: "signed-out", demo })).toMatch(linkedin);
+    expect(report({ saved: "failed" })).not.toMatch(linkedin);
+    expect(report({ saved: "unavailable" })).not.toMatch(linkedin);
+    expect(text(report())).toContain("Suggest LinkedIn lines for this job");
+    expect(report().match(/bg-cta/g)).toHaveLength(1);
+  });
 });
 
 describe("JobForm", () => {

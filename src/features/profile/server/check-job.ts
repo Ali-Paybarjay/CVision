@@ -90,6 +90,6 @@ export function matchPrompt(profile: Profile, job: Job): Promise<string> {
 }
 
 /** Removes anything that looks like the prompt's own tags, so pasted text cannot close its section early. */
-function withoutTags(text: string, tags: string[]): string {
+export function withoutTags(text: string, tags: string[]): string {
   return tags.reduce((result, tag) => result.replace(new RegExp(`<\\s*/?\\s*${tag}\\b[^>]*>`, "gi"), ""), text);
 }

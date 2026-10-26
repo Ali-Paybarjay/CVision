@@ -183,7 +183,8 @@ function listOf(items: string[], max = 3): string {
   return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 }
 
-function normaliseId(id: string): string {
+/** " l7 " → "L7": the model's ids, as the code writes them. */
+export function normaliseId(id: string): string {
   return id.trim().toUpperCase();
 }
 
@@ -234,7 +235,7 @@ export function assessByRules(profile: Profile, job: Job): MatchAssessment {
 }
 
 /** The words of a requirement worth looking for: "Strong SQL" gives "SQL"; "P&L", "C#" and "Node.js" stay whole. */
-function keywords(text: string): string[] {
+export function keywords(text: string): string[] {
   const words = text
     .split(/[^\p{L}\p{N}+#&.]+/u)
     .map((word) => word.replace(/^\.+|\.+$/g, ""))
@@ -247,7 +248,7 @@ function keywords(text: string): string[] {
  * True when a line names the word. Short words must match whole ("Git" is not "digital"); "R", "BI" and other
  * one- or two-letter names must also match in capitals. Longer words match on their start, so "managers" finds "managed".
  */
-function mentions(text: string, word: string): boolean {
+export function mentions(text: string, word: string): boolean {
   let source: string;
   let flags = "iu";
   if (word.length <= 2) {

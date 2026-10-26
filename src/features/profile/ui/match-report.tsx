@@ -122,6 +122,10 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
             Tailor my CV for this job
           </ButtonLink>
         )}
+        {/* /jobs/linkedin reads the job the same way as /tailor, so it needs the same saved job. */}
+        {canTailor && (
+          <ButtonLink href={`/jobs/linkedin?job=${encodeURIComponent(job.id)}`}>Suggest LinkedIn lines for this job</ButtonLink>
+        )}
         <Button onClick={onCheckAnother}>Check another job</Button>
         {job.url && (
           <a
