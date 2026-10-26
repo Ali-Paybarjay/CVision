@@ -1,7 +1,9 @@
 // The six stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
 // against the stage's schema (askModel retries once, then fails clearly) and records estimated usage.
+// Length rules are checked after the reply: a reply that breaks one is kept and recorded as interview.length_over.
 import "server-only";
 import { askModel, AskModelError, getAiMode, loadPrompt, type Requester } from "@/shared/ai";
+import { track } from "@/shared/analytics/track";
 import {
   answerGuide,
   defaultComposition,
@@ -21,7 +23,20 @@ import type {
   TechnicalInterviewQuestion,
 } from "../contracts";
 import { rubricFor, appliedEvidenceByType } from "../rubrics";
-import { bannedTopicHits, isCleanFollowUp, isLevelBelow, isSpeakable, type DraftQuestion, type QuestionSetContext } from "./checks";
+import {
+  bannedTopicHits,
+  evaluationProblems,
+  isCleanFollowUp,
+  isLengthProblem,
+  isLevelBelow,
+  isSpeakable,
+  questionSetProblems,
+  type DraftQuestion,
+  type EvaluationContext,
+  type LengthRule,
+  type Problem,
+  type QuestionSetContext,
+} from "./checks";
 import { fixtureOrPlaceholder, mockEvaluation, mockFollowUpDecision, mockReport, requireFixture } from "./mock";
 import {
   analyseOutputSchema,
@@ -87,6 +102,23 @@ function data(value: unknown): string {
   return neutraliseTags(JSON.stringify(value, null, 2));
 }
 
+export const lengthOverEvent = "interview.length_over";
+
+/**
+ * Records each length rule a kept reply breaks, by stage and rule name only, never the text. The event is stored
+ * only for a signed-in user's live request, so mock runs and the eval leave the events table alone.
+ */
+async function recordLengthOver(stage: StageName, problems: Problem[], requester?: Requester): Promise<void> {
+  const counts = new Map<LengthRule, number>();
+  for (const problem of problems) {
+    if (problem.lengthRule) counts.set(problem.lengthRule, (counts.get(problem.lengthRule) ?? 0) + 1);
+  }
+  for (const [rule, count] of counts) {
+    console.info(`interview length over: ${stage} ${rule} x${count}`);
+    if (requester) await track(lengthOverEvent, { stage, rule, count }, requester);
+  }
+}
+
 async function callStage<T>(options: {
   stage: StageName;
   values: Record<string, string>;
@@ -95,6 +127,8 @@ async function callStage<T>(options: {
   voice: boolean;
   run: StageRun;
   questionId?: string;
+  /** The stage's checks, run again on the kept reply to find the soft length rules it breaks. */
+  problems?: (output: T) => Problem[];
 }): Promise<{ output: T; usage: StageUsage; provenance: Provenance }> {
   const settings = settingsFor(options.stage, options.run.overrides);
   const prompt = await loadInterviewPrompt(settings.prompt, options.values);
@@ -109,6 +143,8 @@ async function callStage<T>(options: {
     maxTokens: settings.maxTokens,
     requester: options.run.requester,
   })) as T;
+  const over = options.problems?.(output).filter(isLengthProblem) ?? [];
+  if (over.length) await recordLengthOver(options.stage, over, options.run.requester);
   const system = options.voice ? await loadPrompt("_voice") : "";
   const usage = estimateUsage({
     stage: options.stage,
@@ -253,6 +289,7 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
       questions: data(technicalQuestions(session).map(toDraft)),
     },
     schema: reviewOutputSchema(context),
+    problems: (value) => questionSetProblems(value, context, "review"),
     sample: sampleFixture(session.jobId).review,
     voice: false,
     run,
@@ -397,6 +434,14 @@ export async function evaluateAnswer(
   if (asked && followUp === null) throw new InterviewStageError(`${questionId} is waiting for its follow-up answer.`);
 
   const rubric = rubricFor(question.category);
+  const evaluationContext: EvaluationContext = {
+    lookForIds: question.lookFors.map((l) => l.id),
+    mainAnswer: main,
+    followUpAnswer: followUp,
+    followUpAsked: asked,
+    // The job ad's own tools and standards may keep their US spelling when the model quotes them.
+    quotable: [role.title, role.discipline, question.text, ...role.namedItems.map((item) => item.text)].join("\n"),
+  };
   const { output, usage, provenance } = await callStage<EvaluateOutput>({
     stage: "evaluate",
     values: {
@@ -409,14 +454,8 @@ export async function evaluateAnswer(
       applied_evidence: appliedEvidenceByType[question.type],
       transcript: buildTranscript(session, questionId),
     },
-    schema: evaluateOutputSchema({
-      lookForIds: question.lookFors.map((l) => l.id),
-      mainAnswer: main,
-      followUpAnswer: followUp,
-      followUpAsked: asked,
-      // The job ad's own tools and standards may keep their US spelling when the model quotes them.
-      quotable: [role.title, role.discipline, question.text, ...role.namedItems.map((item) => item.text)].join("\n"),
-    }),
+    schema: evaluateOutputSchema(evaluationContext),
+    problems: (value) => evaluationProblems(value, evaluationContext),
     sample: mockEvaluation(session, question),
     voice: true,
     run,

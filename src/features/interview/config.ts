@@ -76,11 +76,14 @@ export const limits = {
    * about 110K; the rest of it (role, blueprint, questions) has no length limits of its own, so this caps them.
    */
   sessionMaxChars: 150_000,
+  // The word and sentence limits below are soft: a reply that breaks one is kept and recorded as
+  // interview.length_over, because one long sentence is better than a failed session (#112).
   questionMaxWords: 80,
   followUpMaxWords: 40,
   quoteMaxWords: 25,
   /** The one thing to do next time: a single specific action, not a list. */
   improvementMaxWords: 60,
+  improvementMaxSentences: 3,
 };
 
 /** Overall score thresholds for the readiness label. */

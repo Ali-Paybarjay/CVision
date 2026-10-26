@@ -1,6 +1,6 @@
 ---
 name: interview-evaluate-technical
-version: 1.1.0
+version: 1.2.0
 stage: 5
 rubric: technical-v1
 ---
@@ -41,7 +41,7 @@ For this question type, applied evidence looks like: {{applied_evidence}}
 5. Write the feedback the candidate reads first, outcome first:
    - `strengths`: 1 or 2 things this answer did well, each naming what they said and why it works for this role. None if the answer gives nothing to credit.
    - `weaknesses`: 1 or 2 things that cost them marks, each naming what was missing or wrong in this answer.
-   - `improvement`: exactly one action for next time, in one or two sentences of at most 60 words, specific enough to rehearse tonight (what to add, where in the answer, and from which part of their own experience).
+   - `improvement`: exactly one action for next time, in at most three short sentences and 60 words, specific enough to rehearse tonight (what to add, where in the answer, and from which part of their own experience).
    - `strongerAnswerOutline`: 3 to 5 points.
 
 ## Rules

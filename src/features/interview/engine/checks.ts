@@ -12,7 +12,15 @@ import type {
 } from "../contracts";
 import { countWords, isVerbatim } from "./text";
 
-export type Problem = { path: (string | number)[]; message: string };
+/** The soft length rules. A problem that names one is recorded, not sent back to the model (see isLengthProblem). */
+export type LengthRule = "question-words" | "follow-up-length" | "quote-words" | "improvement-length";
+
+export type Problem = { path: (string | number)[]; message: string; lengthRule?: LengthRule };
+
+/** Length rules never fail a stage: a reply that is one sentence too long is still worth showing. */
+export function isLengthProblem(problem: Problem): boolean {
+  return problem.lengthRule !== undefined;
+}
 
 /**
  * Protected characteristics (Equality Act 2010), health, family, age and nationality. Matched as whole words or
@@ -185,15 +193,21 @@ export function isSingleQuestion(text: string): boolean {
   return trimmed.endsWith("?") && (trimmed.match(/\?/g) ?? []).length === 1;
 }
 
-/**
- * A follow-up fit to show the candidate: one question of at most 40 words, with at most one short lead-in
- * sentence ("You said X. Why…?"), and none of the model's own reasoning leaking into it.
- */
-export function isCleanFollowUp(text: string): boolean {
+/** One question on one line, with none of the model's own reasoning leaking into it. */
+function isFollowUpShape(text: string): boolean {
   const trimmed = text.trim();
-  if (!isSingleQuestion(trimmed) || countWords(trimmed) > limits.followUpMaxWords || trimmed.includes("\n")) return false;
-  if (sentenceCount(trimmed) > 2) return false;
+  if (!isSingleQuestion(trimmed) || trimmed.includes("\n")) return false;
   return !/\b(the candidate|candidate's|I should|I will ask|I'll ask|let me|planned follow-up|follow-up question|gap type)\b/i.test(trimmed);
+}
+
+/** At most 40 words, with at most one short lead-in sentence ("You said X. Why…?"). */
+function isFollowUpLength(text: string): boolean {
+  return countWords(text) <= limits.followUpMaxWords && sentenceCount(text) <= 2;
+}
+
+/** A follow-up fit to show the candidate: the right shape and the right length. */
+export function isCleanFollowUp(text: string): boolean {
+  return isFollowUpShape(text) && isFollowUpLength(text);
 }
 
 /** Nothing the candidate would have to see: no symbols, formulas, line breaks or abbreviated units. */
@@ -320,8 +334,15 @@ function followUpProblems(followUps: PlannedFollowUp[], path: (string | number)[
   if (duplicates(followUps.map((f) => f.id)).length) problems.push({ path, message: "Follow-up ids must be unique." });
   if (strict) {
     followUps.forEach((followUp, i) => {
-      if (!isCleanFollowUp(followUp.text)) {
-        problems.push({ path: [...path, i, "text"], message: `Must be one question of at most ${limits.followUpMaxWords} words, with no notes.` });
+      if (!isFollowUpShape(followUp.text)) {
+        problems.push({ path: [...path, i, "text"], message: "Must be one question on one line, with no notes." });
+      }
+      if (!isFollowUpLength(followUp.text)) {
+        problems.push({
+          path: [...path, i, "text"],
+          message: `Must be at most ${limits.followUpMaxWords} words, with at most one lead-in sentence.`,
+          lengthRule: "follow-up-length",
+        });
       }
       if (!isSpeakable(followUp.text)) problems.push({ path: [...path, i, "text"], message: "Must be speakable: no symbols or abbreviated units." });
       if (bannedTopicHits(followUp.text).length) problems.push({ path: [...path, i, "text"], message: "Touches a protected or personal topic." });
@@ -368,7 +389,7 @@ export function questionSetProblems(
 
     if (stage === "review") {
       if (countWords(question.text) > limits.questionMaxWords) {
-        problems.push({ path: [...path, "text"], message: `Must be at most ${limits.questionMaxWords} words.` });
+        problems.push({ path: [...path, "text"], message: `Must be at most ${limits.questionMaxWords} words.`, lengthRule: "question-words" });
       }
       if (!isSingleQuestion(question.text)) problems.push({ path: [...path, "text"], message: "Must be one question with a single question mark at the end." });
       if (!isSpeakable(question.text)) problems.push({ path: [...path, "text"], message: "Must be speakable: no symbols or abbreviated units." });
@@ -441,7 +462,9 @@ export function evaluationProblems(output: EvaluationDraft, context: EvaluationC
       problems.push({ path, message: "A covered or partial look-for needs a quote from the answer." });
       return;
     }
-    if (countWords(entry.quote) > limits.quoteMaxWords) problems.push({ path, message: `Quote at most ${limits.quoteMaxWords} words.` });
+    if (countWords(entry.quote) > limits.quoteMaxWords) {
+      problems.push({ path, message: `Quote at most ${limits.quoteMaxWords} words.`, lengthRule: "quote-words" });
+    }
     const inAnswer = isVerbatim(entry.quote, context.mainAnswer) || (context.followUpAnswer !== null && isVerbatim(entry.quote, context.followUpAnswer));
     if (!inAnswer) problems.push({ path, message: "Must be copied exactly from the candidate's answer." });
   });
@@ -469,8 +492,12 @@ export function evaluationProblems(output: EvaluationDraft, context: EvaluationC
   if (genericFeedbackHits([...output.strengths, ...output.weaknesses, output.improvement].join("\n")).length) {
     problems.push({ path: ["strengths"], message: "Feedback must be specific to this answer: no generic praise or advice." });
   }
-  if (sentenceCount(output.improvement) > 2 || countWords(output.improvement) > limits.improvementMaxWords) {
-    problems.push({ path: ["improvement"], message: `Give one specific action in at most 2 sentences and ${limits.improvementMaxWords} words.` });
+  if (sentenceCount(output.improvement) > limits.improvementMaxSentences || countWords(output.improvement) > limits.improvementMaxWords) {
+    problems.push({
+      path: ["improvement"],
+      message: `Give one specific action in at most ${limits.improvementMaxSentences} sentences and ${limits.improvementMaxWords} words.`,
+      lengthRule: "improvement-length",
+    });
   }
   return problems;
 }
