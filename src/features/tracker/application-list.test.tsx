@@ -94,6 +94,16 @@ describe("the dashboard's application list", () => {
     expect(html).not.toContain("border-warning");
   });
 
+  it("keeps each row's Saved message on the page, next to its Save button and able to take the focus", () => {
+    const html = render([row("1", "applied", "2026-10-20", "Data Analyst")]);
+
+    // Nothing to save yet, so the button is disabled and out of the way. Once a save leaves nothing to save, it is
+    // disabled again, so the focus on it moves to the message, which stays in the row rather than the top of the page.
+    expect(html).toMatch(/<button type="submit"[^>]* disabled=""[^>]*>Save<\/button><p role="status" tabindex="-1" class="sr-only"><\/p><\/form>/);
+    // aria-disabled only while saving, so the focus stays on the button until the save is done.
+    expect(html).not.toContain('aria-disabled="');
+  });
+
   it("shows only the date once the application has been sent, and nothing without a closing date", () => {
     expect(text(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")]))).toContain("Closing date 24 Oct 2026 ");
     expect(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")])).not.toContain("border-warning");

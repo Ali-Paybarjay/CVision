@@ -125,6 +125,12 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
   useLayoutEffect(() => {
     if (moved) messageRef.current?.focus();
   }, [moved]);
+  // Saved in place: with nothing left to save the button is disabled, so the focus on it moves to the message too,
+  // and Tab goes on from this row. After an error the button is still enabled, so the focus stays on it.
+  const saveRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (result?.ok && document.activeElement === saveRef.current) messageRef.current?.focus();
+  }, [result]);
 
   const unsaved = status !== saved.status || nextStep.trim() !== (saved.nextStep ?? "");
   // Both worked out on each render from today's date, never saved.
@@ -152,6 +158,8 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
         // Not a form action: React resets a form after its action, which would put the status back on screen.
         onSubmit={(event) => {
           event.preventDefault();
+          // While saving, the button is aria-disabled rather than disabled, so the focus stays where it is.
+          if (pending || !unsaved) return;
           startTransition(() => save({ status, nextStep }));
         }}
         className="grid gap-4 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] sm:items-end">
@@ -179,7 +187,12 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
             />
           )}
         </Field>
-        <Button type="submit" disabled={!unsaved || pending}>
+        <Button
+          ref={saveRef}
+          type="submit"
+          disabled={!unsaved && !pending}
+          aria-disabled={pending || undefined}
+          className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
           {pending ? "Saving…" : "Save"}
         </Button>
         <SaveMessage ref={messageRef} result={pending ? null : result} unsaved={unsaved} closed={isClosed(saved.status)} />
