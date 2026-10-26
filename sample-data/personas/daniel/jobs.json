@@ -29,7 +29,7 @@
     "salary": { "min": 50000, "max": 50000, "currency": "GBP", "period": "year", "isEstimate": false },
     "contractType": "permanent",
     "hours": "full-time",
-    "workMode": "hybrid",
+    "workMode": null,
     "description": "Corner Coffee Co. runs 85 coffee shops across the Midlands. Our Area Operations Manager looks after 12 shops in the West Midlands, travelling between them most days.\n\nEssential:\n- Multi-site or large-store management\n- Coaching and developing managers\n- Strong commercial awareness\n- Full UK driving licence\n\nDesirable:\n- Food and drink or hospitality experience\n\nSalary £50,000 plus car allowance. Permanent, full-time.",
     "requirements": {
       "essential": [
