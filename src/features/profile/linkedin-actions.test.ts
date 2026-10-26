@@ -94,17 +94,27 @@ describe("suggestLinkedInAction", () => {
     expect(suggestLinkedInExperience).not.toHaveBeenCalled();
   });
 
-  it("asks for a CV first when there is no profile yet, and for work experience when it has no roles", async () => {
+  it("asks for a CV, roles or lines first when the profile has nothing to take lines from, without asking the model", async () => {
     getCurrentUser.mockResolvedValue(user);
-    vi.mocked(getMyJob).mockResolvedValueOnce(savedJob).mockResolvedValueOnce(savedJob);
+    vi.mocked(getMyJob).mockResolvedValueOnce(savedJob).mockResolvedValueOnce(savedJob).mockResolvedValueOnce(savedJob);
     vi.mocked(getMyProfile).mockResolvedValueOnce(null);
     vi.mocked(getMyProfile).mockResolvedValueOnce({ ...sara.profile, experience: [] });
+    vi.mocked(getMyProfile).mockResolvedValueOnce({
+      ...sara.profile,
+      followUpAnswers: [],
+      experience: sara.profile.experience.map((item) => ({ ...item, duties: [], achievements: [] })),
+    });
 
     expect(await suggestLinkedInAction({ jobId: savedJob.id })).toMatchObject({ ok: false, code: "profile" });
     expect(await suggestLinkedInAction({ jobId: savedJob.id })).toEqual({
       ok: false,
       code: "profile",
       message: "Add your work experience to your profile first, so there are roles to write for.",
+    });
+    expect(await suggestLinkedInAction({ jobId: savedJob.id })).toEqual({
+      ok: false,
+      code: "profile",
+      message: "Add what you did in each role to your profile first, so there are lines to suggest.",
     });
     expect(suggestLinkedInExperience).not.toHaveBeenCalled();
   });
@@ -119,7 +129,7 @@ describe("suggestLinkedInAction", () => {
     expect(await suggestLinkedInAction({ jobId: "reza-job-1" })).toEqual({
       ok: false,
       code: "ai-failed",
-      message: "We couldn’t write your LinkedIn lines. Try again in a moment.",
+      message: "Something went wrong on our side. Try again in a moment.",
     });
     expect(await suggestLinkedInAction({ jobId: "reza-job-1" })).toEqual({
       ok: false,

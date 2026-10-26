@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { findBrandProblems } from "@/features/tailor/brand-check";
 import { cleanModelText } from "@/shared/clean-text";
 import type { Job, MatchResult, Profile, WorkExperience } from "@/shared/contracts";
 import {
+  assessByRules,
   jobRequirements,
   keywords,
   mentions,
@@ -15,11 +17,11 @@ import { formatPeriod } from "./ui/format";
 
 // LinkedIn Experience lines: what to write under each role of the user's LinkedIn profile, for one job.
 // The model (or, in mock mode, simple rules) writes the lines and points at the profile lines behind each one by
-// their ids, as in match.ts. The code then keeps a line only when it rests on that role's own duties and results (or
-// the user's answers about it) and says nothing they don't: every word comes from those lines, apart from small
-// linking words and a change of tense; every figure counts the same thing; a rank word such as "senior" or "lead"
-// is used as the lines use it (Nothing invented, Sounds like you). Titles, companies and dates come from the CV
-// itself, never from the model. Nothing is saved and nothing is sent to LinkedIn: the user copies what they want.
+// their ids, as in match.ts. The code then keeps a line only when it says nothing those lines don't (checkWriting):
+// each part of it comes from one of them, word for word apart from the tense and small linking words, with every
+// figure counting the same thing and every rank used the same way (Nothing invented, Sounds like you). Titles,
+// companies and dates come from the CV itself, never from the model. Nothing is saved and nothing is sent to LinkedIn:
+// the user copies what they want.
 
 /** At most this many lines for one role: a short description gets read. */
 export const MAX_LINES_PER_ROLE = 5;
@@ -57,23 +59,65 @@ export type RoleBlock = {
   role: EvidenceLine;
   /** Its duties and results. */
   lines: EvidenceLine[];
+  /** The user's answers about this role (see roleOfAnswer). */
+  answers: EvidenceLine[];
 };
 
-/** The profile's lines by role, with the same ids as match.ts. Summary, skills, education, certificates and answers belong to no role. */
+/**
+ * The profile's lines by role, with the same ids as match.ts. Each answer goes to the one role it is about, if any.
+ * Summary, skills, education and certificates belong to no role.
+ */
 export function linkedInRoles(profile: Profile): { roles: RoleBlock[]; shared: EvidenceLine[] } {
   const roles: RoleBlock[] = [];
   const shared: EvidenceLine[] = [];
   for (const line of profileEvidenceLines(profile)) {
     if (line.kind === "role") {
       // profileEvidenceLines gives one role line for each job, in profile order.
-      roles.push({ id: `R${roles.length + 1}`, experience: profile.experience[roles.length], role: line, lines: [] });
+      roles.push({ id: `R${roles.length + 1}`, experience: profile.experience[roles.length], role: line, lines: [], answers: [] });
     } else if ((line.kind === "duty" || line.kind === "achievement") && roles.length > 0) {
       roles[roles.length - 1].lines.push(line);
     } else {
       shared.push(line);
     }
   }
+  for (const answer of shared.filter((line) => line.kind === "answer")) roleOfAnswer(answer, roles)?.answers.push(answer);
   return { roles, shared };
+}
+
+/**
+ * Why a profile has nothing to write LinkedIn lines from, or null when it has: no roles at all, or roles with no
+ * duties, results or answers, so no line could pass the checks and a model request would be wasted.
+ */
+export function nothingToWrite(profile: Profile): "no-roles" | "no-lines" | null {
+  if (profile.experience.length === 0) return "no-roles";
+  return linkedInRoles(profile).roles.every((role) => role.lines.length === 0 && role.answers.length === 0) ? "no-lines" : null;
+}
+
+/**
+ * The role an answer is about: the one whose company the answer or its question names, otherwise the one it shares
+ * the most words with that no other role has (for two roles at one company, the same between those two). None when
+ * that isn't clear, so an answer never backs a line under the wrong employer.
+ */
+function roleOfAnswer(answer: EvidenceLine, roles: RoleBlock[]): RoleBlock | undefined {
+  const said = contentStems([answer.text, answer.context ?? ""]);
+  const named = roles.filter((role) => said.has(companyKey(role.experience.company)));
+  if (new Set(named.map((role) => companyKey(role.experience.company))).size > 1) return undefined;
+  if (named.length === 1) return named[0];
+
+  const candidates = named.length > 0 ? named : roles;
+  const words = candidates.map((role) => contentStems([role.experience.title, ...role.lines.map((line) => line.text)]));
+  const scores = words.map((own, index) => {
+    const others = new Set(words.filter((_, other) => other !== index).flatMap((set) => [...set]));
+    return [...own].filter((word) => said.has(word) && !others.has(word)).length;
+  });
+  const best = Math.max(0, ...scores);
+  return best > 0 && scores.filter((score) => score === best).length === 1 ? candidates[scores.indexOf(best)] : undefined;
+}
+
+/** "Hartley's Home Stores" → "hartley": the word an answer would name the company by. */
+function companyKey(company: string): string {
+  const first = tokens(company).find((token) => token.type === "word");
+  return first?.type === "word" ? first.stem : "";
 }
 
 /** A profile line a suggestion rests on, as the user wrote it. */
@@ -113,7 +157,7 @@ export type LinkedInSuggestions = {
   /** The other roles, as "Title at Company": nothing in them speaks to this job. */
   otherRoles: string[];
   notShown: NotShown[];
-  /** How many suggestions were left out because the profile doesn't back them up. */
+  /** How many suggestions were left out because they couldn't be checked against the profile. */
   dropped: number;
 };
 
@@ -123,8 +167,8 @@ export type RejectedSuggestion = { role: string; text: string; reason: string };
 /**
  * Turns the model's answer into what the user sees. Each line is checked against the lines it says it rests on
  * (checkLine, checkWriting); anything they don't back up is left out and listed in `rejected`. Roles with nothing
- * left go to `otherRoles`. The ad's requirements the match found no clear evidence for go to `notShown`, so the user
- * knows why no line mentions them.
+ * left go to `otherRoles`. The ad's requirements the profile doesn't show clearly go to `notShown`, so the user knows
+ * why no line mentions them.
  */
 export function buildLinkedInSuggestions(
   profile: Profile,
@@ -134,9 +178,8 @@ export function buildLinkedInSuggestions(
 ): { suggestions: LinkedInSuggestions; rejected: RejectedSuggestion[] } {
   const { roles, shared } = linkedInRoles(profile);
   const lines = new Map([...roles.flatMap((role) => [role.role, ...role.lines]), ...shared].map((line) => [line.id, line]));
-  const owners = new Map(roles.flatMap((role) => [role.role, ...role.lines].map((line) => [line.id, role.id] as const)));
-  const findings = requirementFindings(match);
-  const blocked = blockedWords(job, findings);
+  const owners = new Map(roles.flatMap((role) => [role.role, ...role.lines, ...role.answers].map((line) => [line.id, role.id] as const)));
+  const findings = currentFindings(profile, job, match);
   const rejected: RejectedSuggestion[] = [];
 
   const answers = new Map<string, RoleAnswer>();
@@ -160,13 +203,13 @@ export function buildLinkedInSuggestions(
 
     const kept: LinkedInLine[] = [];
     for (const line of item?.lines ?? []) {
-      const result = checkLine(line, role, lines, owners, blocked);
+      const result = checkLine(line, role, lines, owners);
       if (!result) continue;
       if ("reason" in result) rejected.push({ role: role.id, text: line.text, reason: result.reason });
       else if (!kept.some((other) => sameWords(other.text, result.line.text))) kept.push(result.line);
     }
 
-    const own = [role.role, ...role.lines].map((line) => line.text);
+    const own = role.lines.map((line) => line.text);
     const skills: string[] = [];
     for (const value of item?.skills ?? []) {
       const skill = skillLine(value, shared);
@@ -193,9 +236,11 @@ export function buildLinkedInSuggestions(
   return { suggestions: { roles: suggested, otherRoles, notShown, dropped: rejected.length }, rejected };
 }
 
+type Finding = "met" | "unclear" | "missing";
+
 /** What the match found for each requirement, by its words. A requirement it lists as uncovered counts as missing. */
-export function requirementFindings(match: MatchResult | null): Map<string, "met" | "unclear" | "missing"> {
-  const findings = new Map<string, "met" | "unclear" | "missing">();
+export function requirementFindings(match: MatchResult | null): Map<string, Finding> {
+  const findings = new Map<string, Finding>();
   for (const strength of match?.strengths ?? []) findings.set(strength.requirement, "met");
   for (const gap of match?.gaps ?? []) findings.set(gap.requirement, gap.kind);
   for (const requirement of match?.uncoveredRequirements ?? []) {
@@ -205,16 +250,34 @@ export function requirementFindings(match: MatchResult | null): Map<string, "met
 }
 
 /**
+ * The match's findings brought up to date with the profile as it is now. The match was saved when the job was
+ * checked, so a requirement the user has since shown in a duty or a result counts as met, as the demo's rules find
+ * it; a bare skills-list entry doesn't, and neither does an answer, which may say the user hasn't done it. Without a
+ * match, the rules decide everything.
+ */
+export function currentFindings(profile: Profile, job: Job, match: MatchResult | null): Map<string, Finding> {
+  const findings = requirementFindings(match);
+  const lines = new Map(profileEvidenceLines(profile).map((line) => [line.id, line]));
+  const rules = assessByRules(profile, job).requirements;
+  for (const [index, requirement] of jobRequirements(job).entries()) {
+    const ruled = rules[index];
+    const proof = lines.get(ruled.evidence);
+    if (ruled.status === "met" && (proof?.kind === "duty" || proof?.kind === "achievement")) findings.set(requirement.text, "met");
+    else if (!match) findings.set(requirement.text, ruled.status);
+  }
+  return findings;
+}
+
+/**
  * One written line, checked against the lines it says it rests on. Only this role's duties and results count as
- * evidence, and the user's answers when they are about this role: the summary, skills, education and certificates say
- * nothing about what the person did in it. Null for an empty line, which is simply not shown.
+ * evidence, and the user's answers about this role: the summary, skills, education and certificates say nothing
+ * about what the person did in it. Null for an empty line, which is simply not shown.
  */
 function checkLine(
   line: RoleAnswer["lines"][number],
   role: RoleBlock,
   lines: Map<string, EvidenceLine>,
   owners: Map<string, string>,
-  blocked: Set<string>,
 ): { line: LinkedInLine } | { reason: string } | null {
   const text = tidy(line.text);
   if (!text) return null;
@@ -227,16 +290,12 @@ function checkLine(
     const owner = owners.get(id);
     if (owner && owner !== role.id) return { reason: `${id} belongs to another role.` };
     if (source.kind === "duty" || source.kind === "achievement") own.push(source);
-    else if (source.kind === "answer" && isAbout(source, role)) answers.push(source);
+    else if (source.kind === "answer" && owner === role.id) answers.push(source);
   }
   const sources = [...own, ...answers];
   if (sources.length === 0) return { reason: "It rests on no duty or result of this role, and on no answer about it." };
 
-  const problem = checkWriting(text, {
-    evidence: [role.role.text, ...sources.map((source) => source.text)],
-    anchors: [role.role.text, ...own.map((source) => source.text)],
-    blocked,
-  });
+  const problem = checkWriting(text, { evidence: sources.map((source) => source.text), title: role.experience.title });
   if (problem) return { reason: problem };
 
   return {
@@ -248,66 +307,318 @@ function checkLine(
   };
 }
 
-/** True when an answer, or the question it answers, shares a word that says something with the role's own lines. */
-function isAbout(answer: EvidenceLine, role: RoleBlock): boolean {
-  const roleWords = contentStems([role.role, ...role.lines].map((line) => line.text));
-  return [...contentStems([answer.text, answer.context ?? ""])].some((word) => roleWords.has(word));
-}
-
 /**
- * Why a written line says more than its evidence, or null when everything in it is backed up:
- * - every figure counts the same thing as in one of the lines, with no "over", "nearly" or "+" added;
- * - every word is a word of the lines (in any tense or number), a shortening of one ("prep"), a standard abbreviation
- *   of words they have ("P&L"), or a small linking word;
- * - the first word, usually the verb, starts a clause in the lines and acts on the same thing there;
- * - a rank word ("senior", "lead", "manager") follows the same word as in the lines, so "two senior developers" can't
- *   become "Senior developer";
- * - a word of a requirement the match found missing or unclear is in `anchors`, the role's own lines, not only in an
- *   answer that might say the opposite ("I have never used Power BI").
+ * Why a written line says more than its evidence, or null when everything in it is backed up. The line is read in
+ * parts, split at punctuation and at words such as "and" or "by", and each part must come from one evidence line:
+ * - every word is a word of that line, in any tense or number, a standard shortening or abbreviation of its words
+ *   ("prep", "P&L"), or a small linking word, and not a word the line denies ("I never presented…");
+ * - every figure counts the same thing there, with no "over", "nearly" or "+" added ("classes of 30" is not "30 classes");
+ * - its first word starts a clause in that line and acts on the same thing ("Coordinated the move" can't become
+ *   "Coordinated 80 staff", and "Helped manage" can't become "Managed");
+ * - a rank word ("senior", "lead", "manager") follows the same word and preposition as there ("with two senior
+ *   developers" can't become "Senior developer" or "from two senior developers"); the role's own title may follow "as";
+ * - words that limit what the line says, such as "in my classes" or "for the Midlands region", are kept.
+ * A part may move on to another line only at that line's own start ("…, and own its profit and loss"); a part that
+ * starts with "by" or an -ing verb belongs with the part before it, so one line's result can't be pinned on another's
+ * duty.
  */
-export function checkWriting(text: string, lines: { evidence: string[]; anchors?: string[]; blocked?: Set<string> }): string | null {
+export function checkWriting(text: string, lines: { evidence: string[]; title?: string }): string | null {
   if (text.length > MAX_LINE_CHARACTERS) return "It is too long for one line.";
-  const evidence = lines.evidence.map(tokens);
+  const sources = lines.evidence.map(prepare);
   const written = tokens(text);
+  const titled = titleSpan(written, lines.title);
+  const whole = stemSet(written);
 
-  const figures = new Set(evidence.flatMap(figureKeys).map((figure) => figure.key));
-  const figure = figureKeys(written).find((item) => !figures.has(item.key));
-  if (figure) return `It says "${figure.shown}", which its lines don't say that way.`;
+  let current: number[] | null = null;
+  for (const part of parts(written)) {
+    const content = part.filter((index) => isContent(written[index]) && !titled.has(index));
+    if (content.length === 0) continue;
+    const first = written[content[0]];
+    const dependent = written[part[0]].link === "by" || (first.type === "word" && first.word.length > 5 && first.word.endsWith("ing"));
 
-  const stems = stemSet(evidence.flat());
-  const sourceWords = evidence.flat().flatMap((token) => (token.type === "word" ? [token.word] : []));
-  const word = written.find((token) => token.type === "word" && !GLUE.has(token.word) && !backed(token, stems, sourceWords));
-  if (word) return `It says "${word.shown}", which its lines don't.`;
-
-  // The main verb keeps its object and its place: "Coordinated the move" can't borrow "Led" from "Led a team" to
-  // become "Led the move", and "Helped manage the stock count" can't become "Managed the stock count".
-  const first = written.findIndex((token) => !(token.type === "word" && GLUE.has(token.word)));
-  const verb = written[first];
-  if (verb?.type === "word") {
-    const object = nextContent(written, first);
-    const sameUse = evidence.some((line) =>
-      line.some((other, at) => other.type === "word" && other.stem === verb.stem && other.clause && nextContent(line, at) === object),
-    );
-    if (!sameUse) return `It starts with "${verb.shown}" in a way its lines don't.`;
+    const previous: number[] | null = current;
+    const stay: number[] = (previous ?? []).filter((source) => !fit(written, content, sources[source], "continue", whole));
+    const move: number[] =
+      previous !== null && dependent
+        ? []
+        : sources.flatMap((source, at) => (fit(written, content, source, previous === null ? "first" : "switch", whole) ? [] : [at]));
+    const allowed: number[] = stay.length > 0 ? stay : move;
+    if (allowed.length === 0) return partProblem(written, content, sources, previous, dependent, whole);
+    current = allowed;
   }
-
-  for (const [index, token] of written.entries()) {
-    if (token.type !== "word" || !RANKS.has(token.stem)) continue;
-    const before = keyOf(written[index - 1]);
-    const usedSo = evidence.some((line) => line.some((other, at) => other.type === "word" && other.stem === token.stem && keyOf(line[at - 1]) === before));
-    if (!usedSo) return `It calls the person "${token.shown}" in a way its lines don't.`;
-  }
-
-  const anchors = stemSet((lines.anchors ?? lines.evidence).flatMap(tokens));
-  const missing = written.find((token) => token.type === "word" && lines.blocked?.has(token.stem) && !anchors.has(token.stem));
-  if (missing) return `It adds "${missing.shown}", which your CV doesn't show for this role.`;
   return null;
 }
 
-/** `clause`: the token starts a clause, so it can be the line's main verb ("Cleaned and joined…", "…report, cutting…"). */
-type Token =
-  | { type: "word"; word: string; stem: string; shown: string; clause: boolean }
-  | { type: "figure"; value: string; money: boolean; percent: boolean; plus: boolean; shown: string; clause: boolean };
+/** The clearest reason a part fits no evidence line, for the tests, the evals and the count the user sees. */
+function partProblem(written: Token[], content: number[], sources: Prepared[], current: number[] | null, dependent: boolean, whole: Set<string>): string {
+  const words = content.map((index) => written[index]).filter((token): token is Extract<Token, { type: "word" }> => token.type === "word");
+  const unknown = words.find((token) => !sources.some((source) => backedBy(token, source, true)));
+  if (unknown) return `It says "${unknown.shown}", which its lines don't.`;
+  const denied = !words.some((token) => token.negation) && words.find((token) => !sources.some((source) => backedBy(token, source, false)));
+  if (denied) return `It says "${denied.shown}", which its lines say didn't happen.`;
+  const first = written[content[0]];
+  if (current !== null && dependent && sources.some((source) => !fit(written, content, source, "continue", whole))) {
+    return `It joins "${first.shown}" to a line it doesn't come from.`;
+  }
+  // When the line it goes on with has every word, its own reason (a figure, a rank, a dropped limit) says most.
+  const staying = (current ?? []).map((source) => fit(written, content, sources[source], "continue", whole) ?? "");
+  const specific = staying.find((reason) => reason && !(reason.startsWith("It says") && !reason.includes("that way")));
+  if (specific) return specific;
+  const reasons = sources.map((source) => fit(written, content, source, current === null ? "first" : "switch", whole) ?? "");
+  const wordReasons = reasons.filter((reason) => reason.startsWith("It says") && !reason.includes("that way"));
+  if (wordReasons.length === reasons.length) return "It joins two lines into a claim neither of them makes.";
+  return reasons.find((reason) => reason && !wordReasons.includes(reason)) ?? reasons[0];
+}
+
+/**
+ * Why one part doesn't fit one evidence line, or null when it does. `mode` says how the part follows the one before:
+ * "first" (the line's first part), "continue" (more of the same evidence line) or "switch" (another evidence line).
+ */
+function fit(written: Token[], content: number[], source: Prepared, mode: "first" | "continue" | "switch", whole: Set<string>): string | null {
+  const denied = content.some((index) => written[index].negation);
+  for (const index of content) {
+    const token = written[index];
+    if (token.type === "word" && !backedBy(token, source, denied)) return `It says "${token.shown}", which its lines don't.`;
+  }
+  for (const index of content) {
+    const token = written[index];
+    if (token.type !== "figure") continue;
+    const shown = figureInfo(written, index);
+    if (!source.tokens.some((other, at) => other.type === "figure" && sameFigure(shown, figureInfo(source.tokens, at)))) {
+      return `It says "${token.shown}", which its lines don't say that way.`;
+    }
+  }
+
+  const [start, next] = content.map((index) => written[index]);
+  const starts = source.tokens.flatMap((other, at) =>
+    keyOf(other) === keyOf(start) && (!other.negated || denied) && (mode === "first" ? other.clause : mode === "switch" ? other.fresh : true) ? [at] : [],
+  );
+  if (starts.length === 0 || (next && !starts.some((at) => inScope(source.tokens, at, next)))) {
+    return `It starts with "${start.shown}" in a way its lines don't.`;
+  }
+
+  for (const index of content) {
+    const token = written[index];
+    if (token.type !== "word" || !RANKS.has(token.stem)) continue;
+    const preposition = prepositionBefore(written, index);
+    const usedSo =
+      preposition !== "as" &&
+      source.tokens.some((other, at) => {
+        if (other.type !== "word" || other.stem !== token.stem || keyOf(source.tokens[at - 1]) !== keyOf(written[index - 1])) return false;
+        const theirs = prepositionBefore(source.tokens, at);
+        if (theirs !== null && theirs !== preposition) return false;
+        // "Head of Year 9" can't become "head of school".
+        return !isWord(written[index + 1], "of") || (isWord(source.tokens[at + 1], "of") && keyAfter(source.tokens, at + 1) === keyAfter(written, index + 1));
+      });
+    if (!usedSo) return `It calls the person "${token.shown}" in a way its lines don't.`;
+  }
+
+  const usesLine = content.some((index) => {
+    const token = written[index];
+    return keyOf(token) === source.start || (token.type === "figure" && source.figures.has(token.value));
+  });
+  const dropped = usesLine && source.limits.find((limit) => !limit.stems.every((stem) => whole.has(stem)));
+  if (dropped) return `It leaves out "${dropped.shown}", which limits what the line says.`;
+  return null;
+}
+
+/** An evidence line, read once. */
+type Prepared = {
+  tokens: Token[];
+  /** Stems of its words that it doesn't deny, with the words its abbreviations stand for. */
+  stems: Set<string>;
+  /** The same, the denied words included. */
+  allStems: Set<string>;
+  words: string[];
+  /** The key of its first word that isn't a linking word: usually its verb. */
+  start: string;
+  figures: Set<string>;
+  /** Phrases that limit what it says: "in my classes", "for the Midlands region". */
+  limits: { stems: string[]; shown: string }[];
+};
+
+function prepare(text: string): Prepared {
+  const line = tokens(text);
+  const first = line.find(isContent);
+  return {
+    tokens: line,
+    stems: stemSet(line.filter((token) => !token.negated)),
+    allStems: stemSet(line),
+    words: line.flatMap((token) => (token.type === "word" ? [token.word] : [])),
+    start: first ? keyOf(first) : "",
+    figures: new Set(line.flatMap((token) => (token.type === "figure" ? [token.value] : []))),
+    limits: limitsOf(line),
+  };
+}
+
+/** A word of the line in any tense or number, a standard shortening of one, or an abbreviation of its words. */
+function backedBy(token: Extract<Token, { type: "word" }>, source: Prepared, denied: boolean): boolean {
+  const stems = denied ? source.allStems : source.stems;
+  if (stems.has(token.stem)) return true;
+  if (ABBREVIATIONS[token.stem]?.every((part) => stems.has(part))) return true;
+  return SHORTENINGS[token.word]?.some((start) => source.words.some((word) => word.startsWith(start))) ?? false;
+}
+
+/** The written line's parts: a new part starts at punctuation and after a word that starts a clause. */
+function parts(line: Token[]): number[][] {
+  const found: number[][] = [];
+  for (const [index, token] of line.entries()) {
+    if (index === 0 || token.after) found.push([]);
+    found[found.length - 1].push(index);
+  }
+  return found;
+}
+
+/**
+ * True when `target` comes straight after the word at `index` ("delivered on time"), or is part of what that word acts
+ * on: the words after it up to a preposition or a new clause ("Managed deliveries, stockroom and a team").
+ */
+function inScope(line: Token[], index: number, target: Token): boolean {
+  const same = (token: Token) =>
+    keyOf(token) === keyOf(target) ||
+    (target.type === "word" && token.type === "word" &&
+      (ABBREVIATIONS[target.stem]?.includes(token.stem) || SHORTENINGS[target.word]?.some((start) => token.word.startsWith(start))));
+  const next = line.slice(index + 1).find(isContent);
+  if (next && same(next)) return true;
+  for (const token of line.slice(index + 1)) {
+    if (token.after === "stop") return false;
+    if (token.type === "word" && SCOPE_ENDS.has(token.word)) return false;
+    if (token.after === "comma" && token.type === "word" && token.word.endsWith("ing")) return false;
+    if (same(token)) return true;
+  }
+  return false;
+}
+
+/** Phrases that limit a claim to a place or a group: a preposition, then "my" or a word such as team or region. */
+function limitsOf(line: Token[]): { stems: string[]; shown: string }[] {
+  const limits: { stems: string[]; shown: string }[] = [];
+  for (const [index, token] of line.entries()) {
+    if (!isWord(token) || !LIMIT_PREPOSITIONS.has(token.word)) continue;
+    let personal = false;
+    for (let at = index + 1; at < Math.min(line.length, index + 7); at++) {
+      const other = line[at];
+      if (other.after && at > index + 1) break;
+      if (isWord(other, "my") || isWord(other, "our")) personal = true;
+      else if (other.type === "word" && !GLUE.has(other.word) && (personal || LIMIT_NOUNS.has(other.stem))) {
+        const phrase = line.slice(index, at + 1);
+        const stems = phrase.slice(1).flatMap((item) => (item.type === "word" && !GLUE.has(item.word) && item.word !== "my" && item.word !== "our" ? [item.stem] : []));
+        limits.push({ stems, shown: phrase.map((item) => item.shown).join(" ") });
+        break;
+      }
+    }
+  }
+  return limits;
+}
+
+/** The nearest preposition before a word in its phrase, or null when the phrase starts with a verb or a new part. */
+function prepositionBefore(line: Token[], index: number): string | null {
+  for (let at = index - 1; at >= Math.max(0, index - 5); at--) {
+    const token = line[at];
+    if (token.type === "word" && PREPOSITIONS.has(token.word)) return token.word;
+    if ((isContent(token) && token.clause) || token.after) return null;
+  }
+  return null;
+}
+
+/** The key of the first word or figure after a token that isn't a linking word, or "$" at the end. */
+function keyAfter(line: Token[], index: number): string {
+  const next = line.slice(index + 1).find(isContent);
+  return next ? keyOf(next) : "$";
+}
+
+/** "as Head of Year 9": the role's own title, or one part of it, may describe the person. Those tokens need no other evidence. */
+function titleSpan(line: Token[], title: string | undefined): Set<number> {
+  const span = new Set<number>();
+  const titles = (title ?? "").split(/\s+and\s+|[,&/]/i).map(tokens).filter((part) => part.length > 0);
+  for (const [index, token] of line.entries()) {
+    if (!isWord(token, "as")) continue;
+    let at = index + 1;
+    for (let next = line[at]; isWord(next) && ARTICLES.has(next.word); next = line[at]) at++;
+    const named = titles.find((part) => part.every((word, offset) => line[at + offset] && keyOf(line[at + offset]) === keyOf(word)));
+    if (named) for (let offset = 0; offset < named.length; offset++) span.add(at + offset);
+  }
+  return span;
+}
+
+type FigureInfo = {
+  value: string;
+  kind: "money" | "percent" | "count";
+  year: boolean;
+  /** What it counts: the last word of the phrase after it ("six agency clients" → client). */
+  head: string;
+  /** "classes of 30" → class. */
+  owner: string;
+  /** "Year 9" → year, when nothing follows it. */
+  label: string;
+  /** "over", "nearly", "by", "+"… */
+  modifier: string;
+  /** For money: "a year", "per student". */
+  period: string;
+};
+
+function figureInfo(line: Token[], index: number): FigureInfo {
+  const token = line[index] as Extract<Token, { type: "figure" }>;
+  const [before, beforeThat] = [line[index - 1], line[index - 2]];
+  const kind = token.money ? "money" : token.percent ? "percent" : "count";
+
+  let head = "";
+  for (const next of line.slice(index + 1)) {
+    if (next.after || next.type !== "word" || GLUE.has(next.word)) break;
+    head = next.stem;
+  }
+  const owner = isWord(before, "of") && beforeThat && isContent(beforeThat) ? keyOf(beforeThat) : "";
+  const label = !head && !owner && before && isContent(before) && !token.after ? keyOf(before) : "";
+  const modifier = token.plus
+    ? "+"
+    : isWord(before) && MODIFIERS.has(before.word)
+      ? before.word
+      : isWord(before, "to") && isWord(beforeThat, "up")
+        ? "up to"
+        : "";
+
+  let period = "";
+  if (kind === "money") {
+    let at = index + 1;
+    for (let next = line[at]; isWord(next) && /^(a|an|per|each|every)$/.test(next.word); next = line[at]) at++;
+    const next = line[at];
+    if (next?.type === "word" && PERIODS[next.stem]) period = PERIODS[next.stem];
+    else if (at > index + 1 && next?.type === "word") period = next.stem;
+  }
+  const year = kind === "count" && !token.plus && !token.comma && !head && /^(19|20)\d\d$/.test(token.value);
+  return { value: token.value, kind, year, head, owner, label, modifier, period };
+}
+
+/** A written figure counts the same thing as one in the evidence. "In" clauses about it go one way only: leaving out "of" is fine. */
+function sameFigure(written: FigureInfo, evidence: FigureInfo): boolean {
+  if (written.value !== evidence.value || written.kind !== evidence.kind || written.modifier !== evidence.modifier) return false;
+  if (written.year !== evidence.year) return false;
+  if (written.owner && written.owner !== evidence.owner) return false;
+  if (written.kind === "money") return !written.period || written.period === evidence.period;
+  if (written.kind !== "count" || written.year) return true;
+  if (written.head) return written.head === evidence.head;
+  if (written.owner) return true;
+  if (written.label) return written.label === evidence.label;
+  return !evidence.head && !evidence.owner;
+}
+
+type Token = (
+  | { type: "word"; word: string; stem: string }
+  | { type: "figure"; value: string; money: boolean; percent: boolean; plus: boolean; comma: boolean }
+) & {
+  shown: string;
+  /** The break just before it: the start, a full stop (or ; : ! ? or a new line), a comma or bracket, or a word such as "and". */
+  after: "start" | "stop" | "comma" | "link" | null;
+  /** The word before it when `after` is "link": "and", "by", "i"… */
+  link: string | null;
+  /** Only linking words stand between it and the last break: it can start a clause. */
+  clause: boolean;
+  /** It can start a part of its own: at the start of the text, after a full stop, or after "I" or "we". */
+  fresh: boolean;
+  /** It says "not", "never", "no" or "without". */
+  negation: boolean;
+  /** It is said not to have happened: it follows a negation in the same clause. */
+  negated: boolean;
+};
 
 /** Figures (with £, %, "k" or "million"), then words; hyphens and other punctuation split words. */
 const TOKEN =
@@ -324,44 +635,83 @@ const NUMBER_WORDS: Record<string, string> = {
   dozens: "dozens", hundreds: "hundreds", thousands: "thousands", millions: "millions",
 };
 
+/**
+ * The text's words and figures, each with what stands before it. Words are compared in UK spelling, as the brand
+ * writes them, so "Analysed" is backed by a CV that says "Analyzed".
+ */
 function tokens(text: string): Token[] {
   const found: Token[] = [];
   const clean = cleanModelText(text).text;
   let end = 0;
+  let glueOnly = true;
+  let runFresh = true;
+  let negating = false;
   for (const match of clean.matchAll(TOKEN)) {
     const [shown, money, digits, scale, plus, percent] = match;
+    const gap = clean.slice(end, match.index);
     const previous = found.at(-1);
-    const clause =
-      !previous || /[,;:–—(]/.test(clean.slice(end, match.index)) || (previous.type === "word" && CLAUSE_LINKS.has(previous.word));
+    const link = previous?.type === "word" && CLAUSE_LINKS.has(previous.word) ? previous.word : null;
+    const after: Token["after"] = !previous ? "start" : /[.!?;:\n]/.test(gap) ? "stop" : /[,()–—]/.test(gap) ? "comma" : link ? "link" : null;
     end = match.index + shown.length;
-    if (digits !== undefined) {
-      const amount = Number(digits.replace(/,(?=\d{3}(?!\d))/g, "")) * (scale ? SCALES[scale.toLowerCase()] : 1);
-      const value = String(Math.round(amount * 1000) / 1000);
-      found.push({ type: "figure", value, money: Boolean(money), percent: Boolean(percent), plus: Boolean(plus), shown, clause });
-      continue;
+    if (after) {
+      glueOnly = true;
+      runFresh = after === "start" || after === "stop" || link === "i" || link === "we";
     }
-    // "KPIs" is the plural of "KPI"; the stem can't tell, as it keeps "analysis" whole.
-    const word = (/^\p{Lu}{2,}s$/u.test(shown) ? shown.slice(0, -1) : shown).toLowerCase().replace(/['’]s$/, "");
-    const number = NUMBER_WORDS[word];
-    if (number) found.push({ type: "figure", value: number, money: false, percent: false, plus: false, shown, clause });
-    else found.push({ type: "word", word, stem: stem(word), shown, clause });
+    if (after === "stop" || after === "comma") negating = false;
+
+    const base = { shown, after, link: after === "link" ? link : null, clause: glueOnly, fresh: glueOnly && runFresh, negated: negating };
+    let token: Token;
+    if (digits !== undefined) {
+      const plain = digits.replace(/,(?=\d{3}(?!\d))/g, "");
+      const amount = Number(plain) * (scale ? SCALES[scale.toLowerCase()] : 1);
+      // "3,4" or "16.8.0" isn't one number: keep the digits as written.
+      const value = Number.isNaN(amount) ? plain : String(Math.round(amount * 1000) / 1000);
+      token = { ...base, type: "figure", value, money: Boolean(money), percent: Boolean(percent), plus: Boolean(plus), comma: plain !== digits, negation: false };
+    } else {
+      // "KPIs" is the plural of "KPI"; the stem can't tell, as it keeps "analysis" whole.
+      const word = (/^\p{Lu}{2,}s$/u.test(shown) ? shown.slice(0, -1) : shown).toLowerCase().replace(/['’]s$/, "");
+      const number = NUMBER_WORDS[word];
+      const negation = NEGATIONS.has(word) || /n['’]t$/.test(word);
+      token = number
+        ? { ...base, type: "figure", value: number, money: false, percent: false, plus: false, comma: false, negation: false }
+        : { ...base, type: "word", word, stem: stem(ukSpelling(word)), negation };
+      if (negation) negating = true;
+      if (word === "but" || word === "i" || word === "we") negating = false;
+    }
+    if (isContent(token)) glueOnly = false;
+    found.push(token);
   }
   return found;
 }
 
-/**
- * Words after which a new clause starts: "Cleaned and joined", "…by automating", and "I" or "we" in the user's
- * answers ("Every Monday I walked…"). Not "to": "helped to manage".
- */
-const CLAUSE_LINKS = new Set(["and", "or", "then", "while", "by", "also", "i", "we"]);
+/** The brand's UK spelling of a word, so both sides compare the same: "analyzed" → "analysed", "color" → "colour". */
+function ukSpelling(word: string): string {
+  const uk = findBrandProblems(word).find((problem) => problem.kind === "us-spelling");
+  return uk ? uk.suggestion.toLowerCase() : word;
+}
+
+/** Words after which a new clause starts: "Cleaned and joined", "…by automating", "I walked". Not "to": "helped to manage". */
+const CLAUSE_LINKS = new Set(["and", "or", "then", "while", "by", "also", "but", "i", "we"]);
+
+const NEGATIONS = new Set(["not", "never", "no", "without", "nor", "cannot"]);
 
 /** Words that only link others; they claim nothing, so a line may add them. */
 const GLUE = new Set(
   (
     "a an the and or but nor of to in on at for by with from into onto as via per its it their them they this that " +
     "these those which who whose while when where across through throughout within during after before between " +
-    "including using also so such then up out"
+    "including using also so such then up out alongside i we"
   ).split(" "),
+);
+
+const ARTICLES = new Set(["a", "an", "the"]);
+
+/** Prepositions that say whose a rank is: "with two senior developers", "to the area manager", "as manager". */
+const PREPOSITIONS = new Set("to for from with as by at in on under over alongside beside without within across".split(" "));
+
+/** Where what a verb acts on ends: "Coordinated the move | to a new timetable". "of" doesn't end it. */
+const SCOPE_ENDS = new Set(
+  "to for from with in on at into onto through across during via per by under over after before within using alongside while when where".split(" "),
 );
 
 /** Words that change what a figure says: "over 120 stores" is not "120 stores". */
@@ -369,36 +719,8 @@ const MODIFIERS = new Set(
   "over under than nearly almost about around approximately roughly circa more less fewer least most above below exceeding by".split(" "),
 );
 
-/**
- * A figure with what it counts, so it can only be used as the evidence uses it: "classes of 30" is not "30 classes",
- * "£9 million" is not "9 stores", and "from 2.1% to 1.3%" is not "by 2.1%". A year is just a year.
- */
-function figureKeys(line: Token[]): { key: string; shown: string }[] {
-  return line.flatMap((token, index) => {
-    if (token.type !== "figure") return [];
-    const [before, beforeThat, after] = [line[index - 1], line[index - 2], line[index + 1]];
-    const isWord = (other: Token | undefined, word?: string): other is Extract<Token, { type: "word" }> =>
-      other?.type === "word" && (word === undefined ? !GLUE.has(other.word) : other.word === word);
-    if (!token.money && !token.percent && !token.plus && /^(19|20)\d\d$/.test(token.value)) {
-      return [{ key: `${token.value}|year`, shown: token.shown }];
-    }
-
-    let unit = token.money ? "£" : token.percent ? "%" : "";
-    if (!unit) {
-      if (isWord(after)) unit = `${after.stem} counted`;
-      else if (isWord(before, "of") && isWord(beforeThat)) unit = `of ${beforeThat.stem}`;
-      else if (isWord(before)) unit = `${before.stem} numbered`;
-    }
-    const modifier = token.plus
-      ? "+"
-      : before?.type === "word" && MODIFIERS.has(before.word)
-        ? before.word
-        : isWord(before, "to") && isWord(beforeThat, "up")
-          ? "up to"
-          : "";
-    return [{ key: `${token.value}|${unit}|${modifier}`, shown: token.shown }];
-  });
-}
+/** Prepositions and nouns that limit a claim: "in my team", "for the Midlands region". */
+const LIMIT_PREPOSITIONS = new Set(["in", "for", "across", "within", "at"]);
 
 /** Past forms that don't end in -ed, so a change of tense keeps the same word. Above the sets that stem their words. */
 const IRREGULAR: Record<string, string> = {
@@ -408,8 +730,21 @@ const IRREGULAR: Record<string, string> = {
   spent: "spend", told: "tell", thought: "think", found: "find", rose: "rise", risen: "rise", did: "do", done: "do",
   went: "go", gone: "go", saw: "see", seen: "see", chose: "choose", chosen: "choose", drove: "drive", driven: "drive",
   spoke: "speak", spoken: "speak", understood: "understand", stood: "stand", paid: "pay", said: "say", heard: "hear",
-  felt: "feel", lost: "lose", caught: "catch", dealt: "deal", meant: "mean", learnt: "learn", used: "use",
+  felt: "feel", lost: "lose", caught: "catch", dealt: "deal", meant: "mean", learnt: "learn", used: "use", using: "use",
+  oversaw: "oversee", overseen: "oversee", undertook: "undertake", undertaken: "undertake", drew: "draw", drawn: "draw",
 };
+
+/** Prefixes kept on an irregular verb: "rebuilt" is "rebuild", not "build". */
+const VERB_PREFIXES = ["re", "over", "under", "with", "up"];
+
+const LIMIT_NOUNS = new Set(["team", "class", "region", "area", "department", "branch", "site"].map(stem));
+
+const PERIODS: Record<string, string> = Object.fromEntries(
+  [
+    ["year", "year"], ["annum", "year"], ["annual", "year"], ["yearly", "year"], ["month", "month"], ["monthly", "month"],
+    ["week", "week"], ["weekly", "week"], ["day", "day"], ["daily", "day"], ["hour", "hour"],
+  ].map(([word, period]) => [stem(word), period]),
+);
 
 /** Ranks and titles: a line may only use them as its evidence does. */
 const RANKS = new Set(
@@ -422,15 +757,30 @@ const ABBREVIATIONS: Record<string, string[]> = {
   kpi: ["key", "performance", "indicator"].map(stem),
 };
 
+/** Standard shortenings and the starts of the words they stand for: "prep" for "preparation". */
+const SHORTENINGS: Record<string, string[]> = {
+  prep: ["prepar"],
+  admin: ["administ"],
+  info: ["inform"],
+  stats: ["statistic"],
+  comms: ["communicat"],
+  dept: ["department"],
+};
+
 function keyOf(token: Token | undefined): string {
   if (!token) return "^";
   return token.type === "word" ? token.stem : token.value;
 }
 
-/** The first word or figure after a token that isn't a linking word: what the verb acts on. "$" at the end. */
-function nextContent(line: Token[], index: number): string {
-  const next = line.slice(index + 1).find((token) => !(token.type === "word" && GLUE.has(token.word)));
-  return next ? keyOf(next) : "$";
+function isContent(token: Token): boolean {
+  return token.type === "figure" || !GLUE.has(token.word);
+}
+
+/** A word token; with `word`, that very word (no narrowing then, as a different word is still a word). */
+function isWord(token: Token | undefined): token is Extract<Token, { type: "word" }>;
+function isWord(token: Token | undefined, word: string): boolean;
+function isWord(token: Token | undefined, word?: string): boolean {
+  return token?.type === "word" && (word === undefined || token.word === word);
 }
 
 /** The stems of these tokens' words, with the words a standard abbreviation among them stands for. */
@@ -444,24 +794,19 @@ function stemSet(line: Token[]): Set<string> {
   return stems;
 }
 
-/** A word of the evidence in any form, a shortening of one ("prep" for "preparation"), or an abbreviation of its words. */
-function backed(token: Extract<Token, { type: "word" }>, stems: Set<string>, sourceWords: string[]): boolean {
-  if (stems.has(token.stem)) return true;
-  if (token.word.length >= 4 && sourceWords.some((word) => word.length > token.word.length && word.startsWith(token.word))) return true;
-  return ABBREVIATIONS[token.stem]?.every((part) => stems.has(part)) ?? false;
-}
-
 /** A rough stem, so tense and number don't count as new words: "Managed", "managing" and "manages" give "manag". */
 function stem(word: string): string {
-  let result = IRREGULAR[word] ?? word;
+  const prefix = VERB_PREFIXES.find((start) => word.startsWith(start) && IRREGULAR[word.slice(start.length)]);
+  let result = IRREGULAR[word] ?? (prefix ? prefix + IRREGULAR[word.slice(prefix.length)] : word);
   // Names such as "P&L", "Node.js" and "C#" are kept whole.
   if (!/^[a-z]+$/.test(result)) return result;
   if (result.length > 4 && result.endsWith("ies")) result = `${result.slice(0, -3)}y`;
   else if (result.length > 4 && /(ss|x|z|ch|sh)es$/.test(result)) result = result.slice(0, -2);
   else if (result.length > 3 && result.endsWith("s") && !/(ss|us|is)$/.test(result)) result = result.slice(0, -1);
-  if (result.length > 5 && result.endsWith("ing")) result = result.slice(0, -3);
+  if (result.length > 4 && result.endsWith("ied")) result = `${result.slice(0, -3)}y`;
+  else if (result.length > 5 && result.endsWith("ing")) result = result.slice(0, -3);
   else if (result.length > 4 && result.endsWith("ed")) result = result.slice(0, -2);
-  if (/([b-df-hj-km-np-rt-vxz])\1$/.test(result)) result = result.slice(0, -1);
+  if (/([b-df-hj-np-tv-z])\1$/.test(result)) result = result.slice(0, -1);
   if (result.length > 3 && result.endsWith("e")) result = result.slice(0, -1);
   return result;
 }
@@ -482,22 +827,6 @@ function contentStems(texts: string[]): Set<string> {
   return new Set(stems.filter((word) => !COMMON.has(word)));
 }
 
-/**
- * The words of the requirements the match found missing or unclear, as stems, and run together for names such as
- * "PowerBI". A line may use one only where the role's own lines do.
- */
-function blockedWords(job: Job, findings: Map<string, "met" | "unclear" | "missing">): Set<string> {
-  const words = jobRequirements(job)
-    .filter((requirement) => findings.get(requirement.text) === "missing" || findings.get(requirement.text) === "unclear")
-    .flatMap((requirement) =>
-      requirement.text.split(/\s+or\s+|[/,;()]/i).flatMap((option) => {
-        const parts = keywords(option).map((part) => stem(part.toLowerCase()));
-        return parts.length > 1 ? [...parts, parts.join("")] : parts;
-      }),
-    );
-  return new Set(words);
-}
-
 /** A skill the model named, by its line id or, failing that, by its exact words. */
 function skillLine(value: string, shared: EvidenceLine[]): EvidenceLine | undefined {
   const skills = shared.filter((line) => line.kind === "skill");
@@ -505,17 +834,25 @@ function skillLine(value: string, shared: EvidenceLine[]): EvidenceLine | undefi
   return skills.find((line) => line.id === id) ?? skills.find((line) => sameWords(line.text, value));
 }
 
+/** Skill words too general to show a skill alone: "Team leadership" needs more than a line with "team" in it. */
+const GENERAL_SKILL_WORDS = new Set(["team", "data", "customer", "project", "time", "people", "client", "business"].map(stem));
+const MANAGING = new Set(["lead", "manage", "supervise", "run", "coach"].map(stem));
+
 /**
- * True when the role's lines name what the skill is about: the first word of one of its alternatives, or the words
- * it stands for. "Python (pandas)" is shown by "using SQL and Python", "P&L management" by "profit and loss", but not
- * by "Managed deliveries", which only shares the general word.
+ * True when the role's duties and results show the skill: they name the first word of one of its alternatives, or the
+ * words it stands for ("P&L management" is shown by "profit and loss"). For a general first word they must name the
+ * next one too, or, for leading a team, show the person leading, managing or supervising one.
  */
 function shows(lines: string[], skill: string): boolean {
-  const stems = stemSet(lines.flatMap(tokens));
-  const heads = skill.split(/\s+or\s+|[/,;()]/i).flatMap((option) => keywords(option).slice(0, 1));
-  return heads.some((word) => {
-    const head = stem(word.toLowerCase());
-    return stems.has(head) || (ABBREVIATIONS[head]?.every((part) => stems.has(part)) ?? false);
+  const read = lines.map(tokens);
+  const stems = stemSet(read.flat());
+  const has = (word: string) => stems.has(word) || (ABBREVIATIONS[word]?.every((part) => stems.has(part)) ?? false);
+  return skill.split(/\s+or\s+|[/,;()]/i).some((option) => {
+    const [head, next] = keywords(option).map((word) => stem(ukSpelling(word.toLowerCase())));
+    if (!head || !has(head)) return false;
+    if (!GENERAL_SKILL_WORDS.has(head) || !next) return true;
+    if (has(next) || [...stems].some((word) => word.length >= 4 && word.startsWith(next.slice(0, 4)))) return true;
+    return /^(lead|manag)/.test(next) && read.some((line) => line.some((token) => token.type === "word" && token.stem === head) && line.some((token) => token.type === "word" && token.clause && MANAGING.has(token.stem)));
   });
 }
 
@@ -580,33 +917,34 @@ function sameWords(a: string, b: string): boolean {
   return plain(a) === plain(b);
 }
 
-// The mock answer: each role's own lines that name the ad's requirements, word for word, so the demo works
-// without the model and is honest by construction.
+// The mock answer: each role's own lines that show what the ad asks for, word for word, so the demo works without
+// the model and is honest by construction.
 
-/** For each role, its duties and results that name the most requirement words, results first when they tie. */
-export function suggestByRules(profile: Profile, job: Job): LinkedInAnswer {
+/**
+ * For each role, its duties and results that show the most requirements the profile meets or touches on (all the
+ * words of one of a requirement's alternatives), the match's own evidence first, then results before duties.
+ */
+export function suggestByRules(profile: Profile, job: Job, match: MatchResult | null): LinkedInAnswer {
   const { roles, shared } = linkedInRoles(profile);
-  const wanted = [
-    ...new Map(
-      jobRequirements(job)
-        .flatMap((requirement) => requirement.text.split(/\s+or\s+|[/,;()]/i).flatMap(keywords))
-        .map((word) => [word.toLowerCase(), word]),
-    ).values(),
-  ];
-  const relevance = (text: string) => wanted.filter((word) => mentions(text, word)).length;
+  const findings = currentFindings(profile, job, match);
+  const wanted = jobRequirements(job)
+    .filter((requirement) => findings.get(requirement.text) !== "missing")
+    .map((requirement) => requirement.text.split(/\s+or\s+|[/,;()]/i).map(keywords).filter((words) => words.length > 0));
+  const relevance = (text: string) => wanted.filter((options) => options.some((words) => words.every((word) => mentions(text, word)))).length;
+  const evidence = new Set((match?.strengths ?? []).map((strength) => strength.evidence));
   const skillLines = shared.filter((line) => line.kind === "skill");
 
   return {
     roles: roles.flatMap((role) => {
       const lines = role.lines
         .filter((line) => line.text.length <= MAX_LINE_CHARACTERS)
-        .map((line, index) => ({ line, index, score: relevance(line.text) }))
+        .map((line, index) => ({ line, index, score: relevance(line.text) + (evidence.has(line.text) ? 1 : 0) }))
         .filter((item) => item.score > 0)
         .sort((a, b) => b.score - a.score || resultsFirst(a.line) - resultsFirst(b.line) || a.index - b.index)
         .slice(0, MAX_LINES_PER_ROLE);
       if (lines.length === 0) return [];
 
-      const own = [role.role, ...role.lines].map((line) => line.text);
+      const own = role.lines.map((line) => line.text);
       const skills = skillLines
         .filter((skill) => shows(own, skill.text))
         .sort((a, b) => relevance(b.text) - relevance(a.text))

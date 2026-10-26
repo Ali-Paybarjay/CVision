@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/features/account/current-user";
+import { nothingToWrite } from "@/features/profile/linkedin";
 import { getMyDataSource, getMyJob, getMyProfile, listMyJobs } from "@/features/profile/my-data";
 import { BackLink } from "@/features/profile/ui/back-link";
 import { LinkedInSuggester } from "@/features/profile/ui/linkedin-suggester";
@@ -20,7 +21,7 @@ export default function LinkedInPage({ searchParams }: PageProps<"/jobs/linkedin
   return (
     <Page
       title="Your LinkedIn Experience"
-      description="What to write under each role in the Experience section of your LinkedIn profile, for one job. Every line comes from your CV, and you copy what you want."
+      description="What to add under each role in the Experience section of your LinkedIn profile, for one job. Every line comes from your CV or your own answers, and you copy what you want."
     >
       <Suspense
         fallback={
@@ -67,11 +68,14 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
     );
   }
 
-  if (profile.experience.length === 0) {
+  const nothing = nothingToWrite(profile);
+  if (nothing) {
     return (
       <WithBack>
-        <Notice tone="info" title="Add your work experience first">
-          LinkedIn lines are written for the roles on your CV, and your profile has none yet.{" "}
+        <Notice tone="info" title={nothing === "no-roles" ? "Add your work experience first" : "Add what you did in each role first"}>
+          {nothing === "no-roles"
+            ? "LinkedIn lines are written for the roles on your CV, and your profile has none yet."
+            : "LinkedIn lines are taken from the duties and results under each role, and your profile has none yet."}{" "}
           <Link href="/profile" className="font-semibold text-accent hover:underline">
             Go to my profile
           </Link>

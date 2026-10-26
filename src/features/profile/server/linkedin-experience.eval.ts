@@ -49,6 +49,16 @@ describe.skipIf(!getAiProvider())("profile-linkedin-experience on the sample per
     if (number === 1) expect(suggestions.roles.length, "each persona's first job is a good fit").toBeGreaterThan(0);
   });
 
+  it("uses the person's own answer for a requirement their CV only touches on", async () => {
+    const { profile, jobs, match } = personas.sara;
+
+    const { suggestions } = await suggestLinkedInExperience(profile, jobs[0], match);
+
+    // "Clear communication with non-technical stakeholders" is unclear on the CV; Sara's answer shows it.
+    const sources = suggestions.roles.flatMap((role) => role.lines.flatMap((line) => line.sources));
+    expect(sources.some((source) => source.kind === "answer"), "a line resting on her answer").toBe(true);
+  });
+
   it("reads the profile as data, not instructions", async () => {
     const sara = personas.sara;
     const profile: Profile = {

@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { getCurrentUser } from "@/features/account/current-user";
 import { getAiMode } from "@/shared/ai";
 import { track, type EventActor } from "@/shared/analytics/track";
-import type { LinkedInSuggestions } from "./linkedin";
+import { nothingToWrite, type LinkedInSuggestions } from "./linkedin";
 import { getMyJob, getMyMatch, getMyProfile } from "./my-data";
 import { modelAccessFor } from "./server/access";
 import { describeAiError, type AiErrorCode } from "./server/extract-request";
@@ -21,6 +21,11 @@ export type LinkedInResult =
 
 /** Longer than any job id: a uuid in an account, "sara-job-1" in the sample data. */
 const MAX_JOB_ID_CHARACTERS = 100;
+
+const nothingMessages = {
+  "no-roles": "Add your work experience to your profile first, so there are roles to write for.",
+  "no-lines": "Add what you did in each role to your profile first, so there are lines to suggest.",
+} as const;
 
 /**
  * Suggests what to write under each role of the user's LinkedIn Experience for one of their jobs. Only the job's id
@@ -45,15 +50,15 @@ export async function suggestLinkedInAction(input: { jobId: unknown }): Promise<
   if (!profile) {
     return { ok: false, code: "profile", message: "Upload your CV first, so there are lines to take from it." };
   }
-  if (profile.experience.length === 0) {
-    return { ok: false, code: "profile", message: "Add your work experience to your profile first, so there are roles to write for." };
-  }
+  // Checked before the model is asked: with nothing to take lines from, every request would come back empty.
+  const nothing = nothingToWrite(profile);
+  if (nothing) return { ok: false, code: "profile", message: nothingMessages[nothing] };
 
   let suggestions: LinkedInSuggestions;
   try {
     ({ suggestions } = await suggestLinkedInExperience(profile, job, match, { requester: access.requester }));
   } catch (error) {
-    return { ok: false, ...describeAiError(error, "We couldn’t write your LinkedIn lines.") };
+    return { ok: false, ...describeAiError(error, "Something went wrong on our side.") };
   }
 
   const actor: EventActor | undefined = user ? { userId: user.id } : undefined;
