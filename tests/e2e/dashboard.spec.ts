@@ -73,13 +73,19 @@ test("a row saved with the keyboard keeps the focus where it is (#154)", async (
   await page.keyboard.press("Enter");
 
   // The button has nothing left to save, so the focus moves to the row's message, not back to the top of the page.
-  const message = row.getByRole("status");
-  await expect(message).toHaveText("Saved");
-  await expect(message).toBeFocused();
+  // Taking the focus reads it out, so the status line stays empty rather than read it a second time.
+  await expect(row.getByText("Saved", { exact: true })).toBeFocused();
+  await expect(row.getByRole("status")).toBeEmpty();
   await expect(save).toBeDisabled();
   await expect(nextStep).toHaveValue("Email the hiring manager on Monday");
   // The keyboard carries on from the same row: back past the disabled button to the field just saved.
   await page.keyboard.press("Shift+Tab");
+  await expect(nextStep).toBeFocused();
+
+  // Saved with Enter in the field, the focus stays there and the status line says it.
+  await nextStep.fill("Email the hiring manager on Tuesday");
+  await page.keyboard.press("Enter");
+  await expect(row.getByRole("status")).toHaveText("Saved");
   await expect(nextStep).toBeFocused();
 });
 

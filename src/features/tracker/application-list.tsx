@@ -96,8 +96,11 @@ type ApplicationRowProps = {
   onSaved: (application: Application) => void;
 };
 
-/** A save's outcome. `moved` marks the one that moved the row between the open and closed lists. */
-type RowResult = UpdateApplicationResult & { moved?: boolean };
+/**
+ * A save's outcome. `moved` marks the one that moved the row between the open and closed lists, and `focus` one
+ * that ended with the focus still on the Save button.
+ */
+type RowResult = UpdateApplicationResult & { moved?: boolean; focus?: boolean };
 
 function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved }: ApplicationRowProps) {
   const { application: saved, job } = item;
@@ -110,11 +113,14 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
     setStatus(saved.status);
     setNextStep(saved.nextStep ?? "");
   }
+  const saveRef = useRef<HTMLButtonElement>(null);
   const [result, save, pending] = useActionState<RowResult | null, { status: string; nextStep: string }>(
     async (_previous, change) => {
       const outcome = sample ? changeSample(saved, change, today) : await updateApplication(saved.id, change);
       if (outcome.ok) onSaved(outcome.application);
-      return outcome;
+      // Whether the Save button still has the focus, asked once the save is done: a user who moved on meanwhile keeps
+      // their place.
+      return { ...outcome, focus: document.activeElement === saveRef.current };
     },
     // Drawn here by the save that moved it, so it starts with that save's message.
     moved ? { ok: true, application: saved, moved: true } : null,
@@ -125,11 +131,12 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
   useLayoutEffect(() => {
     if (moved) messageRef.current?.focus();
   }, [moved]);
-  // Saved in place: with nothing left to save the button is disabled, so the focus on it moves to the message too,
-  // and Tab goes on from this row. After an error the button is still enabled, so the focus stays on it.
-  const saveRef = useRef<HTMLButtonElement>(null);
+  // Saved in place from the Save button: with nothing left to save the button is disabled, so the focus on it moves
+  // to the message too, and Tab goes on from this row. After an error there is no such message: the button is still
+  // enabled and keeps the focus.
+  const focusedMessageRef = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
-    if (result?.ok && document.activeElement === saveRef.current) messageRef.current?.focus();
+    if (result?.focus) focusedMessageRef.current?.focus();
   }, [result]);
 
   const unsaved = status !== saved.status || nextStep.trim() !== (saved.nextStep ?? "");
@@ -195,7 +202,13 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
           className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
           {pending ? "Saving…" : "Save"}
         </Button>
-        <SaveMessage ref={messageRef} result={pending ? null : result} unsaved={unsaved} closed={isClosed(saved.status)} />
+        <SaveMessage
+          ref={messageRef}
+          focusedRef={focusedMessageRef}
+          result={pending ? null : result}
+          unsaved={unsaved}
+          closed={isClosed(saved.status)}
+        />
       </form>
     </li>
   );
@@ -379,28 +392,36 @@ type SaveMessageProps = {
   unsaved: boolean;
   /** Whether the row is in the closed list, for the message of a save that moved it. */
   closed: boolean;
+  /** The status line, which takes the focus after a save that moved the row. */
   ref: React.Ref<HTMLParagraphElement>;
+  /** The line that shows the message instead when the focus moves to it. */
+  focusedRef: React.Ref<HTMLParagraphElement>;
 };
 
 /** "Saved" after a save, or what went wrong, across the whole form. Icon and words, never colour alone. */
-function SaveMessage({ result, unsaved, closed, ref }: SaveMessageProps) {
+function SaveMessage({ result, unsaved, closed, ref, focusedRef }: SaveMessageProps) {
   const saved = result?.ok && !unsaved;
+  // The focus moves to this message, which reads it out, so it is not also put in the status line to be read twice.
+  const focused = saved && result.focus;
   const words = !result?.moved ? "Saved" : closed ? "Saved and moved to Closed" : "Saved and moved to your open applications";
+  const shown = "flex items-center gap-1.5 text-sm font-semibold text-accent sm:col-span-3";
+  const message = (
+    <>
+      <CheckIcon className="size-4 shrink-0" />
+      {words}
+    </>
+  );
   // The status line stays on the page (hidden while empty), so screen readers announce "Saved" when it appears.
   return (
     <>
-      <p
-        ref={ref}
-        role="status"
-        tabIndex={-1}
-        className={saved ? "flex items-center gap-1.5 text-sm font-semibold text-accent sm:col-span-3" : "sr-only"}>
-        {saved && (
-          <>
-            <CheckIcon className="size-4 shrink-0" />
-            {words}
-          </>
-        )}
+      <p ref={ref} role="status" tabIndex={-1} className={saved && !focused ? shown : "sr-only"}>
+        {saved && !focused && message}
       </p>
+      {focused && (
+        <p ref={focusedRef} tabIndex={-1} className={shown}>
+          {message}
+        </p>
+      )}
       {result && !result.ok && (
         <p role="alert" className="flex items-center gap-1.5 text-sm text-error sm:col-span-3">
           <ErrorIcon className="size-4 shrink-0" />
