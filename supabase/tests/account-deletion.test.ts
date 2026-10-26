@@ -25,13 +25,13 @@ afterAll(async () => {
   await db?.close();
 });
 
-/** A row in every table for the user: the six the app writes as the user, and the two only the server writes. */
+/** A row in every table for the user: the ones the app writes as the user, and the two only the server writes. */
 async function addEverything(userId: string) {
   await asUser(db, userId, async (tx) => {
     await tx.query("insert into public.profiles (data, cv_file_path) values ('{}', $1)", [`${userId}/cv.pdf`]);
     const { rows } = await tx.query<{ id: string }>("insert into public.jobs (data) values ('{}'), ('{}') returning id");
     for (const job of rows) {
-      for (const table of ["match_results", "tailoring_changes", "interview_sessions", "applications"]) {
+      for (const table of ["match_results", "tailoring_changes", "tailored_cvs", "interview_sessions", "applications"]) {
         await tx.query(`insert into public.${table} (job_id, data) values ($1, '{}')`, [job.id]);
       }
     }
@@ -74,7 +74,7 @@ describe("the app's list of user tables", () => {
 });
 
 describe("deleting a user from auth.users", () => {
-  it("leaves no row of theirs in any of the eight tables, and keeps everyone else's", async () => {
+  it("leaves no row of theirs in any of the user tables, and keeps everyone else's", async () => {
     const before = await counts(reza);
     expect(await counts(sara)).toEqual(before);
     expect(Object.values(before).every((count) => count > 0)).toBe(true);
