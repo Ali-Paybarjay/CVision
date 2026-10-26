@@ -17,7 +17,8 @@ export type GapPrompt = { gap: Gap; question: string; sampleAnswer: string | nul
 
 
 type GapState =
-  | { phase: "open" }
+  /** `moreDetail` is what the answer still needs before it can back a line; the answer stays in the box. */
+  | { phase: "open"; moreDetail?: string }
   | { phase: "working" }
   | { phase: "answered"; nextSteps: NextStep[] }
   | { phase: "error"; message: string };
@@ -69,7 +70,10 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, save
     const replaced = changes.filter((change) => change.gapId === gapId && change.status !== "rejected");
     setAnswers((current) => ({ ...current, [gapId]: answer }));
     setChanges((current) => [...current.filter((change) => change.gapId !== gapId), ...newChanges]);
-    setGapStates((current) => ({ ...current, [gapId]: { phase: "answered", nextSteps } }));
+    // A request for more detail keeps the question open, so it does not read as the end of the road.
+    const moreDetail = newChanges.length === 0 ? nextSteps.find((step) => step.kind === "more-detail") : undefined;
+    const state: GapState = moreDetail ? { phase: "open", moreDetail: moreDetail.suggestion } : { phase: "answered", nextSteps };
+    setGapStates((current) => ({ ...current, [gapId]: state }));
     for (const change of replaced) {
       decideChange({ ...change, status: "rejected" }, { replaced: true }).catch(() => setSaveNote(unreachableMessage));
     }
@@ -185,6 +189,11 @@ function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, c
 
       {state.phase !== "answered" && (
         <>
+          {state.phase === "open" && state.moreDetail && (
+            <Notice tone="info" title="Tell us a bit more">
+              {state.moreDetail} Add it to your answer below and ask again.
+            </Notice>
+          )}
           <Field
             label="Your answer"
             hint={prompt.sampleAnswer ? "Sample answer for the sample CV. Change it if you like." : "In your own words: where, what you did and what changed."}
@@ -220,7 +229,7 @@ function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, c
           ))}
           {state.nextSteps.map((step, index) => (
             <Notice key={index} tone="info" title="Not added to your CV">
-              {step.kind === "learn" ? "A way to build it: " : "Your closest real skill: "}
+              {step.kind === "related-skill" ? "Your closest real skill: " : "A way to build it: "}
               {step.suggestion}
             </Notice>
           ))}

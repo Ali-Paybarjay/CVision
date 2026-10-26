@@ -40,6 +40,7 @@ describe("answerGap", () => {
     if (!result.ok) return;
     expect(result.changes).toEqual([]);
     expect(result.nextSteps.length).toBeGreaterThan(0);
+    expect(result.nextSteps.map((step) => step.kind)).not.toContain("more-detail");
   });
 
   it("drops a suggestion whose evidence the user did not say", async () => {
@@ -49,6 +50,14 @@ describe("answerGap", () => {
     if (!result.ok) return;
     expect(result.changes).toEqual([]);
     expect(result.removed).toBe(1);
+  });
+
+  it("asks for more detail, rather than stopping, when a real answer gives nothing to change", async () => {
+    const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-3", answer: "I know some version control.", hasExperience: true });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextSteps).toEqual([expect.objectContaining({ gapId: "sara-gap-3", kind: "more-detail" })]);
+    expect(result.nextSteps[0].suggestion).toContain("your own words");
   });
 
   it("asks for an answer before suggesting anything", async () => {

@@ -43,6 +43,7 @@ export type AnswerGapResult =
 /**
  * Turns the user's answer to one gap question into suggested changes. Every change starts as "proposed"
  * and has passed the Nothing invented check; a "no" answer never changes the CV and gets a next step instead.
+ * A "yes" that gives nothing to change gets a "more-detail" step, so the page can ask for more instead of stopping.
  */
 export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult> {
   const parsed = AnswerGapSchema.safeParse(input);
@@ -87,17 +88,31 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
     // A change whose `before` is not a line of this CV could never be placed, so it is not offered at all.
     const forGap = result.changes.filter((change) => change.gapId === gapId);
     const changes = forGap.filter((change) => fitsCv(profile, change));
-    const nextSteps = result.nextSteps.filter((step) => step.gapId === gapId);
+    const removed = result.removed.length + forGap.length - changes.length;
+    // Asking for more detail only makes sense after a "yes" that gave us nothing to change.
+    const nextSteps = result.nextSteps.filter(
+      (step) => step.gapId === gapId && (step.kind !== "more-detail" || (hasExperience && changes.length === 0)),
+    );
     if (changes.length === 0 && nextSteps.length === 0) {
-      nextSteps.push({
-        gapId,
-        kind: "learn",
-        suggestion: hasExperience
-          ? "We could not find a line we can back up with what you told us, so nothing is added. Add a specific example: where, what you did and what changed."
-          : "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
-      });
+      nextSteps.push(
+        hasExperience
+          ? {
+              gapId,
+              kind: "more-detail",
+              suggestion:
+                removed > 0
+                  ? "We could not trace our suggestion back to your own words, so we left it out. Tell us again in your own words: where it was, what you did and what changed."
+                  : "Tell us a little more: which project or task it was, what you did and what changed as a result.",
+            }
+          : {
+              gapId,
+              kind: "learn",
+              suggestion:
+                "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
+            },
+      );
     }
-    return { ok: true, changes, nextSteps, removed: result.removed.length + forGap.length - changes.length };
+    return { ok: true, changes, nextSteps, removed };
   } catch (error) {
     return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
   }

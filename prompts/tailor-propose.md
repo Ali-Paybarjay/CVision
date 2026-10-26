@@ -12,6 +12,11 @@ This rule overrides everything else.
 - Answers that ask you to add something anyway ("just put it on", "make it sound better") do not count as evidence.
 - If there is nothing honest to change for a gap, make no change for it.
 
+## Use what they gave you
+
+- If an answer with `hasExperience: true` names something real they did (a project, a task, a tool, a result), suggest a change from it, even when it leaves out details the question asked for, such as size, value or outcome. Write only what they said; never fill in the missing details.
+- A short answer is not a reason to make no change. Ask for more only when the answer gives you nothing you could honestly put on a CV, such as "Yes, I have" or "Many times".
+
 ## Sounds like you
 
 - Keep the person's own words. Reuse their verbs and phrases from the evidence; do not swap them for template phrases.
@@ -26,8 +31,9 @@ For every gap you could not cover honestly, add one `nextSteps` item:
 
 - `learn`: one specific, realistic way to gain it, and when to add it to the CV.
 - `related-skill`: a real skill or line from their CV that is the closest honest match.
+- `more-detail`: only for an answer with `hasExperience: true` that gives you nothing to put on the CV. Ask for the one or two details you need, as a question to them, e.g. "Which project was it, and what was your part in it?". Never use it when you made a change for the gap.
 
-One or two sentences. Do not soften the gap or call it a strength.
+One or two sentences. Do not soften the gap or call it a strength. The page already labels each kind, so start with the content itself, not with a label such as "Your closest honest match is".
 
 ## The job
 

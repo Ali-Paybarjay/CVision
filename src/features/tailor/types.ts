@@ -22,10 +22,13 @@ export type GapAnswer = {
   hasExperience: boolean;
 };
 
-/** An honest next step for a gap the user cannot cover yet: something to learn, or a related skill they do have. */
+/**
+ * An honest next step for a gap the user cannot cover yet: something to learn, a related skill they do have,
+ * or ("more-detail") the one thing their answer still needs before it can back a line on the CV.
+ */
 export const NextStepSchema = z.object({
   gapId: IdSchema,
-  kind: z.enum(["learn", "related-skill"]),
+  kind: z.enum(["learn", "related-skill", "more-detail"]),
   suggestion: z.string().min(1),
 });
 export type NextStep = z.infer<typeof NextStepSchema>;
