@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { JobPreferences } from "@/shared/contracts";
 import { consentPurpose, type ProfileStorageKind } from "../consent";
 import { describePreferences } from "../preferences";
-import type { SavedProfile } from "../saved-profile";
+import { builtFromCv, type SavedProfile } from "../saved-profile";
+import { useFocusHeading } from "./focus-heading";
 import { count, formatDay, formatPeriod } from "./format";
 import { PreferencesForm } from "./preferences-form";
 import { Button, ButtonLink, Card, Notice } from "@/shared/ui";
@@ -43,9 +44,7 @@ export function ProfileOverview({
   const latestJob = profile.experience[0];
   const preferences = describePreferences(profile.preferences);
 
-  useEffect(() => {
-    if (focusHeading) headingRef.current?.focus();
-  }, [focusHeading]);
+  useFocusHeading(headingRef, focusHeading);
 
   const savePreferences = async (next: JobPreferences) => {
     const problem = await onSavePreferences(next);
@@ -143,7 +142,7 @@ export function ProfileOverview({
         <div className="mt-4 flex flex-wrap gap-3">
           <Button onClick={() => downloadJson(saved)}>Download my data</Button>
           <Button variant="quiet" onClick={onUploadNew}>
-            Upload a new CV
+            {builtFromCv(saved) ? "Upload a new CV" : "Upload your CV"}
           </Button>
           {!confirmingDelete && (
             <Button variant="quiet" onClick={() => setConfirmingDelete(true)}>
@@ -154,11 +153,7 @@ export function ProfileOverview({
         {confirmingDelete && (
           <div role="alertdialog" aria-labelledby="delete-question" className="mt-4 rounded-md border border-error p-4">
             <p id="delete-question" className="font-semibold">
-              {storage === "browser"
-                ? "Delete your profile from this browser?"
-                : saved.cvFormat
-                  ? "Delete your profile and your CV file from your account?"
-                  : "Delete your profile from your account?"}
+              {deleteQuestion(saved, storage)}
             </p>
             <p className="mt-1 text-sm text-text-muted">This can’t be undone. Download your data first to keep a copy.</p>
             {deleteProblem && <p className="mt-2 text-sm text-error">{deleteProblem}</p>}
@@ -181,6 +176,12 @@ export function ProfileOverview({
       </Card>
     </section>
   );
+}
+
+/** The question before deleting: from where, and whether a CV file goes with the profile. */
+export function deleteQuestion(saved: SavedProfile, storage: ProfileStorageKind): string {
+  if (storage === "browser") return "Delete your profile from this browser?";
+  return saved.cvFormat ? "Delete your profile and your CV file from your account?" : "Delete your profile from your account?";
 }
 
 /** One plain sentence on where the profile is kept and since when. */

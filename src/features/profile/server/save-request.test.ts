@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
 import { cvConsent, manualConsent } from "../consent";
-import { MAX_CV_BYTES } from "../cv-limits";
+import { MAX_CV_BYTES, MAX_PROFILE_CHARACTERS, profileTooLongMessage } from "../cv-limits";
 import { handleSaveRequest, saveFields } from "./save-request";
 import { saveAccountProfile } from "./profile-account";
 import type { SupabaseServerClient } from "./job-store";
@@ -83,6 +83,29 @@ describe("handleSaveRequest", () => {
     });
     expect(saveAccountProfile).not.toHaveBeenCalled();
     expect(track).not.toHaveBeenCalled();
+  });
+
+  it("asks a page opened before the typed-in profile's consent changed to reload, since its box is ticked", async () => {
+    const result = await handleSaveRequest(form({ profile, consent: "manual-2026-01-01" }), account);
+
+    expect(result).toEqual({
+      ok: false,
+      code: "consent",
+      message: expect.stringContaining("Reload the page and choose Fill in my details to read the new wording."),
+    });
+    expect(result).not.toMatchObject({ message: expect.stringContaining("Tick the box") });
+    expect(saveAccountProfile).not.toHaveBeenCalled();
+  });
+
+  it("says a profile is too long to save, rather than to reload the page and lose what was typed", async () => {
+    const long = { ...profile, summary: "x".repeat(MAX_PROFILE_CHARACTERS) };
+
+    expect(await handleSaveRequest(form({ profile: long, consent: manualConsent.version }), account)).toEqual({
+      ok: false,
+      code: "invalid",
+      message: profileTooLongMessage,
+    });
+    expect(saveAccountProfile).not.toHaveBeenCalled();
   });
 
   it("saves new preferences without a file, and records only approvals", async () => {

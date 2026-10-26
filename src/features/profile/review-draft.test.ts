@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { type Profile } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { extractionFromProfile, type CvExtraction } from "./cv-extraction";
+import { MAX_PROFILE_CHARACTERS, profileTooLongMessage } from "./cv-limits";
 import {
+  approvalFor,
   draftFromExtraction,
   draftFromProfile,
   emptyDraft,
@@ -266,6 +268,38 @@ describe("a profile typed in by hand, with no CV", () => {
       preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] },
       contact: { location: undefined },
     });
+  });
+});
+
+describe("approvalFor", () => {
+  const base = newProfileBase({ contact: {} }, { id: "new-id", followUpAnswers: [] });
+  const named = approve(apply(emptyDraft(), { type: "edit-contact", change: { fullName: sara.fullName } }));
+
+  it("saves nothing typed in by hand until the box is ticked, and sends focus to the box", () => {
+    expect(approvalFor(named, base, true)).toEqual({ ok: false, message: null, focus: "consent" });
+  });
+
+  it("asks for both when an item needs fixing and the box isn't ticked, with focus on the item", () => {
+    expect(approvalFor(approve(emptyDraft()), base, true)).toEqual({
+      ok: false,
+      message: "Fix the 1 item marked above and tick the box to agree, then approve again.",
+      focus: { item: "contact" },
+    });
+    expect(approvalFor(approve(emptyDraft()), base, false)).toEqual({
+      ok: false,
+      message: "Fix the 1 item marked above, then approve again.",
+      focus: { item: "contact" },
+    });
+  });
+
+  it("saves the profile once every item passes and nothing else is missing", () => {
+    expect(approvalFor(named, base, false)).toEqual({ ok: true, profile: profileFromDraft(named, base) });
+  });
+
+  it("refuses a profile too long to save on the page, before the server would", () => {
+    const long = approve(apply(named, { type: "edit-summary", text: "x".repeat(MAX_PROFILE_CHARACTERS) }));
+
+    expect(approvalFor(long, base, false)).toEqual({ ok: false, message: profileTooLongMessage, focus: null });
   });
 });
 

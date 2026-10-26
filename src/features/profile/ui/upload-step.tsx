@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { withNext } from "@/features/account/safe-redirect";
 import { Button, Card, Field, Notice } from "@/shared/ui";
 import { consentPoints, cvConsent, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
 import { ConsentBox } from "./consent-box";
+import { useFocusHeading } from "./focus-heading";
 import { Steps } from "./steps";
 
 export type ExtractSuccess = Extract<ExtractResponse, { ok: true }>;
@@ -15,6 +16,8 @@ export type ExtractSuccess = Extract<ExtractResponse, { ok: true }>;
 type UploadStepProps = {
   /** True when a saved profile exists: uploading replaces it. */
   replacing: boolean;
+  /** True when that profile came from a CV, so this one is a new CV. A profile typed in by hand had none. */
+  newCv?: boolean;
   /** True while the AI is in mock mode: say so before the upload, not only after it. */
   demoMode: boolean;
   /** Where the approved profile will be kept, so the consent says so. */
@@ -29,14 +32,21 @@ type UploadStepProps = {
 
 type Errors = { file?: string; consent?: string; form?: string; signIn?: boolean };
 
-export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtracted, onStartManual, onCancel }: UploadStepProps) {
+export function UploadStep({
+  replacing,
+  newCv = false,
+  demoMode,
+  storage,
+  focusHeading,
+  onExtracted,
+  onStartManual,
+  onCancel,
+}: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
 
-  useEffect(() => {
-    if (focusHeading) headingRef.current?.focus();
-  }, [focusHeading]);
+  useFocusHeading(headingRef, focusHeading);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +83,7 @@ export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtra
     <section aria-labelledby="upload-heading" className="flex flex-col gap-6">
       <Steps current={0} />
       <h2 id="upload-heading" ref={headingRef} tabIndex={-1} className="text-2xl">
-        {replacing ? "Upload a new CV" : "Upload your CV"}
+        {newCv ? "Upload a new CV" : "Upload your CV"}
       </h2>
 
       {demoMode && (

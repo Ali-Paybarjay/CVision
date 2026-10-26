@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { consentPoints, cvConsent, manualConsent, manualConsentPoints } from "../consent";
 import { extractionFromProfile } from "../cv-extraction";
-import { draftFromExtraction, draftFromProfile, emptyDraft } from "../review-draft";
+import { draftFromExtraction, draftFromProfile, emptyDraft, reviewReducer, type ReviewDraft } from "../review-draft";
 import type { StoredProfile } from "../profile-store";
-import { fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
+import { builtFromCv, fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import { BackLink } from "./back-link";
-import { ProfileBuilder } from "./profile-builder";
-import { ProfileOverview } from "./profile-overview";
+import { consentToSend, ProfileBuilder } from "./profile-builder";
+import { deleteQuestion, ProfileOverview } from "./profile-overview";
 import { ReviewStep } from "./review-step";
 import { SignInToStart } from "./sign-in-to-start";
 import { SignInNotice, UploadStep } from "./upload-step";
@@ -99,6 +99,16 @@ describe("profile screens", () => {
     expect(html).not.toContain("No CV to upload?");
   });
 
+  it("calls the upload a new CV only when the profile it replaces came from one", () => {
+    const heading = (newCv: boolean) =>
+      renderToStaticMarkup(
+        <UploadStep replacing newCv={newCv} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} onCancel={noop} />,
+      ).match(/<h2 id="upload-heading"[^>]*>(.*?)<\/h2>/)?.[1];
+
+    expect(heading(true)).toBe("Upload a new CV");
+    expect(heading(false)).toBe("Upload your CV");
+  });
+
   it("points a signed-out visitor to sign in or create an account, then back to the profile page", () => {
     const html = renderToStaticMarkup(<SignInNotice />);
 
@@ -184,10 +194,10 @@ describe("profile screens", () => {
     expect(html).not.toContain("so we put December");
   });
 
-  function manualReview(storage: "account" | "browser") {
+  function manualReview(storage: "account" | "browser", draft: ReviewDraft = emptyDraft()) {
     return renderToStaticMarkup(
       <ReviewStep
-        draft={emptyDraft()}
+        draft={draft}
         base={personas.sara.profile}
         source="manual"
         storage={storage}
@@ -209,10 +219,24 @@ describe("profile screens", () => {
     expect(words).toContain("No qualifications yet. GCSEs, A levels, degrees and training courses all count.");
     expect(words).toContain("No certificates yet.");
     expect(words).toContain("A few sentences about you and the work you want, in your own words.");
-    expect(words).not.toMatch(/in your CV|your CV’s|your CV doesn’t|as on your CV/);
+    expect(words).not.toMatch(/in your CV|your CV’s|your CV doesn’t|as on your CV/i);
     // A single page, so no steps of the upload.
     expect(words).not.toContain("Upload your CV");
     expect(words).toContain("Upload a CV instead");
+  });
+
+  it("asks for a job typed in by hand without pointing to a CV", () => {
+    const words = text(manualReview("account", reviewReducer(emptyDraft(), { type: "add", section: "experience", key: "job" })));
+
+    expect(words).toContain("New job");
+    expect(words).toContain("What you did One per line.");
+    expect(words).not.toMatch(/as on your CV|your CV gives/i);
+  });
+
+  it("names the purpose of each contact field, so a phone can fill them in", () => {
+    const html = manualReview("account");
+
+    for (const token of ["name", "email", "tel", "address-level2", "url"]) expect(html).toContain(`autoComplete="${token}"`);
   });
 
   it.each(["account", "browser"] as const)(
@@ -308,6 +332,34 @@ describe("profile screens", () => {
 
     expect(html).toContain("You agreed to us saving the details you typed in on 25 October 2026.");
     expect(html).not.toContain("reading your CV");
+  });
+
+  it("offers a new CV only for a profile that came from one", () => {
+    const typedIn = fromBrowser({ ...stored("sara"), consent: { version: manualConsent.version, givenAt: "2026-10-25T09:00:00.000Z" } });
+    const inAccount = (cvFormat: "pdf" | null) =>
+      fromAccount({ profile: personas.emma.profile, savedAt: "2026-10-21T10:00:00.000Z", cvFormat });
+
+    expect(overview(fromBrowser(stored("sara")), "browser")).toContain("Upload a new CV");
+    expect(overview(typedIn, "browser")).toContain("Upload your CV");
+    expect(overview(typedIn, "browser")).not.toContain("Upload a new CV");
+    expect([inAccount("pdf"), inAccount(null), typedIn].map(builtFromCv)).toEqual([true, false, false]);
+  });
+
+  it("asks before deleting, naming the CV file only when the account keeps one", () => {
+    const inAccount = (cvFormat: "pdf" | null) =>
+      fromAccount({ profile: personas.emma.profile, savedAt: "2026-10-21T10:00:00.000Z", cvFormat });
+
+    expect(deleteQuestion(inAccount("pdf"), "account")).toBe("Delete your profile and your CV file from your account?");
+    expect(deleteQuestion(inAccount(null), "account")).toBe("Delete your profile from your account?");
+    expect(deleteQuestion(fromBrowser(stored("sara")), "browser")).toBe("Delete your profile from this browser?");
+  });
+
+  it("sends the account the consent just given with a new CV or a typed-in profile, and none with an edit", () => {
+    const given = (version: string) => ({ version, givenAt: "2026-10-25T09:00:00.000Z" });
+
+    expect(consentToSend("cv", given(cvConsent.version))).toBe(cvConsent.version);
+    expect(consentToSend("manual", given(manualConsent.version))).toBe(manualConsent.version);
+    expect(consentToSend("saved", given(cvConsent.version))).toBeUndefined();
   });
 
   it("says an account profile is in the account, with its CV file", () => {

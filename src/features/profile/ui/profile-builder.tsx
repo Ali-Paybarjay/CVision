@@ -13,7 +13,7 @@ import {
   type ProfileBase,
   type ReviewDraft,
 } from "../review-draft";
-import { fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
+import { builtFromCv, fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import type { SaveReason } from "../server/save-request";
 import type { AccountProfile } from "../server/profile-account";
 import { Card, Notice } from "@/shared/ui";
@@ -52,6 +52,14 @@ type View =
 
 /** Where Back goes from this page when the page before it isn't on this site. */
 const PAGE_BACK = "/dashboard";
+
+/**
+ * The consent an approved profile takes to the account: the one just given, with a new CV or for a profile typed in
+ * by hand. An edit sends none, so it isn't recorded as a new consent.
+ */
+export function consentToSend(source: ReviewSource, consent: ConsentRecord | null): string | undefined {
+  return source === "saved" ? undefined : consent?.version;
+}
 
 /**
  * The profile page: upload a CV (with consent), or type the details in by hand when there is no CV, check them and
@@ -97,12 +105,12 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   };
 
   /**
-   * Keeps the profile where this page keeps it. `manual` is true for a profile just typed in by hand: like a new CV,
-   * it goes to the account with the consent given for it. Resolves to a message for the user, or null once it is saved.
+   * Keeps the profile where this page keeps it: in the account with `consentVersion` (see consentToSend), or in this
+   * browser with its consent record. Resolves to a message for the user, or null once it is saved.
    */
   const write = async (
     next: Pick<SavedProfile, "profile" | "consent">,
-    options: { reason: SaveReason; cv?: File | null; manual?: boolean },
+    options: { reason: SaveReason; cv?: File | null; consentVersion?: string },
   ): Promise<string | null> => {
     if (where === "browser") {
       if (!next.consent) return "Upload your CV again to save your profile.";
@@ -113,7 +121,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     const result = await saveProfileToAccount(next.profile, {
       reason: options.reason,
       cv: options.cv ?? undefined,
-      consentVersion: options.cv || options.manual ? next.consent?.version : undefined,
+      consentVersion: options.consentVersion,
     });
     if (!result.ok) return result.message;
     updateAccount({ ...next, savedAt: result.savedAt, cvFormat: result.cvFormat });
@@ -146,9 +154,14 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   /** `consent` is the one given on the review page, for a profile typed in by hand. */
   const handleSave = async (profile: Profile, consent: ConsentRecord | null): Promise<string | null> => {
     if (view.name !== "review") return null;
+    const record = consent ?? view.consent;
     const problem = await write(
-      { profile, consent: consent ?? view.consent },
-      { reason: "approved", cv: view.source === "cv" ? view.file : null, manual: view.source === "manual" },
+      { profile, consent: record },
+      {
+        reason: "approved",
+        cv: view.source === "cv" ? view.file : null,
+        consentVersion: consentToSend(view.source, record),
+      },
     );
     if (problem) return problem;
     typed.current = null;
@@ -226,6 +239,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     content = (
       <UploadStep
         replacing={saved !== null}
+        newCv={saved !== null && builtFromCv(saved)}
         demoMode={demoMode}
         storage={where}
         focusHeading={navigated}

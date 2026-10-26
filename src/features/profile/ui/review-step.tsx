@@ -5,8 +5,7 @@ import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
 import { manualConsent, manualConsentPoints, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import {
-  itemsWithProblems,
-  profileFromDraft,
+  approvalFor,
   reviewReducer,
   type CertificationDraft,
   type ContactDraft,
@@ -18,9 +17,9 @@ import {
   type ReviewAction,
   type ReviewDraft,
 } from "../review-draft";
-import { count } from "./format";
 import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
 import { ConsentBox } from "./consent-box";
+import { useFocusHeading } from "./focus-heading";
 import { Steps } from "./steps";
 
 /** Where the details on this page come from: a CV just read, the user typing them in by hand, or the saved profile. */
@@ -86,9 +85,7 @@ export function ReviewStep({
   const fromCv = source === "cv";
   const asksConsent = source === "manual";
 
-  useEffect(() => {
-    if (focusHeading) headingRef.current?.focus();
-  }, [focusHeading]);
+  useFocusHeading(headingRef, focusHeading);
 
   useEffect(() => {
     onDraftChange?.(draft);
@@ -127,30 +124,19 @@ export function ReviewStep({
   const approve = async () => {
     const checked = reviewReducer(draft, { type: "check" });
     act({ type: "check" });
-    const problems = itemsWithProblems(checked);
     const consentMissing = asksConsent && !agreed;
     if (consentMissing) setConsentError("Tick the box to agree, so we can save your profile.");
-    if (problems.length > 0) {
-      const andConsent = consentMissing ? " and tick the box to agree" : "";
-      setSaveError(`Fix the ${count(problems.length, "item")} marked above${andConsent}, then approve again.`);
-      focusIn(problems[0], '[aria-invalid="true"]');
-      return;
-    }
-    if (consentMissing) {
-      document.getElementById(CONSENT_ID)?.focus();
-      return;
-    }
-    let profile: Profile;
-    try {
-      profile = profileFromDraft(checked, base);
-    } catch {
-      setSaveError("Some details are not valid. Check them, then approve again.");
+    const approval = approvalFor(checked, base, consentMissing);
+    if (!approval.ok) {
+      setSaveError(approval.message);
+      if (approval.focus === "consent") document.getElementById(CONSENT_ID)?.focus();
+      else if (approval.focus) focusIn(approval.focus.item, '[aria-invalid="true"]');
       return;
     }
     setSaving(true);
     try {
-      const consent = asksConsent ? { version: manualConsent.version, givenAt: new Date().toISOString() } : null;
-      const problem = await onSave(profile, consent);
+      const consent = asksConsent && agreed ? { version: manualConsent.version, givenAt: new Date().toISOString() } : null;
+      const problem = await onSave(approval.profile, consent);
       if (problem) setSaveError(problem);
     } finally {
       setSaving(false);
@@ -422,25 +408,47 @@ type FieldsProps<T> = { value: T; errors: FieldErrors; onChange: (change: Partia
 /** `fromCv`: the job was read from a CV just uploaded, so the hints can point to the CV. */
 type ExperienceFieldsProps = FieldsProps<ExperienceDraft> & { fromCv: boolean };
 
+/** The user's own details, so each field names its purpose and the phone can fill it in (WCAG 1.3.5). */
 function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
   return (
     <>
       <Field label="Full name" error={errors.fullName}>
-        {(props) => <Input {...props} value={value.fullName} onChange={(event) => onChange({ fullName: event.target.value })} />}
+        {(props) => (
+          <Input {...props} autoComplete="name" value={value.fullName} onChange={(event) => onChange({ fullName: event.target.value })} />
+        )}
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Email" error={errors.email}>
           {(props) => (
-            <Input {...props} type="email" value={value.email} onChange={(event) => onChange({ email: event.target.value })} />
+            <Input
+              {...props}
+              type="email"
+              autoComplete="email"
+              value={value.email}
+              onChange={(event) => onChange({ email: event.target.value })}
+            />
           )}
         </Field>
         <Field label="Phone" error={errors.phone}>
           {(props) => (
-            <Input {...props} type="tel" value={value.phone} onChange={(event) => onChange({ phone: event.target.value })} />
+            <Input
+              {...props}
+              type="tel"
+              autoComplete="tel"
+              value={value.phone}
+              onChange={(event) => onChange({ phone: event.target.value })}
+            />
           )}
         </Field>
         <Field label="Town or city" error={errors.location}>
-          {(props) => <Input {...props} value={value.location} onChange={(event) => onChange({ location: event.target.value })} />}
+          {(props) => (
+            <Input
+              {...props}
+              autoComplete="address-level2"
+              value={value.location}
+              onChange={(event) => onChange({ location: event.target.value })}
+            />
+          )}
         </Field>
         <Field label="LinkedIn (optional)" error={errors.linkedIn}>
           {(props) => (
@@ -448,6 +456,7 @@ function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
               {...props}
               type="url"
               inputMode="url"
+              autoComplete="url"
               value={value.linkedIn}
               onChange={(event) => onChange({ linkedIn: event.target.value })}
             />

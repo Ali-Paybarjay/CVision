@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { ProfileSchema, type JobPreferences, type Profile, type WorkExperience } from "@/shared/contracts";
 import { uniqueLines, type CvExtraction } from "./cv-extraction";
+import { fitsProfileLimit, profileTooLongMessage } from "./cv-limits";
 import { phoneProblem, tidyPhone } from "./phone";
+import { count } from "./ui/format";
 
-// The review step: the user checks every item read from their CV, corrects what is wrong, then approves the
-// whole page at once. Nothing is saved until they approve and every item passes its checks (You approve
-// everything). Pure functions, so the page only renders this state, and tests cover the rules without a browser.
+// The review step: the user checks every item read from their CV (or, with no CV, fills the page in themselves),
+// corrects what is wrong, then approves the whole page at once. Nothing is saved until they approve and every item
+// passes its checks (You approve everything). Pure functions, so the page only renders this state, and tests cover
+// the rules without a browser.
 
 export type ContactDraft = { fullName: string; email: string; phone: string; location: string; linkedIn: string };
 export type SummaryDraft = { text: string };
@@ -275,7 +278,8 @@ export function itemsWithProblems(draft: ReviewDraft): string[] {
 export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile {
   const contact = draft.contact.value;
   const location = optional(contact.location);
-  // Job preferences start from the CV's location; keep them in step unless the user has set them apart.
+  // Job preferences start from the CV's location (empty for a profile typed in by hand); keep them in step unless
+  // the user has set them apart.
   const preferencesFollowContact = base.preferences.location === (base.contact.location ?? "");
 
   const experience: WorkExperience[] = draft.experience.map(({ value }) => ({
@@ -316,6 +320,37 @@ export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile
     })),
     preferences: preferencesFollowContact ? { ...base.preferences, location: location ?? "" } : base.preferences,
   });
+}
+
+/**
+ * What the one Approve button does with a checked draft: the profile to save, or what the page says instead and
+ * where focus goes (the first item to fix, the consent box, or nowhere). `consentMissing` is true while the page asks
+ * for consent, for a profile typed in by hand, and the box isn't ticked.
+ */
+export type Approval =
+  | { ok: true; profile: Profile }
+  | { ok: false; message: string | null; focus: { item: string } | "consent" | null };
+
+export function approvalFor(checked: ReviewDraft, base: ProfileBase, consentMissing: boolean): Approval {
+  const problems = itemsWithProblems(checked);
+  if (problems.length > 0) {
+    const andConsent = consentMissing ? " and tick the box to agree" : "";
+    return {
+      ok: false,
+      message: `Fix the ${count(problems.length, "item")} marked above${andConsent}, then approve again.`,
+      focus: { item: problems[0] },
+    };
+  }
+  // The consent box shows its own message.
+  if (consentMissing) return { ok: false, message: null, focus: "consent" };
+  let profile: Profile;
+  try {
+    profile = profileFromDraft(checked, base);
+  } catch {
+    return { ok: false, message: "Some details are not valid. Check them, then approve again.", focus: null };
+  }
+  if (!fitsProfileLimit(profile)) return { ok: false, message: profileTooLongMessage, focus: null };
+  return { ok: true, profile };
 }
 
 // --- Validation -------------------------------------------------------------------------------

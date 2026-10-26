@@ -2,7 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import { track } from "@/shared/analytics/track";
 import { cvConsent, manualConsent } from "../consent";
-import { cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
+import { cvFileMessages, MAX_CV_BYTES, profileTooLongMessage } from "../cv-limits";
 import type { SupabaseServerClient } from "./job-store";
 import { saveAccountProfile } from "./profile-account";
 import { readProfileInput } from "./profile-input";
@@ -11,7 +11,10 @@ import { detectCvFormat, type CvFormat } from "./read-cv";
 /** The names of the fields the profile page sends to POST /profile/save. */
 export const saveFields = { profile: "profile", cv: "cv", consent: "consent", reason: "reason" } as const;
 
-/** Why the profile is being saved: the user approved it in the review step (a new CV or an edit), or changed their job preferences. */
+/**
+ * Why the profile is being saved: the user approved it in the review step (a new CV, a profile typed in by hand, or an
+ * edit), or changed their job preferences.
+ */
 export type SaveReason = "approved" | "preferences";
 
 export type SaveResponse =
@@ -34,7 +37,10 @@ export async function handleSaveRequest(
   }
   const input = readProfileInput(raw);
   if (!input.ok) {
-    return { ok: false, code: "invalid", message: "Your profile could not be read. Reload the page and try again." };
+    // Reloading wouldn't help a profile that is too long, and would lose what the user typed.
+    const message =
+      input.reason === "too-long" ? profileTooLongMessage : "Your profile could not be read. Reload the page and try again.";
+    return { ok: false, code: "invalid", message };
   }
 
   const reasonField = form.get(saveFields.reason);
@@ -54,8 +60,14 @@ export async function handleSaveRequest(
     if (format !== "pdf" && format !== "docx") return { ok: false, code: "file", message: cvFileMessages.wrongType };
     cv = { bytes, format };
   } else if (consent !== null && consent !== manualConsent.version) {
-    // Without a file, the only consent is the one for a profile typed in by hand.
-    return { ok: false, code: "consent", message: "Tick the box to agree, so we can save your profile." };
+    // Without a file, the only consent is the one for a profile typed in by hand. Another version comes from a page
+    // opened before that consent's wording changed: the box is ticked, but the user hasn't read the new wording.
+    return {
+      ok: false,
+      code: "consent",
+      message:
+        "We’ve updated what you agree to since you opened this page. Reload the page and choose Fill in my details to read the new wording. Reloading clears the details you typed.",
+    };
   }
   const manual = cv === undefined && consent === manualConsent.version;
 
