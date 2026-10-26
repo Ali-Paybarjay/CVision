@@ -15,7 +15,10 @@ export const statusLabels: Record<ApplicationStatus, string> = {
   applied: "Applied",
   interview: "Interview",
   offer: "Offer",
+  accepted: "Accepted",
   rejected: "Unsuccessful",
+  no_response: "No response",
+  withdrawn: "Withdrawn",
 };
 
 /** The words before the date under each job, e.g. "Applied on 22 Oct 2026". */
@@ -24,7 +27,10 @@ export const statusDateLabels: Record<ApplicationStatus, string> = {
   applied: "Applied on",
   interview: "Interview stage since",
   offer: "Offer received on",
+  accepted: "Accepted on",
   rejected: "Closed on",
+  no_response: "Closed on",
+  withdrawn: "Withdrawn on",
 };
 
 export const nextStepMaxLength = 200;

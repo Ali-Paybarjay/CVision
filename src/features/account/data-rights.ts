@@ -57,7 +57,7 @@ export function totalRows(summary: DataSummary): number {
 }
 
 /**
- * Everything we hold about the user in one ZIP: data.json with their account's details and every row of the eight
+ * Everything we hold about the user in one ZIP: data.json with their account's details and every row of the user
  * tables, and their original CV files under cv-files/. Built in full before anything is sent, so a failure never
  * gives the user half a file.
  */
@@ -104,7 +104,7 @@ export async function exportUserData(user: CurrentUser, now: Date): Promise<({ o
 
 /**
  * Deletes the user's account for good: first every file under cvs/<user id>/ (Supabase cannot delete a user who
- * still owns Storage objects), then the user, whose rows in the eight tables go with them (on delete cascade).
+ * still owns Storage objects), then the user, whose rows in the user tables go with them (on delete cascade).
  * Says honestly how far it got when a step fails. Signing out and clearing the browser are up to the caller.
  */
 export async function deleteAccount(userId: string): Promise<DeleteAccountResult> {
