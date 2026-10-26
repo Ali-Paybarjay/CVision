@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { askModel } from "@/shared/ai";
+import { askModel, getAiProvider } from "@/shared/ai";
 
 // no-network.ts runs before this file through setupFiles, as it does before every unit test file.
 describe("unit tests and the network", () => {
@@ -49,8 +49,33 @@ describe("unit tests and the network", () => {
     vi.stubEnv("AI_MODE", "live");
 
     expect(process.env.ANTHROPIC_API_KEY).toBe("");
+    expect(process.env.OPENROUTER_API_KEY).toBe("");
     await expect(
       askModel({ feature: "test", prompt: "x", schema: z.object({ ok: z.boolean() }), sample: { ok: true } }),
     ).rejects.toMatchObject({ reason: "no-api-key" });
+  });
+
+  it("empties every AI key and Supabase setting, whatever the developer's shell exports", () => {
+    for (const name of [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_BASE_URL",
+      "OPENROUTER_API_KEY",
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "SUPABASE_SECRET_KEY",
+      "ANONYMOUS_KEY_SALT",
+    ]) {
+      expect(process.env[name], name).toBe("");
+    }
+  });
+
+  it("lets a test set one on purpose with vi.stubEnv, then empties it again", () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "openrouter-test-key");
+    expect(getAiProvider()).toBe("openrouter");
+
+    vi.unstubAllEnvs();
+    expect(process.env.OPENROUTER_API_KEY).toBe("");
+    expect(getAiProvider()).toBeNull();
   });
 });
