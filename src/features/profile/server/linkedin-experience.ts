@@ -40,11 +40,12 @@ export async function suggestLinkedInExperience(
 }
 
 /**
- * The request text: the job's requirements, each with what the match found, and the profile's lines grouped by
- * role, with the same ids as the match. The name and contact details are never included.
+ * The request text: the job's requirements, each with what the match found, the profile's duties and results grouped
+ * by role, the user's answers and their skills, with the same ids as the match. Only lines that can back a line or a
+ * skill are sent: never the name, contact details, summary, education or certificates.
  */
 export function linkedInPrompt(profile: Profile, job: Job, match: MatchResult | null): Promise<string> {
-  const tags = ["job", "requirements", "roles", "other"];
+  const tags = ["job", "requirements", "roles", "answers", "skills"];
   const found = requirementFindings(match);
   const requirements = jobRequirements(job)
     .map((requirement) => {
@@ -58,11 +59,14 @@ export function linkedInPrompt(profile: Profile, job: Job, match: MatchResult | 
     .map((role) => [`${role.id} · ${role.role.text} · ${role.role.context}`, ...role.lines.map(lineText)].join("\n"))
     .join("\n\n");
 
+  const listed = (kind: EvidenceLine["kind"]) => shared.filter((line) => line.kind === kind).map(lineText).join("\n");
+
   return loadPrompt("profile-linkedin-experience", {
     job: withoutTags(`${job.title} at ${job.company}`, tags),
     requirements: withoutTags(requirements || "(none)", tags),
     roles: withoutTags(roleText || "(none)", tags),
-    other: withoutTags(shared.map(lineText).join("\n") || "(none)", tags),
+    answers: withoutTags(listed("answer") || "(none)", tags),
+    skills: withoutTags(listed("skill") || "(none)", tags),
   });
 }
 

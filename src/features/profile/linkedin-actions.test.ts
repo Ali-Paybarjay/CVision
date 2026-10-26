@@ -94,12 +94,18 @@ describe("suggestLinkedInAction", () => {
     expect(suggestLinkedInExperience).not.toHaveBeenCalled();
   });
 
-  it("asks for a CV first when there is no profile yet", async () => {
+  it("asks for a CV first when there is no profile yet, and for work experience when it has no roles", async () => {
     getCurrentUser.mockResolvedValue(user);
-    vi.mocked(getMyJob).mockResolvedValueOnce(savedJob);
+    vi.mocked(getMyJob).mockResolvedValueOnce(savedJob).mockResolvedValueOnce(savedJob);
     vi.mocked(getMyProfile).mockResolvedValueOnce(null);
+    vi.mocked(getMyProfile).mockResolvedValueOnce({ ...sara.profile, experience: [] });
 
     expect(await suggestLinkedInAction({ jobId: savedJob.id })).toMatchObject({ ok: false, code: "profile" });
+    expect(await suggestLinkedInAction({ jobId: savedJob.id })).toEqual({
+      ok: false,
+      code: "profile",
+      message: "Add your work experience to your profile first, so there are roles to write for.",
+    });
     expect(suggestLinkedInExperience).not.toHaveBeenCalled();
   });
 

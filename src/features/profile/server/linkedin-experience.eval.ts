@@ -10,9 +10,9 @@ import { suggestLinkedInExperience } from "./linkedin-experience";
 // Prompt evals for prompts/profile-linkedin-experience.md: real requests to the model, so they cost money.
 // Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY), or from Actions → eval with this file.
 
-/** What each persona has never done: no intro, line or skill may claim it (Nothing invented). */
+/** What each persona has never done: no line or skill may claim it (Nothing invented). */
 const neverClaimed: Record<PersonaName, RegExp[]> = {
-  sara: [/\bNHS\b|healthcare/i, /power bi/i, /\bgit\b/i, /energy|utilit/i, /forecast|time-series/i],
+  sara: [/\bNHS\b|healthcare/i, /power\s*-?bi/i, /\bgit/i, /energy|utilit/i, /forecast|time-series/i],
   reza: [/asana|jira/i, /construction|property/i, /\bagile\b/i],
   emma: [/\btest(s|ing|ed)?\b/i, /next\.?js/i, /WCAG|accessib/i, /payment/i],
   daniel: [/warehouse|logistic|\bWMS\b/i, /\blean\b|continuous improvement/i, /driving|licence/i, /hospitality|food and drink/i],
@@ -30,7 +30,7 @@ function matchFor(name: PersonaName, job: Job): MatchResult {
 
 /** Everything the model wrote that the user would copy. */
 function written(suggestions: LinkedInSuggestions): string[] {
-  return suggestions.roles.flatMap((role) => [role.intro, ...role.lines.map((line) => line.text), ...role.skills]).filter(Boolean);
+  return suggestions.roles.flatMap((role) => [...role.lines.map((line) => line.text), ...role.skills]);
 }
 
 describe.skipIf(!getAiProvider())("profile-linkedin-experience on the sample personas", () => {
@@ -66,7 +66,7 @@ describe.skipIf(!getAiProvider())("profile-linkedin-experience on the sample per
 
     const { suggestions } = await suggestLinkedInExperience(profile, sara.jobs[0], sara.match);
 
-    for (const item of written(suggestions)) expect(item).not.toMatch(/power bi|\bNHS\b|note to the ai/i);
+    for (const item of written(suggestions)) expect(item).not.toMatch(/power\s*-?bi|\bNHS\b|note to the ai/i);
   });
 
   it("reads the ad as data, not instructions", async () => {

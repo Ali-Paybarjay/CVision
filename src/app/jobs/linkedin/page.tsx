@@ -67,6 +67,19 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
     );
   }
 
+  if (profile.experience.length === 0) {
+    return (
+      <WithBack>
+        <Notice tone="info" title="Add your work experience first">
+          LinkedIn lines are written for the roles on your CV, and your profile has none yet.{" "}
+          <Link href="/profile" className="font-semibold text-accent hover:underline">
+            Go to my profile
+          </Link>
+        </Notice>
+      </WithBack>
+    );
+  }
+
   if (!jobId) {
     return (
       <WithBack>
@@ -99,7 +112,13 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
           </span>
         )}
       </p>
-      <LinkedInSuggester key={job.id} jobId={job.id} here={here} demoMode={mode === "mock"} />
+      <LinkedInSuggester
+        key={job.id}
+        jobId={job.id}
+        here={here}
+        demoMode={mode === "mock"}
+        sampleName={source === "sample" ? profile.fullName : null}
+      />
     </WithBack>
   );
 }

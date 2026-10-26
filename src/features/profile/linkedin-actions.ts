@@ -45,6 +45,9 @@ export async function suggestLinkedInAction(input: { jobId: unknown }): Promise<
   if (!profile) {
     return { ok: false, code: "profile", message: "Upload your CV first, so there are lines to take from it." };
   }
+  if (profile.experience.length === 0) {
+    return { ok: false, code: "profile", message: "Add your work experience to your profile first, so there are roles to write for." };
+  }
 
   let suggestions: LinkedInSuggestions;
   try {

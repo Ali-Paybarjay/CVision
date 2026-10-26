@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { brand } from "@/shared/brand";
-import type { Job } from "@/shared/contracts";
+import type { Job, Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { buildLinkedInSuggestions, suggestByRules, type LinkedInAnswer, type LinkedInSuggestions } from "../linkedin";
 import { profileEvidenceLines } from "../match";
@@ -35,25 +35,42 @@ function mockSuggestions(name: PersonaName, job: Job = personas[name].jobs[0]): 
   return buildLinkedInSuggestions(profile, job, match, suggestByRules(profile, job)).suggestions;
 }
 
+/** Suggestions for one of Sara's roles from a written answer, as the model would give them. */
+function written(roles: LinkedInAnswer["roles"], profile: Profile = personas.sara.profile): LinkedInSuggestions {
+  const { jobs, match } = personas.sara;
+  return buildLinkedInSuggestions(profile, jobs[0], match, { roles }).suggestions;
+}
+
+function idOf(text: string, profile: Profile = personas.sara.profile): string {
+  return profileEvidenceLines(profile).find((item) => item.text === text)?.id ?? "";
+}
+
 function results(suggestions: LinkedInSuggestions) {
-  return renderToStaticMarkup(<LinkedInResults suggestions={suggestions} focusHeading={false} />);
+  return renderToStaticMarkup(<LinkedInResults suggestions={suggestions} focusKey={0} />);
+}
+
+function suggester(props: Partial<React.ComponentProps<typeof LinkedInSuggester>> = {}) {
+  return renderToStaticMarkup(
+    <LinkedInSuggester jobId="sara-job-1" here="/jobs/linkedin?job=sara-job-1" demoMode={false} sampleName={null} {...props} />,
+  );
 }
 
 describe("LinkedInSuggester", () => {
   it("offers one main button, and says nothing goes to LinkedIn and every line comes from the CV", () => {
-    const html = renderToStaticMarkup(<LinkedInSuggester jobId="sara-job-1" here="/jobs/linkedin?job=sara-job-1" demoMode={false} />);
+    const html = suggester();
 
     expect(html.match(/bg-cta/g)).toHaveLength(1);
     expect(text(html)).toContain("Suggest my LinkedIn lines");
     expect(text(html)).toContain("We never post to LinkedIn.");
     expect(text(html)).toContain("Nothing invented.");
     expect(text(html)).not.toContain("Demo mode");
+    expect(text(html)).not.toContain("Suggest again");
   });
 
-  it("says so in demo mode", () => {
-    const html = text(renderToStaticMarkup(<LinkedInSuggester jobId="sara-job-1" here="/jobs/linkedin" demoMode />));
-
-    expect(html).toContain("Demo mode: lines straight from the CV");
+  it("says so in demo mode, and names whose sample CV the lines come from", () => {
+    expect(text(suggester({ demoMode: true }))).toContain("Demo mode: lines straight from the CV");
+    expect(text(suggester({ demoMode: true, sampleName: "Sara Khan" }))).toContain("This uses Sara Khan’s sample CV, not yours.");
+    expect(text(suggester({ sampleName: "Sara Khan" }))).toContain("This uses Sara Khan’s sample CV, not yours");
   });
 });
 
@@ -70,7 +87,7 @@ describe("LinkedInResults", () => {
       expect(visible).toContain(role.title);
       expect(visible).toContain(role.company);
       expect(visible).toContain(role.period);
-      expect(visible).toContain(`Copy the description for ${role.title}`);
+      expect(visible).toContain(`Copy the description for ${role.title} at ${role.company}`);
       for (const line of role.lines) {
         expect(visible).toContain(line.text);
         for (const source of line.sources) expect(visible).toContain(source.text);
@@ -100,40 +117,50 @@ describe("LinkedInResults", () => {
   });
 
   it("highlights a reworded line, keeps the CV's own words plain, and says which is which", () => {
-    const { profile, jobs, match } = personas.sara;
-    const id = (line: string) => profileEvidenceLines(profile).find((item) => item.text === line)?.id ?? "";
     const dashboards = "Built Tableau dashboards for the regional sales team";
     const report = "Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes";
-    const answer: LinkedInAnswer = {
-      roles: [
+
+    const html = results(
+      written([
         {
           role: "R1",
-          intro: "",
           lines: [
-            { text: dashboards, from: [id(dashboards)] },
-            { text: "Automated the weekly stock report, cutting prep time from 4 hours to 30 minutes", from: [id(report)] },
+            { text: dashboards, from: [idOf(dashboards)] },
+            { text: "Automated the weekly stock report, cutting prep time from 4 hours to 30 minutes", from: [idOf(report)] },
           ],
           skills: [],
         },
-      ],
-    };
-
-    const html = results(buildLinkedInSuggestions(profile, jobs[0], match, answer).suggestions);
+      ]),
+    );
 
     expect(html).toMatch(/<p>Built Tableau dashboards for the regional sales team<\/p>/);
-    expect(html).toMatch(/border-fit-bar[^>]*>Automated the weekly stock report, cutting prep time from 4 hours to 30 minutes<span class="sr-only"> \(reworded from your CV\)/);
+    expect(html).toMatch(
+      /border-fit-bar[^>]*>Automated the weekly stock report, cutting prep time from 4 hours to 30 minutes<span class="sr-only"> \(reworded from your CV\)/,
+    );
     expect(text(html)).toContain("Highlighted lines are reworded from your CV; the rest are its own words.");
   });
 
-  it("explains LinkedIn's Employment type and the same company, from the CV", () => {
-    const { profile, jobs, match } = personas.sara;
-    const trained = "Trained four new starters";
-    const id = profileEvidenceLines(profile).find((item) => item.text === trained)?.id ?? "";
-    const sara = buildLinkedInSuggestions(profile, jobs[0], match, {
-      roles: [{ role: "R2", intro: "", lines: [{ text: trained, from: [id] }], skills: [] }],
-    }).suggestions;
+  it("says a line from an answer comes from the answer", () => {
+    const answer = personas.sara.profile.followUpAnswers[0].answer;
 
-    expect(text(results(sara))).toContain(
+    const html = results(
+      written([
+        {
+          role: "R1",
+          lines: [{ text: "Walked the regional managers through the dashboard every Monday", from: [idOf(answer)] }],
+          skills: [],
+        },
+      ]),
+    );
+
+    expect(text(html)).toContain(`From your answer: ${answer}`);
+    expect(html).toContain("(reworded from your answer)");
+  });
+
+  it("explains LinkedIn's Employment type and the same company, from the CV", () => {
+    const trained = "Trained four new starters";
+
+    expect(text(results(written([{ role: "R2", lines: [{ text: trained, from: [idOf(trained)] }], skills: [] }])))).toContain(
       "Your CV says “Customer Assistant (part-time)”. On LinkedIn, the title is “Customer Assistant” and “Part-time” goes under Employment type.",
     );
     expect(text(results(mockSuggestions("daniel")))).toContain(

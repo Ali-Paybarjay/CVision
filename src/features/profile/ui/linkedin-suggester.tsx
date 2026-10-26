@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { findBrandProblems } from "@/features/tailor/brand-check";
 import { Button, ButtonLink, Card, CheckIcon, FitLine, Notice, Textarea, WarningIcon } from "@/shared/ui";
 import type { LinkedInLine, LinkedInRole, LinkedInSuggestions, NotShown } from "../linkedin";
@@ -14,43 +14,94 @@ type LinkedInSuggesterProps = {
   here: string;
   /** True in mock mode: the lines come from simple rules, not the AI. */
   demoMode: boolean;
+  /** Set when the lines come from a sample person's CV, not the user's own: their name. */
+  sampleName: string | null;
 };
 
-type State =
-  | { phase: "ready" }
-  | { phase: "working" }
-  | { phase: "done"; suggestions: LinkedInSuggestions }
-  | { phase: "failed"; result: Extract<LinkedInResult, { ok: false }> };
+type State = {
+  suggestions: LinkedInSuggestions | null;
+  /** Counts the results shown, so the heading takes focus once for each new result. */
+  shown: number;
+  pending: boolean;
+  failure: Extract<LinkedInResult, { ok: false }> | null;
+};
+
+const start: State = { suggestions: null, shown: 0, pending: false, failure: null };
 
 /**
  * LinkedIn Experience lines for one job. Nothing is written until the user asks, because with the AI on each request
  * counts against their daily limit; and nothing is saved, so the lines last until the page is left.
  */
-export function LinkedInSuggester({ jobId, here, demoMode }: LinkedInSuggesterProps) {
-  const [state, setState] = useState<State>({ phase: "ready" });
-  const pending = state.phase === "working";
+export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedInSuggesterProps) {
+  const [state, setState] = useState<State>(start);
+  const answered = useRef(false);
+
+  // Next.js keeps a page it has left (Activity), so coming back would show lines written from a CV the user may
+  // have changed since. Start again whenever the page is hidden.
+  useLayoutEffect(() => {
+    return () => {
+      if (answered.current) {
+        answered.current = false;
+        setState(start);
+      }
+    };
+  }, []);
 
   async function suggest() {
-    setState({ phase: "working" });
+    setState((current) => ({ ...current, pending: true, failure: null }));
     let result: LinkedInResult;
     try {
       result = await suggestLinkedInAction({ jobId });
     } catch {
       result = { ok: false, code: "ai-unavailable", message: "We couldn’t reach CVision. Check your connection and try again." };
     }
-    setState(result.ok ? { phase: "done", suggestions: result.suggestions } : { phase: "failed", result });
+    answered.current = true;
+    const outcome = result;
+    setState((current) =>
+      outcome.ok
+        ? { suggestions: outcome.suggestions, shown: current.shown + 1, pending: false, failure: null }
+        : { ...current, pending: false, failure: outcome },
+    );
   }
 
-  if (state.phase === "done") return <LinkedInResults suggestions={state.suggestions} focusHeading />;
+  const { suggestions, shown, pending, failure } = state;
+  const working = (
+    <p aria-live="polite" className="sr-only">
+      {pending ? "Writing your LinkedIn lines. This can take up to a minute." : ""}
+    </p>
+  );
+  const problem =
+    failure &&
+    (failure.code === "sign-in" ? (
+      <SignInNotice title="Sign in to get LinkedIn lines" next={here} />
+    ) : (
+      <Notice tone="error" title="We couldn’t write your LinkedIn lines">
+        {failure.message}
+      </Notice>
+    ));
+
+  if (suggestions) {
+    return (
+      <div className="flex flex-col gap-6">
+        {problem}
+        <LinkedInResults suggestions={suggestions} focusKey={shown} />
+        <Button onClick={suggest} disabled={pending} className="w-full sm:w-auto sm:self-start">
+          {pending ? "Writing your LinkedIn lines…" : "Suggest again"}
+        </Button>
+        {working}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
       {demoMode && (
         <Notice tone="warning" title="Demo mode: lines straight from the CV">
           CVision isn’t connected to the AI yet, so each role shows the lines of the CV that name this ad’s requirements,
-          word for word.
+          word for word. {sampleName && `This uses ${sampleName}’s sample CV, not yours.`}
         </Notice>
       )}
+      {!demoMode && sampleName && <Notice tone="warning" title={`This uses ${sampleName}’s sample CV, not yours`} />}
 
       <Card>
         <h2 className="text-xl">What you get</h2>
@@ -65,32 +116,29 @@ export function LinkedInSuggester({ jobId, here, demoMode }: LinkedInSuggesterPr
         <Button variant="primary" onClick={suggest} disabled={pending} className="mt-5 w-full sm:w-auto">
           {pending ? "Writing your LinkedIn lines…" : "Suggest my LinkedIn lines"}
         </Button>
-        <p aria-live="polite" className="sr-only">
-          {pending ? "Writing your LinkedIn lines. This can take up to a minute." : ""}
-        </p>
+        {working}
       </Card>
 
-      {state.phase === "failed" &&
-        (state.result.code === "sign-in" ? (
-          <SignInNotice title="Sign in to get LinkedIn lines" next={here} />
-        ) : (
-          <Notice tone="error" title="We couldn’t write your LinkedIn lines">
-            {state.result.message}
-          </Notice>
-        ))}
+      {problem}
     </div>
   );
 }
 
-/** The lines for each role, the roles with nothing to add, and what the ad asks for that the CV doesn't show. */
-export function LinkedInResults({ suggestions, focusHeading }: { suggestions: LinkedInSuggestions; focusHeading: boolean }) {
+/**
+ * The lines for each role, the roles with nothing to add, and what the ad asks for that the CV doesn't show.
+ * The heading takes focus when `focusKey` changes, but not when the page is shown again after Back.
+ */
+export function LinkedInResults({ suggestions, focusKey }: { suggestions: LinkedInSuggestions; focusKey: number }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const focused = useRef(0);
   const { roles, otherRoles, notShown, dropped } = suggestions;
-  const reworded = roles.some((role) => role.intro !== "" || role.lines.some((line) => line.reworded));
+  const reworded = roles.some((role) => role.lines.some((line) => line.reworded));
 
   useEffect(() => {
-    if (focusHeading) headingRef.current?.focus();
-  }, [focusHeading]);
+    if (focusKey === focused.current) return;
+    focused.current = focusKey;
+    headingRef.current?.focus();
+  }, [focusKey]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -136,8 +184,7 @@ export function LinkedInResults({ suggestions, focusHeading }: { suggestions: Li
 
 function RoleCard({ role }: { role: LinkedInRole }) {
   const headingId = `linkedin-${role.id}`;
-  const description = [role.intro, role.lines.map((line) => `• ${line.text}`).join("\n")].filter(Boolean).join("\n\n");
-  const problems = findBrandProblems([role.intro, ...role.lines.map((line) => line.text)].join("\n"));
+  const problems = findBrandProblems(role.lines.map((line) => line.text).join("\n"));
   const facts = [
     ["Company", role.company],
     ["Employment type", role.employmentType],
@@ -170,7 +217,7 @@ function RoleCard({ role }: { role: LinkedInRole }) {
         </p>
       )}
 
-      {description && <Description text={description} role={role} />}
+      {role.lines.length > 0 && <Description role={role} />}
 
       {role.skills.length > 0 && (
         <div className="mt-5">
@@ -195,9 +242,11 @@ function RoleCard({ role }: { role: LinkedInRole }) {
   );
 }
 
-/** The description: its first sentence and lines, each with the CV words it comes from, and a Copy button. */
-function Description({ text, role }: { text: string; role: LinkedInRole }) {
+/** The description: its lines, each with the words of the CV it comes from, and a Copy button for all of them. */
+function Description({ role }: { role: LinkedInRole }) {
   const [copy, setCopy] = useState<"ready" | "copied" | "failed">("ready");
+  const text = role.lines.map((line) => `• ${line.text}`).join("\n");
+  const what = `the description for ${role.title} at ${role.company}`;
 
   async function copyDescription() {
     try {
@@ -222,40 +271,41 @@ function Description({ text, role }: { text: string; role: LinkedInRole }) {
           ) : (
             "Copy"
           )}
-          <span className="sr-only"> the description for {role.title}</span>
+          <span className="sr-only"> {what}</span>
         </Button>
       </div>
       <p role="status" className="sr-only">
-        {copy === "copied" ? `Copied the description for ${role.title}.` : ""}
+        {copy === "copied" ? `Copied ${what}.` : ""}
       </p>
       {copy === "failed" && (
         <div className="mt-2 flex flex-col gap-2">
           <p className="text-sm text-text-muted">Your browser didn’t let us copy it. Select the text below and copy it yourself.</p>
-          <Textarea readOnly value={text} aria-label={`The description for ${role.title}`} />
+          <Textarea readOnly value={text} aria-label={`The description for ${role.title} at ${role.company}`} />
         </div>
       )}
 
-      {role.intro && <FitLine className="mt-3">{role.intro}</FitLine>}
-      {role.lines.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-4">
-          {role.lines.map((line) => (
-            <li key={line.text}>
-              <LineText line={line} />
-              <p className="mt-1 text-sm text-text-muted">
-                {line.sources.every((source) => source.kind === "answer") ? "From your answer: " : "From your CV: "}
-                {line.sources.map((source, index) => (
-                  <span key={index}>
-                    {index > 0 && " · "}
-                    <q className="break-words">{source.text}</q>
-                  </span>
-                ))}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="mt-3 flex flex-col gap-4">
+        {role.lines.map((line) => (
+          <li key={line.text}>
+            <LineText line={line} />
+            <p className="mt-1 text-sm text-text-muted">
+              {fromAnswers(line) ? "From your answer: " : "From your CV: "}
+              {line.sources.map((source, index) => (
+                <span key={index}>
+                  {index > 0 && " · "}
+                  <q className="break-words">{source.text}</q>
+                </span>
+              ))}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
+}
+
+function fromAnswers(line: LinkedInLine): boolean {
+  return line.sources.every((source) => source.kind === "answer");
 }
 
 function LineText({ line }: { line: LinkedInLine }) {
@@ -263,7 +313,7 @@ function LineText({ line }: { line: LinkedInLine }) {
   return (
     <FitLine>
       {line.text}
-      <span className="sr-only"> (reworded from your CV)</span>
+      <span className="sr-only"> (reworded from your {fromAnswers(line) ? "answer" : "CV"})</span>
     </FitLine>
   );
 }
