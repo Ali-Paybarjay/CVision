@@ -25,6 +25,7 @@
 | `tailor.apply_clicked` | نازنین | دکمهٔ Apply زده شد (لینک رسمی آگهی باز شد) | بدون متن آگهی | کارت #52 |
 | `tracker.status_changed` | علی | کاربر وضعیت یک درخواست را در داشبورد عوض کرد | `from` و `to`: وضعیت قبلی و تازه | PR #65 |
 | `interview.session_completed` | مرضیه | تمرین مصاحبه تمام شد و گزارش آماده شد | `sessionId`، `jobId`، `mode`، `questions`، `followUpsAsked`، `overall`، `readiness`، `lowConfidenceAnswers`، `averageAnswerWords`، `durationSeconds` | ثبت می‌شود (#54)؛ فقط برای کاربر واردشده و یک بار برای هر session (#99) |
+| `interview.length_over` | مرضیه | جواب مدل در یک مرحلهٔ مصاحبه یکی از قاعده‌های طول را شکست و با این حال نگه داشته شد (مثلاً `improvement` بیش از ۳ جمله)؛ فقط برای درخواست live کاربر واردشده | `stage` (`review` یا `evaluate`)، `rule` (`question-words`، `follow-up-length`، `quote-words`، `improvement-length`)، `count`؛ هرگز خود متن | بعد از #112؛ می‌گوید قاعده‌های طول چند بار شکسته می‌شوند |
 | `ai.hidden_text_removed` | علی | `askModel` در حالت live پیش از فرستادن پرامپت نویسهٔ نامرئی از آن پاک کرد؛ فقط برای درخواستی که از سقف روزانه گذشت و مدل به آن جواب داد، و نه وقتی فقط U+2028 یا U+2029 خط تازه شد | `feature`، `removed` (جمع نویسه‌های پاک‌شده)، و تعدادهای `cleanModelText`: `zeroWidth`، `byteOrderMark`، `softHyphen`، `bidi`، `tag`، `variationSelector`، `hangulFiller`، `annotation`، `lineSeparator`، `tamperSigns`؛ هرگز خود متن | کارت #68؛ `tamperSigns` فقط ثبت می‌شود و هیچ درخواستی را رد نمی‌کند |
 
 رویداد تازه‌ای که اضافه می‌کنید، اول در همین جدول بیاید.

@@ -1,5 +1,6 @@
-// What each stage asks the model for. Each builder returns a zod schema with the stage's checks attached as
+// What each stage asks the model for. Each builder returns a zod schema with the stage's hard checks attached as
 // refinements, so askModel's single retry covers them in live mode and mock samples pass the same checks.
+// Length rules are left out here: stages.ts checks them after the reply and records any it breaks.
 import { z } from "zod";
 import {
   CandidateProfileSchema,
@@ -15,6 +16,7 @@ import {
 import {
   analysisProblems,
   evaluationProblems,
+  isLengthProblem,
   questionSetProblems,
   reportProblems,
   type EvaluationContext,
@@ -37,7 +39,7 @@ export type InterviewInputs = z.infer<typeof InterviewInputsSchema>;
 
 function withProblems<S extends z.ZodType>(schema: S, find: (value: z.output<S>) => Problem[]): S {
   return schema.superRefine((value, ctx) => {
-    for (const problem of find(value)) {
+    for (const problem of find(value).filter((p) => !isLengthProblem(p))) {
       ctx.addIssue({ code: "custom", path: problem.path, message: problem.message });
     }
   }) as unknown as S;
