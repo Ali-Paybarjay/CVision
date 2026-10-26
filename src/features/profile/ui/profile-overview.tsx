@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { JobPreferences } from "@/shared/contracts";
 import type { ProfileStorageKind } from "../consent";
-import { describePreferences } from "../preferences";
+import { describePreferences, noteLines } from "../preferences";
 import type { SavedProfile } from "../saved-profile";
 import { count, formatDay, formatPeriod } from "./format";
 import { PreferencesForm } from "./preferences-form";
@@ -42,6 +42,8 @@ export function ProfileOverview({
   const [preferencesSaved, setPreferencesSaved] = useState(false);
   const latestJob = profile.experience[0];
   const preferences = describePreferences(profile.preferences);
+  const notes = noteLines(profile.preferences.notes);
+  const anyPreferences = preferences.length > 0 || notes.length > 0;
 
   useEffect(() => {
     if (focusHeading) headingRef.current?.focus();
@@ -99,14 +101,30 @@ export function ProfileOverview({
           <PreferencesForm preferences={profile.preferences} onSave={savePreferences} onCancel={() => setEditingPreferences(false)} />
         ) : (
           <>
-            {preferences.length > 0 ? (
-              <ul className="mt-2 flex flex-col gap-1">
-                {preferences.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
+            {anyPreferences ? (
+              <div className="mt-2 flex flex-col gap-4">
+                {preferences.length > 0 && (
+                  <ul className="flex flex-col gap-1">
+                    {preferences.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                )}
+                {notes.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold">Must-haves and deal-breakers</h3>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {notes.map((line, index) => (
+                        <li key={index}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             ) : (
-              <p className="mt-2 text-text-muted">Not set yet. Add the place, contract, hours and pay you want.</p>
+              <p className="mt-2 text-text-muted">
+                Not set yet. Add the place, contract, hours and pay you want, and any must-haves or deal-breakers.
+              </p>
             )}
             {preferencesSaved && (
               <p role="status" className="mt-2 text-sm text-accent">
@@ -120,7 +138,7 @@ export function ProfileOverview({
                 setPreferencesSaved(false);
               }}
             >
-              {preferences.length > 0 ? "Change what you’re looking for" : "Add what you’re looking for"}
+              {anyPreferences ? "Change what you’re looking for" : "Add what you’re looking for"}
             </Button>
           </>
         )}

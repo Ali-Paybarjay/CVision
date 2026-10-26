@@ -7,6 +7,7 @@ import { draftFromExtraction, draftFromProfile } from "../review-draft";
 import type { StoredProfile } from "../profile-store";
 import { fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import { BackLink } from "./back-link";
+import { PreferencesForm } from "./preferences-form";
 import { ProfileBuilder } from "./profile-builder";
 import { ProfileOverview } from "./profile-overview";
 import { ReviewStep } from "./review-step";
@@ -224,6 +225,30 @@ describe("profile screens", () => {
 
     expect(html).toContain("Not set yet.");
     expect(html).toContain("Add what you’re looking for");
+  });
+
+  it("lists must-haves and deal-breakers on their own, even when nothing else is set", () => {
+    const preferences = { salary: null, location: "", workModes: [], contractTypes: [], hours: [], notes: "No night shifts\nNot in gambling" };
+    const profile = { ...personas.reza.profile, preferences };
+
+    const html = overview({ ...fromBrowser(stored("reza")), profile }, "browser");
+
+    expect(html).toContain("Must-haves and deal-breakers No night shifts Not in gambling");
+    expect(html).toContain("Change what you’re looking for");
+    expect(html).not.toContain("Not set yet.");
+  });
+
+  it("asks for must-haves and deal-breakers in the preferences form, with what is left to write", () => {
+    const html = text(
+      renderToStaticMarkup(
+        <PreferencesForm preferences={{ ...personas.sara.profile.preferences, notes: "No night shifts" }} onSave={async () => null} onCancel={noop} />,
+      ),
+    );
+
+    expect(html).toContain("Must-haves and deal-breakers (optional)");
+    expect(html).toContain("Anything our options don’t cover. Write one per line");
+    expect(html).toContain("No night shifts");
+    expect(html).toContain("485 characters left");
   });
 
   it("warns when the browser will not keep the profile", () => {
