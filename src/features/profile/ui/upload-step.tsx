@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { withNext } from "@/features/account/safe-redirect";
-import { Button, Card, cn, ErrorIcon, Field, Notice } from "@/shared/ui";
-import { consentPoints, cvConsent, privacyPage, type ConsentRecord, type ProfileStorageKind } from "../consent";
+import { Button, Card, Field, Notice } from "@/shared/ui";
+import { consentPoints, cvConsent, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
+import { ConsentBox } from "./consent-box";
 import { Steps } from "./steps";
 
 export type ExtractSuccess = Extract<ExtractResponse, { ok: true }>;
@@ -21,12 +22,14 @@ type UploadStepProps = {
   focusHeading: boolean;
   /** `file` is the uploaded CV, kept in the page until the user approves their profile. */
   onExtracted: (result: ExtractSuccess, consent: ConsentRecord, file: File) => void;
+  /** Offers to type the details in by hand instead, for someone with no CV to upload. */
+  onStartManual?: () => void;
   onCancel?: () => void;
 };
 
 type Errors = { file?: string; consent?: string; form?: string; signIn?: boolean };
 
-export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtracted, onCancel }: UploadStepProps) {
+export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtracted, onStartManual, onCancel }: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
@@ -101,34 +104,13 @@ export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtra
             )}
           </Field>
 
-          <fieldset
-            className={cn("rounded-md border p-4", errors.consent ? "border-error" : "border-line")}
-            aria-describedby={errors.consent ? "consent-error" : undefined}
-          >
-            <legend className="px-1 text-sm font-semibold">Before we read your CV</legend>
-            <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-text-muted">
-              {consentPoints(storage).map((point) => (
-                <li key={point}>{linkPrivacyPage(point)}</li>
-              ))}
-            </ul>
-            <label className="mt-4 flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                name="consent"
-                value={cvConsent.version}
-                disabled={pending}
-                aria-invalid={errors.consent ? true : undefined}
-                className="mt-0.5 size-5 shrink-0 accent-accent"
-              />
-              <span className="font-semibold">{cvConsent.label}</span>
-            </label>
-            {errors.consent && (
-              <p id="consent-error" className="mt-2 flex items-center gap-1.5 text-sm text-error">
-                <ErrorIcon className="size-4 shrink-0" />
-                {errors.consent}
-              </p>
-            )}
-          </fieldset>
+          <ConsentBox
+            legend="Before we read your CV"
+            points={consentPoints(storage)}
+            label={cvConsent.label}
+            error={errors.consent}
+            input={{ name: "consent", value: cvConsent.version, disabled: pending }}
+          />
 
           {errors.form && (
             <Notice tone="error" title="We couldn’t read your CV">
@@ -152,22 +134,22 @@ export function UploadStep({ replacing, demoMode, storage, focusHeading, onExtra
           </p>
         </form>
       </Card>
-    </section>
-  );
-}
 
-/** Shows the Privacy page's name in a consent point as a link to that page. */
-function linkPrivacyPage(point: string): React.ReactNode {
-  const at = point.indexOf(privacyPage.name);
-  if (at === -1) return point;
-  return (
-    <>
-      {point.slice(0, at)}
-      <Link href={privacyPage.href} className="font-semibold text-accent hover:underline">
-        {privacyPage.name}
-      </Link>
-      {point.slice(at + privacyPage.name.length)}
-    </>
+      {onStartManual && (
+        <Card aria-labelledby="manual-heading">
+          <h3 id="manual-heading" className="text-xl">
+            No CV to upload?
+          </h3>
+          <p className="mt-2 text-text-muted">
+            Fill in your details yourself instead: your work history, education, certificates and skills. Nothing is
+            saved until you approve it.
+          </p>
+          <Button className="mt-4" onClick={onStartManual} disabled={pending}>
+            Fill in my details
+          </Button>
+        </Card>
+      )}
+    </section>
   );
 }
 

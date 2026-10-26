@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { JobPreferences } from "@/shared/contracts";
-import type { ProfileStorageKind } from "../consent";
+import { consentPurpose, type ProfileStorageKind } from "../consent";
 import { describePreferences } from "../preferences";
 import type { SavedProfile } from "../saved-profile";
 import { count, formatDay, formatPeriod } from "./format";
@@ -154,9 +154,11 @@ export function ProfileOverview({
         {confirmingDelete && (
           <div role="alertdialog" aria-labelledby="delete-question" className="mt-4 rounded-md border border-error p-4">
             <p id="delete-question" className="font-semibold">
-              {storage === "account"
-                ? "Delete your profile and your CV file from your account?"
-                : "Delete your profile from this browser?"}
+              {storage === "browser"
+                ? "Delete your profile from this browser?"
+                : saved.cvFormat
+                  ? "Delete your profile and your CV file from your account?"
+                  : "Delete your profile from your account?"}
             </p>
             <p className="mt-1 text-sm text-text-muted">This can’t be undone. Download your data first to keep a copy.</p>
             {deleteProblem && <p className="mt-2 text-sm text-error">{deleteProblem}</p>}
@@ -188,7 +190,9 @@ function whereItIs(saved: SavedProfile, storage: ProfileStorageKind, persistent:
     const file = saved.cvFormat ? ` The CV file you uploaded (${saved.cvFormat === "pdf" ? "PDF" : "Word"}) is kept with it.` : "";
     return `Saved to your CVision account, ${changed}.${file}`;
   }
-  const agreed = saved.consent ? ` You agreed to us reading your CV on ${formatDay(saved.consent.givenAt)}.` : "";
+  const agreed = saved.consent
+    ? ` You agreed to us ${consentPurpose(saved.consent)} on ${formatDay(saved.consent.givenAt)}.`
+    : "";
   return `${persistent ? "Saved in this browser only" : "Kept in this tab only"}, ${changed}.${agreed}`;
 }
 

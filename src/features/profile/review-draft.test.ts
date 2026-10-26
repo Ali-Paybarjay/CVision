@@ -5,6 +5,7 @@ import { extractionFromProfile, type CvExtraction } from "./cv-extraction";
 import {
   draftFromExtraction,
   draftFromProfile,
+  emptyDraft,
   itemsWithProblems,
   newProfileBase,
   normaliseLink,
@@ -210,6 +211,60 @@ describe("a draft from a CV just read (#33)", () => {
       followUpAnswers: answers,
       preferences: { salary: null, location: "Manchester", workModes: [], contractTypes: [], hours: [] },
       contact: { location: "Manchester" },
+    });
+  });
+});
+
+describe("a profile typed in by hand, with no CV", () => {
+  const emma = personas.emma.profile;
+  const job = emma.experience[0];
+
+  it("starts with every section empty, and asks only for the name before it can be approved", () => {
+    const draft = approve(emptyDraft());
+
+    expect(draft).toMatchObject({ summary: { value: { text: "" } }, skills: { value: { list: [] } } });
+    expect([draft.experience, draft.education, draft.certifications]).toEqual([[], [], []]);
+    expect(itemsWithProblems(draft)).toEqual(["contact"]);
+    expect(draft.contact.errors).toEqual({ fullName: "Add your full name." });
+  });
+
+  it("saves exactly what the user typed, with job preferences that follow the location they gave", () => {
+    const draft = approve(
+      apply(
+        emptyDraft(),
+        { type: "edit-contact", change: { fullName: emma.fullName, location: emma.contact.location } },
+        { type: "add", section: "experience", key: "new-experience-1" },
+        {
+          type: "edit-experience",
+          key: "new-experience-1",
+          change: { title: job.title, company: job.company, startDate: job.startDate, current: true, duties: job.duties.join("\n") },
+        },
+        { type: "edit-skills", list: ["React", "TypeScript"] },
+      ),
+    );
+    const base = newProfileBase({ contact: {} }, { id: "new-id", followUpAnswers: [] });
+
+    expect(itemsWithProblems(draft)).toEqual([]);
+    expect(profileFromDraft(draft, base)).toEqual({
+      id: "new-id",
+      fullName: emma.fullName,
+      contact: { location: emma.contact.location },
+      summary: "",
+      skills: ["React", "TypeScript"],
+      experience: [{ title: job.title, company: job.company, startDate: job.startDate, endDate: null, duties: job.duties, achievements: [] }],
+      education: [],
+      certifications: [],
+      preferences: { salary: null, location: emma.contact.location, workModes: [], contractTypes: [], hours: [] },
+      followUpAnswers: [],
+    });
+  });
+
+  it("starts the job preferences empty, since there is no CV to read a location from", () => {
+    expect(newProfileBase({ contact: {} }, { id: "new-id", followUpAnswers: [] })).toEqual({
+      id: "new-id",
+      followUpAnswers: [],
+      preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] },
+      contact: { location: undefined },
     });
   });
 });

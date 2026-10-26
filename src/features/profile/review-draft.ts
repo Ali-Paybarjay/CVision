@@ -166,6 +166,18 @@ export function draftFromExtraction(extraction: CvExtraction): ReviewDraft {
   };
 }
 
+/** The draft for a profile typed in by hand, with no CV: every section starts empty, for the user to fill in. */
+export function emptyDraft(): ReviewDraft {
+  return {
+    contact: entry("contact", { fullName: "", email: "", phone: "", location: "", linkedIn: "" }),
+    summary: entry("summary", { text: "" }),
+    skills: entry("skills", { list: [] }),
+    experience: [],
+    education: [],
+    certifications: [],
+  };
+}
+
 const MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
 /**
@@ -195,9 +207,12 @@ export type ProfileBase = Pick<Profile, "id" | "preferences" | "followUpAnswers"
   contact: Pick<Profile["contact"], "location">;
 };
 
-/** The base for a profile from a CV just read: a new id, preferences starting from the CV's location, and earlier answers. */
+/**
+ * The base for a new profile: a new id, preferences starting from the CV's location, and earlier answers.
+ * A profile typed in by hand passes `{ contact: {} }`, so its preferences start empty.
+ */
 export function newProfileBase(
-  extraction: CvExtraction,
+  extraction: Pick<CvExtraction, "contact">,
   details: { id: string; followUpAnswers: Profile["followUpAnswers"] },
 ): ProfileBase {
   const location = extraction.contact.location?.trim() ?? "";

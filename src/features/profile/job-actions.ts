@@ -66,7 +66,11 @@ export async function checkJobAction(input: { ad: unknown; url: unknown; profile
     profile = parsed.profile;
   }
   if (!profile && mode === "live") {
-    return { ok: false, code: "profile", message: "Upload your CV first, so there is a profile to compare with this job." };
+    return {
+      ok: false,
+      code: "profile",
+      message: "Upload your CV or fill in your details first, so there is a profile to compare with this job.",
+    };
   }
 
   const actor: EventActor | undefined = user ? { userId: user.id } : undefined;

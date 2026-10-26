@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useId, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
+import { manualConsent, manualConsentPoints, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import {
   itemsWithProblems,
   profileFromDraft,
@@ -19,35 +20,83 @@ import {
 } from "../review-draft";
 import { count } from "./format";
 import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
+import { ConsentBox } from "./consent-box";
 import { Steps } from "./steps";
 
+/** Where the details on this page come from: a CV just read, the user typing them in by hand, or the saved profile. */
+export type ReviewSource = "cv" | "manual" | "saved";
+
 type ReviewStepProps = {
-  /** What to check: read from a new CV (draftFromExtraction) or from the saved profile (draftFromProfile). */
+  /** What to check: read from a new CV (draftFromExtraction), empty (emptyDraft) or the saved profile (draftFromProfile). */
   draft: ReviewDraft;
   /** What the saved profile keeps besides the reviewed items: its id, preferences and follow-up answers. */
   base: ProfileBase;
-  /** True for a CV just read; false when editing a saved profile. */
-  isNew: boolean;
+  source: ReviewSource;
+  /** Where the approved profile will be kept, so the consent for a profile typed in by hand says so. */
+  storage: ProfileStorageKind;
   /** Set in mock mode: whose sample profile is shown, and the text read from the user's own file. */
   demo: { persona: string; text: string } | null;
   truncated: boolean;
   focusHeading: boolean;
-  /** Saves the approved profile; resolves to a message for the user if it couldn't. */
-  onSave: (profile: Profile) => Promise<string | null> | void;
+  /**
+   * Saves the approved profile; resolves to a message for the user if it couldn't. `consent` is the consent given on
+   * this page, for a profile typed in by hand, and null otherwise.
+   */
+  onSave: (profile: Profile, consent: ConsentRecord | null) => Promise<string | null> | void;
   onCancel: () => void;
+  /** Hears every change, so a profile being typed in isn't lost when the user goes back to the upload. */
+  onDraftChange?: (draft: ReviewDraft) => void;
 };
 
-export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, focusHeading, onSave, onCancel }: ReviewStepProps) {
+/** The first words under the heading, before "Then approve it all at the end of the page." */
+const intro: Record<ReviewSource, string> = {
+  cv: "Compare each section with your CV and correct anything that’s wrong.",
+  manual: "Fill in each section that applies to you.",
+  saved: "Change anything that’s wrong or out of date.",
+};
+
+const cancelLabel: Record<ReviewSource, string> = { cv: "Start again", manual: "Upload a CV instead", saved: "Cancel" };
+
+/** The consent box for a profile typed in by hand, which gets focus when it still needs ticking. */
+const CONSENT_ID = "review-consent";
+
+export function ReviewStep({
+  draft: initialDraft,
+  base,
+  source,
+  storage,
+  demo,
+  truncated,
+  focusHeading,
+  onSave,
+  onCancel,
+  onDraftChange,
+}: ReviewStepProps) {
   const [draft, dispatch] = useReducer(reviewReducer, initialDraft);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Only a profile typed in by hand is agreed to on this page: a CV's consent comes with the upload.
+  const [agreed, setAgreed] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const cards = useRef(new Map<string, HTMLElement>());
+  // New items' keys include this page's own id, so they never clash with items added before the user went back.
+  const pageId = useId();
   const added = useRef(0);
+  const fromCv = source === "cv";
+  const asksConsent = source === "manual";
 
   useEffect(() => {
     if (focusHeading) headingRef.current?.focus();
   }, [focusHeading]);
+
+  useEffect(() => {
+    onDraftChange?.(draft);
+  }, [draft, onDraftChange]);
+
+  /** An empty section: on a CV just read, the CV didn't have it; otherwise nothing is added yet. */
+  const emptyNote = (items: unknown[], notInCv: string, notYet: string) =>
+    items.length > 0 ? null : fromCv ? notInCv : notYet;
 
   const registerCard = (key: string, element: HTMLElement | null) => {
     if (element) cards.current.set(key, element);
@@ -69,7 +118,7 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
 
   const addItem = (section: ListSection) => {
     added.current += 1;
-    const key = `new-${section}-${added.current}`;
+    const key = `new-${section}-${pageId}-${added.current}`;
     act({ type: "add", section, key });
     focusIn(key, "input");
   };
@@ -79,9 +128,16 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
     const checked = reviewReducer(draft, { type: "check" });
     act({ type: "check" });
     const problems = itemsWithProblems(checked);
+    const consentMissing = asksConsent && !agreed;
+    if (consentMissing) setConsentError("Tick the box to agree, so we can save your profile.");
     if (problems.length > 0) {
-      setSaveError(`Fix the ${count(problems.length, "item")} marked above, then approve again.`);
+      const andConsent = consentMissing ? " and tick the box to agree" : "";
+      setSaveError(`Fix the ${count(problems.length, "item")} marked above${andConsent}, then approve again.`);
       focusIn(problems[0], '[aria-invalid="true"]');
+      return;
+    }
+    if (consentMissing) {
+      document.getElementById(CONSENT_ID)?.focus();
       return;
     }
     let profile: Profile;
@@ -93,7 +149,8 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
     }
     setSaving(true);
     try {
-      const problem = await onSave(profile);
+      const consent = asksConsent ? { version: manualConsent.version, givenAt: new Date().toISOString() } : null;
+      const problem = await onSave(profile, consent);
       if (problem) setSaveError(problem);
     } finally {
       setSaving(false);
@@ -102,14 +159,13 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
 
   return (
     <section aria-labelledby="review-heading" className="flex flex-col gap-8">
-      {isNew && <Steps current={1} />}
+      {fromCv && <Steps current={1} />}
       <div>
         <h2 id="review-heading" ref={headingRef} tabIndex={-1} className="text-2xl">
-          Check your details
+          {source === "manual" ? "Add your details" : "Check your details"}
         </h2>
         <p className="mt-2 text-text-muted">
-          {isNew ? "Compare each section with your CV and correct anything that’s wrong." : "Change anything that’s wrong or out of date."}{" "}
-          Then approve it all at the end of the page. Nothing is saved until you do.
+          {intro[source]} Then approve it all at the end of the page. Nothing is saved until you do.
         </p>
       </div>
 
@@ -147,7 +203,11 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
         <ItemCard registerCard={registerCard} item={draft.summary} title="Your summary">
           <Field
             label="Personal statement"
-            hint="Your CV’s own summary, word for word. Leave it empty if your CV doesn’t have one."
+            hint={
+              fromCv
+                ? "Your CV’s own summary, word for word. Leave it empty if your CV doesn’t have one."
+                : "A few sentences about you and the work you want, in your own words. You can leave it empty."
+            }
           >
             {(props) => (
               <Textarea
@@ -164,7 +224,11 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
       <ReviewSection
         id="review-experience"
         title="Work history"
-        empty={draft.experience.length === 0 ? "We didn’t find any jobs in your CV." : null}
+        empty={emptyNote(
+          draft.experience,
+          "We didn’t find any jobs in your CV.",
+          "No jobs yet. Part-time work, volunteering and placements count too.",
+        )}
         addLabel="Add a job"
         onAdd={() => addItem("experience")}
       >
@@ -180,6 +244,7 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
             <ExperienceFields
               value={item.value}
               errors={item.errors}
+              fromCv={fromCv}
               onChange={(change) => act({ type: "edit-experience", key: item.key, change })}
             />
           </ItemCard>
@@ -189,7 +254,11 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
       <ReviewSection
         id="review-education"
         title="Education"
-        empty={draft.education.length === 0 ? "We didn’t find any qualifications in your CV." : null}
+        empty={emptyNote(
+          draft.education,
+          "We didn’t find any qualifications in your CV.",
+          "No qualifications yet. GCSEs, A levels, degrees and training courses all count.",
+        )}
         addLabel="Add a qualification"
         onAdd={() => addItem("education")}
       >
@@ -214,7 +283,7 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
       <ReviewSection
         id="review-certifications"
         title="Certificates"
-        empty={draft.certifications.length === 0 ? "We didn’t find any certificates in your CV." : null}
+        empty={emptyNote(draft.certifications, "We didn’t find any certificates in your CV.", "No certificates yet.")}
         addLabel="Add a certificate"
         onAdd={() => addItem("certifications")}
       >
@@ -244,13 +313,32 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
 
       <Card aria-labelledby="approve-heading">
         <h3 id="approve-heading" className="text-xl">
-          {isNew ? "Approve your profile" : "Approve your changes"}
+          {source === "saved" ? "Approve your changes" : "Approve your profile"}
         </h3>
         <p className="mt-2 text-text-muted">
-          {isNew
-            ? "Approving saves everything above as your profile. You can change it at any time."
-            : "Approving saves everything above to your profile."}
+          {source === "saved"
+            ? "Approving saves everything above to your profile."
+            : "Approving saves everything above as your profile. You can change it at any time."}
         </p>
+        {asksConsent && (
+          <div className="mt-5">
+            <ConsentBox
+              legend="Before we save your profile"
+              points={manualConsentPoints(storage)}
+              label={manualConsent.label}
+              error={consentError ?? undefined}
+              input={{
+                id: CONSENT_ID,
+                checked: agreed,
+                disabled: saving,
+                onChange: (event) => {
+                  setAgreed(event.target.checked);
+                  setConsentError(null);
+                },
+              }}
+            />
+          </div>
+        )}
         {saveError && (
           <p role="alert" className="mt-3 flex items-center gap-1.5 text-sm text-error">
             <ErrorIcon className="size-4 shrink-0" />
@@ -262,7 +350,7 @@ export function ReviewStep({ draft: initialDraft, base, isNew, demo, truncated, 
             {saving ? "Saving…" : "Approve and save"}
           </Button>
           <Button variant="quiet" onClick={onCancel} disabled={saving}>
-            {isNew ? "Start again" : "Cancel"}
+            {cancelLabel[source]}
           </Button>
         </div>
       </Card>
@@ -331,6 +419,9 @@ function ItemCard({ item, title, children, registerCard, onRemove, removeLabel }
 
 type FieldsProps<T> = { value: T; errors: FieldErrors; onChange: (change: Partial<T>) => void };
 
+/** `fromCv`: the job was read from a CV just uploaded, so the hints can point to the CV. */
+type ExperienceFieldsProps = FieldsProps<ExperienceDraft> & { fromCv: boolean };
+
 function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
   return (
     <>
@@ -367,7 +458,7 @@ function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
   );
 }
 
-function ExperienceFields({ value, errors, onChange }: FieldsProps<ExperienceDraft>) {
+function ExperienceFields({ value, errors, fromCv, onChange }: ExperienceFieldsProps) {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -391,7 +482,7 @@ function ExperienceFields({ value, errors, onChange }: FieldsProps<ExperienceDra
         errors={errors}
         onChange={onChange}
       />
-      <Field label="What you did" hint="One per line, as on your CV." error={errors.duties}>
+      <Field label="What you did" hint={fromCv ? "One per line, as on your CV." : "One per line."} error={errors.duties}>
         {(props) => (
           <Textarea {...props} value={value.duties} onChange={(event) => onChange({ duties: event.target.value })} className="min-h-28" />
         )}
