@@ -178,7 +178,7 @@ describe("JobChecker", () => {
     expect(html).toMatch(/^<div[^>]*><a href="\/profile"[^>]*>.*?Back<\/a>/);
   });
 
-  it("asks an account with no profile yet to upload a CV first", () => {
+  it("asks an account with no profile yet to build one first", () => {
     expect(text(renderToStaticMarkup(<JobChecker demoMode={false} source={{ kind: "account", profile: null }} />))).toContain(
       "Your profile comes first",
     );
@@ -196,10 +196,11 @@ describe("JobChecker", () => {
     );
   });
 
-  it("sends a visitor with no profile to the profile page first", () => {
+  it("sends a visitor with no profile to the profile page first, with or without a CV", () => {
     const html = renderToStaticMarkup(<ProfileFirst />);
 
     expect(text(html)).toContain("Your profile comes first");
+    expect(text(html)).toContain("Upload your CV or fill in your details to build it.");
     expect(html).toContain('href="/profile"');
   });
 });

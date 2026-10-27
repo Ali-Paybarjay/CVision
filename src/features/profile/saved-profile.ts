@@ -1,5 +1,5 @@
 import type { Profile } from "@/shared/contracts";
-import type { ConsentRecord } from "./consent";
+import { isManualConsent, type ConsentRecord } from "./consent";
 import type { StoredProfile } from "./profile-store";
 import type { AccountProfile } from "./server/profile-account";
 import type { CvFormat } from "./server/read-cv";
@@ -10,8 +10,8 @@ export type SavedProfile = {
   /** When it last changed, in UTC. */
   savedAt: string;
   /**
-   * The consent given with the CV. In this browser it is kept with the profile. In the account it is recorded
-   * with the save (the profile.approved event), so after a reload the page doesn't have it.
+   * The consent given with the CV, or for a profile typed in by hand. In this browser it is kept with the profile. In
+   * the account it is recorded with the save (the profile.approved event), so after a reload the page doesn't have it.
    */
   consent: ConsentRecord | null;
   /** The format of the CV file kept in the account, or null. */
@@ -24,4 +24,9 @@ export function fromBrowser(stored: StoredProfile): SavedProfile {
 
 export function fromAccount(account: AccountProfile): SavedProfile {
   return { profile: account.profile, savedAt: account.savedAt, consent: null, cvFormat: account.cvFormat };
+}
+
+/** True when the profile came from a CV, so another upload is "a new CV". A profile typed in by hand has none. */
+export function builtFromCv(saved: SavedProfile): boolean {
+  return saved.cvFormat !== null || (saved.consent !== null && !isManualConsent(saved.consent));
 }
