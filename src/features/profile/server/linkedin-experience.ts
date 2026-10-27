@@ -15,10 +15,10 @@ import { withoutTags } from "./check-job";
 import type { Requester } from "./extract-profile";
 
 /**
- * Suggests what to write under each role of the user's LinkedIn Experience for one job, with askModel and
- * prompts/profile-linkedin-experience.md. Only what the profile backs up is kept (buildLinkedInSuggestions);
- * `rejected` lists the rest, for the prompt evals. In mock mode no model is called: each role gets its own lines
- * that show the ad's requirements, word for word (suggestByRules).
+ * Suggests what to add under each role of the user's LinkedIn Experience for one job, with askModel and
+ * prompts/profile-linkedin-experience.md. The model only chooses lines by their ids; buildLinkedInSuggestions shows
+ * them as the CV says them, and `rejected` lists any id that isn't the role's own, for the prompt evals. In mock mode
+ * no model is called: simple rules choose each role's lines that show the ad's requirements (suggestByRules).
  */
 export async function suggestLinkedInExperience(
   profile: Profile,
@@ -32,18 +32,19 @@ export async function suggestLinkedInExperience(
     schema: LinkedInAnswerSchema,
     sample: suggestByRules(profile, job, match),
     requester: options.requester,
-    // Up to five short lines and five skills for each role. Haiku thinks first and that counts too.
-    maxTokens: 8000,
+    // It answers with ids only, so the brand voice has nothing to shape.
+    voice: false,
+    // Up to five line ids and five skill ids for each role. Haiku thinks first and that counts too.
+    maxTokens: 4000,
   });
 
   return buildLinkedInSuggestions(profile, job, match, answer);
 }
 
 /**
- * The request text: the job's requirements, each with what the profile shows of it now, then the profile's duties,
- * results and answers grouped by role, and the skills, with the same ids as the match. Only lines that can back a line
- * or a skill are sent: never the name, contact details, summary, education or certificates, nor an answer that isn't
- * clearly about one role.
+ * The request text: the job's requirements, each with what the profile shows of it now, then each role's duties and
+ * results, and the skills, with the same ids as the match. Only what the model chooses from is sent: never the name,
+ * contact details, summary, education, certificates or answers.
  */
 export function linkedInPrompt(profile: Profile, job: Job, match: MatchResult | null): Promise<string> {
   const tags = ["job", "requirements", "roles", "skills"];
@@ -56,9 +57,7 @@ export function linkedInPrompt(profile: Profile, job: Job, match: MatchResult | 
     .join("\n");
 
   const { roles, shared } = linkedInRoles(profile);
-  const roleText = roles
-    .map((role) => [`${role.id} · ${role.role.text} · ${role.role.context}`, ...[...role.lines, ...role.answers].map(lineText)].join("\n"))
-    .join("\n\n");
+  const roleText = roles.map((role) => [`${role.id} · ${role.role.text} · ${role.role.context}`, ...role.lines.map(lineText)].join("\n")).join("\n\n");
   const skills = shared.filter((line) => line.kind === "skill").map(lineText).join("\n");
 
   return loadPrompt("profile-linkedin-experience", {
@@ -69,8 +68,7 @@ export function linkedInPrompt(profile: Profile, job: Job, match: MatchResult | 
   });
 }
 
-/** "L11 [duty] Built Tableau dashboards…"; an answer also gives its question. */
+/** "L11 [duty] Built Tableau dashboards…" */
 function lineText(line: EvidenceLine): string {
-  const label = line.kind === "answer" && line.context ? `${line.kind} · ${line.context}` : line.kind;
-  return `${line.id} [${label}] ${line.text}`;
+  return `${line.id} [${line.kind}] ${line.text}`;
 }

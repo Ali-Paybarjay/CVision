@@ -18,14 +18,16 @@ const reza = personas.reza;
 const timetable = "Coordinated the move to a new school timetable for 1,100 students and 80 staff, delivered on time";
 
 describe("suggestLinkedInExperience", () => {
-  it("asks the model once for every role, on the user's own daily limit and in the brand voice", async () => {
+  it("asks the model once for every role, on the user's own daily limit, without the brand voice as it writes no text", async () => {
     await suggestLinkedInExperience(reza.profile, reza.jobs[0], reza.match, { requester: { userId: "user-1" } });
 
     expect(askModel).toHaveBeenCalledTimes(1);
-    const options = askModel.mock.calls[0][0];
-    expect(options).toMatchObject({ feature: "profile-linkedin-experience", requester: { userId: "user-1" }, maxTokens: 8000 });
-    // It writes text for the user, so the brand voice stays on.
-    expect(options.voice).toBeUndefined();
+    expect(askModel.mock.calls[0][0]).toMatchObject({
+      feature: "profile-linkedin-experience",
+      requester: { userId: "user-1" },
+      voice: false,
+      maxTokens: 4000,
+    });
   });
 
   it("in mock mode, gives each role its own lines that show the ad's requirements, the match's evidence included", async () => {
@@ -33,27 +35,31 @@ describe("suggestLinkedInExperience", () => {
 
     expect(rejected).toEqual([]);
     expect(suggestions.roles[0]).toMatchObject({ title: "Maths Teacher and Head of Year 9", company: "Riverside Academy" });
-    expect(suggestions.roles[0].lines.map((line) => line.text)).toEqual([timetable, "Ran parents' evenings and kept parents updated on progress"]);
+    expect(suggestions.roles[0].lines).toEqual([timetable, "Ran parents' evenings and kept parents updated on progress"]);
   });
 
-  it("drops what the model makes up, and says why", async () => {
+  it("shows nothing the model writes itself, and says why", async () => {
     const line = profileEvidenceLines(reza.profile).find((item) => item.text === timetable);
     askModel.mockResolvedValueOnce({
-      roles: [{ role: "R1", lines: [{ text: "Coordinated the move to a new school timetable for 1,200 students", from: [line?.id ?? ""] }], skills: [] }],
+      roles: [{ role: "R1", lines: ["Coordinated the move to a new school timetable for 1,200 students", line?.id ?? ""], skills: [] }],
     });
 
     const { suggestions, rejected } = await suggestLinkedInExperience(reza.profile, reza.jobs[0], reza.match);
 
-    expect(suggestions.roles).toEqual([]);
+    expect(suggestions.roles[0].lines).toEqual([timetable]);
     expect(suggestions.dropped).toBe(1);
     expect(rejected).toEqual([
-      { role: "R1", text: "Coordinated the move to a new school timetable for 1,200 students", reason: 'It says "1,200", which its lines don\'t say that way.' },
+      {
+        role: "R1",
+        text: "Coordinated the move to a new school timetable for 1,200 students",
+        reason: "COORDINATED THE MOVE TO A NEW SCHOOL TIMETABLE FOR 1,200 STUDENTS is not a line of the profile.",
+      },
     ]);
   });
 });
 
 describe("linkedInPrompt", () => {
-  it("sends the requirements with what the profile shows of them, the lines and answers by role, and the skills", async () => {
+  it("sends the requirements with what the profile shows of them, the duties and results by role, and the skills", async () => {
     const { profile, jobs, match } = personas.sara;
 
     const prompt = await linkedInPrompt(profile, jobs[0], match);
@@ -63,15 +69,13 @@ describe("linkedInPrompt", () => {
     expect(prompt).toContain("D1 (desirable, missing): Power BI");
     expect(prompt).toContain("D2 (desirable, missing): Healthcare or NHS data");
     expect(prompt).toContain("R1 · Data Analyst Intern at Northgate Retail Insights · Jun 2025 to Sep 2025\nL11 [duty] Cleaned and joined");
-    expect(prompt).toContain("R2 · Customer Assistant (part-time) at Greenway Foods · Jan 2022 to Jun 2024");
-    // Each answer is listed under the role it is about.
     expect(prompt).toContain(
-      `L13 [achievement] Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes\nL19 [answer · ${profile.followUpAnswers[0].question}] ${profile.followUpAnswers[0].answer}\n\nR2 ·`,
+      "L13 [achievement] Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes\n\nR2 · Customer Assistant (part-time) at Greenway Foods · Jan 2022 to Jun 2024",
     );
     expect(prompt).toMatch(/<skills>\nL3 \[skill\] Python \(pandas\)\nL4 \[skill\] SQL\n/);
   });
 
-  it("never sends the name, contact details, summary, education or certificates", async () => {
+  it("never sends the name, contact details, summary, education, certificates or answers", async () => {
     const { profile, jobs, match } = personas.sara;
 
     const prompt = await linkedInPrompt(profile, jobs[0], match);
@@ -81,6 +85,7 @@ describe("linkedInPrompt", () => {
     }
     expect(prompt).not.toContain("Data science graduate");
     expect(prompt).not.toContain("University of Manchester");
+    expect(prompt).not.toContain(profile.followUpAnswers[0].answer);
     expect(await linkedInPrompt(reza.profile, reza.jobs[0], reza.match)).not.toContain("PRINCE2 Foundation, PeopleCert");
   });
 

@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { findBrandProblems } from "@/features/tailor/brand-check";
-import { Button, ButtonLink, Card, CheckIcon, FitLine, Notice, Textarea, WarningIcon } from "@/shared/ui";
-import type { LinkedInLine, LinkedInRole, LinkedInSource, LinkedInSuggestions, NotShown } from "../linkedin";
+import { Button, ButtonLink, Card, CheckIcon, Notice, Textarea, WarningIcon } from "@/shared/ui";
+import type { LinkedInRole, LinkedInSuggestions, NotShown } from "../linkedin";
 import { suggestLinkedInAction, type LinkedInResult } from "../linkedin-actions";
 import { count } from "./format";
 import { SignInNotice } from "./upload-step";
@@ -12,7 +11,7 @@ type LinkedInSuggesterProps = {
   jobId: string;
   /** This page, to come back to after signing in. */
   here: string;
-  /** True in mock mode: the lines come from simple rules, not the AI. */
+  /** True in mock mode: simple rules choose the lines, not the AI. */
   demoMode: boolean;
   /** Set when the lines come from a sample person's CV, not the user's own: their name. */
   sampleName: string | null;
@@ -29,15 +28,15 @@ type State = {
 const start: State = { suggestions: null, shown: 0, pending: false, failure: null };
 
 /**
- * LinkedIn Experience lines for one job. Nothing is written until the user asks, because with the AI on each request
+ * LinkedIn Experience lines for one job. Nothing is chosen until the user asks, because with the AI on each request
  * counts against their daily limit; and nothing is saved, so the lines last until the page is left.
  */
 export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedInSuggesterProps) {
   const [state, setState] = useState<State>(start);
   const request = useRef(0);
 
-  // Next.js keeps a page it has left (Activity), so coming back would show lines written from a CV the user may have
-  // changed since. Start again whenever the page is hidden, and drop any answer to a request sent before that.
+  // Next.js keeps a page it has left (Activity), so coming back would show lines from a CV the user may have changed
+  // since. Start again whenever the page is hidden, and drop any answer to a request sent before that.
   useLayoutEffect(() => {
     return () => {
       request.current += 1;
@@ -66,13 +65,13 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
   const { suggestions, shown, pending, failure } = state;
   const working = (
     <p aria-live="polite" className="sr-only">
-      {pending ? "Writing your LinkedIn lines. This can take up to a minute." : ""}
+      {pending ? "Choosing your LinkedIn lines. This can take up to a minute." : ""}
     </p>
   );
   const notice = demoMode ? (
-    <Notice tone="warning" title="Demo mode: lines straight from the CV">
-      CVision isn’t connected to the AI yet, so each role shows the lines of the CV that show this ad’s requirements,
-      word for word. {sampleName && `This uses ${sampleName}’s sample CV, not yours.`}
+    <Notice tone="warning" title="Demo mode: lines chosen by simple rules">
+      CVision isn’t connected to the AI yet, so simple rules choose each role’s lines: those that name this ad’s
+      requirements. {sampleName && `This uses ${sampleName}’s sample CV, not yours.`}
     </Notice>
   ) : (
     sampleName && <Notice tone="warning" title={`This uses ${sampleName}’s sample CV, not yours`} />
@@ -86,12 +85,12 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
         <LinkedInResults suggestions={suggestions} focusKey={shown} sampleName={sampleName} />
         {signIn}
         {failure && failure.code !== "sign-in" && (
-          <Notice tone="error" title="We couldn’t write new lines">
-            {failure.message} The lines above are from your last try.
+          <Notice tone="error" title="We couldn’t choose new lines">
+            {againFailed(failure.message, suggestions)}
           </Notice>
         )}
         <Button onClick={suggest} disabled={pending} className="w-full sm:w-auto sm:self-start">
-          {pending ? "Writing your LinkedIn lines…" : "Suggest again"}
+          {pending ? "Choosing your LinkedIn lines…" : "Suggest again"}
         </Button>
         {working}
       </div>
@@ -106,25 +105,30 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5">
           <li>For each role on your CV, the lines that show what this ad asks for, ready to add under it on LinkedIn.</li>
           <li>The skills to add to each role, from your CV.</li>
-          <li>Next to every line, the part of your CV or the answer it comes from. Nothing invented.</li>
+          <li>Every line in your CV’s own words, unchanged. Nothing invented.</li>
         </ul>
         <p className="mt-3 max-w-[65ch] text-text-muted">
           We never post to LinkedIn. You copy what you want and paste it into your LinkedIn profile yourself.
         </p>
         <Button variant="primary" onClick={suggest} disabled={pending} className="mt-5 w-full sm:w-auto">
-          {pending ? "Writing your LinkedIn lines…" : "Suggest my LinkedIn lines"}
+          {pending ? "Choosing your LinkedIn lines…" : "Suggest my LinkedIn lines"}
         </Button>
         {working}
       </Card>
 
       {signIn}
       {failure && failure.code !== "sign-in" && (
-        <Notice tone="error" title="We couldn’t write your LinkedIn lines">
+        <Notice tone="error" title="We couldn’t choose your LinkedIn lines">
           {failure.message}
         </Notice>
       )}
     </div>
   );
+}
+
+/** Why Suggest again failed, and that the lines on the page are from the last try, when it showed any. */
+export function againFailed(message: string, last: LinkedInSuggestions): string {
+  return last.roles.length > 0 ? `${message} The lines above are from your last try.` : message;
 }
 
 type LinkedInResultsProps = {
@@ -139,7 +143,8 @@ export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInR
   const headingRef = useRef<HTMLHeadingElement>(null);
   const focused = useRef(0);
   const { roles, otherRoles, notShown, dropped } = suggestions;
-  const reworded = roles.some((role) => role.lines.some((line) => line.reworded));
+  // A sample person's CV is theirs, not the visitor's.
+  const cv = sampleName ? "the CV" : "your CV";
 
   useEffect(() => {
     if (focusKey === focused.current) return;
@@ -149,13 +154,11 @@ export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInR
 
   let summary: string;
   if (roles.length > 0) {
-    summary =
-      "Each role is one position in the Experience section of your LinkedIn profile. If a role isn’t on LinkedIn yet, add it as a new position with these details.";
-    if (reworded) summary += " Highlighted lines are reworded; the rest are your own words.";
+    summary = `Each role is one position in the Experience section of your LinkedIn profile, and every line is word for word from ${cv}. If a role isn’t on LinkedIn yet, add it as a new position with these details.`;
   } else if (dropped > 0) {
-    summary = `We wrote ${count(dropped, "line")} for this job, but none stayed close enough to your CV to keep. Try Suggest again.`;
+    summary = `We left out ${count(dropped, "suggestion")} that we couldn’t check against ${cv}, so there is nothing to add for this job yet. Try Suggest again.`;
   } else {
-    summary = "No line of your CV speaks to this ad’s requirements, so there is nothing to add for this job.";
+    summary = `No line of ${cv} speaks to this ad’s requirements, so there is nothing to add for this job.`;
   }
 
   return (
@@ -168,13 +171,13 @@ export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInR
           <p className="mt-2 max-w-[65ch] text-text-muted">{summary}</p>
           {roles.length > 0 && dropped > 0 && (
             <p className="mt-2 text-sm text-text-muted">
-              We left out {count(dropped, "suggestion")} that we couldn’t check against your CV.
+              We left out {count(dropped, "suggestion")} that we couldn’t check against {cv}.
             </p>
           )}
         </div>
 
         {roles.map((role) => (
-          <RoleCard key={role.id} role={role} />
+          <RoleCard key={role.id} role={role} sample={sampleName !== null} />
         ))}
 
         {roles.length > 0 && otherRoles.length > 0 && (
@@ -190,9 +193,8 @@ export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInR
   );
 }
 
-function RoleCard({ role }: { role: LinkedInRole }) {
+function RoleCard({ role, sample }: { role: LinkedInRole; sample: boolean }) {
   const headingId = `linkedin-${role.id}`;
-  const problems = findBrandProblems(role.lines.map((line) => line.text).join("\n"));
   const facts = [
     ["Company", role.company],
     ["Employment type", role.employmentType],
@@ -215,13 +217,13 @@ function RoleCard({ role }: { role: LinkedInRole }) {
       </dl>
       {role.cvTitle !== role.title && (
         <p className="mt-2 text-sm text-text-muted">
-          Your CV says “{role.cvTitle}”. On LinkedIn, the title is “{role.title}” and “{role.employmentType}” goes under
-          Employment type.
+          {`${sample ? "The CV" : "Your CV"} says “${role.cvTitle}”. On LinkedIn, the title is “${role.title}” and “${role.employmentType}” goes under Employment type.`}
         </p>
       )}
       {role.sameCompanyAs && (
         <p className="mt-2 text-sm text-text-muted">
-          Same company as your {role.sameCompanyAs} role: on LinkedIn, add it as another position under {role.company}.
+          Same company as {sample ? "the" : "your"} {role.sameCompanyAs} role: on LinkedIn, add it as another position
+          under {role.company}.
         </p>
       )}
 
@@ -233,36 +235,33 @@ function RoleCard({ role }: { role: LinkedInRole }) {
           <p className="mt-1">{role.skills.join(", ")}</p>
         </div>
       )}
-
-      {problems.length > 0 && (
-        <Notice tone="warning" title="Check these words" className="mt-5">
-          <ul className="list-disc pl-5">
-            {problems.map((problem, index) => (
-              <li key={index}>
-                “{problem.found}”
-                {problem.suggestion ? `: write “${problem.suggestion}”` : ": rewrite this, it is not in our voice"}
-              </li>
-            ))}
-          </ul>
-        </Notice>
-      )}
     </Card>
   );
 }
 
-/** The lines to add, each with the words of the CV or the answer it comes from, and a Copy button for all of them. */
+/** What the Copy button last tried to copy, and whether the browser let it. */
+type Copied = { text: string; ok: boolean };
+
+/** "copied" or "failed" only for the text that was copied: once the lines change (Suggest again), Copy is offered again. */
+export function copyState(copied: Copied | null, text: string): "ready" | "copied" | "failed" {
+  if (copied?.text !== text) return "ready";
+  return copied.ok ? "copied" : "failed";
+}
+
+/** The lines to add, as the CV says them, and a Copy button for all of them. */
 function Lines({ role }: { role: LinkedInRole }) {
-  const [copy, setCopy] = useState<"ready" | "copied" | "failed">("ready");
-  const text = role.lines.map((line) => `• ${line.text}`).join("\n");
+  const text = role.lines.map((line) => `• ${line}`).join("\n");
+  const [copied, setCopied] = useState<Copied | null>(null);
+  const copy = copyState(copied, text);
   const what = `the lines for ${role.title} at ${role.company}`;
 
   async function copyLines() {
     try {
       await navigator.clipboard.writeText(text);
-      setCopy("copied");
+      setCopied({ text, ok: true });
     } catch {
       // No clipboard here (an old browser, or a page that isn't https): show the text to select instead.
-      setCopy("failed");
+      setCopied({ text, ok: false });
     }
   }
 
@@ -291,53 +290,28 @@ function Lines({ role }: { role: LinkedInRole }) {
       </p>
       {copy === "failed" && <Textarea readOnly value={text} aria-label={`The lines for ${role.title} at ${role.company}`} className="mt-2" />}
 
-      <ul className="mt-3 flex flex-col gap-4">
+      <ul className="mt-3 flex list-disc flex-col gap-3 pl-5">
         {role.lines.map((line) => (
-          <li key={line.text}>
-            <LineText line={line} />
-            <p className="mt-1 text-sm text-text-muted">
-              {line.sources.map((source, index) => (
-                <span key={index}>
-                  {index > 0 && " · "}
-                  {source.kind === "answer" ? "From your answer: " : "From your CV: "}
-                  <q className="break-words">{source.text}</q>
-                </span>
-              ))}
-            </p>
-          </li>
+          <li key={line}>{line}</li>
         ))}
       </ul>
     </div>
   );
 }
 
-/** "your CV", "your answer" or "your CV and your answer": where a reworded line comes from. */
-function origin(sources: LinkedInSource[]): string {
-  const kinds = new Set(sources.map((source) => (source.kind === "answer" ? "your answer" : "your CV")));
-  return [...kinds].join(" and ");
-}
-
-function LineText({ line }: { line: LinkedInLine }) {
-  if (!line.reworded) return <p>{line.text}</p>;
-  return (
-    <FitLine>
-      {line.text}
-      <span className="sr-only"> (reworded from {origin(line.sources)})</span>
-    </FitLine>
-  );
-}
-
 /**
- * What the ad asks for that the CV doesn't show clearly: never written into a line, and what to do about it. In the
- * sample data the profile can't be changed, so the advice is only what the gaps are.
+ * What the ad asks for that the CV doesn't show clearly: never in a line, and what to do about it. In the sample data
+ * the profile can't be changed, so the advice is only what the gaps are.
  */
 function NotShownCard({ items, sampleName }: { items: NotShown[]; sampleName: string | null }) {
   const missing = items.filter((item) => item.kind === "missing");
   const unclear = items.filter((item) => item.kind === "unclear");
   const cv = sampleName ? "the CV" : "your CV";
   return (
-    <Card>
-      <h2 className="text-xl">What {cv} doesn’t show yet</h2>
+    <Card aria-labelledby="linkedin-gaps">
+      <h2 id="linkedin-gaps" className="text-xl">
+        What {cv} doesn’t show yet
+      </h2>
       <p className="mt-2 max-w-[65ch] text-text-muted">
         {sampleName
           ? `The ad also asks for these, and ${sampleName}’s sample CV doesn’t show them clearly.`
