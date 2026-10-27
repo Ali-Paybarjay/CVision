@@ -115,8 +115,12 @@ describe("LinkedInResults", () => {
 
   it("names a sample person's gaps as theirs, without sending the visitor to edit a profile", () => {
     const html = text(results(mockSuggestions("sara"), "Sara Khan"));
+    const gaps = html.slice(html.indexOf("What the CV doesn’t show yet"));
 
-    expect(html).toContain("The ad also asks for these, and Sara Khan’s sample CV doesn’t show them clearly.");
+    expect(gaps).toContain("The ad also asks for these, and Sara Khan’s sample CV doesn’t show them clearly.");
+    expect(gaps).toContain("Not on the CV (3)");
+    expect(gaps).toContain("Not clear on the CV (1)");
+    expect(gaps).not.toContain("your CV");
     expect(html).not.toContain("Go to my profile");
   });
 

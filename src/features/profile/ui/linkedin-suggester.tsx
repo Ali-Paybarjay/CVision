@@ -334,21 +334,22 @@ function LineText({ line }: { line: LinkedInLine }) {
 function NotShownCard({ items, sampleName }: { items: NotShown[]; sampleName: string | null }) {
   const missing = items.filter((item) => item.kind === "missing");
   const unclear = items.filter((item) => item.kind === "unclear");
+  const cv = sampleName ? "the CV" : "your CV";
   return (
     <Card>
-      <h2 className="text-xl">What your CV doesn’t show yet</h2>
+      <h2 className="text-xl">What {cv} doesn’t show yet</h2>
       <p className="mt-2 max-w-[65ch] text-text-muted">
         {sampleName
           ? `The ad also asks for these, and ${sampleName}’s sample CV doesn’t show them clearly.`
           : "The ad also asks for these, and your CV doesn’t show them clearly. Don’t add them to LinkedIn unless you have done them."}
       </p>
       <Gaps
-        title="Not on your CV"
+        title={`Not on ${cv}`}
         advice={sampleName ? null : "If you have done one, add it to your profile first, so every line stays backed by your CV."}
         items={missing}
       />
       <Gaps
-        title="Not clear on your CV"
+        title={`Not clear on ${cv}`}
         advice={sampleName ? null : "Your CV touches on these. Add a clear example to your profile, in your own words."}
         items={unclear}
       />
