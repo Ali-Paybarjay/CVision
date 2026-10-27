@@ -13,6 +13,9 @@ export function getDailyLimits() {
   };
 }
 
+/** One of the daily limits, by its name in getDailyLimits(). */
+export type DailyLimit = keyof ReturnType<typeof getDailyLimits>;
+
 export type UsageRecord = {
   requester?: Requester;
   feature: string;
@@ -193,9 +196,9 @@ export function getUsageStore(): UsageStore {
  */
 export async function reserveWithinDailyLimit(request: UsageRequest, usage: UsageStore = getUsageStore()): Promise<UsageRowId> {
   const reserved = await usage.reserve(request);
-  let refusal: string | undefined;
+  let refusal: Refusal | undefined;
   try {
-    refusal = await limitReachedMessage(request.requester, usage, startOfUtcDay(reserved.createdAt));
+    refusal = await reachedLimit(request.requester, usage, startOfUtcDay(reserved.createdAt));
   } catch (error) {
     // Without a count there is no limit, so the request will not be sent and needs no row.
     await releaseReservation(reserved.id, usage);
@@ -203,31 +206,30 @@ export async function reserveWithinDailyLimit(request: UsageRequest, usage: Usag
   }
   if (refusal) {
     await releaseReservation(reserved.id, usage);
-    throw new LimitReachedError(refusal);
+    throw new LimitReachedError(refusal.message, refusal.limit);
   }
   return reserved.id;
 }
 
+/** Which limit turned a request away, and what the user is told. */
+type Refusal = { limit: DailyLimit; message: string };
+
 /** The day's counts include the request's own reservation, so a count may equal the limit but not pass it. */
-async function limitReachedMessage(
-  requester: Requester | undefined,
-  usage: UsageStore,
-  since: string,
-): Promise<string | undefined> {
+async function reachedLimit(requester: Requester | undefined, usage: UsageStore, since: string): Promise<Refusal | undefined> {
   const limits = getDailyLimits();
 
   if (requester && "userId" in requester) {
     if ((await usage.countSince({ userId: requester.userId }, since)) > limits.perUser) {
-      return "You have reached today's limit. Try again tomorrow.";
+      return { limit: "perUser", message: "You have reached today's limit. Try again tomorrow." };
     }
     return undefined;
   }
 
   if (requester && (await usage.countSince({ anonymousKey: requester.anonymousKey }, since)) > limits.perAnonymousVisitor) {
-    return "You have used today's free checks. Create a free account to keep going.";
+    return { limit: "perAnonymousVisitor", message: "You have used today's free checks. Create a free account to keep going." };
   }
   if ((await usage.countSince({ allAnonymous: true }, since)) > limits.allAnonymous) {
-    return "The free check is busy today. Create a free account to keep going.";
+    return { limit: "allAnonymous", message: "The free check is busy today. Create a free account to keep going." };
   }
   return undefined;
 }
@@ -246,7 +248,11 @@ export async function releaseReservation(id: UsageRowId, usage: UsageStore = get
 
 export class LimitReachedError extends Error {
   readonly reason = "limit-reached";
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** Which limit turned the request away: a person's own, a visitor's free checks, or all visitors' together. */
+    readonly limit: DailyLimit,
+  ) {
     super(message);
     this.name = "LimitReachedError";
   }

@@ -19,10 +19,12 @@ export type StageSettings = {
  */
 export const stageConfig: Record<StageName, StageSettings> = {
   analyse: { prompt: "interview-analyse", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
-  generate: { prompt: "interview-generate-technical", model: "claude-haiku-5-5", effort: "high", maxTokens: 16000 },
+  // generate and review ran at high: about 13K output tokens each and most of a 138-second start. Medium is the
+  // default now; move one back to high only if the eval shows its questions get worse.
+  generate: { prompt: "interview-generate-technical", model: "claude-haiku-5-5", effort: "medium", maxTokens: 16000 },
   // A stronger model is worth trialling here, so that a different model checks the generator's work.
   // Compare with the eval: INTERVIEW_EVAL_REVIEW_MODEL=claude-sonnet-5-5 npm run eval
-  review: { prompt: "interview-review", model: "claude-haiku-5-5", effort: "high", maxTokens: 16000 },
+  review: { prompt: "interview-review", model: "claude-haiku-5-5", effort: "medium", maxTokens: 16000 },
   // At low effort Haiku can let reasoning leak into its reply; the code falls back to the planned text.
   // If tests show quality problems, raise effort to medium.
   followUp: { prompt: "interview-followup", model: "claude-haiku-5-5", effort: "low", maxTokens: 2000 },
@@ -34,7 +36,7 @@ export const stageConfig: Record<StageName, StageSettings> = {
 /**
  * US dollars per million tokens, for prompts up to 100K tokens (October 2026).
  * Source: https://platform.claude.com/docs/en/about-claude/pricing
- * Used only for the estimates in the debug panel and the eval, never for billing.
+ * Used only for the mock-mode estimates; live requests take their cost from askModel. Never for billing.
  */
 export const pricesPerMillion: Record<string, { input: number; output: number }> = {
   "claude-sonnet-5-5": { input: 2, output: 10 },
@@ -76,11 +78,14 @@ export const limits = {
    * about 110K; the rest of it (role, blueprint, questions) has no length limits of its own, so this caps them.
    */
   sessionMaxChars: 150_000,
+  // The word and sentence limits below are soft: a reply that breaks one is kept and recorded as
+  // interview.length_over, because one long sentence is better than a failed session (#112).
   questionMaxWords: 80,
   followUpMaxWords: 40,
   quoteMaxWords: 25,
   /** The one thing to do next time: a single specific action, not a list. */
   improvementMaxWords: 60,
+  improvementMaxSentences: 3,
 };
 
 /** Overall score thresholds for the readiness label. */

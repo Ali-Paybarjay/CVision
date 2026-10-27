@@ -3,8 +3,8 @@ import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asUser, createTestDatabase } from "./test-database";
 
-// The tables whose rows belong to one job (issue #28).
-const jobTables = ["match_results", "tailoring_changes", "interview_sessions", "applications"] as const;
+// The tables whose rows belong to one job (issue #28; tailored_cvs from issue #67).
+const jobTables = ["match_results", "tailoring_changes", "tailored_cvs", "interview_sessions", "applications"] as const;
 type JobTable = (typeof jobTables)[number];
 
 const sara = randomUUID();
@@ -79,5 +79,33 @@ describe("applications", () => {
     await addRow(sara, "applications", job);
 
     await expect(addRow(sara, "applications", job)).rejects.toMatchObject({ code: "23505" });
+  });
+});
+
+describe("tailored_cvs", () => {
+  it("keeps one saved version per job for each user", async () => {
+    const job = await addJob(sara);
+    await addRow(sara, "tailored_cvs", job);
+
+    await expect(addRow(sara, "tailored_cvs", job)).rejects.toMatchObject({ code: "23505" });
+  });
+
+  it("is the owner's alone: another user cannot see, change or delete it, and a visitor cannot reach the table", async () => {
+    const job = await addJob(sara);
+    await addRow(sara, "tailored_cvs", job);
+
+    const asReza = (sql: string) => asUser(db, reza, (tx) => tx.query(sql, [job]));
+    await expect(asReza("select id from public.tailored_cvs where job_id = $1")).resolves.toMatchObject({ rows: [] });
+    await expect(asReza(`update public.tailored_cvs set data = '{"changed": true}' where job_id = $1`)).resolves.toMatchObject({ affectedRows: 0 });
+    await expect(asReza("delete from public.tailored_cvs where job_id = $1")).resolves.toMatchObject({ affectedRows: 0 });
+
+    const asVisitor = db.transaction(async (tx) => {
+      await tx.exec("set local role anon");
+      return tx.query("select id from public.tailored_cvs");
+    });
+    await expect(asVisitor).rejects.toMatchObject({ code: "42501" });
+
+    const { rows } = await asUser(db, sara, (tx) => tx.query("select data from public.tailored_cvs where job_id = $1", [job]));
+    expect(rows).toEqual([{ data: {} }]);
   });
 });

@@ -13,6 +13,7 @@ import {
   reportOutputSchema,
   reviewOutputSchema,
 } from "./engine/schemas";
+import { evaluationProblems, isLengthProblem } from "./engine/checks";
 import { competencyMap, questionOverall, readinessFor, sessionOverall } from "./engine/scoring";
 import { isVerbatim } from "./engine/text";
 import { mainAnswer, followUpAnswer } from "./engine/session";
@@ -129,5 +130,26 @@ describe("structured output formats", () => {
     ["report (with checks)", reportOutputSchema({ levelGap: false, lowConfidenceIds: [] })],
   ])("%s converts to a JSON schema for live mode", (_, schema) => {
     expect(() => zodOutputFormat(schema)).not.toThrow();
+  });
+});
+
+describe("length rules are soft", () => {
+  const base = processEngineer.answers.q1.evaluation;
+  const context = { lookForIds: base.lookForEvidence.map((e) => e.lookForId), mainAnswer: processEngineer.answers.q1.main, followUpAnswer: null, followUpAsked: false };
+  const long = "Name the alarm. Say who you told. Give the figure. Explain the fix.";
+
+  it("keeps an over-long improvement out of the schema, so askModel does not fail the session over it", () => {
+    expect(evaluateOutputSchema(context).safeParse({ ...base, improvement: long }).success).toBe(true);
+  });
+
+  it("still finds the broken length rule, so the stage can record it", () => {
+    const rules = evaluationProblems({ ...base, improvement: long }, context).filter(isLengthProblem).map((p) => p.lengthRule);
+    expect(rules).toEqual(["improvement-length"]);
+  });
+
+  it("still rejects a quote that is not in the answer", () => {
+    const covered = base.lookForEvidence.findIndex((e) => e.status !== "missing");
+    const lookForEvidence = base.lookForEvidence.map((e, i) => (i === covered ? { ...e, quote: "words the candidate never said" } : e));
+    expect(evaluateOutputSchema(context).safeParse({ ...base, lookForEvidence }).success).toBe(false);
   });
 });
