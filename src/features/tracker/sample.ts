@@ -1,11 +1,20 @@
-import { ApplicationSchema } from "@/shared/contracts";
+import { ApplicationSchema, type Job } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
-import type { TrackedApplication } from "./model";
+import { addDays, daysBetween, type JobSummary, type TrackedApplication } from "./model";
 
 // Sara's tracker, shown until Supabase is connected. Her first job is an interview fixture, so the
-// interview link opens practice in mock mode too.
+// interview link opens practice in mock mode too. The other four jobs are fictional, like Sara.
 const [interviewJob, appliedJob] = personas.sara.jobs;
 
+const summary = (job: Job): JobSummary => ({ title: job.title, company: job.company, deadline: job.deadline });
+
+/** The day the dates below are written for. */
+const writtenOn = "2026-10-25";
+
+/**
+ * Sara's sample applications as on 25 October 2026: one at interview, one applied 9 days ago, one ready with
+ * 5 days to its closing date, two applied with no news for over 60 days, and one unsuccessful.
+ */
 export const sampleApplications: TrackedApplication[] = [
   {
     application: ApplicationSchema.parse({
@@ -15,16 +24,68 @@ export const sampleApplications: TrackedApplication[] = [
       status: "interview",
       nextStep: "Practise the interview questions before Thursday",
     }),
-    job: { title: interviewJob.title, company: interviewJob.company },
+    job: summary(interviewJob),
   },
   {
     application: ApplicationSchema.parse({
       id: "sara-application-2",
+      jobId: "sara-sample-job-3",
+      date: "2026-10-23",
+      status: "ready",
+      nextStep: "Check the tailored CV, then apply on the employer's site",
+    }),
+    job: { title: "Reporting Analyst", company: "Medlock Housing Partnership", deadline: "2026-10-30" },
+  },
+  {
+    application: ApplicationSchema.parse({
+      id: "sara-application-3",
       jobId: appliedJob.id,
       date: "2026-10-16",
       status: "applied",
-      nextStep: "Email the recruiter if there is no reply by 30 October",
+      nextStep: "Email the recruiter if there is no reply by Friday",
     }),
-    job: { title: appliedJob.title, company: appliedJob.company },
+    job: summary(appliedJob),
+  },
+  {
+    application: ApplicationSchema.parse({
+      id: "sara-application-4",
+      jobId: "sara-sample-job-4",
+      date: "2026-10-09",
+      status: "rejected",
+      nextStep: "Ask for feedback on the written test",
+    }),
+    job: { title: "Graduate Insight Analyst", company: "Bollin Retail Group" },
+  },
+  {
+    application: ApplicationSchema.parse({
+      id: "sara-application-5",
+      jobId: "sara-sample-job-5",
+      date: "2026-08-24",
+      status: "applied",
+      nextStep: null,
+    }),
+    job: { title: "Junior Business Analyst", company: "Irk Valley Foods" },
+  },
+  {
+    application: ApplicationSchema.parse({
+      id: "sara-application-6",
+      jobId: "sara-sample-job-6",
+      date: "2026-08-21",
+      status: "applied",
+      nextStep: null,
+    }),
+    job: { title: "Data Analyst", company: "Etherow Freight" },
   },
 ];
+
+/**
+ * Sara's sample as it looks today: every date moves by the days since 25 October 2026, so the dashboard always
+ * shows the same picture (days without news, a closing date this week, rows to close).
+ */
+export function sampleApplicationsOn(today: string): TrackedApplication[] {
+  const shift = daysBetween(writtenOn, today);
+  return sampleApplications.map(({ application, job }) => ({
+    application: { ...application, date: addDays(application.date, shift) },
+    job: job && { ...job, deadline: job.deadline && addDays(job.deadline, shift) },
+  }));
+}

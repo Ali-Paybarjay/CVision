@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Claude Code keeps other sessions' worktrees here, each with its own .next build.
     ".claude/**",
+    // Playwright writes these when npm run test:e2e runs (both are git-ignored).
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 

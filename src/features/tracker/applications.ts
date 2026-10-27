@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/features/account/current-user";
 import { ApplicationSchema, JobSchema } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import type { TrackedApplication } from "./model";
-import { sampleApplications } from "./sample";
+import { sampleApplicationsOn } from "./sample";
 
 export type Tracker =
   | { kind: "sample"; items: TrackedApplication[] }
@@ -11,16 +11,17 @@ export type Tracker =
   | { kind: "error" }
   | { kind: "account"; items: TrackedApplication[] };
 
-// The dashboard needs only these two fields, so a job with other gaps still shows.
-const JobSummarySchema = JobSchema.pick({ title: true, company: true });
+// The dashboard needs only these fields, so a job with other gaps still shows. The closing date is optional.
+const JobSummarySchema = JobSchema.pick({ title: true, company: true, deadline: true });
 
 /**
- * The signed-in user's applications, newest first, each with its job's title and company.
- * Sara's sample applications while Supabase is not connected. Reads cookies, so call it inside <Suspense>.
+ * The signed-in user's applications, newest first, each with its job's title, company and closing date.
+ * Sara's sample applications, dated for `today`, while Supabase is not connected. Reads cookies, so call it
+ * inside <Suspense>.
  */
-export async function loadTracker(): Promise<Tracker> {
+export async function loadTracker(today: string): Promise<Tracker> {
   const supabase = await createSupabaseServerClient();
-  if (!supabase) return { kind: "sample", items: sampleApplications };
+  if (!supabase) return { kind: "sample", items: sampleApplicationsOn(today) };
 
   const user = await getCurrentUser();
   if (!user) return { kind: "signed-out" };

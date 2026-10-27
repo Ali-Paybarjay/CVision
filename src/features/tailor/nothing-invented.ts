@@ -1,6 +1,7 @@
 // The Nothing invented check: a change survives only if its evidence can be traced
 // word for word to the CV or to the user's own answers.
 // Pure code with no model call, so unit tests and the live evals share it.
+import { cleanModelText } from "@/shared/clean-text";
 import type { Gap, Profile } from "@/shared/contracts";
 import type { GapAnswer, ProposedChange, RejectedChange } from "./types";
 
@@ -10,10 +11,13 @@ export type EvidenceSources = {
   answers: GapAnswer[];
 };
 
-/** Lower case, straight quotes, single spaces, no trailing full stop. */
+/**
+ * Without the hidden characters cleanModelText removes before the model reads the text (#68), so a faithful quote
+ * still matches. Lower case, straight quotes, single spaces, no trailing full stop.
+ */
 export function normalise(text: string): string {
-  return text
-    .toLowerCase()
+  return cleanModelText(text)
+    .text.toLowerCase()
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/\s+/g, " ")

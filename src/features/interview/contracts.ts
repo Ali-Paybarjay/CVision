@@ -300,7 +300,7 @@ export const StageUsageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   costUsd: z.number().nonnegative(),
-  /** True while askModel does not report usage and the numbers are estimated from text length. */
+  /** True in mock mode, where the numbers are estimated from text length; false when askModel reported them. */
   estimated: z.boolean(),
 });
 export type StageUsage = z.infer<typeof StageUsageSchema>;

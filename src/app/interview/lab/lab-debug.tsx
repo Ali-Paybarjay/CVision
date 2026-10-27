@@ -105,9 +105,10 @@ export function LabDebug({ session, startupMs }: { session: InterviewSession; st
       <Section title="Review changelog">
         <Json value={session.reviewChangelog} />
       </Section>
-      <Section title="Tokens and estimated cost">
+      <Section title="Tokens and cost">
         <p className="mb-2 text-text-muted">
-          Estimated from text length while askModel does not report usage; thinking tokens are not included.
+          Live requests show the tokens the model reported, thinking and retries included. Rows marked (estimated) come
+          from text length in mock mode and leave thinking out.
         </p>
         <table className="w-full text-left">
           <thead className="text-text-muted">
@@ -128,7 +129,10 @@ export function LabDebug({ session, startupMs }: { session: InterviewSession; st
                 <td className="pr-3">{entry.model}</td>
                 <td className="pr-3">{entry.inputTokens}</td>
                 <td className="pr-3">{entry.outputTokens}</td>
-                <td>{money(entry.costUsd)}</td>
+                <td>
+                  {money(entry.costUsd)}
+                  {entry.estimated ? " (estimated)" : ""}
+                </td>
               </tr>
             ))}
             <tr className="border-t border-line font-semibold">
