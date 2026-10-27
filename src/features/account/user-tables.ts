@@ -12,6 +12,7 @@ export const userTables = [
   "jobs",
   "match_results",
   "tailoring_changes",
+  "tailored_cvs",
   "interview_sessions",
   "applications",
   "events",

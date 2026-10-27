@@ -67,7 +67,7 @@ describe("POST /dashboard/your-data/download", () => {
     await post();
     for (const work of deferred.splice(0)) await work();
 
-    expect(track).toHaveBeenCalledWith("account.data_downloaded", { rows: 8, cvFiles: 1 }, { userId: sara });
+    expect(track).toHaveBeenCalledWith("account.data_downloaded", { rows: 9, cvFiles: 1 }, { userId: sara });
   });
 
   it("sends a visitor Supabase Auth does not confirm as signed in to sign in, and back here afterwards", async () => {

@@ -34,7 +34,17 @@ vi.mock("./deleted-flag", () => ({ accountJustDeleted }));
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 
 const summary: DataSummary = {
-  rows: { profiles: 1, jobs: 3, match_results: 3, tailoring_changes: 12, interview_sessions: 2, applications: 2, events: 5, ai_usage: 27 },
+  rows: {
+    profiles: 1,
+    jobs: 3,
+    match_results: 3,
+    tailoring_changes: 12,
+    tailored_cvs: 2,
+    interview_sessions: 2,
+    applications: 2,
+    events: 5,
+    ai_usage: 27,
+  },
   cvFiles: 1,
 };
 
@@ -49,7 +59,7 @@ describe("the Your data page", () => {
   it("shows the count of every table and of the CV files before anything is deleted", () => {
     const counts = [...html.matchAll(/<dd[^>]*>(\d+)<\/dd>/g)].map((match) => Number(match[1]));
     expect(counts).toEqual([...userTables.map((table) => summary.rows[table]), summary.cvFiles]);
-    for (const label of ["Profile", "Saved job ads", "Suggested CV changes", "Usage records", "AI usage records", "CV files"]) {
+    for (const label of ["Profile", "Saved job ads", "Suggested CV changes", "Saved tailored CVs", "Usage records", "AI usage records", "CV files"]) {
       expect(text(html)).toContain(label);
     }
     expect(text(html)).toContain("sara@example.com");

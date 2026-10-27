@@ -1,12 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
 import { PGlite, type Transaction } from "@electric-sql/pglite";
 
-// The parts of Supabase our migrations build on, kept to what they use: the Data API's roles, auth.users and
-// auth.uid() (which reads the user id from the request's JWT claims, as Supabase's does), and the storage tables
-// behind the CV bucket.
+// The parts of Supabase our migrations build on, kept to what they use: the Data API's roles with the table
+// privileges Supabase gives them on the public schema by default, auth.users and auth.uid() (which reads the user
+// id from the request's JWT claims, as Supabase's does), and the storage tables behind the CV bucket.
 const supabaseStub = `
   create role anon nologin noinherit;
   create role authenticated nologin noinherit;
+  -- As on Supabase: every new table in public starts open to both roles, so a migration that forgets to revoke
+  -- anon's access fails the visitor checks.
+  alter default privileges in schema public grant all on tables to anon, authenticated;
 
   create schema auth;
   grant usage on schema auth to anon, authenticated;
