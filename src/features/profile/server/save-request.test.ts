@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
-import { cvConsent } from "../consent";
-import { MAX_CV_BYTES } from "../cv-limits";
+import { cvConsent, manualConsent } from "../consent";
+import { MAX_CV_BYTES, MAX_PROFILE_CHARACTERS, profileTooLongMessage } from "../cv-limits";
 import { handleSaveRequest, saveFields } from "./save-request";
 import { saveAccountProfile } from "./profile-account";
 import type { SupabaseServerClient } from "./job-store";
@@ -42,10 +42,70 @@ describe("handleSaveRequest", () => {
     expect([userId, saved, cv?.format]).toEqual(["user-1", profile, "docx"]);
     expect(track).toHaveBeenCalledWith(
       "profile.approved",
-      { newCv: true, consentVersion: cvConsent.version, jobs: 2, skills: profile.skills.length, answers: 0 },
+      { newCv: true, manual: false, consentVersion: cvConsent.version, jobs: 2, skills: profile.skills.length, answers: 0 },
       { userId: "user-1" },
     );
     expect(JSON.stringify(track.mock.calls)).not.toContain(profile.fullName);
+  });
+
+  it("saves a profile typed in by hand with the consent given for it, and records it as one", async () => {
+    const result = await handleSaveRequest(form({ profile, consent: manualConsent.version }), account);
+
+    expect(result).toEqual({ ok: true, savedAt: "2026-10-21T12:00:00.000Z", cvFormat: "docx" });
+    const [, userId, saved, cv] = vi.mocked(saveAccountProfile).mock.calls[0];
+    expect([userId, saved, cv]).toEqual(["user-1", profile, undefined]);
+    expect(track).toHaveBeenCalledWith(
+      "profile.approved",
+      { newCv: false, manual: true, consentVersion: manualConsent.version, jobs: 2, skills: profile.skills.length, answers: 0 },
+      { userId: "user-1" },
+    );
+    expect(JSON.stringify(track.mock.calls)).not.toContain(profile.fullName);
+  });
+
+  it("records an edit of the saved profile with no new consent", async () => {
+    await handleSaveRequest(form({ profile }), account);
+
+    expect(track).toHaveBeenCalledWith(
+      "profile.approved",
+      expect.objectContaining({ newCv: false, manual: false, consentVersion: null }),
+      { userId: "user-1" },
+    );
+  });
+
+  it("refuses any other consent without a CV file, and the typed-in profile's consent with one", async () => {
+    expect(await handleSaveRequest(form({ profile, consent: cvConsent.version }), account)).toMatchObject({
+      ok: false,
+      code: "consent",
+    });
+    expect(await handleSaveRequest(form({ profile, cv: docx(), consent: manualConsent.version }), account)).toMatchObject({
+      ok: false,
+      code: "consent",
+    });
+    expect(saveAccountProfile).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  it("asks a page opened before the typed-in profile's consent changed to reload, since its box is ticked", async () => {
+    const result = await handleSaveRequest(form({ profile, consent: "manual-2026-01-01" }), account);
+
+    expect(result).toEqual({
+      ok: false,
+      code: "consent",
+      message: expect.stringContaining("Reload the page and choose Fill in my details to read the new wording."),
+    });
+    expect(result).not.toMatchObject({ message: expect.stringContaining("Tick the box") });
+    expect(saveAccountProfile).not.toHaveBeenCalled();
+  });
+
+  it("says a profile is too long to save, rather than to reload the page and lose what was typed", async () => {
+    const long = { ...profile, summary: "x".repeat(MAX_PROFILE_CHARACTERS) };
+
+    expect(await handleSaveRequest(form({ profile: long, consent: manualConsent.version }), account)).toEqual({
+      ok: false,
+      code: "invalid",
+      message: profileTooLongMessage,
+    });
+    expect(saveAccountProfile).not.toHaveBeenCalled();
   });
 
   it("saves new preferences without a file, and records only approvals", async () => {

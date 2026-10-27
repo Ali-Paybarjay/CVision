@@ -30,8 +30,19 @@ export const NextStepSchema = z.object({
 });
 export type NextStep = z.infer<typeof NextStepSchema>;
 
-/** A change as the model writes it; Tailor adds the id, job and status. */
-export const ProposedChangeSchema = TailoringChangeSchema.omit({ id: true, jobId: true, status: true });
+/**
+ * A change as the model writes it; Tailor adds the id, job and status.
+ * The fields are listed one by one, so a field the contract gains later (such as `stretch`, which only code fills)
+ * never reaches the model unless it is added here.
+ */
+export const ProposedChangeSchema = TailoringChangeSchema.pick({
+  gapId: true,
+  section: true,
+  before: true,
+  after: true,
+  evidence: true,
+  evidenceSource: true,
+});
 export type ProposedChange = z.infer<typeof ProposedChangeSchema>;
 
 /** What the model answers to the tailor-propose prompt. */

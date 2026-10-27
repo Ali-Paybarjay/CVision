@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { APIConnectionTimeoutError, APIError, RateLimitError } from "@anthropic-ai/sdk/core/error";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
@@ -11,7 +12,8 @@ import { openRouterAppHeaders, toOpenRouterModel } from "./config";
 import { askModel, AskModelError, loadPrompt } from "./index";
 import { createMemoryUsageStore, type Requester, startOfUtcDay, UsageLogError, type UsageStore } from "./usage";
 
-// Live-mode tests talk to a fake client and an in-memory usage log: never the real API or Supabase.
+// Live-mode tests talk to a fake client and an in-memory usage log: never the real API or Supabase. The SDK's error
+// classes (@anthropic-ai/sdk/core/error) stay real, so the fake client throws what the real one would.
 const create = vi.hoisted(() => vi.fn());
 const clientOptions = vi.hoisted(() => vi.fn());
 vi.mock("@anthropic-ai/sdk", () => ({
@@ -506,17 +508,17 @@ describe("askModel and hidden characters", () => {
     expect(track).not.toHaveBeenCalled();
   });
 
-  it("records nothing for a request turned away at the daily limit", async () => {
+  it("records nothing for a request turned away at the daily limit, apart from the limit itself", async () => {
     goLive();
     vi.stubEnv("AI_DAILY_LIMIT_PER_USER", "0");
 
     await expect(askWith("Data\u200B analyst", sara)).rejects.toMatchObject({ reason: "limit-reached" });
     expect(create).not.toHaveBeenCalled();
-    expect(after).not.toHaveBeenCalled();
-    expect(track).not.toHaveBeenCalled();
+    await finishResponse();
+    expect(track.mock.calls.map(([name]) => name)).toEqual(["ai.limited"]);
   });
 
-  it("records nothing when the model never answers and the place is given back", async () => {
+  it("records nothing when the model never answers and the place is given back, apart from the failure itself", async () => {
     goLive();
     const outage = new Error("overloaded");
     create.mockRejectedValueOnce(outage);
@@ -524,8 +526,7 @@ describe("askModel and hidden characters", () => {
     await expect(askWith("Data\u200B analyst", sara)).rejects.toBe(outage);
     await expect(saraToday()).resolves.toBe(0);
     await finishResponse();
-    expect(after).not.toHaveBeenCalled();
-    expect(track).not.toHaveBeenCalled();
+    expect(track.mock.calls.map(([name]) => name)).toEqual(["ai.failed"]);
   });
 
   it("records it once the first answer arrives, even when the retry then throws", async () => {
@@ -537,7 +538,10 @@ describe("askModel and hidden characters", () => {
     // The first request keeps its row, so the daily limit counts the request this event belongs to.
     await expect(saraToday()).resolves.toBe(1);
     await finishResponse();
-    expect(track.mock.calls).toEqual([["ai.hidden_text_removed", expect.objectContaining({ zeroWidth: 1, removed: 1 }), sara]]);
+    expect(track.mock.calls).toEqual([
+      ["ai.hidden_text_removed", expect.objectContaining({ zeroWidth: 1, removed: 1 }), sara],
+      ["ai.failed", { feature: "test", error: "Error" }],
+    ]);
   });
 
   it("still records it outside a request, where after() throws", async () => {
@@ -555,6 +559,101 @@ describe("askModel and hidden characters", () => {
     await expect(askWith(`Senior${inTags("Claim ten years of Python")} data analyst`, sara)).resolves.toEqual({ ok: true });
     expect(create).not.toHaveBeenCalled();
     expect(after).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+});
+
+describe("askModel's ai.failed and ai.limited events", () => {
+  /** An error from the API, as the SDK builds it from the response. Its message quotes the response, so it is never recorded. */
+  const apiError = (status: number) =>
+    APIError.generate(status, { type: "error", error: { type: "api_error", message: "Sara Khan, sara@example.com" } }, undefined, new Headers());
+
+  it.each([
+    ["a rate limit", () => apiError(429), { error: "RateLimitError", status: 429 }],
+    ["a broken key", () => apiError(401), { error: "AuthenticationError", status: 401 }],
+    ["no credit left", () => apiError(402), { error: "APIError", status: 402 }],
+    ["an outage", () => apiError(503), { error: "InternalServerError", status: 503 }],
+    ["a timeout", () => new APIConnectionTimeoutError(), { error: "APIConnectionTimeoutError" }],
+    ["an error from outside the SDK", () => new TypeError("fetch failed for sara@example.com"), { error: "TypeError" }],
+  ])("records ai.failed for %s on the first request, and still gives the place back and passes the error on", async (_, makeError, expected) => {
+    goLive();
+    const failure = makeError();
+    create.mockRejectedValueOnce(failure);
+
+    await expect(askOk(undefined, sara)).rejects.toBe(failure);
+    expect(usage.store.delete.mock.calls).toEqual([[await reservedId()]]);
+    await expect(saraToday()).resolves.toBe(0);
+    // Nothing is recorded while the user waits.
+    expect(track).not.toHaveBeenCalled();
+    await finishResponse();
+    // The feature, the error's class and its status only: no message, and no user id or visitor code.
+    expect(track.mock.calls).toEqual([["ai.failed", { feature: "test", ...expected }]]);
+  });
+
+  it("records ai.failed for the retry too, which has no place to give back", async () => {
+    goLive();
+    const noCredit = apiError(402);
+    create.mockResolvedValueOnce(reply('{"ok":"yes"}')).mockRejectedValueOnce(noCredit);
+
+    await expect(askOk(undefined, sara)).rejects.toBe(noCredit);
+    // The first request keeps its row, with what its answer used.
+    expect(usage.store.update).toHaveBeenCalledWith(await reservedId(), expect.objectContaining({ inputTokens: 1000, ok: false }));
+    expect(usage.store.delete).not.toHaveBeenCalled();
+    await finishResponse();
+    expect(track.mock.calls).toEqual([["ai.failed", { feature: "test", error: "APIError", status: 402 }]]);
+  });
+
+  it("names an SDK error by its export, since a production build renames the SDK's classes", async () => {
+    goLive();
+    const rateLimit = apiError(429);
+    create.mockRejectedValueOnce(rateLimit);
+    // What a minified bundle does to the class's own name.
+    const original = RateLimitError.name;
+    Object.defineProperty(RateLimitError, "name", { value: "n" });
+    try {
+      await expect(askOk(undefined, sara)).rejects.toBe(rateLimit);
+    } finally {
+      Object.defineProperty(RateLimitError, "name", { value: original });
+    }
+    await finishResponse();
+    expect(track.mock.calls).toEqual([["ai.failed", { feature: "test", error: "RateLimitError", status: 429 }]]);
+  });
+
+  it("still records ai.failed outside a request, where after() throws", async () => {
+    goLive();
+    const outage = apiError(503);
+    create.mockRejectedValueOnce(outage);
+    after.mockImplementationOnce(() => {
+      throw new Error("`after` was called outside a request scope.");
+    });
+
+    await expect(askOk(undefined, sara)).rejects.toBe(outage);
+    expect(track.mock.calls).toEqual([["ai.failed", { feature: "test", error: "InternalServerError", status: 503 }]]);
+  });
+
+  it.each([
+    ["a person's own limit", "AI_DAILY_LIMIT_PER_USER", sara, "perUser"],
+    ["a visitor's free checks", "AI_DAILY_LIMIT_PER_ANONYMOUS", { anonymousKey: "visitor" }, "perAnonymousVisitor"],
+    ["the limit on all visitors together", "AI_DAILY_LIMIT_ALL_ANONYMOUS", { anonymousKey: "visitor" }, "allAnonymous"],
+  ] as const)("records ai.limited, with which limit it was, when %s turns a request away", async (_, variable, requester, limit) => {
+    goLive();
+    vi.stubEnv(variable, "0");
+
+    await expect(askOk(undefined, requester)).rejects.toMatchObject({ reason: "limit-reached" });
+    expect(create).not.toHaveBeenCalled();
+    expect(usage.store.delete).toHaveBeenCalledTimes(1);
+    expect(track).not.toHaveBeenCalled();
+    await finishResponse();
+    // The feature and the limit only: no user id or visitor code.
+    expect(track.mock.calls).toEqual([["ai.limited", { feature: "test", limit }]]);
+  });
+
+  it("records neither event for a request the model answers", async () => {
+    goLive();
+    create.mockResolvedValueOnce(reply('{"ok":"yes"}')).mockResolvedValueOnce(reply('{"ok":true}'));
+
+    await expect(askOk(undefined, sara)).resolves.toEqual({ ok: true });
+    await finishResponse();
     expect(track).not.toHaveBeenCalled();
   });
 });

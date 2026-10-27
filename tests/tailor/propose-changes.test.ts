@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { proposeChanges, type GapAnswer, type Proposal } from "@/features/tailor";
+import { ProposedChangeSchema } from "@/features/tailor/types";
 import { personas } from "@/shared/sample-data";
 
 const { profile, jobs, match } = personas.sara;
@@ -39,5 +40,13 @@ describe("proposeChanges", () => {
 
   it("without the other answers, cannot know about that no", async () => {
     expect((await proposeChanges(input)).changes).toHaveLength(1);
+  });
+});
+
+describe("ProposedChangeSchema", () => {
+  it("asks the model only for the fields it writes, never the ones Tailor or code fill", () => {
+    expect(Object.keys(ProposedChangeSchema.shape).sort()).toEqual(
+      ["after", "before", "evidence", "evidenceSource", "gapId", "section"],
+    );
   });
 });
