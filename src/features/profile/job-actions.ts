@@ -61,12 +61,20 @@ export async function checkJobAction(input: { ad: unknown; url: unknown; profile
   } else if (input.profile != null) {
     const parsed = readProfileInput(input.profile);
     if (!parsed.ok) {
-      return { ok: false, code: "profile", message: "Your profile could not be read. Reload the page and try again." };
+      const message =
+        parsed.reason === "too-long"
+          ? "Your profile is too long to check against a job. Shorten the longest sections on your Profile page, then try again."
+          : "Your profile could not be read. Reload the page and try again.";
+      return { ok: false, code: "profile", message };
     }
     profile = parsed.profile;
   }
   if (!profile && mode === "live") {
-    return { ok: false, code: "profile", message: "Upload your CV first, so there is a profile to compare with this job." };
+    return {
+      ok: false,
+      code: "profile",
+      message: "Upload your CV or fill in your details first, so there is a profile to compare with this job.",
+    };
   }
 
   const actor: EventActor | undefined = user ? { userId: user.id } : undefined;

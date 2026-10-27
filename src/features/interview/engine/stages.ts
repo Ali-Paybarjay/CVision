@@ -1,7 +1,9 @@
 // The six stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
-// against the stage's schema (askModel retries once, then fails clearly) and records estimated usage.
+// against the stage's schema (askModel retries once, then fails clearly) and records what it used.
+// Length rules are checked after the reply: a reply that breaks one is kept and recorded as interview.length_over.
 import "server-only";
-import { askModel, AskModelError, getAiMode, loadPrompt, type Requester } from "@/shared/ai";
+import { askModel, getAiMode, loadPrompt, type ModelUsage, type Requester } from "@/shared/ai";
+import { track } from "@/shared/analytics/track";
 import {
   answerGuide,
   defaultComposition,
@@ -21,7 +23,20 @@ import type {
   TechnicalInterviewQuestion,
 } from "../contracts";
 import { rubricFor, appliedEvidenceByType } from "../rubrics";
-import { bannedTopicHits, isCleanFollowUp, isLevelBelow, isSpeakable, type DraftQuestion, type QuestionSetContext } from "./checks";
+import {
+  bannedTopicHits,
+  evaluationProblems,
+  isCleanFollowUp,
+  isLengthProblem,
+  isLevelBelow,
+  isSpeakable,
+  questionSetProblems,
+  type DraftQuestion,
+  type EvaluationContext,
+  type LengthRule,
+  type Problem,
+  type QuestionSetContext,
+} from "./checks";
 import { fixtureOrPlaceholder, mockEvaluation, mockFollowUpDecision, mockReport, requireFixture } from "./mock";
 import {
   analyseOutputSchema,
@@ -51,7 +66,7 @@ import {
   type Provenance,
 } from "./session";
 import { isNonAnswer, neutraliseTags, wrapUntrusted } from "./text";
-import { estimateUsage } from "./usage";
+import { estimateUsage, measuredUsage } from "./usage";
 
 /** Overrides for one stage's settings, used by the eval to compare models. */
 export type StageOverrides = Partial<Record<StageName, Partial<StageSettings>>>;
@@ -87,6 +102,23 @@ function data(value: unknown): string {
   return neutraliseTags(JSON.stringify(value, null, 2));
 }
 
+export const lengthOverEvent = "interview.length_over";
+
+/**
+ * Records each length rule a kept reply breaks, by stage and rule name only, never the text. The event is stored
+ * only for a signed-in user's live request, so mock runs and the eval leave the events table alone.
+ */
+async function recordLengthOver(stage: StageName, problems: Problem[], requester?: Requester): Promise<void> {
+  const counts = new Map<LengthRule, number>();
+  for (const problem of problems) {
+    if (problem.lengthRule) counts.set(problem.lengthRule, (counts.get(problem.lengthRule) ?? 0) + 1);
+  }
+  for (const [rule, count] of counts) {
+    console.info(`interview length over: ${stage} ${rule} x${count}`);
+    if (requester) await track(lengthOverEvent, { stage, rule, count }, requester);
+  }
+}
+
 async function callStage<T>(options: {
   stage: StageName;
   values: Record<string, string>;
@@ -95,8 +127,13 @@ async function callStage<T>(options: {
   voice: boolean;
   run: StageRun;
   questionId?: string;
+  /** The stage's checks, run again on the kept reply to find the soft length rules it breaks. */
+  problems?: (output: T) => Problem[];
+  /** Collects what each live request used, so a caller can still record it when askModel throws. */
+  reports?: ModelUsage[];
 }): Promise<{ output: T; usage: StageUsage; provenance: Provenance }> {
   const settings = settingsFor(options.stage, options.run.overrides);
+  const reports = options.reports ?? [];
   const prompt = await loadInterviewPrompt(settings.prompt, options.values);
   const output = (await askModel({
     feature: settings.prompt,
@@ -108,16 +145,24 @@ async function callStage<T>(options: {
     effort: settings.effort,
     maxTokens: settings.maxTokens,
     requester: options.run.requester,
+    onUsage: (used) => {
+      reports.push(used);
+    },
   })) as T;
-  const system = options.voice ? await loadPrompt("_voice") : "";
-  const usage = estimateUsage({
-    stage: options.stage,
-    model: settings.model,
-    input: prompt.text + system,
-    extraInputChars: askModelInstructionsChars,
-    output,
-    questionId: options.questionId,
-  });
+  const over = options.problems?.(output).filter(isLengthProblem) ?? [];
+  if (over.length) await recordLengthOver(options.stage, over, options.run.requester);
+  // Live requests report their real tokens, thinking and any retry included; mock mode has nothing to report.
+  const usage =
+    reports.length > 0
+      ? measuredUsage({ stage: options.stage, model: settings.model, reports, questionId: options.questionId })
+      : estimateUsage({
+          stage: options.stage,
+          model: settings.model,
+          input: prompt.text + (options.voice ? await loadPrompt("_voice") : ""),
+          extraInputChars: askModelInstructionsChars,
+          output,
+          questionId: options.questionId,
+        });
   return { output, usage, provenance: { stage: options.stage, prompt: settings.prompt, version: prompt.version, model: settings.model } };
 }
 
@@ -253,6 +298,7 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
       questions: data(technicalQuestions(session).map(toDraft)),
     },
     schema: reviewOutputSchema(context),
+    problems: (value) => questionSetProblems(value, context, "review"),
     sample: sampleFixture(session.jobId).review,
     voice: false,
     run,
@@ -342,6 +388,7 @@ export async function decideFollowUp(
     planned_follow_ups: data(question.followUps),
     candidate_answer: neutraliseTags(main),
   };
+  const reports: ModelUsage[] = [];
   try {
     const { output, usage, provenance } = await callStage<FollowUpOutput>({
       stage: "followUp",
@@ -351,19 +398,19 @@ export async function decideFollowUp(
       voice: false,
       run,
       questionId,
+      reports,
     });
     return { decision: settleFollowUp(question, output), usage, provenance };
   } catch (error) {
     // Logs the kind of failure only, never the answer text.
     console.error(`interview follow-up: falling back to the planned text (${error instanceof Error ? error.name : "unknown error"})`);
     const decision = settleFollowUp(question, null);
-    if (!(error instanceof AskModelError) || error.reason !== "invalid-answer") return { decision };
-    // The model was asked twice and both answers were rejected: record what that cost and which prompt ran.
+    if (reports.length === 0) return { decision };
+    // The model answered but its answers were rejected: record what that cost and which prompt ran.
     const settings = settingsFor("followUp", run.overrides);
     const prompt = await loadInterviewPrompt(settings.prompt, followUpValues).catch(() => null);
     if (!prompt) return { decision };
-    const once = estimateUsage({ stage: "followUp", model: settings.model, input: prompt.text, extraInputChars: askModelInstructionsChars, output: {}, questionId });
-    const usage = { ...once, inputTokens: once.inputTokens * 2, costUsd: once.costUsd * 2 };
+    const usage = measuredUsage({ stage: "followUp", model: settings.model, reports, questionId });
     return { decision, usage, provenance: { stage: "followUp", prompt: settings.prompt, version: prompt.version, model: settings.model } };
   }
 }
@@ -397,6 +444,14 @@ export async function evaluateAnswer(
   if (asked && followUp === null) throw new InterviewStageError(`${questionId} is waiting for its follow-up answer.`);
 
   const rubric = rubricFor(question.category);
+  const evaluationContext: EvaluationContext = {
+    lookForIds: question.lookFors.map((l) => l.id),
+    mainAnswer: main,
+    followUpAnswer: followUp,
+    followUpAsked: asked,
+    // The job ad's own tools and standards may keep their US spelling when the model quotes them.
+    quotable: [role.title, role.discipline, question.text, ...role.namedItems.map((item) => item.text)].join("\n"),
+  };
   const { output, usage, provenance } = await callStage<EvaluateOutput>({
     stage: "evaluate",
     values: {
@@ -409,14 +464,8 @@ export async function evaluateAnswer(
       applied_evidence: appliedEvidenceByType[question.type],
       transcript: buildTranscript(session, questionId),
     },
-    schema: evaluateOutputSchema({
-      lookForIds: question.lookFors.map((l) => l.id),
-      mainAnswer: main,
-      followUpAnswer: followUp,
-      followUpAsked: asked,
-      // The job ad's own tools and standards may keep their US spelling when the model quotes them.
-      quotable: [role.title, role.discipline, question.text, ...role.namedItems.map((item) => item.text)].join("\n"),
-    }),
+    schema: evaluateOutputSchema(evaluationContext),
+    problems: (value) => evaluationProblems(value, evaluationContext),
     sample: mockEvaluation(session, question),
     voice: true,
     run,
