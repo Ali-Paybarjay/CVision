@@ -54,7 +54,7 @@ describe("answer feedback", () => {
 
   it("does not end a sentence at e.g., i.e. or etc.", () => {
     const one = "Open with the governing check, e.g. vibration, then give the figure you designed to. Say who signed it off.";
-    expect(messages({ ...sample.evaluation, improvement: one })).not.toContain("Give one specific action in at most 2 sentences and 60 words.");
+    expect(messages({ ...sample.evaluation, improvement: one })).not.toContain("Give one specific action in at most 3 sentences and 60 words.");
   });
 
   it("rejects praise or advice that fits any answer", () => {
@@ -66,11 +66,17 @@ describe("answer feedback", () => {
     );
   });
 
+  it("allows three short sentences in the improvement", () => {
+    const three =
+      "Open with the tie component: the feed holds 800 kg/h of dry solids. Work the product mass from those 800 kg/h, then take the difference. Rehearse this aloud tonight.";
+    expect(messages({ ...sample.evaluation, improvement: three })).not.toContain("Give one specific action in at most 3 sentences and 60 words.");
+  });
+
   it("keeps the improvement to one specific action", () => {
     const list = "Name the alarm. Say who you told. Give the figure. Explain the fix.";
-    expect(messages({ ...sample.evaluation, improvement: list })).toContain("Give one specific action in at most 2 sentences and 60 words.");
+    expect(messages({ ...sample.evaluation, improvement: list })).toContain("Give one specific action in at most 3 sentences and 60 words.");
     expect(messages({ ...sample.evaluation, improvement: "word ".repeat(61).trim() + "." })).toContain(
-      "Give one specific action in at most 2 sentences and 60 words.",
+      "Give one specific action in at most 3 sentences and 60 words.",
     );
   });
 

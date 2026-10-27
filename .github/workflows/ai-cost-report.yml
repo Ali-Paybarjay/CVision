@@ -1,0 +1,193 @@
+# AI cost report (card #166): what the real model requests in a time window cost, per feature, from public.ai_usage.
+# Someone goes through the app once as a test user, then starts this workflow by hand from the Actions tab with the
+# test's start and end time, and reads the table on the run's page. Totals only: no email, user id or other personal
+# detail reaches the log or the run's page. The repo is public, and so are its run logs, so the input is a time
+# window, never an email. The query is supabase/queries/ai-cost.sql.
+# Manual runs only (CLAUDE.md, rule 11). Needs the secret SUPABASE_DB_URL in the GitHub environment daily-stats, the
+# one daily-stats.yml already uses. Only main may use that environment, so start the run from main.
+name: AI cost report
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "Start of the test, London time, as YYYY-MM-DD HH:MM"
+        required: true
+        type: string
+      to:
+        description: "End of the test, London time, as YYYY-MM-DD HH:MM"
+        required: true
+        type: string
+
+# A new run cancels the one before it (CLAUDE.md, rule 11).
+concurrency:
+  group: ai-cost-report
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: AI cost in a time window
+    # Not in forks, which have neither the secret nor the data.
+    if: github.repository == 'Ali-Paybarjay/CVision'
+    runs-on: ubuntu-latest
+    # The secret lives in this environment, and its deployment branch rule lets only main use it.
+    environment: daily-stats
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # No Git token is left on disk while the database is queried.
+          persist-credentials: false
+
+      - name: Check the window
+        env:
+          # The times reach the script as variables only, never pasted into it.
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+        run: |
+          pattern='^20[0-9]{2}-[01][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]$'
+          for value in "$FROM" "$TO"; do
+            if ! [[ $value =~ $pattern ]]; then
+              echo "::error title=Wrong time format::Write each time as YYYY-MM-DD HH:MM in London time, e.g. 2026-10-27 10:00. Nothing was read."
+              exit 1
+            fi
+          done
+          # Both read YYYYMMDDHHMM once the separators go, so comparing the numbers compares the times.
+          if (( 10#${FROM//[^0-9]/} >= 10#${TO//[^0-9]/} )); then
+            echo "::error title=Wrong window::The start must come before the end. Nothing was read."
+            exit 1
+          fi
+
+      - name: Check the secret
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # Only whether it is set: never echo it, and never add set -x to this workflow.
+          if [ -z "${SUPABASE_DB_URL//[[:space:]]/}" ]; then
+            echo "::error title=Missing secret::Add SUPABASE_DB_URL as an environment secret under Settings → Environments → daily-stats (not as a repository secret), then run again from main. Nothing was read."
+            exit 1
+          fi
+
+      - name: Sum the AI cost
+        env:
+          # The secret and the times reach this step as variables only, never pasted into the script.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          PGCONNECT_TIMEOUT: "30"
+          PGSSLMODE: require
+          PGAPPNAME: cvision-ai-cost-report
+        run: |
+          # GitHub's Ubuntu runners come with psql; install it only if an image ever drops it.
+          if ! command -v psql > /dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client > /dev/null
+          fi
+          result="$RUNNER_TEMP/ai-cost.csv"
+          errors="$RUNNER_TEMP/psql-errors.txt"
+          # - The times go in as the psql variables from_london and to_london, which psql quotes as SQL strings: no SQL
+          #   is built from them.
+          # - VERBOSITY=terse keeps the query text out of any error message.
+          # - The session is read-only, whichever role the connection string uses.
+          if ! psql "$SUPABASE_DB_URL" --no-psqlrc --quiet --csv \
+            -v ON_ERROR_STOP=1 -v VERBOSITY=terse -v from_london="$FROM" -v to_london="$TO" \
+            -c "set default_transaction_read_only = on" \
+            -f supabase/queries/ai-cost.sql > "$result" 2> "$errors"; then
+            # psql's own connection errors can quote part of the connection string, so the log gets a fixed hint
+            # instead. An error from the database itself is short (terse) and shown as it is.
+            if grep -q 'ERROR: ' "$errors"; then
+              grep -m 3 -o 'ERROR: .*' "$errors"
+              hint="The query failed on the database (above). A date that does not exist, such as 2026-02-30, fails here."
+            elif grep -qi 'password authentication failed' "$errors"; then
+              hint="The database refused the password in SUPABASE_DB_URL."
+            elif grep -qi 'tenant or user not found' "$errors"; then
+              hint="The pooler does not know the user in SUPABASE_DB_URL. It reads <role>.<project ref>, e.g. postgres.<project ref>."
+            else
+              hint="psql could not reach the database. Use the Session pooler connection string: GitHub's runners have no IPv6."
+            fi
+            echo "::error title=Query failed::$hint"
+            exit 1
+          fi
+
+          # The query's own header, so a change to its columns stops here instead of showing wrong numbers.
+          expected="group,feature,requests,accounts,input_tokens,output_tokens,cost_usd,log_rows"
+          if [ "$(head -n 1 "$result")" != "$expected" ] || ! grep -q '^total,total,' "$result"; then
+            echo "::error title=Unexpected result::supabase/queries/ai-cost.sql no longer gives a total row and the columns $expected. Change the file and this workflow together."
+            exit 1
+          fi
+          # field <group> <feature> <column>: that row's value, or nothing when the row is missing.
+          field() {
+            awk -F, -v g="$1" -v f="$2" -v column="$3" '
+              NR == 1 { for (i = 1; i <= NF; i++) if ($i == column) c = i; next }
+              $1 == g && $2 == f { print $c }
+            ' "$result"
+          }
+          requests=$(field total total requests)
+          accounts=$(field total total accounts)
+          log_rows=$(field total total log_rows)
+          for n in "$requests" "$accounts" "$log_rows"; do
+            if ! [[ $n =~ ^[0-9]+$ ]]; then
+              echo "::error title=Unexpected result::The query gave something other than a whole number."
+              exit 1
+            fi
+          done
+          # The log already has rows, so none at all means the database role sees none of them, not an empty window.
+          if [ "$log_rows" = 0 ]; then
+            echo "::error title=No rows seen::The query saw no row at all in public.ai_usage. If SUPABASE_DB_URL uses a role of its own, give it BYPASSRLS: public.ai_usage has row-level security with no policies."
+            exit 1
+          fi
+
+          # The team reads the run's page in Persian, like the daily-stats comment.
+          label() {
+            case "$1" in
+              one-time) echo "یک بار برای هر کاربر: ساخت Profile" ;;
+              per-job) echo "برای هر آگهی" ;;
+              cv-check) echo "چک رایگان رزومه" ;;
+              other) echo "قابلیت‌های دیگر" ;;
+              *) echo "$1" ;;
+            esac
+          }
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          summary="$RUNNER_TEMP/summary.md"
+          {
+            echo "### هزینهٔ هوش مصنوعی · $FROM تا $TO به وقت لندن"
+            echo
+            if [ "$requests" = 0 ]; then
+              echo "در این بازه هیچ درخواستی به مدل ثبت نشده است. ساعت‌ها باید به وقت لندن باشند و آزمایش باید روی سایت اصلی انجام شده باشد."
+            else
+              echo "| بخش | درخواست | هزینه به دلار |"
+              echo "| --- | ---: | ---: |"
+              while IFS=, read -r group feature req acc input output cost rows; do
+                [ "$feature" = total ] || continue
+                if [ "$group" = total ]; then
+                  echo "| **جمع کل** | **$req** | **$cost** |"
+                else
+                  echo "| $(label "$group") | $req | $cost |"
+                fi
+              done < <(tail -n +2 "$result")
+              echo
+              echo "<details><summary>جزئیات هر قابلیت</summary>"
+              echo
+              echo "| قابلیت | بخش | درخواست | توکن ورودی | توکن خروجی | هزینه به دلار |"
+              echo "| --- | --- | ---: | ---: | ---: | ---: |"
+              while IFS=, read -r group feature req acc input output cost rows; do
+                [ "$feature" = total ] && continue
+                echo "| \`$feature\` | $(label "$group") | $req | $input | $output | $cost |"
+              done < <(tail -n +2 "$result")
+              echo
+              echo "</details>"
+              echo
+              if [ "$accounts" -gt 1 ]; then
+                echo "**هشدار:** در این بازه $accounts حساب واردشده درخواست داشته‌اند، پس هزینهٔ حساب‌های دیگر هم در این عددهاست. آزمایش را در زمانی تکرار کنید که کس دیگری از سایت استفاده نمی‌کند."
+              else
+                echo "در این بازه $accounts حساب واردشده درخواست داشته است."
+              fi
+            fi
+            echo
+            echo "هزینه‌ها تخمین خود اپ با قیمت استاندارد مدل است. چک رایگان رزومه بدون حساب ثبت می‌شود و در شمار حساب‌ها نمی‌آید. این گزارش را کار دستی \`ai-cost-report\` ساخت ([این اجرا]($run_url))."
+          } > "$summary"
+          cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          cat "$summary"

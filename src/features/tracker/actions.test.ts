@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Application } from "@/shared/contracts";
-import { recordApplication, updateApplication } from "./actions";
+import { closeWithoutNews, recordApplication, updateApplication } from "./actions";
 
 const { getCurrentUser, createSupabaseServerClient, revalidatePath, track, deferred } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -19,7 +19,7 @@ type Row = Record<string, unknown>;
 type Tables = { jobs: Row[]; applications: Row[] };
 
 /**
- * Just enough of the Supabase client for recordApplication, acting as one user: like row-level security,
+ * Just enough of the Supabase client for the tracker's actions, acting as one user: like row-level security,
  * every read and write sees only that user's rows.
  */
 function fakeSupabase(tables: Tables, userId: string, options: { failInsert?: boolean; failUpdate?: boolean } = {}) {
@@ -27,12 +27,17 @@ function fakeSupabase(tables: Tables, userId: string, options: { failInsert?: bo
   return {
     from(table: keyof Tables) {
       const filters: [string, unknown][] = [];
+      const lists: [string, unknown[]][] = [];
+      const matches = (row: Row) => filters.every(([c, v]) => row[c] === v) && lists.every(([c, values]) => values.includes(row[c]));
       const query = {
         select: () => query,
         eq: (column: string, value: unknown) => (filters.push([column, value]), query),
+        in: (column: string, values: unknown[]) => (lists.push([column, values]), query),
         order: () => query,
         limit: () => query,
-        maybeSingle: async () => ({ data: own(table).find((row) => filters.every(([c, v]) => row[c] === v)) ?? null, error: null }),
+        maybeSingle: async () => ({ data: own(table).find(matches) ?? null, error: null }),
+        // Copies, as the real client returns: changing what was read does not change the table.
+        then: (resolve: (value: unknown) => void) => resolve({ data: structuredClone(own(table).filter(matches)), error: null }),
         insert: async (row: Row) => {
           if (options.failInsert) return { error: { code: "42501" } };
           tables[table].push({ ...row, user_id: userId });
@@ -283,6 +288,160 @@ describe("updateApplication", () => {
     expect(result).toMatchObject({ ok: false, reason: "failed" });
     expect(consoleError).toHaveBeenCalledWith("tracker: could not update the tracker (42501)");
     expect(deferred).toHaveLength(0);
+    consoleError.mockRestore();
+  });
+
+  it("keeps the follow-ups the user recorded", async () => {
+    const followUps = [{ kind: "follow-up" as const, date: "2026-10-20" }];
+    tables.applications[0].data = { ...applied, followUps };
+
+    const result = await updateApplication(applicationId, { status: "interview", nextStep: "" });
+
+    expect(tables.applications[0].data).toEqual({ ...applied, status: "interview", date: "2026-10-22", followUps });
+    expect(result.ok && result.application.followUps).toEqual(followUps);
+  });
+});
+
+describe("closeWithoutNews", () => {
+  // Version 4 uuids, as the applications table gives.
+  const uuid = (n: number) => `${String(n).repeat(8)}-${String(n).repeat(4)}-4${String(n).repeat(3)}-8${String(n).repeat(3)}-${String(n).repeat(12)}`;
+  const saved = (n: number, status: Application["status"], date: string): Application => ({ id: uuid(n), jobId: `job-${n}`, date, status, nextStep: null });
+  const add = (...applications: Record<string, unknown>[]) => {
+    for (const data of applications) tables.applications.push({ id: data.id, job_id: data.jobId, data: structuredClone(data), user_id: userId });
+  };
+  const dataOf = (id: string) => tables.applications.find((row) => row.id === id)?.data;
+
+  async function runDeferred() {
+    for (const work of deferred.splice(0)) await work();
+  }
+
+  beforeEach(() => {
+    // Sunday 25 October 2026, midday in London.
+    vi.setSystemTime(new Date("2026-10-25T12:00:00Z"));
+  });
+
+  it("closes only the ticked rows as No response today, and keeps the rest of their data", async () => {
+    const firstInContract: Application = {
+      ...saved(1, "applied", "2026-08-01"),
+      nextStep: "Chase the recruiter",
+      followUps: [{ kind: "follow-up", date: "2026-08-15" }],
+    };
+    // A field a later version of the contract might add: it stays in the saved data too.
+    const first = { ...firstInContract, addedLater: { kept: true } };
+    const second = saved(2, "interview", "2026-07-20");
+    const notTicked = saved(3, "applied", "2026-08-02");
+    add(first, second, notTicked);
+
+    const result = await closeWithoutNews([uuid(1), uuid(2)]);
+
+    expect(result).toEqual({
+      ok: true,
+      closed: [
+        { ...firstInContract, status: "no_response", date: "2026-10-25" },
+        { ...second, status: "no_response", date: "2026-10-25" },
+      ],
+    });
+    expect(dataOf(uuid(1))).toEqual({ ...first, status: "no_response", date: "2026-10-25" });
+    expect(dataOf(uuid(2))).toEqual({ ...second, status: "no_response", date: "2026-10-25" });
+    expect(dataOf(uuid(3))).toEqual(notTicked);
+    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
+
+    await runDeferred();
+    // The count only: no ids, jobs or companies.
+    expect(track).toHaveBeenCalledExactlyOnceWith("tracker.bulk_closed", { count: 2 }, { userId });
+  });
+
+  it("never closes a ready, offer or closed row, or one with news in the last 60 days, whatever is posted", async () => {
+    const old = "2025-01-01";
+    const rows = [
+      saved(1, "ready", old),
+      saved(2, "offer", old),
+      saved(3, "accepted", old),
+      saved(4, "rejected", old),
+      saved(5, "no_response", old),
+      saved(6, "withdrawn", old),
+      saved(7, "applied", "2026-08-27"), // 59 days
+      saved(8, "interview", "2026-08-26"), // 60 days
+    ];
+    add(...rows);
+
+    const result = await closeWithoutNews(rows.map((row) => row.id));
+
+    expect(result).toEqual({ ok: true, closed: [{ ...rows[7], status: "no_response", date: "2026-10-25" }] });
+    for (const row of rows.slice(0, 7)) expect(dataOf(row.id)).toEqual(row);
+    await runDeferred();
+    expect(track).toHaveBeenCalledExactlyOnceWith("tracker.bulk_closed", { count: 1 }, { userId });
+  });
+
+  it("writes nothing and records nothing when no posted row can be closed", async () => {
+    const ready = saved(1, "ready", "2025-01-01");
+    add(ready);
+
+    expect(await closeWithoutNews([uuid(1)])).toEqual({ ok: true, closed: [] });
+    expect(dataOf(uuid(1))).toEqual(ready);
+    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(deferred).toHaveLength(0);
+  });
+
+  it("writes nothing without the user's choice", async () => {
+    const stale = saved(1, "applied", "2026-01-01");
+    add(stale);
+    const tooMany = Array.from({ length: 101 }, () => uuid(1));
+
+    for (const value of [[], undefined, null, uuid(1), { ids: [uuid(1)] }, ["sara-application-1"], tooMany]) {
+      expect(await closeWithoutNews(value)).toMatchObject({ ok: false, reason: "invalid" });
+    }
+    expect(createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(dataOf(uuid(1))).toEqual(stale);
+    expect(deferred).toHaveLength(0);
+  });
+
+  it("draws the 60-day line at midnight in London, on the day the clocks go back", async () => {
+    add(saved(1, "applied", "2026-08-26"), saved(2, "applied", "2026-08-27"));
+
+    // 00:30 in London on 25 October (British Summer Time), still the 24th in UTC: the first has 60 days.
+    vi.setSystemTime(new Date("2026-10-24T23:30:00Z"));
+    expect(await closeWithoutNews([uuid(1)])).toMatchObject({ ok: true, closed: [{ id: uuid(1), date: "2026-10-25" }] });
+
+    // 23:30 in London on 25 October, after the clocks went back: the second still has 59 days.
+    vi.setSystemTime(new Date("2026-10-25T23:30:00Z"));
+    expect(await closeWithoutNews([uuid(2)])).toEqual({ ok: true, closed: [] });
+
+    // Midnight in London: 60 days.
+    vi.setSystemTime(new Date("2026-10-26T00:00:00Z"));
+    expect(await closeWithoutNews([uuid(2)])).toMatchObject({ ok: true, closed: [{ id: uuid(2), date: "2026-10-26" }] });
+  });
+
+  it("does not reach another account's applications", async () => {
+    const others = saved(1, "applied", "2026-01-01");
+    tables.applications.push({ id: others.id, job_id: others.jobId, data: { ...others }, user_id: "user-2" });
+
+    expect(await closeWithoutNews([uuid(1)])).toEqual({ ok: true, closed: [] });
+    expect(dataOf(uuid(1))).toEqual(others);
+  });
+
+  it("asks a signed-out visitor to sign in, and says so when Supabase is not connected yet", async () => {
+    const stale = saved(1, "applied", "2026-01-01");
+    add(stale);
+
+    getCurrentUser.mockResolvedValueOnce(null);
+    expect(await closeWithoutNews([uuid(1)])).toMatchObject({ ok: false, reason: "signed-out" });
+    createSupabaseServerClient.mockResolvedValueOnce(null);
+    expect(await closeWithoutNews([uuid(1)])).toMatchObject({ ok: false, reason: "not-connected" });
+
+    expect(dataOf(uuid(1))).toEqual(stale);
+    expect(deferred).toHaveLength(0);
+  });
+
+  it("reports a database error with the code only and records nothing", async () => {
+    add(saved(1, "applied", "2026-01-01"));
+    createSupabaseServerClient.mockImplementation(async () => fakeSupabase(tables, userId, { failUpdate: true }));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await closeWithoutNews([uuid(1)])).toMatchObject({ ok: false, reason: "failed" });
+    expect(consoleError).toHaveBeenCalledExactlyOnceWith("tracker: could not update the tracker (42501)");
+    expect(deferred).toHaveLength(0);
+    expect(revalidatePath).not.toHaveBeenCalled();
     consoleError.mockRestore();
   });
 });

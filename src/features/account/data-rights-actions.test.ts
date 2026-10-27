@@ -121,7 +121,7 @@ describe("deleteMyAccount", () => {
     await expect(deleteMyAccount(idle, typed("DELETE"))).rejects.toThrow("NEXT_REDIRECT");
     for (const work of deferred.splice(0)) await work();
 
-    expect(track).toHaveBeenCalledWith("account.deleted", { rows: 8, cvFiles: 1 });
+    expect(track).toHaveBeenCalledWith("account.deleted", { rows: 9, cvFiles: 1 });
     expect(JSON.stringify(track.mock.calls)).not.toContain(sara);
   });
 

@@ -1,11 +1,17 @@
+import { io } from "next/cache";
 import { brand } from "@/shared/brand";
 import { ButtonLink, Card, Notice } from "@/shared/ui";
 import { ApplicationList } from "./application-list";
 import { loadTracker } from "./applications";
+import { londonToday } from "./model";
 
 /** The dashboard's application tracker. Reads the session, so render it inside <Suspense>. */
 export async function Tracker() {
-  const tracker = await loadTracker();
+  // Days without news and to the closing date count from today, so the tracker is never part of the static
+  // shell, in sample mode too. One date for the whole render, so the browser shows the same numbers.
+  await io();
+  const today = londonToday();
+  const tracker = await loadTracker(today);
 
   switch (tracker.kind) {
     // The account panel below asks them to sign in.
@@ -23,7 +29,7 @@ export async function Tracker() {
           title="Sara's sample applications"
           intro="Sara is a fictional example. Try changing a status: nothing is saved until accounts are switched on."
         >
-          <ApplicationList items={tracker.items} sample />
+          <ApplicationList items={tracker.items} today={today} sample />
         </TrackerSection>
       );
     case "account": {
@@ -34,7 +40,7 @@ export async function Tracker() {
           title="Your applications"
           intro={`${count} ${count === 1 ? "application" : "applications"}. Keep each status up to date and note what you will do next.`}
         >
-          <ApplicationList items={tracker.items} />
+          <ApplicationList items={tracker.items} today={today} />
         </TrackerSection>
       );
     }
