@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AskModelError } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
+import { MAX_PROFILE_CHARACTERS } from "./cv-limits";
 import { checkJobAction } from "./job-actions";
 import { matchJob, parseJob } from "./server/check-job";
 import { saveJobAndMatch } from "./server/job-store";
@@ -135,6 +136,18 @@ describe("checkJobAction", () => {
     expect(await checkJobAction({ ad, url: "javascript:alert(1)", profile: sara.profile })).toMatchObject({ ok: false, code: "url" });
     getCurrentUser.mockResolvedValue(null);
     expect(await checkJobAction({ ad, url: "", profile: { fullName: "Not a profile" } })).toMatchObject({ ok: false, code: "profile" });
+    expect(parseJob).not.toHaveBeenCalled();
+  });
+
+  it("says a browser profile is too long to check, rather than to reload the page", async () => {
+    getCurrentUser.mockResolvedValue(null);
+    const long = { ...sara.profile, summary: "x".repeat(MAX_PROFILE_CHARACTERS) };
+
+    expect(await checkJobAction({ ad, url: "", profile: long })).toMatchObject({
+      ok: false,
+      code: "profile",
+      message: expect.stringContaining("too long to check against a job"),
+    });
     expect(parseJob).not.toHaveBeenCalled();
   });
 

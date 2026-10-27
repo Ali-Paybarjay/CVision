@@ -5,14 +5,21 @@ import type { JobPreferences, Profile } from "@/shared/contracts";
 import { deleteMyProfileAction } from "../actions";
 import type { ConsentRecord, ProfileStorageKind } from "../consent";
 import { getBrowserProfileStore, useStorageIsPersistent, useStoredProfile } from "../profile-store";
-import { draftFromExtraction, draftFromProfile, newProfileBase, type ProfileBase, type ReviewDraft } from "../review-draft";
-import { fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
+import {
+  draftFromExtraction,
+  draftFromProfile,
+  emptyDraft,
+  newProfileBase,
+  type ProfileBase,
+  type ReviewDraft,
+} from "../review-draft";
+import { builtFromCv, fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import type { SaveReason } from "../server/save-request";
 import type { AccountProfile } from "../server/profile-account";
 import { Card, Notice } from "@/shared/ui";
 import { BackLink } from "./back-link";
 import { ProfileOverview } from "./profile-overview";
-import { ReviewStep } from "./review-step";
+import { ReviewStep, type ReviewSource } from "./review-step";
 import { saveProfileToAccount } from "./save-profile";
 import { UploadStep, type ExtractSuccess } from "./upload-step";
 
@@ -28,25 +35,36 @@ type View =
   | { name: "upload" }
   | {
       name: "review";
+      /** A CV just read, a profile the user types in by hand, or the saved profile being edited. */
+      source: ReviewSource;
       draft: ReviewDraft;
       base: ProfileBase;
-      /** The consent given with a new CV, or the saved one when editing. */
+      /**
+       * The consent given with a new CV, or the saved one when editing. A profile typed in by hand starts without one:
+       * the user agrees on the review page, when they approve it.
+       */
       consent: ConsentRecord | null;
       /** The CV file just read, saved with the profile once the user approves it. */
       file: File | null;
       demo: ExtractSuccess["demo"];
       truncated: boolean;
-      /** True for a CV just read; false when editing the saved profile. */
-      isNew: boolean;
     };
 
 /** Where Back goes from this page when the page before it isn't on this site. */
 const PAGE_BACK = "/dashboard";
 
 /**
- * The profile page: upload a CV (with consent), check what was read and approve it all at once, then see and manage
- * the saved profile. Nothing is saved before the user approves it (You approve everything). Back goes to the step
- * before, or from the first step to the page before.
+ * The consent an approved profile takes to the account: the one just given, with a new CV or for a profile typed in
+ * by hand. An edit sends none, so it isn't recorded as a new consent.
+ */
+export function consentToSend(source: ReviewSource, consent: ConsentRecord | null): string | undefined {
+  return source === "saved" ? undefined : consent?.version;
+}
+
+/**
+ * The profile page: upload a CV (with consent), or type the details in by hand when there is no CV, check them and
+ * approve them all at once, then see and manage the saved profile. Nothing is saved before the user approves it
+ * (You approve everything). Back goes to the step before, or from the first step to the page before.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before an upload.
  */
 export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { demoMode: boolean; storage?: ProfileStorage }) {
@@ -57,6 +75,8 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   );
   // The latest account profile, for handlers that run after an await.
   const accountRef = useRef(account);
+  // What the user has typed in by hand so far, kept while they look at the upload step again.
+  const typed = useRef<ReviewDraft | null>(null);
   const [view, setView] = useState<View>({ name: "home" });
   // Focus moves to each new step's heading, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
@@ -84,10 +104,13 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     return stored && fromBrowser(stored);
   };
 
-  /** Keeps the profile where this page keeps it. Resolves to a message for the user, or null once it is saved. */
+  /**
+   * Keeps the profile where this page keeps it: in the account with `consentVersion` (see consentToSend), or in this
+   * browser with its consent record. Resolves to a message for the user, or null once it is saved.
+   */
   const write = async (
     next: Pick<SavedProfile, "profile" | "consent">,
-    options: { reason: SaveReason; cv?: File | null },
+    options: { reason: SaveReason; cv?: File | null; consentVersion?: string },
   ): Promise<string | null> => {
     if (where === "browser") {
       if (!next.consent) return "Upload your CV again to save your profile.";
@@ -98,7 +121,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     const result = await saveProfileToAccount(next.profile, {
       reason: options.reason,
       cv: options.cv ?? undefined,
-      consentVersion: options.cv ? next.consent?.version : undefined,
+      consentVersion: options.consentVersion,
     });
     if (!result.ok) return result.message;
     updateAccount({ ...next, savedAt: result.savedAt, cvFormat: result.cvFormat });
@@ -114,17 +137,35 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
       followUpAnswers: saved?.profile.followUpAnswers ?? [],
     });
     const draft = draftFromExtraction(result.extraction);
-    go({ name: "review", draft, base, consent, file, demo: result.demo, truncated: result.truncated, isNew: true });
+    go({ name: "review", source: "cv", draft, base, consent, file, demo: result.demo, truncated: result.truncated });
   };
 
-  const handleSave = async (profile: Profile): Promise<string | null> => {
+  /** No CV to upload: the review page starts empty, or from what the user typed before going back. */
+  const handleStartManual = () => {
+    // Nothing is read from a CV, so the job preferences start empty and follow the location the user types.
+    const base = newProfileBase(
+      { contact: {} },
+      { id: crypto.randomUUID(), followUpAnswers: saved?.profile.followUpAnswers ?? [] },
+    );
+    const draft = typed.current ?? emptyDraft();
+    go({ name: "review", source: "manual", draft, base, consent: null, file: null, demo: null, truncated: false });
+  };
+
+  /** `consent` is the one given on the review page, for a profile typed in by hand. */
+  const handleSave = async (profile: Profile, consent: ConsentRecord | null): Promise<string | null> => {
     if (view.name !== "review") return null;
+    const record = consent ?? view.consent;
     const problem = await write(
-      { profile, consent: view.consent },
-      { reason: "approved", cv: view.isNew ? view.file : null },
+      { profile, consent: record },
+      {
+        reason: "approved",
+        cv: view.source === "cv" ? view.file : null,
+        consentVersion: consentToSend(view.source, record),
+      },
     );
     if (problem) return problem;
-    go({ name: "home" }, view.isNew ? "Your profile is saved." : "Your changes are saved.");
+    typed.current = null;
+    go({ name: "home" }, view.source === "saved" ? "Your changes are saved." : "Your profile is saved.");
     return null;
   };
 
@@ -143,8 +184,12 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
         result = { ok: false, message: "We couldn’t reach CVision. Check your connection and try again." };
       }
       if (!result.ok) return result.message;
+      const hadFile = Boolean(accountRef.current?.cvFormat);
       updateAccount(null);
-      go({ name: "home" }, "Your profile and your CV file are deleted from your account.");
+      go(
+        { name: "home" },
+        hadFile ? "Your profile and your CV file are deleted from your account." : "Your profile is deleted from your account.",
+      );
       return null;
     }
     getBrowserProfileStore().clear();
@@ -167,17 +212,26 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   let stepBack: (() => void) | undefined;
   let content: React.ReactNode;
   if (view.name === "review") {
-    stepBack = () => go(view.isNew ? { name: "upload" } : { name: "home" });
+    // Going back from a profile typed in by hand keeps what was typed (onDraftChange), for when the user returns.
+    stepBack = () => go(view.source === "saved" ? { name: "home" } : { name: "upload" });
     content = (
       <ReviewStep
         draft={view.draft}
         base={view.base}
-        isNew={view.isNew}
+        source={view.source}
+        storage={where}
         demo={view.demo}
         truncated={view.truncated}
         focusHeading={navigated}
         onSave={handleSave}
         onCancel={stepBack}
+        onDraftChange={
+          view.source === "manual"
+            ? (draft) => {
+                typed.current = draft;
+              }
+            : undefined
+        }
       />
     );
   } else if (view.name === "upload" || !saved) {
@@ -185,10 +239,13 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     content = (
       <UploadStep
         replacing={saved !== null}
+        newCv={saved !== null && builtFromCv(saved)}
         demoMode={demoMode}
         storage={where}
         focusHeading={navigated}
         onExtracted={handleExtracted}
+        // Only before there is a profile: a saved one is changed with "Check and edit your details".
+        onStartManual={saved ? undefined : handleStartManual}
         onCancel={stepBack}
       />
     );
@@ -202,13 +259,13 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
         onEdit={() =>
           go({
             name: "review",
+            source: "saved",
             draft: draftFromProfile(saved.profile),
             base: saved.profile,
             consent: saved.consent,
             file: null,
             demo: null,
             truncated: false,
-            isNew: false,
           })
         }
         onUploadNew={() => go({ name: "upload" })}

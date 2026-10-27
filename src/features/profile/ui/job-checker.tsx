@@ -236,10 +236,10 @@ export function ProfileFirst() {
       <h2 className="text-xl">Your profile comes first</h2>
       <p className="mt-2 max-w-[65ch] text-text-muted">
         We compare each job ad with the profile you approved, so the match only uses what you told us. Upload your CV
-        to build it.
+        or fill in your details to build it.
       </p>
       <ButtonLink href="/profile" variant="primary" className="mt-4">
-        Upload your CV
+        Build your profile
       </ButtonLink>
     </Card>
   );
