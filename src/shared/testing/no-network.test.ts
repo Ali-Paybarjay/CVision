@@ -55,7 +55,7 @@ describe("unit tests and the network", () => {
     ).rejects.toMatchObject({ reason: "no-api-key" });
   });
 
-  it("empties every AI key and Supabase setting, whatever the developer's shell exports", () => {
+  it("empties every AI key, Supabase setting and VERCEL, whatever the developer's shell exports", () => {
     for (const name of [
       "ANTHROPIC_API_KEY",
       "ANTHROPIC_AUTH_TOKEN",
@@ -65,6 +65,7 @@ describe("unit tests and the network", () => {
       "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
       "SUPABASE_SECRET_KEY",
       "ANONYMOUS_KEY_SALT",
+      "VERCEL",
     ]) {
       expect(process.env[name], name).toBe("");
     }

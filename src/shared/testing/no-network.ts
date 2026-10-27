@@ -6,8 +6,9 @@
 
 const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-// The keys and addresses in .env.example, plus the two the Anthropic SDK reads from the shell by itself.
-// The app and the SDK treat an empty value as unset, so tests run as they do in CI.
+// The keys and addresses in .env.example, plus the base URL and auth token the Anthropic SDK reads from the
+// shell by itself, and VERCEL, so the app does not think it runs on Vercel and demand the keys emptied here.
+// The app and the SDK treat an empty value as unset, so these read exactly as they do in CI.
 const realServiceEnv = [
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
@@ -17,6 +18,7 @@ const realServiceEnv = [
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
   "SUPABASE_SECRET_KEY",
   "ANONYMOUS_KEY_SALT",
+  "VERCEL",
 ];
 
 for (const name of realServiceEnv) process.env[name] = "";
