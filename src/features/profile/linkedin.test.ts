@@ -156,6 +156,15 @@ describe("buildLinkedInSuggestions", () => {
     expect(suggestions.roles[0].lines).toEqual([dashboards, "Ran A", "Ran B", "Ran C", "Ran D"]);
   });
 
+  it("drops a bullet the CV line starts with, but never a minus sign", () => {
+    const duties = ["-20% waste on fresh food in two years", "– Managed the weekly stock count", "•Served customers on the tills"];
+    const profile = withDuties(duties);
+
+    const { suggestions } = build([role("R1", duties.map((duty) => idOf(profile, duty)))], "sara", sara.jobs[0], profile);
+
+    expect(suggestions.roles[0].lines).toEqual(["-20% waste on fresh food in two years", "Managed the weekly stock count", "Served customers on the tills"]);
+  });
+
   it(`keeps a role's lines within LinkedIn's ${LINKEDIN_DESCRIPTION_CHARACTERS} characters for a description, as they are copied`, () => {
     const long = ["A", "B", "C"].map((letter) => `Ran ${letter} ${"x".repeat(895)}`);
     const profile = withDuties(long);
@@ -195,6 +204,22 @@ describe("buildLinkedInSuggestions", () => {
       ["Deputy Store Manager", ["Team leadership"]],
       ["Department Supervisor", ["Team leadership"]],
     ]);
+  });
+
+  it("reads a one- or two-letter skill only as a word of its own: R is not in R&D, nor C in C#", () => {
+    const duties = ["Supported the R&D team with weekly C# reports", "Built R models of weekly sales"];
+    const profile = { ...withDuties(duties.slice(0, 1)), skills: ["R", "C"] };
+    const modelled = { ...withDuties(duties), skills: ["R", "C"] };
+
+    const { suggestions, rejected } = build([role("R1", [idOf(profile, duties[0])], ["R", "C"])], "sara", sara.jobs[0], profile);
+    const shown = build([role("R1", [idOf(modelled, duties[1])], ["R", "C"])], "sara", sara.jobs[0], modelled);
+
+    expect(suggestions.roles[0].skills).toEqual([]);
+    expect(rejected.map((item) => [item.text, item.reason])).toEqual([
+      ["R", "The role's own lines don't show this skill."],
+      ["C", "The role's own lines don't show this skill."],
+    ]);
+    expect(shown.suggestions.roles[0].skills).toEqual(["R"]);
   });
 
   it("never gives a role a skill from a general word alone", () => {

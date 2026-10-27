@@ -63,6 +63,8 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
   }
 
   const { suggestions, shown, pending, failure } = state;
+  // A sample person's CV is theirs, not the visitor's.
+  const cv = sampleName ? "the CV" : "your CV";
   const working = (
     <p aria-live="polite" className="sr-only">
       {pending ? "Choosing your LinkedIn lines. This can take up to a minute." : ""}
@@ -103,9 +105,9 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
       <Card>
         <h2 className="text-xl">What you get</h2>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5">
-          <li>For each role on your CV, the lines that show what this ad asks for, ready to add under it on LinkedIn.</li>
-          <li>The skills to add to each role, from your CV.</li>
-          <li>Every line in your CV’s own words, unchanged. Nothing invented.</li>
+          <li>For each role on {cv}, the lines that show what this ad asks for, ready to add under it on LinkedIn.</li>
+          <li>The skills to add to each role, from {cv}.</li>
+          <li>Every line in the CV’s own words, unchanged. Nothing invented.</li>
         </ul>
         <p className="mt-3 max-w-[65ch] text-text-muted">
           We never post to LinkedIn. You copy what you want and paste it into your LinkedIn profile yourself.

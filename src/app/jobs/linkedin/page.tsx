@@ -16,12 +16,13 @@ export const metadata: Metadata = { title: "Your LinkedIn Experience" };
 /** One model request per click, which may be asked twice. */
 export const maxDuration = 60;
 
-// /jobs/linkedin?job=<id>: what to write under each role of the user's LinkedIn profile for one of their jobs.
+// /jobs/linkedin?job=<id>: which lines of the CV to add under each role of the user's LinkedIn profile, for one of
+// their jobs.
 export default function LinkedInPage({ searchParams }: PageProps<"/jobs/linkedin">) {
   return (
     <Page
       title="Your LinkedIn Experience"
-      description="What to add under each role in the Experience section of your LinkedIn profile, for one job. Every line comes from your CV or your own answers, and you copy what you want."
+      description="What to add under each role in the Experience section of your LinkedIn profile, for one job. Every line is one of your CV’s own lines, word for word, and you copy what you want."
     >
       <Suspense
         fallback={
@@ -74,7 +75,7 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
       <WithBack>
         <Notice tone="info" title={nothing === "no-roles" ? "Add your work experience first" : "Add what you did in each role first"}>
           {nothing === "no-roles"
-            ? "LinkedIn lines are written for the roles on your CV, and your profile has none yet."
+            ? "LinkedIn lines come from the roles on your CV, and your profile has none yet."
             : "LinkedIn lines are taken from the duties and results under each role, and your profile has none yet."}{" "}
           <Link href="/profile" className="font-semibold text-accent hover:underline">
             Go to my profile
@@ -141,7 +142,7 @@ function JobPicker({ jobs }: { jobs: Job[] }) {
   if (jobs.length === 0) {
     return (
       <Notice tone="info" title="Check a job ad first">
-        LinkedIn lines are written for one job.{" "}
+        LinkedIn lines are chosen for one job.{" "}
         <Link href="/jobs" className="font-semibold text-accent hover:underline">
           Check a job ad
         </Link>

@@ -63,15 +63,17 @@ describe("LinkedInSuggester", () => {
     expect(html.match(/bg-cta/g)).toHaveLength(1);
     expect(text(html)).toContain("Suggest my LinkedIn lines");
     expect(text(html)).toContain("We never post to LinkedIn.");
-    expect(text(html)).toContain("Every line in your CV’s own words, unchanged. Nothing invented.");
+    expect(text(html)).toContain("For each role on your CV, the lines that show what this ad asks for");
+    expect(text(html)).toContain("Every line in the CV’s own words, unchanged. Nothing invented.");
     expect(text(html)).not.toContain("Demo mode");
     expect(text(html)).not.toContain("Suggest again");
   });
 
-  it("says so in demo mode, and names whose sample CV the lines come from", () => {
+  it("says so in demo mode, and names whose sample CV the lines come from, never calling it the visitor's", () => {
     expect(text(suggester({ demoMode: true }))).toContain("Demo mode: lines chosen by simple rules");
     expect(text(suggester({ demoMode: true, sampleName: "Sara Khan" }))).toContain("This uses Sara Khan’s sample CV, not yours.");
     expect(text(suggester({ sampleName: "Sara Khan" }))).toContain("This uses Sara Khan’s sample CV, not yours");
+    for (const demoMode of [true, false]) expect(text(suggester({ demoMode, sampleName: "Sara Khan" }))).not.toMatch(/your CV/i);
   });
 });
 

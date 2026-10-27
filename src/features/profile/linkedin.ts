@@ -267,8 +267,10 @@ const ABBREVIATIONS: Record<string, string[]> = {
  */
 function shows(lines: string[], skill: string): boolean {
   const named = (word: string) =>
-    lines.some((line) => mentions(line, word)) ||
-    (ABBREVIATIONS[word.toLowerCase()]?.every((part) => lines.some((line) => mentions(line, part))) ?? false);
+    word.length <= 2
+      ? lines.some((line) => standsAlone(line, word))
+      : lines.some((line) => mentions(line, word)) ||
+        (ABBREVIATIONS[word.toLowerCase()]?.every((part) => lines.some((line) => mentions(line, part))) ?? false);
   return skill.split(/\s+or\s+|[/,;()]/i).some((option) => {
     const [head, next] = keywords(option);
     if (!head || !named(head)) return false;
@@ -276,6 +278,11 @@ function shows(lines: string[], skill: string): boolean {
     if (named(next)) return true;
     return /^(lead|manag)/i.test(next) && lines.some((line) => mentions(line, head) && MANAGING.test(line));
   });
+}
+
+/** A one- or two-letter name as a word of its own, in the same case: "R" is in "Built R models", not in "R&D"; "C" isn't in "C#". */
+function standsAlone(line: string, word: string): boolean {
+  return line.split(/[^\p{L}\p{N}+#&.]+/u).some((token) => token.replace(/\.+$/, "") === word);
 }
 
 /** What LinkedIn asks for besides the description: the CV's own title, company, place and dates. */
@@ -320,12 +327,15 @@ export function linkedInTitle(cvTitle: string): { title: string; employmentType:
   return { title: cvTitle, employmentType: null };
 }
 
-/** Text as it should be copied: no hidden characters, no bullet of its own and one space between words. */
+/**
+ * Text as it should be copied: no hidden characters, no bullet of its own and one space between words. A dash is a
+ * bullet only with a space after it, so "-20% waste" keeps its minus sign.
+ */
 function tidy(text: string): string {
   return cleanModelText(text)
     .text.replace(/\s+/g, " ")
     .trim()
-    .replace(/^[•·*–—-]+\s*/, "");
+    .replace(/^(?:[•·*]+\s*|[–—-]+\s+)/, "");
 }
 
 /** The same words, whatever the case, spacing, curly quotes or a full stop at the end. */

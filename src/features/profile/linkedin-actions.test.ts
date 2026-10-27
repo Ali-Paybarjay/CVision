@@ -109,7 +109,7 @@ describe("suggestLinkedInAction", () => {
     expect(await suggestLinkedInAction({ jobId: savedJob.id })).toEqual({
       ok: false,
       code: "profile",
-      message: "Add your work experience to your profile first, so there are roles to write for.",
+      message: "Add your work experience to your profile first, so there are roles to suggest lines for.",
     });
     expect(await suggestLinkedInAction({ jobId: savedJob.id })).toEqual({
       ok: false,

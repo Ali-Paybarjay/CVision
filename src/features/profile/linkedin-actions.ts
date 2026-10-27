@@ -23,12 +23,12 @@ export type LinkedInResult =
 const MAX_JOB_ID_CHARACTERS = 100;
 
 const nothingMessages = {
-  "no-roles": "Add your work experience to your profile first, so there are roles to write for.",
+  "no-roles": "Add your work experience to your profile first, so there are roles to suggest lines for.",
   "no-lines": "Add what you did in each role to your profile first, so there are lines to suggest.",
 } as const;
 
 /**
- * Suggests what to write under each role of the user's LinkedIn Experience for one of their jobs. Only the job's id
+ * Suggests which CV lines to add under each role of the user's LinkedIn Experience for one of their jobs. Only the job's id
  * comes from the browser: the job, its match and the profile are read again on the server, from the account or, in
  * the demo, from the sample data. Nothing is saved.
  */
