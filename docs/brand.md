@@ -6,9 +6,9 @@ Brand foundation, visual identity and voice
 > **Every application, made to fit.**
 > AI job-application app for the UK. Paste a job ad. Get a CV matched to it.
 
-Version 2.1 · 20 October 2026
+Version 2.2 · 27 October 2026
 
-**New in version 2.1:** the product is renamed CVision. Version 2 made a light palette the primary palette, with a dark palette as its counterpart for dark mode; both replace the version 1 palette.
+**New in version 2.2:** step 1 of the plan becomes “Build your profile.”, so people with no CV to upload can fill in their details. Version 2.1 renamed the product CVision. Version 2 made a light palette the primary palette, with a dark palette as its counterpart for dark mode; both replace the version 1 palette.
 
 ---
 
@@ -368,8 +368,9 @@ Always write it as CVision: capital C and V, with no space or hyphen. The wordma
 
 ## Changelog
 
+- **2.2 · 27 Oct 2026:** Step 1 of the plan becomes “Build your profile.”, so people with no CV to upload can fill in their details (card #179). Nothing else changes.
 - **2.1 · 20 Oct 2026:** Product renamed from Candid to CVision. The wordmark, palette names, captions and the name section are updated; nothing else changes.
 - **2.0 · 20 Oct 2026:** New light palette as the primary palette (from the light palette draft) and a new dark palette for dark mode, with a role map, contrast tables, rules and colour tokens for the app. The logo now has a dark-mode version. The version 1 palette is retired. Foundation, voice, calls to action and promises are unchanged.
 - **1.0 · 19 Oct 2026:** First version: brand foundation, visual identity, verbal identity and brand applications.
 
-*CVision | Brand Guide 2026 · Version 2.1*
+*CVision | Brand Guide 2026 · Version 2.2*

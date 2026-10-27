@@ -63,6 +63,8 @@ describe("privacy page", () => {
     expect(text).toContain("Nothing is sent to the AI while you type, and nothing is saved until you approve your profile.");
     expect(text).toContain("Then we save your profile, with no CV file.");
     expect(text).toContain("which you give when you approve your profile");
+    // Such a profile has no CV file, so the page never says every profile comes with one.
+    expect(text).not.toContain("your profile and CV file");
   });
 
   // The free CV check (#98, src/app/cv-check/api/route.ts) keeps no CV and no review, only cvcheck.completed and

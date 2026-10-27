@@ -168,9 +168,9 @@ const services: { name: string; body: React.ReactNode }[] = [
 
 const howLong: { what: string; until: string }[] = [
   {
-    what: "Your account and everything saved with it, your profile and CV file included",
+    what: "Your account and everything saved with it, your profile and any CV file included",
     until:
-      "Until you delete your account. You can also delete your profile and CV file on their own, on the Profile page.",
+      "Until you delete your account. You can also delete your profile and any CV file on their own, on the Profile page.",
   },
   { what: "Usage and AI use records linked to your account", until: "Until you delete your account." },
   { what: "Usage and AI use records made while you weren’t signed in", until: "We haven’t set an end date yet." },
@@ -453,7 +453,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             <span className="font-semibold">To have it deleted.</span> Use Delete my account on the Your data page,
-            or Delete my profile on the Profile page to delete your profile and CV file on their own.
+            or Delete my profile on the Profile page to delete your profile and any CV file on their own.
           </li>
           <li>
             <span className="font-semibold">To withdraw your consent.</span> You can withdraw your consent to us
