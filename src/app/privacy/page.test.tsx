@@ -53,9 +53,16 @@ describe("privacy page", () => {
 
   // Since #94 the approved profile and its CV file are saved to the account (src/features/profile/server/profile-account.ts).
   it("says the approved profile and CV file are kept in the account, not that the file is discarded", () => {
-    expect(text).toContain("we save it and the CV file you uploaded (PDF or Word) to your account");
+    expect(text).toContain("we save it to your account, with the CV file you uploaded (PDF or Word) if there is one");
     expect(text).not.toContain("We don’t keep your CV file");
     expect(text).not.toContain("saved in this browser only");
+  });
+
+  // Card #179: a profile typed in by hand sends nothing to the AI while typing, keeps no CV file, and needs its own consent.
+  it("says what happens to a profile typed in without a CV", () => {
+    expect(text).toContain("Nothing is sent to the AI while you type, and nothing is saved until you approve your profile.");
+    expect(text).toContain("Then we save your profile, with no CV file.");
+    expect(text).toContain("which you give when you approve your profile");
   });
 
   // The free CV check (#98, src/app/cv-check/api/route.ts) keeps no CV and no review, only cvcheck.completed and

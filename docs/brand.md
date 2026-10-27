@@ -42,7 +42,7 @@ Version 2.1 · 20 October 2026
 ### The plan
 *Three steps, one outcome.*
 
-1. **Upload your CV.** Your CV is the source. Everything we write comes from it and from what you tell us.
+1. **Build your profile.** Upload your CV or fill in your details. Everything we write comes from your profile and from what you tell us.
 2. **Paste a job ad.** We find what the employer is asking for, and where your experience already matches.
 3. **Get a tailored CV and cover letter.** Every change is highlighted, so you can check it before you download.
 
