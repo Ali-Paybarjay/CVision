@@ -60,7 +60,7 @@ test("step 2: paste a job ad, see the match and go on to tailoring", async ({ pa
 
 test("step 3, for now: approve a suggested change on the sample job", async ({ page }) => {
   // Until Jobs hands over a real job, /tailor works on Sara's sample jobs (Nazanin, #49): it asks which job,
-  // then asks a question per gap, with the sample answer already filled in.
+  // suggests changes from the CV straight away, then asks a one-tap question per gap (#191).
   await page.goto("/tailor");
   await expect(page.getByRole("heading", { name: "Which job is this CV for?" })).toBeVisible();
   await page.getByRole("link", { name: "Junior Data Analyst at Pennine Health Analytics" }).click();
@@ -68,23 +68,28 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(page).toHaveURL(/\/tailor\?job=sara-job-1$/);
   await expect(page.getByText("Sample data · mock mode")).toBeVisible();
 
-  const gap = page
-    .getByRole("region", { name: "Questions about your experience" })
-    .getByRole("article")
-    .filter({ hasText: "Clear communication with non-technical stakeholders" });
-  await expect(gap.getByLabel("Your answer")).not.toHaveValue("");
-  await gap.getByRole("button", { name: "Suggest a change" }).click();
-
-  // The suggestion waits for the user: nothing goes into the CV until they approve it.
-  const approve = gap.getByRole("button", { name: "Approve", exact: true });
+  // Suggestions from the CV come without any question, and wait for the user: nothing goes in until they approve.
+  const fromCv = page.getByRole("region", { name: "Suggestions from your CV" });
   const tailoredLines = page.getByRole("complementary", { name: "Your CV for this job" }).getByText("(tailored for this job)");
-  await expect(approve.first()).toBeVisible();
+  const approveFromCv = fromCv.getByRole("button", { name: "Approve", exact: true });
+  await expect(approveFromCv.first()).toBeVisible();
   await expect(tailoredLines).toHaveCount(0);
-  await approve.first().click();
-
-  await expect(approve.first()).toHaveAttribute("aria-pressed", "true");
+  await approveFromCv.first().click();
+  await expect(approveFromCv.first()).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("✓ Approved: 1")).toBeVisible();
   await expect(tailoredLines).toHaveCount(1);
+
+  // A gap is answered with one tap; there is no box to fill in.
+  const gap = page
+    .getByRole("region", { name: "What the job asks for that your CV does not show" })
+    .getByRole("article")
+    .filter({ hasText: "Clear communication with non-technical stakeholders" });
+  await gap.getByRole("button", { name: "Yes, at work" }).click();
+  const approveGap = gap.getByRole("button", { name: "Approve", exact: true });
+  await expect(approveGap.first()).toBeVisible();
+  await approveGap.first().click();
+  await expect(page.getByText("✓ Approved: 2")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(2);
 });
 
 test.fixme("step 3: get the tailored CV for the pasted job, with each change marked (#49)", async ({ page }) => {

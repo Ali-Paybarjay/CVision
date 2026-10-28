@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { askGapQuestions, defaultGapQuestion } from "@/features/tailor/gap-questions";
-import { sampleForGap } from "@/features/tailor/samples";
 import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
 import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
 import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
@@ -17,7 +16,7 @@ export const metadata: Metadata = { title: "Tailor your CV" };
 // /tailor?job=<id>: the user's CV for one job, with a question per gap and every change approved by them.
 export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
   return (
-    <Page width="wide" title="Tailor your CV" description="Answer a few questions, then approve each change before it goes into your CV.">
+    <Page width="wide" title="Tailor your CV" description="Start from suggestions made from your own CV, answer a few one-tap questions, then approve each change.">
       <Suspense fallback={<p className="text-text-muted">Loading your CV…</p>}>
         <TailorView searchParams={searchParams} />
       </Suspense>
@@ -76,12 +75,9 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   }
 
   const [{ questions, notice }, savedChanges] = await Promise.all([questionsFor({ profile, job, match }), getMySavedChanges(job.id)]);
-  const showSamples = getAiMode() === "mock";
   const prompts = questions.flatMap(({ gapId, question }) => {
     const gap = match.gaps.find((item) => item.id === gapId);
-    if (!gap) return [];
-    const sampleAnswer = showSamples ? (sampleForGap(job.id, gap.id).answer?.answer ?? null) : null;
-    return [{ gap, question, sampleAnswer }];
+    return gap ? [{ gap, question }] : [];
   });
 
   return (

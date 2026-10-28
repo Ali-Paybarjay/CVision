@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { answerGap, decideChange } from "@/features/tailor/actions";
+import { answerGap, decideChange, suggestCvChanges } from "@/features/tailor/actions";
 import type { TailoringChange } from "@/shared/contracts";
 
 const { getCurrentUser, createSupabaseServerClient, track } = vi.hoisted(() => ({
@@ -42,18 +42,33 @@ describe("answerGap", () => {
     expect(result.nextSteps.length).toBeGreaterThan(0);
   });
 
-  it("drops a suggestion whose evidence the user did not say", async () => {
+  it("drops a suggestion whose evidence the user did not say, and keeps only what they did say", async () => {
     // The sample suggestion quotes "I used Git and GitHub…", which this answer does not say.
     const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-3", answer: "I know some version control.", hasExperience: true });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.changes).toEqual([]);
     expect(result.removed).toBe(1);
+    expect(result.changes.map((change) => [change.section, change.after, change.evidence])).toEqual([
+      ["skills", "Git", "Yes, I have done this at work: Git. I know some version control."],
+    ]);
   });
 
-  it("asks for an answer before suggesting anything", async () => {
-    const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-1", answer: "  ", hasExperience: true });
-    expect(result.ok).toBe(false);
+  it("needs only a tap: a plain yes to one tool adds it as a skill, quoting the user's answer (#191)", async () => {
+    const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, where: "study" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.answer).toBe("Yes, I have done this in study or on my own: Power BI.");
+    expect(result.changes).toMatchObject([{ section: "skills", before: null, after: "Power BI", status: "proposed" }]);
+    expect(result.nextSteps).toEqual([]);
+    expect(result.hint).toBeNull();
+  });
+
+  it("a no never adds anything, whatever detail comes with it", async () => {
+    const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "Power BI", hasExperience: false });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.changes).toEqual([]);
+    expect(result.hint).toBeNull();
   });
 
   it("refuses a gap that is not in the job's match", async () => {
@@ -72,6 +87,28 @@ describe("answerGap", () => {
     }
   });
 
+});
+
+describe("suggestCvChanges", () => {
+  it("suggests changes from the CV alone, each quoting a CV line and waiting for approval (#191)", async () => {
+    const result = await suggestCvChanges("sara-job-1");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.changes.length).toBeGreaterThan(0);
+    for (const change of result.changes) {
+      expect(change).toMatchObject({ evidenceSource: "cv", status: "proposed", jobId: "sara-job-1" });
+      expect(change.gapId).toBeUndefined();
+    }
+  });
+
+  it("in live mode, asks a visitor to sign in before calling the model", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    try {
+      expect(await suggestCvChanges("sara-job-1")).toEqual({ ok: false, message: "Sign in to get suggestions for your CV." });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 const jobId = "0b6f2d3e-6a51-4c1e-9d6e-2f6c1a7b9e10";

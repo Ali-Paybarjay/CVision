@@ -2,12 +2,12 @@ import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
-/** A plain question for one gap, used as the mock answer and as a fallback. */
+/** A plain yes-or-no question for one gap, used as the mock answer and as a fallback. */
 export function defaultGapQuestion(gap: Gap): GapQuestion {
   const question =
     gap.kind === "missing"
-      ? `The job asks for “${gap.requirement}”. Have you done this at work, in study or on your own? If so, tell us what you did, in your own words.`
-      : `The job asks for “${gap.requirement}”. ${gap.detail} Tell us about one time you did this: what you did and what changed as a result.`;
+      ? `The job asks for “${gap.requirement}”. Have you done this?`
+      : `The job asks for “${gap.requirement}”, and your CV does not show it clearly. Have you done this?`;
   return { gapId: gap.id, question };
 }
 

@@ -185,3 +185,68 @@ export const sampleProposals: Record<PersonaName, Proposal> = {
     ],
   },
 };
+
+/**
+ * The mock suggestions made from the CV alone, before any question: each persona's summary, rewritten for the job
+ * with a fact from one of their own CV lines (the evidence).
+ */
+export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
+  sara: {
+    changes: [
+      {
+        section: "summary",
+        before: personas.sara.profile.summary,
+        after:
+          "Data science graduate with hands-on experience cleaning and analysing retail sales data in Python and SQL, and building Tableau dashboards for a regional sales team. Looking for a first analyst role in Manchester.",
+        evidence: "Built Tableau dashboards for the regional sales team",
+        evidenceSource: "cv",
+      },
+    ],
+    nextSteps: [],
+  },
+  reza: {
+    changes: [
+      {
+        section: "summary",
+        before: personas.reza.profile.summary,
+        after:
+          "Former secondary school maths teacher and head of year with nine years of planning, organising and leading people, including coordinating the move to a new timetable for 1,100 students and 80 staff. Moving into project coordination, with PRINCE2 Foundation.",
+        evidence: "Coordinated the move to a new school timetable for 1,100 students and 80 staff, delivered on time",
+        evidenceSource: "cv",
+      },
+    ],
+    nextSteps: [],
+  },
+  emma: {
+    changes: [
+      {
+        section: "summary",
+        before: personas.emma.profile.summary,
+        after:
+          "Junior web developer with a year of commercial experience building React and TypeScript websites for six agency clients. Looking for a remote front-end role.",
+        evidence: "Build and maintain React and TypeScript websites for six agency clients",
+        evidenceSource: "cv",
+      },
+    ],
+    nextSteps: [],
+  },
+  daniel: {
+    changes: [
+      {
+        section: "summary",
+        before: personas.daniel.profile.summary,
+        after:
+          "Retail store manager with 15 years of experience running large teams and multi-million-pound budgets, and reporting weekly sales, waste and availability KPIs. Ready for an operations management role in the West Midlands.",
+        evidence: "Report weekly sales, waste and availability KPIs to the area manager",
+        evidenceSource: "cv",
+      },
+    ],
+    nextSteps: [],
+  },
+};
+
+/** The mock CV suggestions for a sample job; any other job gets none in mock mode. */
+export function sampleCvSuggestionsFor(jobId: string): Proposal {
+  const name = (Object.keys(personas) as PersonaName[]).find((key) => personas[key].match.jobId === jobId);
+  return name ? sampleCvSuggestions[name] : { changes: [], nextSteps: [] };
+}

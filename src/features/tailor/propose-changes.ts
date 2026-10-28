@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { enforceNothingInvented } from "./nothing-invented";
-import { sectionLines } from "./tailored-cv";
+import { fitsCv, sectionLines } from "./tailored-cv";
 import { ProposalSchema, type GapAnswer, type Proposal, type TailoringProposal } from "./types";
 
 export type ProposeInput = {
@@ -49,6 +49,48 @@ export async function askForProposal({ profile, job, match, answers, sample, req
   });
 
   return askModel({ feature: "tailor-propose", prompt, schema: ProposalSchema, sample, requester });
+}
+
+export type SuggestInput = {
+  profile: Profile;
+  job: Job;
+  match: MatchResult;
+  /** Returned in mock mode. */
+  sample: Proposal;
+  requester?: Requester;
+};
+
+/**
+ * Suggested changes made from the CV alone, before the user answers anything: lines of their CV rewritten for the
+ * job. Every change quotes a CV line as evidence, rewrites a line that is on the CV, and passes the Nothing invented
+ * check with every gap counted as not confirmed, so nothing the job asks for can slip in before the user says yes.
+ */
+export async function suggestFromCv({ profile, job, match, sample, requester }: SuggestInput): Promise<TailoringProposal> {
+  const prompt = await loadPrompt("tailor-suggest", {
+    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
+    strengths: JSON.stringify(match.strengths, null, 2),
+    missing: JSON.stringify(match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement), null, 2),
+    lines: JSON.stringify(Object.fromEntries(sections.map((section) => [section, sectionLines(profile, section)])), null, 2),
+  });
+  const proposal = await askModel({ feature: "tailor-suggest", prompt, schema: ProposalSchema, sample, requester });
+
+  const fromCv = proposal.changes
+    .filter((change) => change.evidenceSource === "cv" && change.before !== null && fitsCv(profile, change))
+    .map((change) => ({ ...change, gapId: undefined }))
+    .slice(0, 5);
+  const { kept, removed } = enforceNothingInvented(fromCv, {
+    profile,
+    gaps: match.gaps.filter((gap) => gap.kind === "missing"),
+    answers: match.gaps
+      .filter((gap) => gap.kind === "missing")
+      .map((gap) => ({ gapId: gap.id, question: "", answer: "Not confirmed yet.", hasExperience: false })),
+  });
+
+  return {
+    changes: kept.map((change) => ({ ...change, id: randomUUID(), jobId: job.id, status: "proposed" })),
+    nextSteps: [],
+    removed,
+  };
 }
 
 /**
