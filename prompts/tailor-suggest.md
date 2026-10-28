@@ -19,9 +19,17 @@ This rule overrides everything else.
 - Keep the person's own words, tense and style. Short lines. No template phrases ("results-driven", "proven track record", "passionate", "dynamic", "team player").
 - If a line already fits the job, leave it alone. Make no change rather than a change for its own sake.
 
+## Skills the CV shows but does not list
+
+The tailored CV lists six main skills. This CV's skills list can take {{skillsToAdd}} more.
+
+- If that number is 0, suggest no new skills.
+- Otherwise suggest up to that many skills, the most useful for this job first. Each must be a skill the CV clearly shows in another line, such as a tool named in an experience line, and must not already be in the skills list.
+- A new skill is a change with `section: "skills"`, `before: null`, `after` the short skill name only, and `evidence` the CV line that shows it, copied exactly. The skill name must appear in that line.
+
 ## Shape
 
-- `before` is one line copied exactly, character for character, from "Lines you can change" under the same section. Do not add new lines here: `before` is never null.
+- For a rewrite, `before` is one line copied exactly, character for character, from "Lines you can change" under the same section. `before` is null only for a new skill.
 - Leave `gapId` out.
 - `nextSteps` is always an empty list.
 

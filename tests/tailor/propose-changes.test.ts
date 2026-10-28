@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { proposeChanges, type GapAnswer, type Proposal } from "@/features/tailor";
+import { proposeChanges, suggestFromCv, type GapAnswer, type Proposal } from "@/features/tailor";
 import { ProposedChangeSchema } from "@/features/tailor/types";
 import { personas } from "@/shared/sample-data";
 
@@ -48,5 +48,23 @@ describe("ProposedChangeSchema", () => {
     expect(Object.keys(ProposedChangeSchema.shape).sort()).toEqual(
       ["after", "before", "evidence", "evidenceSource", "gapId", "section"],
     );
+  });
+});
+
+describe("suggestFromCv fills the skills up to six (#191)", () => {
+  const sara = personas.sara;
+  const line = "Cleaned and joined weekly sales data from 120 stores using SQL and Python";
+  const skill = (after: string) => ({ section: "skills" as const, before: null, after, evidence: line, evidenceSource: "cv" as const });
+  const sample = { changes: [skill("Power BI"), skill("SQL"), skill("Python"), skill("SQL")], nextSteps: [] };
+
+  it("suggests skills the CV shows elsewhere, only up to six skills in all, never twice and never one it does not show", async () => {
+    const profile = { ...sara.profile, skills: ["Excel", "Tableau", "R", "Statistics", "Data cleaning"] };
+    const result = await suggestFromCv({ profile, job: sara.jobs[0], match: sara.match, sample });
+    expect(result.changes.map((change) => [change.section, change.before, change.after, change.status])).toEqual([["skills", null, "SQL", "proposed"]]);
+  });
+
+  it("suggests no new skill when the CV already lists six or more", async () => {
+    const result = await suggestFromCv({ profile: sara.profile, job: sara.jobs[0], match: sara.match, sample });
+    expect(result.changes).toEqual([]);
   });
 });

@@ -60,9 +60,12 @@ export type SuggestInput = {
   requester?: Requester;
 };
 
+/** A tailored CV lists six main skills; when the CV has fewer, the CV suggestions may offer the rest. */
+const skillTarget = 6;
+
 /**
  * Suggested changes made from the CV alone, before the user answers anything: lines of their CV rewritten for the
- * job. Every change quotes a CV line as evidence, rewrites a line that is on the CV, and passes the Nothing invented
+ * job, and, when the CV lists fewer than six skills, skills the CV already shows in its other lines. Every change quotes a CV line as evidence, rewrites a line that is on the CV, and passes the Nothing invented
  * check with every gap counted as not confirmed, so nothing the job asks for can slip in before the user says yes.
  */
 export async function suggestFromCv({ profile, job, match, sample, requester }: SuggestInput): Promise<TailoringProposal> {
@@ -71,13 +74,19 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
     strengths: JSON.stringify(match.strengths, null, 2),
     missing: JSON.stringify(match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement), null, 2),
     lines: JSON.stringify(Object.fromEntries(sections.map((section) => [section, sectionLines(profile, section)])), null, 2),
+    skillsToAdd: String(Math.max(0, skillTarget - profile.skills.length)),
   });
   const proposal = await askModel({ feature: "tailor-suggest", prompt, schema: ProposalSchema, sample, requester });
 
-  const fromCv = proposal.changes
-    .filter((change) => change.evidenceSource === "cv" && change.before !== null && fitsCv(profile, change))
-    .map((change) => ({ ...change, gapId: undefined }))
-    .slice(0, 5);
+  const cvChanges = proposal.changes
+    .filter((change) => change.evidenceSource === "cv" && fitsCv(profile, change))
+    .map((change) => ({ ...change, gapId: undefined }));
+  // A new line is only ever a skill the CV lacks in its skills list, and only up to six skills in all.
+  const known = new Set(profile.skills.map((skill) => skill.trim().toLowerCase()));
+  const newSkills = cvChanges
+    .filter((change) => change.before === null && change.section === "skills" && !known.has(change.after.trim().toLowerCase()))
+    .filter((change, index, all) => all.findIndex((other) => other.after.trim().toLowerCase() === change.after.trim().toLowerCase()) === index);
+  const fromCv = [...cvChanges.filter((change) => change.before !== null).slice(0, 5), ...newSkills];
   const { kept, removed } = enforceNothingInvented(fromCv, {
     profile,
     gaps: match.gaps.filter((gap) => gap.kind === "missing"),
@@ -86,8 +95,12 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
       .map((gap) => ({ gapId: gap.id, question: "", answer: "Not confirmed yet.", hasExperience: false })),
   });
 
+  // The cap comes after the check, so a skill the check refuses never takes the place of one it keeps.
+  const room = Math.max(0, skillTarget - profile.skills.length);
+  const allowed = [...kept.filter((change) => change.before !== null), ...kept.filter((change) => change.before === null).slice(0, room)];
+
   return {
-    changes: kept.map((change) => ({ ...change, id: randomUUID(), jobId: job.id, status: "proposed" })),
+    changes: allowed.map((change) => ({ ...change, id: randomUUID(), jobId: job.id, status: "proposed" })),
     nextSteps: [],
     removed,
   };
