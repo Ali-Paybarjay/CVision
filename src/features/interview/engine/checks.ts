@@ -588,14 +588,22 @@ function figures(text: string): string[] {
   return (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((figure) => figure.replace(/,/g, "").replace(/\.0+$/, ""));
 }
 
+/** A sentence that says what the candidate did, not what they would do. */
+function isClaim(sentence: string): boolean {
+  return aboutTheCandidate.test(sentence) && !hypothetical.test(sentence);
+}
+
 /**
  * Figures in sentences about what the candidate did that appear in none of the sources. [Placeholders] are skipped,
- * and so is working such as "I'd compare 60 out of 400"; "I cut errors by 20 per cent, so the team could trust it" is not.
+ * and so is what they would do ("I'd compare 60 out of 400"); "I cut errors by 20 per cent, so the team could trust
+ * it" is not. For a problem-solving question, pass its text as `workingFrom`: a sentence that uses its figures is
+ * working on the question ("so I get 800 kilograms of dry solids from the 1,000"), not a claim about the past.
  */
-export function inventedFigures(text: string, sources: string): string[] {
+export function inventedFigures(text: string, sources: string, workingFrom = ""): string[] {
   const known = new Set(figures(sources));
+  const given = new Set(figures(workingFrom));
   return splitSentences(text.replace(/\[[^\]]*\]/g, " "))
-    .filter((sentence) => aboutTheCandidate.test(sentence) && !hypothetical.test(sentence))
+    .filter((sentence) => isClaim(sentence) && !figures(sentence).some((figure) => given.has(figure)))
     .flatMap((sentence) => figures(sentence).filter((figure) => !known.has(figure)));
 }
 
@@ -640,27 +648,23 @@ export function suggestionProblems(output: SuggestionDraft, context: SuggestionC
     if (!honestWording.test(honest)) problems.push({ path: ["honestLine"], message: "The honest line must say plainly what the CV does not show." });
   }
 
-  // R4: a tool or method the CV never names is never claimed. Once the honest line owns up to it, it may appear in
-  // what the candidate would do ("In Power BI I'd…") or in plain facts about the tool, never in what they did.
+  // R4: a tool, method or regulation the CV never names is never claimed. It may appear in the honest line, in what the
+  // candidate would do ("In Power BI I'd…") and in plain facts about it ("DSEAR needs the area zoned"), never in what they did.
   const answerOutsideHonest = honest ? splitSentences(output.sampleAnswer).filter((sentence) => !isVerbatim(honest, sentence)) : splitSentences(output.sampleAnswer);
   const elsewhere = [...answerOutsideHonest, ...[...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip), output.uncertainty ?? ""].flatMap(splitSentences)];
-  const claimed = namedItemsAbsentFromCv(context.role, context.cv).filter((item) => {
-    const naming = elsewhere.filter((sentence) => mentions(sentence, item));
-    if (naming.length === 0) return false;
-    if (!mentions(honest, item)) return true;
-    return naming.some((sentence) => aboutTheCandidate.test(sentence) && !hypothetical.test(sentence));
-  });
+  const claimed = namedItemsAbsentFromCv(context.role, context.cv).filter((item) => elsewhere.some((sentence) => mentions(sentence, item) && isClaim(sentence)));
   if (claimed.length) {
     problems.push({
       path: ["sampleAnswer"],
-      message: "Names a tool or method from the job ad that the CV never mentions: say so in the honest line, and use it only in what the candidate would do.",
+      message: "Claims a tool or method from the job ad that the CV never mentions: use it only in what the candidate would do, and say plainly in honestLine that they have not used it.",
     });
   }
 
   // R3: a figure about what the candidate did comes from the CV, the job ad or the question.
   const sources = [context.cv, context.jobDescription, question.text, ...question.lookFors.map((l) => l.text), ...question.followUps.map((f) => f.text)].join("\n");
   const written = [output.sampleAnswer, ...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip)];
-  if (written.some((text) => inventedFigures(text, sources).length > 0)) {
+  const workingFrom = question.type === "problem-solving" ? question.text : "";
+  if (written.some((text) => inventedFigures(text, sources, workingFrom).length > 0)) {
     problems.push({ path: ["sampleAnswer"], message: "A figure about what the candidate did is not in the CV, the job ad or the question: use a [placeholder]." });
   }
 

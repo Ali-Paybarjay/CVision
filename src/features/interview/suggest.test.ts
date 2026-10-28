@@ -95,6 +95,14 @@ describe("naming a tool and quoting a figure", () => {
     expect(inventedFigures("Last month 60 out of 400 is 15 per cent.", sources)).toEqual([]);
   });
 
+  it("treats a problem-solving answer's use of the question's figures as working, not a claim", () => {
+    const question = "A dryer receives 1,000 kilograms per hour of wet solids at 20 per cent moisture.";
+    const working = "So I get 800 kilograms of dry solids from the 1,000.";
+    expect(inventedFigures(working, inputs.cv, question)).toEqual([]);
+    expect(inventedFigures(working, inputs.cv)).toEqual(["800", "1000"]);
+    expect(inventedFigures("I once cut drying energy by 35 per cent.", inputs.cv, question)).toEqual(["35"]);
+  });
+
   it("treats a competency with no analysis entry as having no CV evidence", () => {
     const context = contextFor("q1");
     const withoutEntry = { ...context.candidate, evidence: context.candidate.evidence.filter((e) => e.competencyId !== context.question.competencyId) };
@@ -139,10 +147,18 @@ describe("the rules every suggested answer passes", () => {
   });
 
   it("R4: a tool the CV never names is never claimed, but may be owned up to", () => {
-    const toolRule = "Names a tool or method from the job ad that the CV never mentions: say so in the honest line, and use it only in what the candidate would do.";
+    const toolRule =
+      "Claims a tool or method from the job ad that the CV never mentions: use it only in what the candidate would do, and say plainly in honestLine that they have not used it.";
     const claimed = sample("q1");
     claimed.sampleAnswer += " I also built the report in Power BI.";
     expect(messages(claimed)).toContain(toolRule);
+    const coached = sample("q1");
+    coached.points[0].text += " Say you checked it in Power BI.";
+    expect(messages(coached)).toContain(toolRule);
+    // A plain fact about the tool claims nothing.
+    const fact = sample("q1");
+    fact.points[0].text += " Power BI can refresh from the warehouse each morning.";
+    expect(messages(fact)).toEqual([]);
     // Owned up to, the tool may appear in what the candidate would do, never in what they did.
     const wouldDo = sample("q1");
     wouldDo.honestLine = "I haven't used Power BI yet.";
