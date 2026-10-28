@@ -76,6 +76,16 @@ describe("daily limits", () => {
     await expect(use(store, { userId: "sara" })).resolves.toEqual(expect.any(Number));
   });
 
+  it.each([
+    ["a person's own limit", "AI_DAILY_LIMIT_PER_USER", { userId: "sara" }, "perUser"],
+    ["a visitor's free checks", "AI_DAILY_LIMIT_PER_ANONYMOUS", { anonymousKey: "a" }, "perAnonymousVisitor"],
+    ["the limit on all visitors together", "AI_DAILY_LIMIT_ALL_ANONYMOUS", { anonymousKey: "a" }, "allAnonymous"],
+  ] as const)("says when it was %s that turned the request away", async (_, variable, requester, limit) => {
+    vi.stubEnv(variable, "0");
+
+    await expect(use(createMemoryUsageStore(), requester)).rejects.toMatchObject({ name: "LimitReachedError", limit });
+  });
+
   it("holds both anonymous limits when many requests arrive at once", async () => {
     vi.stubEnv("AI_DAILY_LIMIT_PER_ANONYMOUS", "2");
     vi.stubEnv("AI_DAILY_LIMIT_ALL_ANONYMOUS", "3");

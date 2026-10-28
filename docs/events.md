@@ -15,7 +15,7 @@
 | `home.cta_clicked` | علی | کلیک روی Get started free یا Free 2-minute CV check در صفحهٔ اصلی | `cta`: `get_started` یا `cv_check`؛ `placement`: `header` یا `hero` | ثبت می‌شود (#41) |
 | `cvcheck.completed` | مرضیه | نتیجهٔ چک دودقیقه‌ای رزومه نشان داده شد | نمرهٔ کلی و تعداد ایرادها | کارت #53 |
 | `profile.cv_uploaded` | شایان | رزومه خوانده شد | بدون متن رزومه | کارت #47 |
-| `profile.approved` | شایان | کاربر Profile را تأیید و ذخیره کرد | بدون متن رزومه | کارت #47 |
+| `profile.approved` | شایان | کاربر Profile را تأیید و ذخیره کرد: از رزومهٔ تازه، پر کردن دستی بدون رزومه، یا ویرایش | `newCv`، `manual` (پروفایل را خودش بدون رزومه پر کرد)، `consentVersion` (نسخهٔ رضایت تازه، وگرنه null)، و تعداد `jobs`، `skills` و `answers`؛ بدون متن رزومه | کارت #47؛ `manual` از کارت #179 |
 | `jobs.ad_pasted` | شایان | آگهی چسبانده و خوانده شد | بدون متن آگهی | کارت #46 |
 | `jobs.match_shown` | شایان | گزارش تطابق نشان داده شد | بدون متن آگهی یا رزومه | کارت #46 |
 | `jobs.linkedin_suggested` | شایان | خط‌های پیشنهادی Experience لینکدین برای یک آگهی نشان داده شد | `roles`، `lines` و `skills` (تعدادها)، `dropped` (انتخاب‌هایی از مدل که خط یا مهارت خود آن نقش نبودند و کنار رفتند)، `demo`؛ بدون متن رزومه، آگهی یا خط‌ها | کارت #195 |
@@ -28,6 +28,8 @@
 | `interview.session_completed` | مرضیه | تمرین مصاحبه تمام شد و گزارش آماده شد | `sessionId`، `jobId`، `mode`، `questions`، `followUpsAsked`، `overall`، `readiness`، `lowConfidenceAnswers`، `averageAnswerWords`، `durationSeconds` | ثبت می‌شود (#54)؛ فقط برای کاربر واردشده و یک بار برای هر session (#99) |
 | `interview.length_over` | مرضیه | جواب مدل در یک مرحلهٔ مصاحبه یکی از قاعده‌های طول را شکست و با این حال نگه داشته شد (مثلاً `improvement` بیش از ۳ جمله)؛ فقط برای درخواست live کاربر واردشده | `stage` (`review` یا `evaluate`)، `rule` (`question-words`، `follow-up-length`، `quote-words`، `improvement-length`)، `count`؛ هرگز خود متن | بعد از #112؛ می‌گوید قاعده‌های طول چند بار شکسته می‌شوند |
 | `ai.hidden_text_removed` | علی | `askModel` در حالت live پیش از فرستادن پرامپت نویسهٔ نامرئی از آن پاک کرد؛ فقط برای درخواستی که از سقف روزانه گذشت و مدل به آن جواب داد، و نه وقتی فقط U+2028 یا U+2029 خط تازه شد | `feature`، `removed` (جمع نویسه‌های پاک‌شده)، و تعدادهای `cleanModelText`: `zeroWidth`، `byteOrderMark`، `softHyphen`، `bidi`، `tag`، `variationSelector`، `hangulFiller`، `annotation`، `lineSeparator`، `tamperSigns`؛ هرگز خود متن | کارت #68؛ `tamperSigns` فقط ثبت می‌شود و هیچ درخواستی را رد نمی‌کند |
+| `ai.failed` | علی | `askModel` در حالت live درخواستی به مدل فرستاد و به جای جواب خطا گرفت (کلید خراب، تمام شدن اعتبار، سقف OpenRouter، قطعی، timeout)؛ برای هر تلاش، تلاش دوم هم. خطا بی‌تغییر به صدازننده می‌رسد و ردیف رزروشدهٔ تلاش اول پاک می‌شود | `feature`، `error` (نام کلاس خطا، مثل `RateLimitError` یا `APIConnectionTimeoutError`)، `status` (کد HTTP، فقط اگر خطا داشته باشد)؛ هرگز متن خطا. بدون `user_id` و `anonymous_id` | کارت #160؛ شمار روزانه در view ِ `reporting.ai_events_daily` |
+| `ai.limited` | علی | سقف روزانه درخواستی را پیش از فرستادن به مدل رد کرد (`limit-reached`) | `feature`، `limit`: `perUser` (سقف هر کاربر)، `perAnonymousVisitor` (چک‌های رایگان هر مهمان) یا `allAnonymous` (همهٔ مهمان‌ها روی هم). بدون `user_id` و `anonymous_id` | کارت #160؛ شمار روزانه در view ِ `reporting.ai_events_daily` |
 
 رویداد تازه‌ای که اضافه می‌کنید، اول در همین جدول بیاید.
 
@@ -112,6 +114,7 @@ order by steps.step;
 **حساب‌های تیم، تست و دمو** کنار گذاشته می‌شوند، بی‌آنکه ایمیل یا شناسهٔ کسی در مخزن بیاید. فایل فهرست ایمیل‌ها را از متغیر psql به نام `team_emails` می‌گیرد: یک متن که ایمیل‌ها در آن با ویرگول، فاصله یا خط تازه جدا شده‌اند.
 
 - آدرس پایه کافی است: `name@…` همهٔ `name+…@…`ها را هم کنار می‌گذارد. بزرگی و کوچکی حروف مهم نیست.
+- تابع `stats.team_user_ids` (در `supabase/migrations/20261025212453_stats_team_user_ids.sql`، #162) فهرست را به شناسهٔ همان حساب‌ها برمی‌گرداند و جز شناسه چیزی نمی‌دهد. پس کسی که فایل را اجرا می‌کند به `auth.users` دسترسی لازم ندارد. فقط `cvision_stats` (پایین‌تر) و صاحب تابع (`postgres`، نقش SQL Editor) اجازهٔ اجرایش را دارند؛ `anon` و `authenticated` نه.
 - در فهرست بیایند: حساب‌های تیم، حساب‌های تستی که هم‌تیمی‌ها می‌سازند (#140) و حساب دمو (#142). حساب تازه‌ای از این دست که ساخته شد، به secret `TEAM_ACCOUNT_EMAILS` هم اضافه شود.
 - فهرست فقط در secret `TEAM_ACCOUNT_EMAILS` در GitHub و در SQL Editor می‌ماند و هرگز در مخزن، PR، کارت، شیت یا گروه تیم نمی‌آید.
 
@@ -138,6 +141,6 @@ order by steps.step;
 
 - دو secret لازم دارد: `SUPABASE_DB_URL` (connection string از نوع Session pooler، با رمز) و `TEAM_ACCOUNT_EMAILS` (همان فهرست بالا). هر دو secret محیط (environment) به نام `daily-stats` هستند، نه secret مخزن، و فقط شاخهٔ `main` اجازهٔ استفاده از این environment را دارد. secret مخزن به workflow هر شاخه‌ای می‌رسد، پس هر کسی که شاخه‌ای push کند می‌تواند آن را بخواند.
 - اگر یکی از secretها نباشد، کوئری خطا بدهد، یا کوئری هیچ کاربر فعال و هیچ چک رزومه‌ای نبیند، کار با پیام روشن شکست می‌خورد و چیزی کامنت نمی‌کند.
-- اگر `SUPABASE_DB_URL` با نقشی جز `postgres` وصل می‌شود، آن نقش `bypassrls` لازم دارد: RLS روی `public.events` روشن است و هیچ policyای ندارد، پس بی آن صفر ردیف می‌بیند. روی `auth.users` هم فقط ستون‌های `id` و `email` را لازم دارد.
+- `SUPABASE_DB_URL` با نقش آمار، `cvision_stats`، وصل می‌شود که فقط این‌ها را لازم دارد: `bypassrls` (RLS روی `public.events` روشن است و هیچ policyای ندارد، پس بی آن صفر ردیف می‌بیند)، `select` روی `public.events`، و اجازهٔ استفاده از schema ‏`stats` و اجرای `stats.team_user_ids`. این نقش دیگر `auth.users` را نمی‌خواند و ایمیل هیچ کاربری را نمی‌بیند: migration #162 اجازه‌های قبلی‌اش روی `auth.users` و schema `auth` را پس می‌گیرد. همان migration نقش را اگر نباشد بی login می‌سازد و login و رمز نقشی را که هست دست نمی‌زند؛ رمز فقط در Supabase و در secret است، نه در مخزن.
 - کار فقط عدد و تاریخ می‌نویسد، نه ایمیل یا شناسه، چون لاگ Actions این مخزن هم عمومی است.
-- آزمون `supabase/tests/active-users-query.test.ts` خود فایل را روی پایگاه دادهٔ آزمایشی (PGlite) با دادهٔ ساختگی اجرا می‌کند. ستون‌های فایل و workflow با هم عوض شوند؛ آزمون هم‌گامی‌شان را می‌سنجد.
+- آزمون `supabase/tests/active-users-query.test.ts` خود فایل را روی پایگاه دادهٔ آزمایشی (PGlite) با دادهٔ ساختگی و با نقش `cvision_stats` اجرا می‌کند، پس اگر آن نقش اجازه‌ای کم داشته باشد شکست می‌خورد. ستون‌های فایل و workflow با هم عوض شوند؛ آزمون هم‌گامی‌شان را می‌سنجد. `supabase/tests/stats-team-user-ids.test.ts` تابع و اجازه‌های نقش را می‌سنجد.

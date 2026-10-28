@@ -4,6 +4,8 @@
 --
 -- Team, test and demo accounts are left out through one list of emails, separated by commas, spaces or new lines.
 -- A base address also leaves out each of its name+...@ aliases. The list never goes in the repo.
+-- stats.team_user_ids (supabase/migrations/20261025212453_stats_team_user_ids.sql) turns the list into user ids, so
+-- whoever runs this file needs no access to auth.users: the workflow's role, cvision_stats, has none.
 -- - psql (what the workflow does): psql -v team_emails="a@example.com,b@example.com" -f supabase/queries/active-users.sql
 --   psql puts the list in as one quoted SQL string, so no SQL is built from it.
 -- - Supabase SQL Editor: on the line marked "team list" below, replace the psql variable (a colon, then team_emails
@@ -12,16 +14,9 @@
 -- Totals only: no column reaches a user. One Total row, then one row per London day from the first active user or CV
 -- check to today, newest first; a day with neither shows 0. Today's row is not complete until the day ends.
 -- The daily-stats workflow reads these six columns by name and in this order: change them together.
-with excluded_emails as (
-  select distinct regexp_replace(lower(email), '\+[^@]*@', '@') as email
-  from regexp_split_to_table(:'team_emails', '[\s,;]+') as list (email) -- team list
-  where email <> ''
-),
 -- The accounts on the list, with every name+...@ alias of each address.
-excluded_users as (
-  select u.id
-  from auth.users u
-  join excluded_emails x on regexp_replace(lower(trim(u.email)), '\+[^@]*@', '@') = x.email
+with excluded_users as (
+  select id from stats.team_user_ids(:'team_emails') as team (id) -- team list
 ),
 -- Every day each signed-in user did something that makes them active.
 active as (

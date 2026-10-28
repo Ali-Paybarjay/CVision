@@ -32,8 +32,9 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   const profile = await getMyProfile(jobId ? { jobId } : {});
   if (!profile) {
     return (
-      <Notice tone="info" title="Upload your CV first">
-        Tailoring starts from your CV. <Link href="/profile" className="text-accent underline">Upload your CV</Link>
+      <Notice tone="info" title="Build your profile first">
+        Tailoring starts from the profile you approve. Upload your CV or fill in your details yourself.{" "}
+        <Link href="/profile" className="text-accent underline">Build your profile</Link>
       </Notice>
     );
   }
@@ -64,8 +65,8 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
     return (
       <>
         {header}
-        <Notice tone="info" title="We have not compared your CV with this job yet">
-          Check how your CV matches this job first, then come back to tailor it.
+        <Notice tone="info" title="We have not compared your profile with this job yet">
+          Check how your profile matches this job first, then come back to tailor your CV.
         </Notice>
         <div>
           <ButtonLink href="/jobs">Go to your jobs</ButtonLink>
