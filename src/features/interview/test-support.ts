@@ -2,8 +2,18 @@
 import type { InterviewSession } from "./contracts";
 import type { QuestionSetContext } from "./engine/checks";
 import type { InterviewInputs } from "./engine/schemas";
-import { addAnswer, applyEvaluation, applyFollowUpDecision, applyReport, askQuestion } from "./engine/session";
-import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, writeReport } from "./engine/stages";
+import {
+  addAnswer,
+  applyAnalysis,
+  applyEvaluation,
+  applyFollowUpDecision,
+  applyQuestions,
+  applyReport,
+  askQuestion,
+  createSession,
+  endEarly,
+} from "./engine/session";
+import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, toTechnicalQuestion, writeReport } from "./engine/stages";
 import { jobRequirementsText, jobToText, profileToCvText } from "./engine/text";
 import type { InterviewFixture } from "./fixtures/types";
 
@@ -30,6 +40,25 @@ export function questionSetContextFor(fixture: InterviewFixture): QuestionSetCon
 let counter = 0;
 const nextId = () => `t${++counter}`;
 const at = (minute: number) => new Date(Date.UTC(2026, 9, 21, 9, minute)).toISOString();
+
+/** A session with the fixture's analysis and reviewed questions, before any question is asked. */
+export function readySessionFor(fixture: InterviewFixture, mode: "mock" | "live" = "mock"): InterviewSession {
+  const context = questionSetContextFor(fixture);
+  const session = applyAnalysis(createSession({ id: `ready-${fixture.id}`, jobId: fixture.job.id, startedAt: at(0), mode }), {
+    ...fixture.analyse,
+    composition: { technical: 6, behavioural: 0 },
+  });
+  return applyQuestions(session, {
+    blueprint: fixture.review.blueprint,
+    questions: fixture.review.questions.map((q) => toTechnicalQuestion(q, context)),
+    changelog: fixture.review.changelog,
+  });
+}
+
+/** The same session ended before any answer ("End here", #205). */
+export function endedSessionFor(fixture: InterviewFixture, mode: "mock" | "live" = "mock"): InterviewSession {
+  return endEarly(readySessionFor(fixture, mode), at(1));
+}
 
 /** Runs a whole session in mock mode with the fixture's sample answers, through the same functions the page uses. */
 export async function runMockSession(fixture: InterviewFixture, answer?: (questionId: string) => { main: string; followUp: string }): Promise<InterviewSession> {

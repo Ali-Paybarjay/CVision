@@ -1,8 +1,8 @@
-// The six stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
+// The seven stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
 // against the stage's schema (askModel retries once, then fails clearly) and records what it used.
 // Length rules are checked after the reply: a reply that breaks one is kept and recorded as interview.length_over.
 import "server-only";
-import { askModel, getAiMode, loadPrompt, type ModelUsage, type Requester } from "@/shared/ai";
+import { askModel, AskModelError, getAiMode, loadPrompt, type ModelUsage, type Requester } from "@/shared/ai";
 import { track } from "@/shared/analytics/track";
 import {
   answerGuide,
@@ -15,6 +15,7 @@ import {
 } from "../config";
 import type {
   AnswerEvaluation,
+  AnswerSuggestion,
   FollowUpDecision,
   InterviewReport,
   InterviewSession,
@@ -26,24 +27,29 @@ import { rubricFor, appliedEvidenceByType } from "../rubrics";
 import {
   bannedTopicHits,
   evaluationProblems,
+  hasNoCvEvidence,
   isCleanFollowUp,
   isLengthProblem,
   isLevelBelow,
   isSpeakable,
+  namedItemsAbsentFromCv,
   questionSetProblems,
+  suggestionProblems,
   type DraftQuestion,
   type EvaluationContext,
   type LengthRule,
   type Problem,
   type QuestionSetContext,
+  type SuggestionContext,
 } from "./checks";
-import { fixtureOrPlaceholder, mockEvaluation, mockFollowUpDecision, mockReport, requireFixture } from "./mock";
+import { fixtureOrPlaceholder, mockEvaluation, mockFollowUpDecision, mockReport, mockSuggestion, requireFixture } from "./mock";
 import {
   analyseOutputSchema,
   evaluateOutputSchema,
   generateOutputSchema,
   reportOutputSchema,
   reviewOutputSchema,
+  suggestOutputSchema,
   FollowUpOutputSchema,
   type AnalyseOutput,
   type EvaluateOutput,
@@ -51,6 +57,7 @@ import {
   type GenerateOutput,
   type ReportOutput,
   type ReviewOutput,
+  type SuggestOutput,
   type InterviewInputs,
 } from "./schemas";
 import { competencyMap, questionOverall, readinessFor, sessionOverall } from "./scoring";
@@ -62,10 +69,12 @@ import {
   followUpAnswer,
   followUpQuestion,
   mainAnswer,
+  suggestionFor,
   technicalQuestions,
+  unansweredQuestionIds,
   type Provenance,
 } from "./session";
-import { isNonAnswer, neutraliseTags, wrapUntrusted } from "./text";
+import { cvEvidenceLines, isNonAnswer, neutraliseTags, wrapUntrusted } from "./text";
 import { estimateUsage, measuredUsage } from "./usage";
 
 /** Overrides for one stage's settings, used by the eval to compare models. */
@@ -565,4 +574,144 @@ export async function writeReport(
     uncertaintyNotes: output.uncertaintyNotes,
   };
   return { report, usage, provenance };
+}
+
+export const suggestionFallbackEvent = "interview.suggestion_fallback";
+
+/** What the suggestion checks need for one question (#205). */
+export function suggestionContext(
+  session: InterviewSession,
+  questionId: string,
+  inputs: Pick<InterviewInputs, "cv" | "jobDescription">,
+): SuggestionContext {
+  const role = session.roleProfile;
+  const candidate = session.candidateProfile;
+  if (!role || !candidate) throw new InterviewStageError("The session has not been analysed yet.");
+  return { question: findQuestion(session, questionId), role, candidate, lines: cvEvidenceLines(inputs.cv), cv: inputs.cv, jobDescription: inputs.jobDescription };
+}
+
+/** The model's suggestion as stored: points in the look-fors' order, each cited CV line copied word for word by the code. */
+export function toSuggestion(output: SuggestOutput, context: SuggestionContext): AnswerSuggestion {
+  const lineText = new Map(context.lines.map((line) => [line.id, line.text]));
+  const planned = new Set(context.question.followUps.map((f) => f.id));
+  return {
+    questionId: context.question.id,
+    kind: output.kind,
+    points: context.question.lookFors.flatMap((lookFor) => {
+      const point = output.points.find((p) => p.lookForId === lookFor.id);
+      if (!point) return [];
+      return [{ lookForId: lookFor.id, text: point.text, evidence: [...new Set(point.evidenceLineIds)].flatMap((id) => lineText.get(id) ?? []) }];
+    }),
+    sampleAnswer: output.sampleAnswer,
+    honestLine: output.honestLine,
+    followUpTips: output.followUpTips.filter((tip) => planned.has(tip.followUpId)),
+    uncertainty: output.uncertainty,
+    fallback: false,
+  };
+}
+
+/**
+ * The safe version when the model's suggestion cannot be used, built by the code from the reviewed question: its
+ * look-fors as the points and the analysis's CV quote as the evidence, with no sample answer.
+ */
+export function fallbackSuggestion(context: SuggestionContext): AnswerSuggestion {
+  const { question, candidate } = context;
+  const quote = question.rationale.cvQuote ?? candidate.evidence.find((e) => e.competencyId === question.competencyId)?.cvQuote ?? null;
+  return {
+    questionId: question.id,
+    kind: hasNoCvEvidence(question, candidate) ? "gap" : "evidence",
+    points: question.lookFors.map((lookFor, i) => ({ lookForId: lookFor.id, text: lookFor.text, evidence: i === 0 && quote ? [quote] : [] })),
+    sampleAnswer: null,
+    honestLine: null,
+    followUpTips: [],
+    uncertainty: null,
+    fallback: true,
+  };
+}
+
+/** Failures that get the code-built suggestion. Any other error (no key, a network failure) is thrown, so the page offers "Try again". */
+const fallbackReasons: ReadonlySet<string> = new Set(["invalid-answer", "refused", "limit-reached"]);
+
+/**
+ * Stage 7 (#205): a suggested answer, built from the candidate's CV, for one question left unanswered after "End here".
+ * One request per question: the checks are schema refinements, so askModel's one retry re-asks only this question,
+ * and if the retry still breaks a rule the question gets the code-built version instead.
+ */
+export async function suggestAnswer(
+  session: InterviewSession,
+  questionId: string,
+  inputs: Pick<InterviewInputs, "cv" | "jobDescription">,
+  run: StageRun = {},
+): Promise<{ suggestion: AnswerSuggestion; usage?: StageUsage; provenance?: Provenance; requests?: number }> {
+  const existing = suggestionFor(session, questionId);
+  if (existing) return { suggestion: existing };
+  if (!session.endedAt) throw new InterviewStageError("The practice has not ended, so there is nothing to suggest yet.");
+  if (!unansweredQuestionIds(session).includes(questionId)) throw new InterviewStageError(`${questionId} was answered, so it gets feedback instead.`);
+  const context = suggestionContext(session, questionId, inputs);
+  const sample = mockSuggestion(session.jobId, questionId);
+  if (isMock() && !sample) return { suggestion: fallbackSuggestion(context) };
+
+  const { question, role, candidate } = context;
+  const values = {
+    role: data({
+      title: role.title,
+      discipline: role.discipline,
+      sector: role.sector,
+      level: role.roleLevel,
+      levelDescription: levelDescriptions[role.roleLevel],
+      namedItemsNotInCv: namedItemsAbsentFromCv(role, inputs.cv),
+    }),
+    question: data({
+      id: question.id,
+      text: question.text,
+      type: question.type,
+      focus: question.focus,
+      competency: role.competencies.find((c) => c.id === question.competencyId) ?? null,
+      jdQuote: question.rationale.jdQuote,
+      cvQuote: question.rationale.cvQuote ?? null,
+      lookFors: question.lookFors.map(({ id, text }) => ({ id, text })),
+      plannedFollowUps: question.followUps.map(({ id, text }) => ({ id, text })),
+    }),
+    candidate_profile: data({
+      cvLevel: candidate.cvLevel,
+      evidence: candidate.evidence.find((e) => e.competencyId === question.competencyId) ?? null,
+      gap: candidate.gaps.find((g) => g.competencyId === question.competencyId) ?? null,
+      claimsToProbe: candidate.claimsToProbe,
+    }),
+    cv: neutraliseTags(context.lines.map((line) => `${line.id}: ${line.text}`).join("\n")),
+    job_description: neutraliseTags(inputs.jobDescription),
+    kind_rule: hasNoCvEvidence(question, candidate)
+      ? 'The CV shows no evidence for this competency, so set kind to "gap".'
+      : 'Choose the kind from the CV lines: "evidence" if they show this competency, "gap" if they do not.',
+  };
+  const reports: ModelUsage[] = [];
+  try {
+    const { output, usage, provenance } = await callStage<SuggestOutput>({
+      stage: "suggest",
+      values,
+      schema: suggestOutputSchema(context),
+      problems: (value) => suggestionProblems(value, context),
+      // In live mode askModel ignores the sample.
+      sample: sample ?? null,
+      voice: true,
+      run,
+      questionId,
+      reports,
+    });
+    // Live requests sent, the retry included; the eval logs it.
+    return { suggestion: toSuggestion(output, context), usage, provenance, requests: reports.length };
+  } catch (error) {
+    if (!(error instanceof AskModelError) || !fallbackReasons.has(error.reason)) throw error;
+    // Logs the kind of failure only, never the CV or the model's text.
+    console.error(`interview suggest: using the code-built suggestion for ${questionId} (${error.reason})`);
+    if (run.requester) await track(suggestionFallbackEvent, { questionType: question.type, focus: question.focus, reason: error.reason }, run.requester);
+    const suggestion = fallbackSuggestion(context);
+    if (reports.length === 0) return { suggestion };
+    // The model answered but its answers were rejected: record what that cost and which prompt ran.
+    const settings = settingsFor("suggest", run.overrides);
+    const prompt = await loadInterviewPrompt(settings.prompt, values).catch(() => null);
+    if (!prompt) return { suggestion };
+    const usage = measuredUsage({ stage: "suggest", model: settings.model, reports, questionId });
+    return { suggestion, usage, provenance: { stage: "suggest", prompt: settings.prompt, version: prompt.version, model: settings.model } };
+  }
 }
