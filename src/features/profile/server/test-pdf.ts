@@ -6,8 +6,16 @@ export function makeTestPdf(lines: string[]): Uint8Array {
   return makeTestPdfPages([lines]);
 }
 
-/** A PDF with one page for each list of lines. */
-export function makeTestPdfPages(pages: string[][]): Uint8Array {
+/** A one-page PDF that asks for a password to open it. */
+export function makePasswordProtectedTestPdf(): Uint8Array {
+  return makeTestPdfPages([["Sara Khan"]], { password: true });
+}
+
+/**
+ * A PDF with one page for each list of lines. With `password`, it is marked as encrypted with a password
+ * nobody knows (the standard 40-bit scheme), so a reader can't open it without asking for one.
+ */
+export function makeTestPdfPages(pages: string[][], options: { password?: boolean } = {}): Uint8Array {
   const escape = (text: string) => text.replace(/[\\()]/g, (character) => `\\${character}`);
   const content = (lines: string[]) =>
     lines.length ? `BT /F1 11 Tf 72 770 Td 15 TL ${lines.map((line) => `(${escape(line)}) Tj T*`).join(" ")} ET` : "";
@@ -26,6 +34,12 @@ export function makeTestPdfPages(pages: string[][]): Uint8Array {
       ];
     }),
   ];
+  // The owner and user keys match no password, not even an empty one.
+  if (options.password) {
+    objects.push(`<< /Filter /Standard /V 1 /R 2 /O <${"ab".repeat(32)}> /U <${"cd".repeat(32)}> /P -44 >>`);
+  }
+  const fileId = `<${"01".repeat(16)}>`;
+  const encryption = options.password ? ` /Encrypt ${objects.length} 0 R /ID [${fileId} ${fileId}]` : "";
 
   let pdf = "%PDF-1.4\n";
   const offsets: number[] = [];
@@ -36,7 +50,7 @@ export function makeTestPdfPages(pages: string[][]): Uint8Array {
   const xref = Buffer.byteLength(pdf, "latin1");
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
   pdf += offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R${encryption} >>\nstartxref\n${xref}\n%%EOF\n`;
 
   return new Uint8Array(Buffer.from(pdf, "latin1"));
 }
