@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTailoredCv, fitsCv, formatMonth } from "@/features/tailor/tailored-cv";
+import { buildTailoredCv, fitsCv, formatMonth, maxSkills } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 
@@ -35,7 +35,7 @@ describe("the tailored CV (You approve everything)", () => {
   it("with no changes, is the CV as the user wrote it", () => {
     const cv = buildTailoredCv(profile, []);
     expect(cv.fullName).toBe(profile.fullName);
-    expect(cv.skills.map((line) => line.text)).toEqual(profile.skills);
+    expect(cv.skills.map((line) => line.text)).toEqual(profile.skills.slice(0, maxSkills));
     expect(allText(cv).some((text) => text.includes("Built Tableau dashboards for the regional sales team"))).toBe(true);
     expect(cv.experience.flatMap((job) => job.lines).every((line) => !line.tailored)).toBe(true);
   });
@@ -58,6 +58,19 @@ describe("the tailored CV (You approve everything)", () => {
     const lines = buildTailoredCv(profile, [approved]).experience[0].lines;
     expect(lines).toContainEqual({ text: approved.after, tailored: true });
     expect(lines.map((line) => line.text)).not.toContain(approved.before);
+  });
+
+  it("shows at most six skills: the user's first ones, in their own order", () => {
+    expect(profile.skills.length).toBeGreaterThan(maxSkills);
+    expect(buildTailoredCv(profile, []).skills.map((line) => line.text)).toEqual(profile.skills.slice(0, 6));
+  });
+
+  it("always keeps an approved skill within the six, and adds nothing of its own", () => {
+    const cv = buildTailoredCv(profile, [change("approved", { section: "skills", before: null, after: "Git and GitHub" })]);
+    expect(cv.skills).toHaveLength(maxSkills);
+    expect(cv.skills.at(-1)).toEqual({ text: "Git and GitHub", tailored: true });
+    expect(cv.skills.slice(0, -1).map((line) => line.text)).toEqual(profile.skills.slice(0, 5));
+    expect(cv.unplaced).toEqual([]);
   });
 
   it("adds an approved new skill at the end of the skills", () => {

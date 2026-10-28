@@ -36,6 +36,18 @@ function same(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
 }
 
+/** A tailored CV shows at most this many skills: a short list a recruiter reads, not every skill the user has. */
+export const maxSkills = 6;
+
+/**
+ * The skills the CV shows: every skill the user approved for this job first, then their own first skills, kept in
+ * the CV's order, up to six. Nothing is added; the rest stay in the Profile.
+ */
+function mainSkills(skills: CvLine[]): CvLine[] {
+  const keep = new Set([...skills.filter((line) => line.tailored), ...skills.filter((line) => !line.tailored)].slice(0, maxSkills));
+  return skills.filter((line) => keep.has(line));
+}
+
 /** An education entry as one CV line, e.g. "MSc, Data Science, University of Manchester, Merit". */
 function educationLine(item: Profile["education"][number]): string {
   return [item.qualification, item.subject, item.institution, item.grade].filter(Boolean).join(", ");
@@ -107,7 +119,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[]): T
       (item): item is string => Boolean(item),
     ),
     summary,
-    skills: [...profile.skills.map((skill) => apply(skill, "skills")), ...added("skills")],
+    skills: mainSkills([...profile.skills.map((skill) => apply(skill, "skills")), ...added("skills")]),
     experience,
     education: [...profile.education.map((item) => apply(educationLine(item), "education")), ...added("education")],
     certifications: [

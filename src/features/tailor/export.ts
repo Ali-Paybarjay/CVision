@@ -1,8 +1,9 @@
 // The PDF and Word downloads of the tailored CV and the cover letter. Pure code: no browser, no network.
-// One column, plain headings and real text, so applicant tracking systems read the file as the user does.
+// One column, simple headings and real text, so applicant tracking systems read the file as the user does.
+// Headings are bold Teal with a Teal rule, as in the preview; the colour is decoration only, never needed to read it.
 // The Fit highlight is for the preview only and never reaches the file.
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
-import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { brand } from "@/shared/brand";
 import type { TailoredCv } from "./tailored-cv";
 
@@ -24,7 +25,10 @@ export const mimeTypes: Record<ExportFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** The CV in reading order, with the same headings as the preview. */
+/** The brand's Teal, for CV headings and their rule (5.5:1 on white). */
+const teal = { hex: "167480", rgb: rgb(0x16 / 255, 0x74 / 255, 0x80 / 255) };
+
+/** The CV in reading order (summary, skills, education, experience, additional information), as in the preview. */
 export function cvBlocks(cv: TailoredCv): Block[] {
   const list = (heading: string, lines: { text: string }[]): Block[] =>
     lines.length === 0 ? [] : [{ kind: "heading", text: heading }, ...lines.map((line) => ({ kind: "bullet" as const, text: line.text }))];
@@ -34,13 +38,13 @@ export function cvBlocks(cv: TailoredCv): Block[] {
     ...(cv.contact.length > 0 ? [{ kind: "contact" as const, text: cv.contact.join(" · ") }] : []),
     ...(cv.summary ? [{ kind: "heading" as const, text: "Professional summary" }, { kind: "text" as const, text: cv.summary.text }] : []),
     ...list("Skills", cv.skills),
+    ...list("Education", cv.education),
     ...(cv.experience.length > 0 ? [{ kind: "heading" as const, text: "Experience" }] : []),
     ...cv.experience.flatMap((job): Block[] => [
       { kind: "role", text: `${job.title}, ${job.company}` },
       ...(job.dates ? [{ kind: "dates" as const, text: job.dates }] : []),
       ...job.lines.map((line) => ({ kind: "bullet" as const, text: line.text })),
     ]),
-    ...list("Education", cv.education),
     ...list("Additional information", cv.certifications),
   ];
 }
@@ -86,8 +90,8 @@ const page = { width: 595.28, height: 841.89, margin: 56 };
 
 const pdfStyle: Record<Block["kind"], { size: number; bold: boolean; before: number; indent: number }> = {
   name: { size: 20, bold: true, before: 0, indent: 0 },
-  contact: { size: 10, bold: false, before: 4, indent: 0 },
-  heading: { size: 12, bold: true, before: 16, indent: 0 },
+  contact: { size: 10, bold: false, before: 6, indent: 0 },
+  heading: { size: 12.5, bold: true, before: 20, indent: 0 },
   role: { size: 11, bold: true, before: 10, indent: 0 },
   dates: { size: 10, bold: false, before: 1, indent: 0 },
   bullet: { size: 10.5, bold: false, before: 3, indent: 12 },
@@ -166,13 +170,13 @@ async function blocksToPdf(blocks: Block[], meta: Meta): Promise<Uint8Array> {
       }
       y -= style.size;
       if (block.kind === "bullet" && index === 0) current.drawText("•", { x: page.margin + 2, y, size: style.size, font: regular });
-      current.drawText(line, { x: page.margin + indent, y, size: style.size, font });
+      current.drawText(line, { x: page.margin + indent, y, size: style.size, font, color: block.kind === "heading" ? teal.rgb : undefined });
       y -= leading - style.size;
     });
 
     if (block.kind === "heading") {
-      current.drawLine({ start: { x: page.margin, y: y + 1 }, end: { x: page.width - page.margin, y: y + 1 }, thickness: 0.5 });
-      y -= 2;
+      current.drawLine({ start: { x: page.margin, y: y - 2 }, end: { x: page.width - page.margin, y: y - 2 }, thickness: 1, color: teal.rgb });
+      y -= 8;
     }
   }
 
@@ -190,9 +194,9 @@ function blockToParagraph(block: Block): Paragraph {
     case "heading":
       return new Paragraph({
         heading: HeadingLevel.HEADING_1,
-        spacing: { before: 280, after: 80 },
-        border: { bottom: { style: "single", size: 4, color: "auto", space: 1 } },
-        children: [new TextRun({ text: block.text, bold: true, size: 24 })],
+        spacing: { before: 320, after: 120 },
+        border: { bottom: { style: "single", size: 8, color: teal.hex, space: 2 } },
+        children: [new TextRun({ text: block.text, bold: true, size: 25, color: teal.hex })],
       });
     case "role":
       return new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: block.text, bold: true })] });

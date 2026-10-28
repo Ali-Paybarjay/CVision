@@ -76,7 +76,7 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file (You approve everythin
   it("keeps every heading of the preview as real text, in order", async () => {
     const cv = buildTailoredCv(profile, []);
     const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
-    const headings = ["Professional summary", "Skills", "Experience", "Education"].map((heading) => text.indexOf(heading));
+    const headings = ["Professional summary", "Skills", "Education", "Experience"].map((heading) => text.indexOf(heading));
     expect(headings.every((index) => index >= 0)).toBe(true);
     expect([...headings].sort((a, b) => a - b)).toEqual(headings);
   });
