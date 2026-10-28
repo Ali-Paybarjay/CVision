@@ -194,6 +194,40 @@ describe("profile screens", () => {
     expect(html).not.toContain("so we put December");
   });
 
+  // #186: the browser's month box has no picker in Safari or Firefox on a computer, and in Edge its calendar has no
+  // year list. Two menus work the same everywhere, with nothing to type.
+  it("asks for each date with a Month and a Year menu in a named group, showing the saved date", () => {
+    const html = renderToStaticMarkup(
+      <ReviewStep
+        draft={draftFromProfile(personas.sara.profile)}
+        base={personas.sara.profile}
+        source="saved"
+        storage="account"
+        demo={null}
+        truncated={false}
+        focusHeading={false}
+        onSave={noop}
+        onCancel={noop}
+      />,
+    );
+    const thisYear = new Date().getFullYear();
+    const [startYear, startMonth] = personas.sara.profile.experience[0].startDate.split("-");
+
+    expect(html).not.toContain('type="month"');
+    expect(text(html)).not.toContain("YYYY-MM");
+    expect(html).toMatch(/<fieldset[^>]*><legend[^>]*>Started<\/legend>/);
+    expect(html).toMatch(/<legend[^>]*>Finished \(optional\)<\/legend>/);
+    expect(html).toContain(">Month</label>");
+    expect(html).toContain(">Year</label>");
+    // The saved date is chosen in both menus, and years run newest first from this year.
+    expect(html).toContain(`<option value="${startMonth}" selected="">`);
+    expect(html).toContain(`<option value="${startYear}" selected="">${startYear}</option>`);
+    expect(html).toContain(`<option value="">Year</option><option value="${thisYear}">${thisYear}</option>`);
+    // A course's Finished menu goes up to six years from now, and no further.
+    expect(html).toContain(`<option value="${thisYear + 6}">${thisYear + 6}</option>`);
+    expect(html).not.toContain(`<option value="${thisYear + 7}">`);
+  });
+
   function manualReview(storage: "account" | "browser", draft: ReviewDraft = emptyDraft()) {
     return renderToStaticMarkup(
       <ReviewStep
