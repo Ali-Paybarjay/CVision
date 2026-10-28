@@ -188,14 +188,29 @@ export type SessionStep =
   | { step: "answer"; questionId: string; kind: InterviewTurn["kind"] }
   | { step: "decide"; questionId: string }
   | { step: "evaluate"; questionIds: string[] }
+  | { step: "suggest"; questionIds: string[] }
   | { step: "report" }
   | { step: "done" };
+
+/** The questions the report scores: every question, or after "End here" only those with a genuine answer. */
+export function reportQuestionIds(session: InterviewSession): string[] {
+  const unanswered = new Set(unansweredQuestionIds(session));
+  return session.questions.filter((q) => !unanswered.has(q.id)).map((q) => q.id);
+}
 
 /** What the session needs next. Lets a page resume a saved session exactly where it stopped. */
 export function nextStep(session: InterviewSession): SessionStep {
   if (!session.roleProfile) return { step: "analyse" };
   if (session.questions.length === 0) return { step: "generate" };
   if (!session.reviewChangelog) return { step: "review" };
+  if (session.endedAt) {
+    // After "End here": answered questions are scored and the rest get a suggested answer. No overall report is written.
+    const unscored = reportQuestionIds(session).filter((id) => !evaluationFor(session, id));
+    if (unscored.length) return { step: "evaluate", questionIds: unscored };
+    const missing = missingSuggestionIds(session);
+    if (missing.length) return { step: "suggest", questionIds: missing };
+    return { step: "done" };
+  }
   for (const question of session.questions) {
     if (isQuestionFinished(session, question.id)) continue;
     if (!findTurn(session, question.id, "interviewer", "main")) return { step: "ask", questionId: question.id };
