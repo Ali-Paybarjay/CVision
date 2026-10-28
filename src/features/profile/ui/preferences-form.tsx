@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import type { JobPreferences } from "@/shared/contracts";
-import { Button, Field, Input, Notice, Select } from "@/shared/ui";
+import { Button, Field, Input, Notice, Select, Textarea } from "@/shared/ui";
 import {
   contractTypeOptions,
   draftFromPreferences,
   hoursOptions,
+  MAX_NOTES_CHARACTERS,
   preferencesFromDraft,
   salaryPeriodOptions,
+  tidyNotes,
   workModeOptions,
   type PreferencesDraft,
   type PreferencesErrors,
   type SalaryPeriod,
 } from "../preferences";
+import { count } from "./format";
 
 type PreferencesFormProps = {
   preferences: JobPreferences;
@@ -22,12 +25,13 @@ type PreferencesFormProps = {
   onCancel: () => void;
 };
 
-/** What kind of work the user is looking for: place, way of working, contract, hours and pay. */
+/** What kind of work the user is looking for: place, way of working, contract, hours, pay, must-haves and deal-breakers. */
 export function PreferencesForm({ preferences, onSave, onCancel }: PreferencesFormProps) {
   const [draft, setDraft] = useState<PreferencesDraft>(() => draftFromPreferences(preferences));
   const [errors, setErrors] = useState<PreferencesErrors>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const notesLeft = MAX_NOTES_CHARACTERS - tidyNotes(draft.notes).length;
 
   const change = (next: Partial<PreferencesDraft>) => {
     setDraft((current) => ({ ...current, ...next }));
@@ -101,6 +105,27 @@ export function PreferencesForm({ preferences, onSave, onCancel }: PreferencesFo
           </Field>
         </div>
       </fieldset>
+
+      <Field
+        label="Must-haves and deal-breakers (optional)"
+        hint="Anything our options don’t cover. Write one per line, for example: “Move into team leadership”, “No night shifts”, “Not in gambling”, “Within 45 minutes of Leeds”."
+        error={errors.notes}
+      >
+        {(props) => (
+          <>
+            <Textarea
+              {...props}
+              rows={4}
+              className="min-h-28"
+              value={draft.notes}
+              onChange={(event) => change({ notes: event.target.value })}
+            />
+            <p className="text-sm text-text-muted">
+              {notesLeft >= 0 ? `${count(notesLeft, "character")} left` : `${count(-notesLeft, "character")} too many`}
+            </p>
+          </>
+        )}
+      </Field>
 
       {problem && (
         <Notice tone="error" title="Your preferences aren’t saved">

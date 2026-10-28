@@ -36,6 +36,9 @@ export const salaryPeriodOptions: { value: SalaryPeriod; label: string }[] = [
   { value: "hour", label: "an hour" },
 ];
 
+/** The longest must-haves and deal-breakers note; the contract allows no more. */
+export const MAX_NOTES_CHARACTERS = 500;
+
 /** The preferences form, as typed. */
 export type PreferencesDraft = {
   location: string;
@@ -46,6 +49,8 @@ export type PreferencesDraft = {
   minimumPay: string;
   maximumPay: string;
   payPeriod: SalaryPeriod;
+  /** Must-haves and deal-breakers the options don't cover, one per line, as typed. */
+  notes: string;
 };
 
 export function draftFromPreferences(preferences: JobPreferences): PreferencesDraft {
@@ -57,10 +62,11 @@ export function draftFromPreferences(preferences: JobPreferences): PreferencesDr
     minimumPay: preferences.salary?.min?.toString() ?? "",
     maximumPay: preferences.salary?.max?.toString() ?? "",
     payPeriod: preferences.salary?.period ?? "year",
+    notes: preferences.notes ?? "",
   };
 }
 
-export type PreferencesErrors = { minimumPay?: string; maximumPay?: string };
+export type PreferencesErrors = { minimumPay?: string; maximumPay?: string; notes?: string };
 export type PreferencesResult = { ok: true; preferences: JobPreferences } | { ok: false; errors: PreferencesErrors };
 
 /** The form as JobPreferences, or what to fix. Choices keep their order, without repeats. */
@@ -75,7 +81,9 @@ export function preferencesFromDraft(draft: PreferencesDraft): PreferencesResult
   const min = pay(draft.minimumPay, "minimumPay");
   const max = pay(draft.maximumPay, "maximumPay");
   if (min !== undefined && max !== undefined && max < min) errors.maximumPay = "This is less than the lowest pay.";
-  if (errors.minimumPay || errors.maximumPay) return { ok: false, errors };
+  const notes = tidyNotes(draft.notes);
+  if (notes.length > MAX_NOTES_CHARACTERS) errors.notes = `Keep this to ${MAX_NOTES_CHARACTERS} characters or fewer.`;
+  if (errors.minimumPay || errors.maximumPay || errors.notes) return { ok: false, errors };
 
   const salary: Salary | null =
     min === undefined && max === undefined ? null : { min, max, currency: "GBP", period: draft.payPeriod, isEstimate: false };
@@ -89,8 +97,25 @@ export function preferencesFromDraft(draft: PreferencesDraft): PreferencesResult
       workModes: unique(draft.workModes),
       contractTypes: unique(draft.contractTypes),
       hours: unique(draft.hours),
+      ...(notes ? { notes } : {}),
     }),
   };
+}
+
+/**
+ * The user's must-haves and deal-breakers, one per line. They say what the user wants, not what they have done,
+ * so they are never evidence for a tailored CV (Nothing invented).
+ */
+export function noteLines(notes: string | undefined): string[] {
+  return (notes ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+}
+
+/** The note as it is saved: each line trimmed, blank lines dropped. Empty when nothing is written. */
+export function tidyNotes(text: string): string {
+  return noteLines(text).join("\n");
 }
 
 /** "30000", "£30,000", "30k" and "12.50" in pounds; null for anything else, or for nothing at all. */

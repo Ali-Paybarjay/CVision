@@ -49,6 +49,8 @@ export const JobPreferencesSchema = z.object({
   workModes: z.array(WorkModeSchema),
   contractTypes: z.array(ContractTypeSchema),
   hours: z.array(HoursSchema),
+  /** Must-haves and deal-breakers the options don't cover, one per line, as the user wrote them. Not evidence for the CV. */
+  notes: z.string().max(500).optional(),
 });
 export type JobPreferences = z.infer<typeof JobPreferencesSchema>;
 
