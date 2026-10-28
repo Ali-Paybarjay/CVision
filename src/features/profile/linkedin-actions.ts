@@ -48,7 +48,7 @@ export async function suggestLinkedInAction(input: { jobId: unknown }): Promise<
   // The sample data answers any unknown id with Sara's first job: that would be someone else's job.
   if (!job || job.id !== jobId) return notFound;
   if (!profile) {
-    return { ok: false, code: "profile", message: "Upload your CV first, so there are lines to take from it." };
+    return { ok: false, code: "profile", message: "Build your profile first: upload your CV or fill in your details yourself." };
   }
   // Checked before the model is asked: with nothing to take lines from, every request would come back empty.
   const nothing = nothingToWrite(profile);

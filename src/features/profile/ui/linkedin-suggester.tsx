@@ -7,14 +7,34 @@ import { suggestLinkedInAction, type LinkedInResult } from "../linkedin-actions"
 import { count } from "./format";
 import { SignInNotice } from "./upload-step";
 
+/**
+ * Where the lines come from, so the page names it right: a sample person's CV in the demo, the user's own CV, or a
+ * profile they typed in by hand, with no CV (card #179).
+ */
+export type LinesFrom = { kind: "sample"; name: string } | { kind: "cv" } | { kind: "typed" };
+
+/**
+ * How the page names where the lines come from: inside a sentence, at its start, and as the place a role or a gap is
+ * ("Not on your CV"). A sample person's CV is theirs, not the visitor's.
+ */
+const sourceNames = {
+  sample: { it: "the CV", It: "The CV", on: "on the CV" },
+  cv: { it: "your CV", It: "Your CV", on: "on your CV" },
+  typed: { it: "your profile", It: "Your profile", on: "in your profile" },
+} as const;
+
+/** The sample person's name when the lines are from their CV, otherwise null. */
+function sampleNameOf(from: LinesFrom): string | null {
+  return from.kind === "sample" ? from.name : null;
+}
+
 type LinkedInSuggesterProps = {
   jobId: string;
   /** This page, to come back to after signing in. */
   here: string;
   /** True in mock mode: simple rules choose the lines, not the AI. */
   demoMode: boolean;
-  /** Set when the lines come from a sample person's CV, not the user's own: their name. */
-  sampleName: string | null;
+  from: LinesFrom;
 };
 
 type State = {
@@ -31,7 +51,7 @@ const start: State = { suggestions: null, shown: 0, pending: false, failure: nul
  * LinkedIn Experience lines for one job. Nothing is chosen until the user asks, because with the AI on each request
  * counts against their daily limit; and nothing is saved, so the lines last until the page is left.
  */
-export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedInSuggesterProps) {
+export function LinkedInSuggester({ jobId, here, demoMode, from }: LinkedInSuggesterProps) {
   const [state, setState] = useState<State>(start);
   const request = useRef(0);
 
@@ -63,8 +83,8 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
   }
 
   const { suggestions, shown, pending, failure } = state;
-  // A sample person's CV is theirs, not the visitor's.
-  const cv = sampleName ? "the CV" : "your CV";
+  const { it, on } = sourceNames[from.kind];
+  const sampleName = sampleNameOf(from);
   const working = (
     <p aria-live="polite" className="sr-only">
       {pending ? "Choosing your LinkedIn lines. This can take up to a minute." : ""}
@@ -84,7 +104,7 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
     return (
       <div className="flex flex-col gap-6">
         {notice}
-        <LinkedInResults suggestions={suggestions} focusKey={shown} sampleName={sampleName} />
+        <LinkedInResults suggestions={suggestions} focusKey={shown} from={from} />
         {signIn}
         {failure && failure.code !== "sign-in" && (
           <Notice tone="error" title="We couldn’t choose new lines">
@@ -105,9 +125,9 @@ export function LinkedInSuggester({ jobId, here, demoMode, sampleName }: LinkedI
       <Card>
         <h2 className="text-xl">What you get</h2>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5">
-          <li>For each role on {cv}, the lines that show what this ad asks for, ready to add under it on LinkedIn.</li>
-          <li>The skills to add to each role, from {cv}.</li>
-          <li>Every line in the CV’s own words, unchanged. Nothing invented.</li>
+          <li>For each role {on}, the lines that show what this ad asks for, ready to add under it on LinkedIn.</li>
+          <li>The skills to add to each role, from {it}.</li>
+          <li>Every line in {from.kind === "typed" ? "your" : "the CV’s"} own words, unchanged. Nothing invented.</li>
         </ul>
         <p className="mt-3 max-w-[65ch] text-text-muted">
           We never post to LinkedIn. You copy what you want and paste it into your LinkedIn profile yourself.
@@ -137,16 +157,15 @@ type LinkedInResultsProps = {
   suggestions: LinkedInSuggestions;
   /** The heading takes focus when this changes, but not when the page is shown again after Back. */
   focusKey: number;
-  sampleName: string | null;
+  from: LinesFrom;
 };
 
-/** The lines for each role, the roles with nothing to add, and what the ad asks for that the CV doesn't show. */
-export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInResultsProps) {
+/** The lines for each role, the roles with nothing to add, and what the ad asks for that the CV or profile doesn't show. */
+export function LinkedInResults({ suggestions, focusKey, from }: LinkedInResultsProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const focused = useRef(0);
   const { roles, otherRoles, notShown, dropped } = suggestions;
-  // A sample person's CV is theirs, not the visitor's.
-  const cv = sampleName ? "the CV" : "your CV";
+  const { it } = sourceNames[from.kind];
 
   useEffect(() => {
     if (focusKey === focused.current) return;
@@ -154,13 +173,14 @@ export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInR
     headingRef.current?.focus();
   }, [focusKey]);
 
+  // "On LinkedIn", not "of your LinkedIn profile": next to "your profile", that could be read as the same one.
   let summary: string;
   if (roles.length > 0) {
-    summary = `Each role is one position in the Experience section of your LinkedIn profile, and every line is word for word from ${cv}. If a role isn’t on LinkedIn yet, add it as a new position with these details.`;
+    summary = `Each role is one position in the Experience section on LinkedIn, and every line is word for word from ${it}. If a role isn’t on LinkedIn yet, add it as a new position with these details.`;
   } else if (dropped > 0) {
-    summary = `We left out ${count(dropped, "suggestion")} that we couldn’t check against ${cv}, so there is nothing to add for this job yet. Try Suggest again.`;
+    summary = `We left out ${count(dropped, "suggestion")} that we couldn’t check against ${it}, so there is nothing to add for this job yet. Try Suggest again.`;
   } else {
-    summary = `No line of ${cv} speaks to this ad’s requirements, so there is nothing to add for this job.`;
+    summary = `No line of ${it} speaks to this ad’s requirements, so there is nothing to add for this job.`;
   }
 
   return (
@@ -173,13 +193,13 @@ export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInR
           <p className="mt-2 max-w-[65ch] text-text-muted">{summary}</p>
           {roles.length > 0 && dropped > 0 && (
             <p className="mt-2 text-sm text-text-muted">
-              We left out {count(dropped, "suggestion")} that we couldn’t check against {cv}.
+              We left out {count(dropped, "suggestion")} that we couldn’t check against {it}.
             </p>
           )}
         </div>
 
         {roles.map((role) => (
-          <RoleCard key={role.id} role={role} sample={sampleName !== null} />
+          <RoleCard key={role.id} role={role} from={from} />
         ))}
 
         {roles.length > 0 && otherRoles.length > 0 && (
@@ -190,12 +210,12 @@ export function LinkedInResults({ suggestions, focusKey, sampleName }: LinkedInR
         )}
       </section>
 
-      {notShown.length > 0 && <NotShownCard items={notShown} sampleName={sampleName} />}
+      {notShown.length > 0 && <NotShownCard items={notShown} from={from} />}
     </div>
   );
 }
 
-function RoleCard({ role, sample }: { role: LinkedInRole; sample: boolean }) {
+function RoleCard({ role, from }: { role: LinkedInRole; from: LinesFrom }) {
   const headingId = `linkedin-${role.id}`;
   const facts = [
     ["Company", role.company],
@@ -219,12 +239,12 @@ function RoleCard({ role, sample }: { role: LinkedInRole; sample: boolean }) {
       </dl>
       {role.cvTitle !== role.title && (
         <p className="mt-2 text-sm text-text-muted">
-          {`${sample ? "The CV" : "Your CV"} says “${role.cvTitle}”. On LinkedIn, the title is “${role.title}” and “${role.employmentType}” goes under Employment type.`}
+          {`${sourceNames[from.kind].It} says “${role.cvTitle}”. On LinkedIn, the title is “${role.title}” and “${role.employmentType}” goes under Employment type.`}
         </p>
       )}
       {role.sameCompanyAs && (
         <p className="mt-2 text-sm text-text-muted">
-          Same company as {sample ? "the" : "your"} {role.sameCompanyAs} role: on LinkedIn, add it as another position
+          Same company as {from.kind === "sample" ? "the" : "your"} {role.sameCompanyAs} role: on LinkedIn, add it as another position
           under {role.company}.
         </p>
       )}
@@ -250,7 +270,7 @@ export function copyState(copied: Copied | null, text: string): "ready" | "copie
   return copied.ok ? "copied" : "failed";
 }
 
-/** The lines to add, as the CV says them, and a Copy button for all of them. */
+/** The lines to add, as the CV or profile says them, and a Copy button for all of them. */
 function Lines({ role }: { role: LinkedInRole }) {
   const text = role.lines.map((line) => `• ${line}`).join("\n");
   const [copied, setCopied] = useState<Copied | null>(null);
@@ -302,31 +322,36 @@ function Lines({ role }: { role: LinkedInRole }) {
 }
 
 /**
- * What the ad asks for that the CV doesn't show clearly: never in a line, and what to do about it. In the sample data
- * the profile can't be changed, so the advice is only what the gaps are.
+ * What the ad asks for that the CV or profile doesn't show clearly: never in a line, and what to do about it. In the
+ * sample data the profile can't be changed, so the advice is only what the gaps are.
  */
-function NotShownCard({ items, sampleName }: { items: NotShown[]; sampleName: string | null }) {
+function NotShownCard({ items, from }: { items: NotShown[]; from: LinesFrom }) {
   const missing = items.filter((item) => item.kind === "missing");
   const unclear = items.filter((item) => item.kind === "unclear");
-  const cv = sampleName ? "the CV" : "your CV";
+  const { it, It, on } = sourceNames[from.kind];
+  const sampleName = sampleNameOf(from);
   return (
     <Card aria-labelledby="linkedin-gaps">
       <h2 id="linkedin-gaps" className="text-xl">
-        What {cv} doesn’t show yet
+        What {it} doesn’t show yet
       </h2>
       <p className="mt-2 max-w-[65ch] text-text-muted">
         {sampleName
           ? `The ad also asks for these, and ${sampleName}’s sample CV doesn’t show them clearly.`
-          : "The ad also asks for these, and your CV doesn’t show them clearly. Don’t add them to LinkedIn unless you have done them."}
+          : `The ad also asks for these, and ${it} doesn’t show them clearly. Don’t add them to LinkedIn unless you have done them.`}
       </p>
       <Gaps
-        title={`Not on ${cv}`}
-        advice={sampleName ? null : "If you have done one, add it to your profile first, so every line stays backed by your CV."}
+        title={`Not ${on}`}
+        advice={sampleName ? null : `If you have done one, add it to your profile first, so every line stays backed by ${it}.`}
         items={missing}
       />
       <Gaps
-        title={`Not clear on ${cv}`}
-        advice={sampleName ? null : "Your CV touches on these. Add a clear example to your profile, in your own words."}
+        title={`Not clear ${on}`}
+        advice={
+          sampleName
+            ? null
+            : `${It} touches on these. Add a clear example to ${from.kind === "typed" ? "it" : "your profile"}, in your own words.`
+        }
         items={unclear}
       />
       {!sampleName && (

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
 import { profileEvidenceLines } from "./match";
-import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs, MAX_LISTED_JOBS } from "./my-data";
+import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, isMyProfileFromCv, listMyJobs, MAX_LISTED_JOBS } from "./my-data";
 
 const { getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -79,6 +79,8 @@ describe("with no account (Supabase not connected, or signed out)", () => {
     expect(await listMyJobs()).toEqual(personas.sara.jobs);
     expect(await getMyJob("anything")).toBe(personas.sara.jobs[0]);
     expect(await getMyMatch("anything")).toBe(personas.sara.match);
+    // Each persona's profile comes from their sample CV.
+    expect(await isMyProfileFromCv()).toBe(true);
   });
 
   it("keeps the profile, job and match of one sample persona together", async () => {
@@ -113,6 +115,19 @@ describe("for a signed-in user", () => {
     createSupabaseServerClient.mockResolvedValue(fakeSupabase({ profiles: [] }).client);
 
     expect(await getMyProfile()).toBeNull();
+  });
+
+  it("says their profile came from a CV only when the account keeps the CV file, not for one typed in by hand", async () => {
+    const fromCv = fakeSupabase({ profiles: [{ data: profile, cv_file_path: "user-1/cv-1761600000000.pdf" }] });
+    createSupabaseServerClient.mockResolvedValue(fromCv.client);
+    expect(await isMyProfileFromCv()).toBe(true);
+    expect(fromCv.queries[0].steps).toEqual(["select cv_file_path"]);
+
+    createSupabaseServerClient.mockResolvedValue(fakeSupabase({ profiles: [{ data: profile, cv_file_path: null }] }).client);
+    expect(await isMyProfileFromCv()).toBe(false);
+
+    createSupabaseServerClient.mockResolvedValue(fakeSupabase({ profiles: [] }).client);
+    expect(await isMyProfileFromCv()).toBe(false);
   });
 
   it("lists their jobs newest first, with each row's id", async () => {
@@ -181,5 +196,7 @@ describe("for a signed-in user", () => {
     expect(await listMyJobs()).toEqual([]);
     expect(await getMyJob(id(1))).toBeNull();
     expect(await getMyMatch(id(1))).toBeNull();
+    // "Your profile" is true whichever way the profile was made.
+    expect(await isMyProfileFromCv()).toBe(false);
   });
 });

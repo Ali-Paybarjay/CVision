@@ -5,7 +5,7 @@ import type { Job, Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { buildLinkedInSuggestions, suggestByRules, type LinkedInAnswer, type LinkedInSuggestions } from "../linkedin";
 import { profileEvidenceLines } from "../match";
-import { againFailed, copyState, LinkedInResults, LinkedInSuggester } from "./linkedin-suggester";
+import { againFailed, copyState, LinkedInResults, LinkedInSuggester, type LinesFrom } from "./linkedin-suggester";
 
 // Render checks for /jobs/linkedin: they catch crashes and missing content.
 
@@ -46,13 +46,17 @@ function idOf(text: string, profile: Profile = personas.sara.profile): string {
   return profileEvidenceLines(profile).find((item) => item.text === text)?.id ?? "";
 }
 
-function results(suggestions: LinkedInSuggestions, sampleName: string | null = null) {
-  return renderToStaticMarkup(<LinkedInResults suggestions={suggestions} focusKey={0} sampleName={sampleName} />);
+const fromCv: LinesFrom = { kind: "cv" };
+const typed: LinesFrom = { kind: "typed" };
+const sample = (name: string): LinesFrom => ({ kind: "sample", name });
+
+function results(suggestions: LinkedInSuggestions, from: LinesFrom = fromCv) {
+  return renderToStaticMarkup(<LinkedInResults suggestions={suggestions} focusKey={0} from={from} />);
 }
 
 function suggester(props: Partial<React.ComponentProps<typeof LinkedInSuggester>> = {}) {
   return renderToStaticMarkup(
-    <LinkedInSuggester jobId="sara-job-1" here="/jobs/linkedin?job=sara-job-1" demoMode={false} sampleName={null} {...props} />,
+    <LinkedInSuggester jobId="sara-job-1" here="/jobs/linkedin?job=sara-job-1" demoMode={false} from={fromCv} {...props} />,
   );
 }
 
@@ -71,9 +75,18 @@ describe("LinkedInSuggester", () => {
 
   it("says so in demo mode, and names whose sample CV the lines come from, never calling it the visitor's", () => {
     expect(text(suggester({ demoMode: true }))).toContain("Demo mode: lines chosen by simple rules");
-    expect(text(suggester({ demoMode: true, sampleName: "Sara Khan" }))).toContain("This uses Sara Khan’s sample CV, not yours.");
-    expect(text(suggester({ sampleName: "Sara Khan" }))).toContain("This uses Sara Khan’s sample CV, not yours");
-    for (const demoMode of [true, false]) expect(text(suggester({ demoMode, sampleName: "Sara Khan" }))).not.toMatch(/your CV/i);
+    expect(text(suggester({ demoMode: true, from: sample("Sara Khan") }))).toContain("This uses Sara Khan’s sample CV, not yours.");
+    expect(text(suggester({ from: sample("Sara Khan") }))).toContain("This uses Sara Khan’s sample CV, not yours");
+    for (const demoMode of [true, false]) expect(text(suggester({ demoMode, from: sample("Sara Khan") }))).not.toMatch(/your CV/i);
+  });
+
+  it("speaks of the profile, never a CV, to someone who typed their profile in by hand", () => {
+    const html = text(suggester({ from: typed }));
+
+    expect(html).toContain("For each role in your profile, the lines that show what this ad asks for");
+    expect(html).toContain("The skills to add to each role, from your profile.");
+    expect(html).toContain("Every line in your own words, unchanged. Nothing invented.");
+    expect(html).not.toMatch(/\bCV\b/);
   });
 });
 
@@ -115,7 +128,7 @@ describe("LinkedInResults", () => {
   });
 
   it("names a sample person's gaps as theirs, without sending the visitor to edit a profile", () => {
-    const html = text(results(mockSuggestions("sara"), "Sara Khan"));
+    const html = text(results(mockSuggestions("sara"), sample("Sara Khan")));
 
     expect(html).toContain("What the CV doesn’t show yet");
     expect(html).toContain("The ad also asks for these, and Sara Khan’s sample CV doesn’t show them clearly.");
@@ -125,9 +138,29 @@ describe("LinkedInResults", () => {
   });
 
   it.each(sampleJobs)("calls $name's sample CV the CV, never the visitor's, for $job.id", ({ name, job }) => {
-    const html = text(results(mockSuggestions(name, job), personas[name].profile.fullName));
+    const html = text(results(mockSuggestions(name, job), sample(personas[name].profile.fullName)));
 
     expect(html).not.toMatch(/your CV|Your CV|Same company as your/);
+  });
+
+  it.each(sampleJobs)("calls a profile typed in by hand the profile, never a CV, for $job.id's lines", ({ name, job }) => {
+    const html = text(results({ ...mockSuggestions(name, job), dropped: 1 }, typed));
+
+    expect(html).toContain("every line is word for word from your profile");
+    expect(html).toContain("We left out 1 suggestion that we couldn’t check against your profile.");
+    expect(html).not.toMatch(/\bCV\b/);
+  });
+
+  it("names the gaps of a profile typed in by hand as the profile's, and leads to it", () => {
+    const html = text(results(mockSuggestions("sara"), typed));
+
+    expect(html).toContain("What your profile doesn’t show yet");
+    expect(html).toContain("The ad also asks for these, and your profile doesn’t show them clearly. Don’t add them to LinkedIn unless you have done them.");
+    expect(html).toContain("Not in your profile (3)");
+    expect(html).toContain("If you have done one, add it to your profile first, so every line stays backed by your profile.");
+    expect(html).toContain("Not clear in your profile (1)");
+    expect(html).toContain("Your profile touches on these. Add a clear example to it, in your own words.");
+    expect(html).toContain("Go to my profile");
   });
 
   it("uses none of the brand's banned words", () => {
@@ -148,7 +181,11 @@ describe("LinkedInResults", () => {
     expect(text(results(daniel))).toContain(
       "Same company as your Store Manager role: on LinkedIn, add it as another position under Hartley's Home Stores.",
     );
-    expect(text(results(daniel, personas.daniel.profile.fullName))).toContain("Same company as the Store Manager role");
+    expect(text(results(daniel, sample(personas.daniel.profile.fullName)))).toContain("Same company as the Store Manager role");
+    expect(text(results(daniel, typed))).toContain("Same company as your Store Manager role");
+    expect(text(results(chosen([{ role: "R2", lines: [idOf(trained)], skills: [] }]), typed))).toContain(
+      "Your profile says “Customer Assistant (part-time)”. On LinkedIn, the title is “Customer Assistant”",
+    );
   });
 
   it("names the roles with nothing to add, and says how many suggestions were left out", () => {

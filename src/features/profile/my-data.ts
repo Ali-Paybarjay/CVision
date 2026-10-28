@@ -48,6 +48,20 @@ export async function getMyProfile(options: { jobId?: string } = {}): Promise<Pr
   return data ? parsed(ProfileSchema, data.data, "profile") : null;
 }
 
+/**
+ * True when the user's profile came from their CV: the account keeps the CV file it was built from. False for a
+ * profile typed in by hand (card #179), which has none, and when the database fails, so a page then says "your
+ * profile", which is true either way. Sample data: true, since each persona's profile comes from their sample CV.
+ */
+export async function isMyProfileFromCv(): Promise<boolean> {
+  const account = await getAccount();
+  if (account.source === "sample") return true;
+
+  const { data, error } = await account.supabase.from("profiles").select("cv_file_path").maybeSingle();
+  if (error) return failed("profile", error) ?? false;
+  return Boolean(data?.cv_file_path);
+}
+
 /** The user's jobs, newest first. Sample data: Sara's two jobs. */
 export async function listMyJobs(): Promise<Job[]> {
   const account = await getAccount();

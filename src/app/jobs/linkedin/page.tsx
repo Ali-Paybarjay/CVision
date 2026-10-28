@@ -3,12 +3,12 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/features/account/current-user";
 import { nothingToWrite } from "@/features/profile/linkedin";
-import { getMyDataSource, getMyJob, getMyProfile, listMyJobs } from "@/features/profile/my-data";
+import { getMyDataSource, getMyJob, getMyProfile, isMyProfileFromCv, listMyJobs } from "@/features/profile/my-data";
 import { BackLink } from "@/features/profile/ui/back-link";
-import { LinkedInSuggester } from "@/features/profile/ui/linkedin-suggester";
+import { LinkedInSuggester, type LinesFrom } from "@/features/profile/ui/linkedin-suggester";
 import { SignInNotice } from "@/features/profile/ui/upload-step";
 import { getAiMode } from "@/shared/ai";
-import type { Job } from "@/shared/contracts";
+import type { Job, Profile } from "@/shared/contracts";
 import { Card, Notice, Page } from "@/shared/ui";
 
 export const metadata: Metadata = { title: "Your LinkedIn Experience" };
@@ -16,13 +16,13 @@ export const metadata: Metadata = { title: "Your LinkedIn Experience" };
 /** One model request per click, which may be asked twice. */
 export const maxDuration = 60;
 
-// /jobs/linkedin?job=<id>: which lines of the CV to add under each role of the user's LinkedIn profile, for one of
-// their jobs.
+// /jobs/linkedin?job=<id>: which lines of the CV (or of a profile typed in by hand) to add under each role of the
+// user's LinkedIn profile, for one of their jobs. Where the lines come from is said below, once the page knows which.
 export default function LinkedInPage({ searchParams }: PageProps<"/jobs/linkedin">) {
   return (
     <Page
       title="Your LinkedIn Experience"
-      description="What to add under each role in the Experience section of your LinkedIn profile, for one job. Every line is one of your CV’s own lines, word for word, and you copy what you want."
+      description="What to add under each role in the Experience section of your LinkedIn profile, for one job."
     >
       <Suspense
         fallback={
@@ -59,23 +59,24 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
   if (!profile) {
     return (
       <WithBack>
-        <Notice tone="info" title="Upload your CV first">
-          Your LinkedIn lines come from your CV.{" "}
+        <Notice tone="info" title="Build your profile first">
+          Your LinkedIn lines come from the profile you approve. Upload your CV or fill in your details yourself.{" "}
           <Link href="/profile" className="font-semibold text-accent hover:underline">
-            Upload your CV
+            Build your profile
           </Link>
         </Notice>
       </WithBack>
     );
   }
 
+  const from = await linesFrom(profile);
   const nothing = nothingToWrite(profile);
   if (nothing) {
     return (
       <WithBack>
         <Notice tone="info" title={nothing === "no-roles" ? "Add your work experience first" : "Add what you did in each role first"}>
           {nothing === "no-roles"
-            ? "LinkedIn lines come from the roles on your CV, and your profile has none yet."
+            ? `LinkedIn lines come from the roles ${from.kind === "typed" ? "in your profile, and it has" : "on your CV, and your profile has"} none yet.`
             : "LinkedIn lines are taken from the duties and results under each role, and your profile has none yet."}{" "}
           <Link href="/profile" className="font-semibold text-accent hover:underline">
             Go to my profile
@@ -93,7 +94,7 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
     );
   }
 
-  const [job, source] = await Promise.all([getMyJob(jobId), getMyDataSource()]);
+  const job = await getMyJob(jobId);
   // The sample data answers any unknown id with Sara's first job, so check it is the job asked for.
   if (!job || job.id !== jobId) {
     return (
@@ -106,7 +107,7 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
     );
   }
 
-  const label = [source === "sample" && "Sample data", mode === "mock" && "mock mode"].filter(Boolean).join(" · ");
+  const label = [from.kind === "sample" && "Sample data", mode === "mock" && "mock mode"].filter(Boolean).join(" · ");
   return (
     <WithBack>
       <p className="text-lg">
@@ -122,10 +123,19 @@ async function LinkedInView({ searchParams }: Pick<PageProps<"/jobs/linkedin">, 
         jobId={job.id}
         here={here}
         demoMode={mode === "mock"}
-        sampleName={source === "sample" ? profile.fullName : null}
+        from={from}
       />
     </WithBack>
   );
+}
+
+/**
+ * Where the lines come from, so the page names it right: a sample person's CV in the demo, the user's own CV, or a
+ * profile they typed in by hand (card #179), which has no CV file in the account.
+ */
+async function linesFrom(profile: Profile): Promise<LinesFrom> {
+  if ((await getMyDataSource()) === "sample") return { kind: "sample", name: profile.fullName };
+  return (await isMyProfileFromCv()) ? { kind: "cv" } : { kind: "typed" };
 }
 
 /** Back first, then the page's content. */
