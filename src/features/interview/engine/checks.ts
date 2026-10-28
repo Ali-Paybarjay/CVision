@@ -640,19 +640,21 @@ export function suggestionProblems(output: SuggestionDraft, context: SuggestionC
     if (!honestWording.test(honest)) problems.push({ path: ["honestLine"], message: "The honest line must say plainly what the CV does not show." });
   }
 
-  // R4: a tool or method the CV never names is never claimed. It may be named in the honest line, and elsewhere only
-  // when the question itself names it and the honest line owns up to it.
-  const answerOutsideHonest = honest
-    ? splitSentences(output.sampleAnswer)
-        .filter((sentence) => !isVerbatim(honest, sentence))
-        .join(" ")
-    : output.sampleAnswer;
-  const elsewhere = [answerOutsideHonest, ...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip), output.uncertainty ?? ""].join("\n");
-  const claimed = namedItemsAbsentFromCv(context.role, context.cv).filter(
-    (item) => mentions(elsewhere, item) && !(mentions(question.text, item) && mentions(honest, item)),
-  );
+  // R4: a tool or method the CV never names is never claimed. Once the honest line owns up to it, it may appear in
+  // what the candidate would do ("In Power BI I'd…") or in plain facts about the tool, never in what they did.
+  const answerOutsideHonest = honest ? splitSentences(output.sampleAnswer).filter((sentence) => !isVerbatim(honest, sentence)) : splitSentences(output.sampleAnswer);
+  const elsewhere = [...answerOutsideHonest, ...[...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip), output.uncertainty ?? ""].flatMap(splitSentences)];
+  const claimed = namedItemsAbsentFromCv(context.role, context.cv).filter((item) => {
+    const naming = elsewhere.filter((sentence) => mentions(sentence, item));
+    if (naming.length === 0) return false;
+    if (!mentions(honest, item)) return true;
+    return naming.some((sentence) => aboutTheCandidate.test(sentence) && !hypothetical.test(sentence));
+  });
   if (claimed.length) {
-    problems.push({ path: ["sampleAnswer"], message: "Names a tool or method from the job ad that the CV never mentions: name it only in the honest line." });
+    problems.push({
+      path: ["sampleAnswer"],
+      message: "Names a tool or method from the job ad that the CV never mentions: say so in the honest line, and use it only in what the candidate would do.",
+    });
   }
 
   // R3: a figure about what the candidate did comes from the CV, the job ad or the question.

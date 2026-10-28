@@ -139,9 +139,19 @@ describe("the rules every suggested answer passes", () => {
   });
 
   it("R4: a tool the CV never names is never claimed, but may be owned up to", () => {
+    const toolRule = "Names a tool or method from the job ad that the CV never mentions: say so in the honest line, and use it only in what the candidate would do.";
     const claimed = sample("q1");
     claimed.sampleAnswer += " I also built the report in Power BI.";
-    expect(messages(claimed)).toContain("Names a tool or method from the job ad that the CV never mentions: name it only in the honest line.");
+    expect(messages(claimed)).toContain(toolRule);
+    // Owned up to, the tool may appear in what the candidate would do, never in what they did.
+    const wouldDo = sample("q1");
+    wouldDo.honestLine = "I haven't used Power BI yet.";
+    wouldDo.sampleAnswer = `${wouldDo.honestLine} ${wouldDo.sampleAnswer} In Power BI I'd build the same checks into the refresh.`;
+    expect(messages(wouldDo)).toEqual([]);
+    const didDo = sample("q1");
+    didDo.honestLine = "I haven't used Power BI yet.";
+    didDo.sampleAnswer = `${didDo.honestLine} ${didDo.sampleAnswer} I built the stock report in Power BI.`;
+    expect(messages(didDo)).toContain(toolRule);
     const owned = sample("q1");
     owned.honestLine = "I haven't used Power BI yet.";
     owned.sampleAnswer = `${owned.honestLine} ${owned.sampleAnswer}`;

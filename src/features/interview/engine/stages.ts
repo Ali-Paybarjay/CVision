@@ -702,16 +702,17 @@ export async function suggestAnswer(
     return { suggestion: toSuggestion(output, context), usage, provenance, requests: reports.length };
   } catch (error) {
     if (!(error instanceof AskModelError) || !fallbackReasons.has(error.reason)) throw error;
-    // Logs the kind of failure only, never the CV or the model's text.
-    console.error(`interview suggest: using the code-built suggestion for ${questionId} (${error.reason})`);
+    // The message names the broken rule and its field only: the checks never quote the CV or the model's text.
+    console.error(`interview suggest: using the code-built suggestion for ${questionId} (${error.reason}: ${error.message})`);
     if (run.requester) await track(suggestionFallbackEvent, { questionType: question.type, focus: question.focus, reason: error.reason }, run.requester);
     const suggestion = fallbackSuggestion(context);
-    if (reports.length === 0) return { suggestion };
+    const requests = reports.length;
+    if (requests === 0) return { suggestion, requests };
     // The model answered but its answers were rejected: record what that cost and which prompt ran.
     const settings = settingsFor("suggest", run.overrides);
     const prompt = await loadInterviewPrompt(settings.prompt, values).catch(() => null);
-    if (!prompt) return { suggestion };
+    if (!prompt) return { suggestion, requests };
     const usage = measuredUsage({ stage: "suggest", model: settings.model, reports, questionId });
-    return { suggestion, usage, provenance: { stage: "suggest", prompt: settings.prompt, version: prompt.version, model: settings.model } };
+    return { suggestion, usage, provenance: { stage: "suggest", prompt: settings.prompt, version: prompt.version, model: settings.model }, requests };
   }
 }
