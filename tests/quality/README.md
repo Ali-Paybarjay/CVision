@@ -62,7 +62,7 @@
 ### صفحهٔ اصلی و حساب
 
 - [ ] `/` تیتر «Every application, made to fit.» را نشان می‌دهد. «Get started free» به «Create your free account» می‌رسد.
-- [ ] ثبت‌نام: پیام «Check your email» می‌آید، و با لینک ایمیل وارد حساب می‌شوی.
+- [ ] ثبت‌نام: با «Create your account» مستقیم وارد حساب می‌شوی، چون تأیید ایمیل در Supabase خاموش است. اگر روشن شود، پیام «Check your email» می‌آید و با لینک ایمیل وارد می‌شوی.
 - [ ] خروج و ورود دوباره کار می‌کند، و ورود تو را به همان صفحه‌ای برمی‌گرداند که از آن آمده بودی.
 
 ### قدم ۱ · آپلود رزومه (`/profile`)
@@ -71,7 +71,7 @@
 - [ ] جزئیات همان رزومه است و چیزی از خودش نساخته. اگر چیزی در رزومه نیست، از تو می‌خواهد جایش را پر کنی.
 - [ ] یک مورد را ویرایش کن و «Approve and save» را بزن. «Your profile is saved.» با نام Sara Khan و لینک «Paste a job ad» می‌آید.
 - [ ] بعد از reload، Profile ذخیره‌شده با ویرایش تو سر جایش است.
-- [ ] فایل نادرست (مثلاً یک عکس) یا فایل بالای ۴ مگابایت پیام روشن می‌گیرد.
+- [ ] انتخابگر فایل فقط PDF و Word را نشان می‌دهد، پس عکس انتخاب‌شدنی نیست. یک PDF یا Word بالای ۴ مگابایت پیام روشن می‌گیرد.
 - [ ] یک PDF هم امتحان کن (`sara.docx` را در Word یا Google Docs به PDF ذخیره کن).
 - [ ] **بدون رزومه (#179):** با یک حساب آزمایشی دوم (`<you>+qa2@gmail.com`) در کارت «No CV to upload?» «Fill in my details» را بزن. صفحهٔ «Add your details» خالی می‌آید. نام، یک کار و یک مهارت از Sara را بنویس، تیک «I agree that CVision saves these details as my profile.» را بزن و «Approve and save» را بزن. «Your profile is saved.» می‌آید و بعد از reload سر جایش است.
 
@@ -93,7 +93,7 @@
 
 ### Apply و پیگیری (`/tailor` و `/dashboard`)
 
-- [ ] «Apply» لینک خود آگهی را باز می‌کند، و اپ هرگز به‌جای کاربر درخواست نمی‌فرستد. آگهی‌ای که لینک ندارد پیام «This job ad has no link» می‌گیرد.
+- [ ] آگهی‌ای که در `/jobs` بدون «Link to the ad (optional)» چسبانده شده، به‌جای دکمهٔ «Apply» پیام «This job ad has no link» می‌گیرد. یک بار هم آگهی را با یک لینک (مثلاً `https://example.com/jobs/1`) بچسبان: «Apply» همان لینک را در تب تازه باز می‌کند، و اپ هرگز به‌جای کاربر درخواست نمی‌فرستد.
 - [ ] درخواست در «Your applications» در `/dashboard` آمده است.
 - [ ] «Status» و «Next step» را عوض کن و reload کن. تغییر می‌ماند.
 - [ ] «Practise for this interview» به تمرین مصاحبهٔ همین آگهی می‌رود.
