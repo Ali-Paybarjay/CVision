@@ -35,6 +35,30 @@ describe("inventedTerms", () => {
     const { input, gaps } = coverLetterCases[0];
     expect(inventedTerms("I have built reports in Power BI.", gaps, input.answers, input.profile)).toEqual(["power bi"]);
   });
+
+  it("still accepts a skill that is on the CV or in a follow-up answer", () => {
+    const { input, gaps } = coverLetterCases[0];
+    const letter = "I have built reports in Power BI.";
+    const onCv = { ...input.profile, skills: [...input.profile.skills, "Power BI"] };
+    const answered = {
+      ...input.profile,
+      followUpAnswers: [
+        { id: "fu-1", question: "Which tools?", answer: "Weekly reports in Power BI", answeredAt: "2026-10-01T09:00:00.000Z" },
+      ],
+    };
+
+    expect(inventedTerms(letter, gaps, input.answers, onCv)).toEqual([]);
+    expect(inventedTerms(letter, gaps, input.answers, answered)).toEqual([]);
+  });
+
+  it("does not count what the user wants as evidence of what they have done (#164)", () => {
+    const { input, gaps } = coverLetterCases[0];
+    // Written as a type assertion until `notes` reaches the contract in #199; any other field outside the CV lines works the same.
+    const preferences = { ...input.profile.preferences, notes: "Learn Power BI" } as typeof input.profile.preferences;
+    const profile = { ...input.profile, preferences };
+
+    expect(inventedTerms("I have built reports in Power BI.", gaps, input.answers, profile)).toEqual(["power bi"]);
+  });
 });
 
 describe("createCoverLetter", () => {
