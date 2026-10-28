@@ -10,7 +10,7 @@ import { DeleteAccountForm } from "./delete-account-form";
 import { withNext } from "./safe-redirect";
 
 const tableLabels: Record<UserTable, { label: string; detail: string }> = {
-  profiles: { label: "Profile", detail: "Your approved profile, from your CV and your answers." },
+  profiles: { label: "Profile", detail: "Your approved profile, from your CV or the details you typed in, and your answers." },
   jobs: { label: "Saved job ads", detail: "The job ads you pasted." },
   match_results: { label: "Match results", detail: "How well your experience fits each job." },
   tailoring_changes: { label: "Suggested CV changes", detail: "Each tailored line, and whether you approved it." },

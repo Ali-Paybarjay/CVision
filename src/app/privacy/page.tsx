@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "25 October 2026";
+const lastUpdated = "27 October 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -32,8 +32,8 @@ const link = "font-semibold text-accent hover:underline";
 const yourDataPath = "/dashboard/your-data";
 
 const inShort = [
-  "We save your profile and the CV file you uploaded to your account, and only once you’ve approved your profile.",
-  "Your account and everything saved with it, your CV file included, are stored in London.",
+  "We save your profile, and the CV file if you uploaded one, to your account, and only once you’ve approved your profile.",
+  "Your account and everything saved with it, any CV file included, are stored in London.",
   "The AI services that read your text delete it once the answer is ready, apart from the few exceptions set out below.",
   "No advertising or analytics cookies, and no cookie banner: everything we store on your device is needed for CVision to work.",
   "You can download or delete your data at any time.",
@@ -63,10 +63,19 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
           don’t keep the file.
         </p>
         <p>
-          When you approve your profile, we save it and the CV file you uploaded (PDF or Word) to your account. You need
-          to be signed in to build a profile. If you upload a new CV later, the new file replaces the old one.
+          When you approve your profile, we save it to your account, with the CV file you uploaded (PDF or Word) if
+          there is one. You need to be signed in to build a profile. If you upload a new CV later, the new file replaces
+          the old one.
         </p>
-        <p>We read your CV only with your explicit consent, which you give when you upload it.</p>
+        <p>
+          If you don’t have a CV to upload, you can type your details in yourself instead. Nothing is sent to the AI
+          while you type, and nothing is saved until you approve your profile. Then we save your profile, with no CV
+          file.
+        </p>
+        <p>
+          We read your CV only with your explicit consent, which you give when you upload it. If you type your details
+          in instead, we save them only with your explicit consent, which you give when you approve your profile.
+        </p>
       </>
     ),
   },
@@ -134,7 +143,7 @@ const services: { name: string; body: React.ReactNode }[] = [
       <>
         <p>
           Passes your text to the AI and returns the answer. We don’t send your account ID or email address with it,
-          but your CV text may include your name and contact details.
+          but the text we send, from your CV or your profile, may include your name and contact details.
         </p>
         <p>
           OpenRouter deletes the text as soon as the answer is ready, unless the law requires it to keep it or it
@@ -159,9 +168,9 @@ const services: { name: string; body: React.ReactNode }[] = [
 
 const howLong: { what: string; until: string }[] = [
   {
-    what: "Your account and everything saved with it, your profile and CV file included",
+    what: "Your account and everything saved with it, your profile and any CV file included",
     until:
-      "Until you delete your account. You can also delete your profile and CV file on their own, on the Profile page.",
+      "Until you delete your account. You can also delete your profile and any CV file on their own, on the Profile page.",
   },
   { what: "Usage and AI use records linked to your account", until: "Until you delete your account." },
   { what: "Usage and AI use records made while you weren’t signed in", until: "We haven’t set an end date yet." },
@@ -444,12 +453,12 @@ export default function PrivacyPage() {
           </li>
           <li>
             <span className="font-semibold">To have it deleted.</span> Use Delete my account on the Your data page,
-            or Delete my profile on the Profile page to delete your profile and CV file on their own.
+            or Delete my profile on the Profile page to delete your profile and any CV file on their own.
           </li>
           <li>
             <span className="font-semibold">To withdraw your consent.</span> You can withdraw your consent to us
-            reading your CV at any time: use Delete my profile on the Profile page, which deletes your profile and your
-            CV file. This doesn’t affect what we did before you withdrew it.
+            reading your CV, or to us saving the details you typed in, at any time: use Delete my profile on the Profile
+            page, which deletes your profile and any CV file. This doesn’t affect what we did before you withdrew it.
           </li>
           <li>
             <span className="font-semibold">To ask us to limit how we use your data, or to object to how we use it.</span>

@@ -83,7 +83,7 @@ function EmptyTracker() {
         ))}
       </ol>
       <ButtonLink href="/profile" variant="primary" className="mt-6">
-        Upload your CV
+        Build your profile
       </ButtonLink>
     </Card>
   );
