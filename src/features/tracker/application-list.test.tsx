@@ -5,11 +5,24 @@ import { ApplicationList } from "./application-list";
 import type { TrackedApplication } from "./model";
 import { sampleApplications } from "./sample";
 
-// What the dashboard rows say about days and closing dates, and what the closing suggestion offers. Saving and
-// closing are tested in actions.test.ts and model.test.ts.
+// What the dashboard rows say about days and closing dates, what the closing suggestion offers, and the Save button
+// mid-save. Saving and closing are tested in actions.test.ts and model.test.ts, and where the focus goes after a save
+// in tests/e2e/dashboard.spec.ts.
 
 const { updateApplication, closeWithoutNews } = vi.hoisted(() => ({ updateApplication: vi.fn(), closeWithoutNews: vi.fn() }));
 vi.mock("./actions", () => ({ updateApplication, closeWithoutNews }));
+// While a test sets it, every form is drawn mid-save: pending, with no result yet.
+const midSave = vi.hoisted(() => ({ on: false }));
+vi.mock("react", async (importOriginal) => {
+  const react = await importOriginal<typeof import("react")>();
+  return {
+    ...react,
+    useActionState: (action: never, initialState: unknown) => {
+      const [state, dispatch, pending] = react.useActionState(action, initialState);
+      return midSave.on ? [null, dispatch, true] : [state, dispatch, pending];
+    },
+  };
+});
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...props}>
@@ -27,6 +40,14 @@ const text = (html: string) =>
     .replace(/\s+/g, " ")
     .replace(/ \./g, ".");
 const render = (items: TrackedApplication[], today = "2026-10-25") => renderToStaticMarkup(<ApplicationList items={items} today={today} sample />);
+const renderMidSave = (items: TrackedApplication[]) => {
+  midSave.on = true;
+  try {
+    return render(items);
+  } finally {
+    midSave.on = false;
+  }
+};
 
 const row = (id: string, status: Application["status"], date: string, title: string, deadline?: string | null): TrackedApplication => ({
   application: { id, jobId: `job-${id}`, date, status, nextStep: null },
@@ -92,6 +113,19 @@ describe("the dashboard's application list", () => {
 
     expect(text(html)).toContain("Closing date 2 Nov 2026. The employer may close the advert early if they get enough applications.");
     expect(html).not.toContain("border-warning");
+  });
+
+  it("keeps the Save button able to hold the focus while saving, and disables it only with nothing to save", () => {
+    const idle = render([row("1", "applied", "2026-10-20", "Data Analyst")]);
+    // Nothing to save yet, so the button is disabled and out of the way.
+    expect(idle).toMatch(/<button type="submit"[^>]* disabled=""[^>]*>Save<\/button>/);
+    expect(idle).not.toContain('aria-disabled="');
+
+    // The saved row can come back before the save is done, with nothing left to save. Disabled then, the button would
+    // drop the focus to the top of the page before its message could take it (#154).
+    const saving = renderMidSave([row("1", "applied", "2026-10-20", "Data Analyst")]);
+    expect(saving).toMatch(/<button type="submit"[^>]* aria-disabled="true"[^>]*>Saving…<\/button>/);
+    expect(saving).not.toContain('disabled=""');
   });
 
   it("shows only the date once the application has been sent, and nothing without a closing date", () => {
