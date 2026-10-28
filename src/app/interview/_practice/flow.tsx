@@ -3,20 +3,26 @@
 // The interview itself, shared by the main page and the lab: answer one question at a time while finished
 // questions are scored in the background. The saved session drives everything: whatever it needs next is
 // requested, so a reload resumes exactly where it stopped.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { answerGuide, limits } from "@/features/interview/config";
-import type { AnswerEvaluation, FollowUpDecision, InterviewReport, InterviewSession, StageUsage } from "@/features/interview/contracts";
+import type { AnswerEvaluation, AnswerSuggestion, FollowUpDecision, InterviewReport, InterviewSession, StageUsage } from "@/features/interview/contracts";
 import {
   addAnswer,
   applyEvaluation,
   applyFollowUpDecision,
   applyReport,
+  applySuggestion,
   askQuestion,
   decisionFor,
+  endEarly,
   evaluationFor,
   isQuestionFinished,
+  missingSuggestionIds,
   nextStep,
+  reportQuestionIds,
+  suggestionFor,
   turnsFor,
+  unansweredQuestionIds,
   type Provenance,
 } from "@/features/interview/engine/session";
 import { countWords } from "@/features/interview/engine/text";
@@ -83,20 +89,38 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
     const questionId = next.questionId;
     store.runJob(`${run}:decide:${questionId}`, async () => {
       const result = await call<{ decision: FollowUpDecision } & WithUsage>({ step: "follow-up", session, questionId });
+      // A decision that arrives after "End here" is dropped: the record is closed.
       updateSameSession(session.id, (current) =>
-        decisionFor(current, questionId)
+        decisionFor(current, questionId) || current.endedAt
           ? current
           : advance(applyFollowUpDecision(current, result.decision, now(), crypto.randomUUID(), result.usage, result.provenance)),
       );
     });
   }
 
-  // Each finished question is scored on its own, in the background, while the interview carries on.
+  // Each finished question is scored on its own, in the background, while the interview carries on. After
+  // "End here", only the questions with a genuine answer are scored.
+  const scoredIds = new Set(reportQuestionIds(session));
   for (const question of session.questions) {
-    if (!isQuestionFinished(session, question.id) || evaluationFor(session, question.id)) continue;
+    if (!isQuestionFinished(session, question.id) || !scoredIds.has(question.id) || evaluationFor(session, question.id)) continue;
     store.runJob(`${run}:evaluate:${question.id}`, async () => {
       const result = await call<{ evaluation: AnswerEvaluation } & WithUsage>({ step: "evaluate", session, questionId: question.id });
       updateSameSession(session.id, (current) => applyEvaluation(current, result.evaluation, result.usage, result.provenance));
+    });
+  }
+
+  // After "End here" (#205): one request records it, and each unanswered question gets its suggested answer.
+  if (session.endedAt && next.step !== "done") {
+    store.runJob(`${run}:end`, async () => {
+      await call({ step: "end", session });
+    });
+  }
+  for (const questionId of missingSuggestionIds(session)) {
+    store.runJob(`${run}:suggest:${questionId}`, async () => {
+      const result = await call<{ suggestion: AnswerSuggestion } & WithUsage>({ step: "suggest", session, questionId });
+      updateSameSession(session.id, (current) =>
+        suggestionFor(current, questionId) ? current : applySuggestion(current, result.suggestion, result.usage, result.provenance),
+      );
     });
   }
 
@@ -179,7 +203,11 @@ export function InterviewFlow({
 }) {
   const step = nextStep(session);
   const asked = session.questions.filter((q) => turnsFor(session, q.id).length > 0);
-  const scored = session.questions.filter((q) => evaluationFor(session, q.id)).length;
+  const scoredIds = reportQuestionIds(session);
+  const scored = scoredIds.filter((id) => evaluationFor(session, id)).length;
+  const unanswered = new Set(unansweredQuestionIds(session));
+  const failedSuggestions = [...unanswered].map((id) => `${run}:suggest:${id}`).filter((key) => jobs[key]?.status === "failed");
+  const suggestFailure = failedSuggestions.length > 0 ? jobs[failedSuggestions[0]] : undefined;
   const reportJob = jobs[`${run}:report`];
 
   return (
@@ -188,6 +216,7 @@ export function InterviewFlow({
         const turns = turnsFor(session, question.id);
         const finished = isQuestionFinished(session, question.id);
         const evaluateJob = jobs[`${run}:evaluate:${question.id}`];
+        const suggestJob = jobs[`${run}:suggest:${question.id}`];
         return (
           <Card key={question.id} className="space-y-3">
             <p className="text-sm text-text-muted">
@@ -200,34 +229,50 @@ export function InterviewFlow({
                   {turn.text}
                 </p>
               ) : (
-                <p key={turn.id} className="ml-auto max-w-[90%] whitespace-pre-wrap rounded-md bg-canvas p-3 text-sm sm:max-w-[80%]">
-                  {turn.text}
-                </p>
+                // A follow-up skipped by "End here" is an empty answer: nothing to show.
+                turn.text && (
+                  <p key={turn.id} className="ml-auto max-w-[90%] whitespace-pre-wrap rounded-md bg-canvas p-3 text-sm sm:max-w-[80%]">
+                    {turn.text}
+                  </p>
+                )
               ),
             )}
-            {finished && (
+            {unanswered.has(question.id) ? (
               <p>
-                {evaluationFor(session, question.id) ? (
-                  <Status tone="accent">Scored</Status>
-                ) : evaluateJob?.status === "failed" ? (
-                  <span className="flex flex-wrap items-center gap-2">
-                    <Status tone="error">Scoring failed</Status>
-                    <span className="text-sm text-error">{evaluateJob.message}</span>
-                    <Button onClick={() => store.retryJob(`${run}:evaluate:${question.id}`)}>Try again</Button>
-                  </span>
+                {suggestionFor(session, question.id) ? (
+                  <Status tone="accent">Suggested answer ready</Status>
                 ) : (
-                  <Status tone="muted">Scoring in the background…</Status>
+                  <JobStatus
+                    store={store}
+                    job={suggestJob}
+                    jobKey={`${run}:suggest:${question.id}`}
+                    failed="Suggested answer failed"
+                    working="Not answered: writing a suggested answer from your CV…"
+                  />
                 )}
               </p>
+            ) : (
+              finished && (
+                <p>
+                  {evaluationFor(session, question.id) ? (
+                    <Status tone="accent">Scored</Status>
+                  ) : (
+                    <JobStatus store={store} job={evaluateJob} jobKey={`${run}:evaluate:${question.id}`} failed="Scoring failed" working="Scoring in the background…" />
+                  )}
+                </p>
+              )
             )}
             {step.step === "answer" && step.questionId === question.id && (
-              <AnswerForm
-                key={`${question.id}-${step.kind}`}
-                store={store}
-                questionId={question.id}
-                kind={step.kind}
-                sample={step.kind === "main" ? samples?.[question.id]?.main : samples?.[question.id]?.followUp}
-              />
+              <>
+                <AnswerForm
+                  key={`${question.id}-${step.kind}`}
+                  store={store}
+                  questionId={question.id}
+                  kind={step.kind}
+                  sample={step.kind === "main" ? samples?.[question.id]?.main : samples?.[question.id]?.followUp}
+                />
+                <EndHere key={`${question.id}-${step.kind}-end`} store={store} session={session} />
+              </>
             )}
             {step.step === "decide" && step.questionId === question.id && (
               <DecisionStatus store={store} job={jobs[`${run}:decide:${question.id}`]} jobKey={`${run}:decide:${question.id}`} />
@@ -236,21 +281,106 @@ export function InterviewFlow({
         );
       })}
 
-      {(step.step === "evaluate" || step.step === "report") && (
+      {session.endedAt ? (
         <Card>
           <h2 className="text-xl">Writing your report</h2>
-          <p className="mt-2 text-text-muted">
-            {scored} of {session.questions.length} answers scored.
-            {step.step === "report" ? " Putting the report together…" : ""}
-          </p>
-          {reportJob?.status === "failed" && (
+          <ul className="mt-2 space-y-1 text-text-muted">
+            {scoredIds.length > 0 && (
+              <li>
+                Scoring your answers: {scored} of {scoredIds.length}
+              </li>
+            )}
+            <li>
+              Writing suggested answers from your CV: {unanswered.size - missingSuggestionIds(session).length} of {unanswered.size} ready
+            </li>
+          </ul>
+          {suggestFailure?.status === "failed" && (
+            // Questions never reached have no card of their own, so their failures are retried from here.
             <div className="mt-2 space-y-2">
-              <Notice tone="error">{reportJob.message}</Notice>
-              <Button onClick={() => store.retryJob(`${run}:report`)}>Try again</Button>
+              <Notice tone="error">{suggestFailure.message}</Notice>
+              <Button onClick={() => failedSuggestions.forEach((key) => store.retryJob(key))}>Try again</Button>
             </div>
           )}
         </Card>
+      ) : (
+        (step.step === "evaluate" || step.step === "report") && (
+          <Card>
+            <h2 className="text-xl">Writing your report</h2>
+            <p className="mt-2 text-text-muted">
+              {scored} of {session.questions.length} answers scored.
+              {step.step === "report" ? " Putting the report together…" : ""}
+            </p>
+            {reportJob?.status === "failed" && (
+              <div className="mt-2 space-y-2">
+                <Notice tone="error">{reportJob.message}</Notice>
+                <Button onClick={() => store.retryJob(`${run}:report`)}>Try again</Button>
+              </div>
+            )}
+          </Card>
+        )
       )}
+    </div>
+  );
+}
+
+/** A background request still working, or failed with its message and Try again. */
+function JobStatus({ store, job, jobKey, failed, working }: { store: PracticeStore; job?: JobState; jobKey: string; failed: string; working: string }) {
+  if (job?.status !== "failed") return <Status tone="muted">{working}</Status>;
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <Status tone="error">{failed}</Status>
+      <span className="text-sm text-error">{job.message}</span>
+      <Button onClick={() => store.retryJob(jobKey)}>Try again</Button>
+    </span>
+  );
+}
+
+/**
+ * "End here" (#205): a quiet way out at any question, confirmed in place. Answered questions keep their feedback and
+ * every other question gets a suggested answer built from the CV. Hidden when ending would leave nothing unanswered,
+ * so the last follow-up still leads to the full report.
+ */
+export function EndHere({ store, session }: { store: PracticeStore; session: InterviewSession }) {
+  const [confirming, setConfirming] = useState(false);
+  const heading = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (confirming) heading.current?.focus();
+  }, [confirming]);
+
+  let left: number;
+  try {
+    left = unansweredQuestionIds(endEarly(session, now())).length;
+  } catch {
+    return null;
+  }
+  if (left === 0) return null;
+  const total = session.questions.length;
+  const answered = total - left;
+
+  if (!confirming) {
+    return (
+      <div className="border-t border-line pt-3">
+        <Button variant="quiet" className="px-0" onClick={() => setConfirming(true)}>
+          End here and see suggested answers
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-line bg-canvas p-3">
+      <p ref={heading} tabIndex={-1} className="font-semibold">
+        End the practice here?
+      </p>
+      <p className="text-sm">
+        {answered > 0
+          ? `You've answered ${answered} of ${total} questions. Those get your feedback; the other ${left} get a suggested answer built from your CV.`
+          : `Each of the ${total} questions gets a suggested answer built from your CV.`}{" "}
+        Anything you haven&apos;t submitted won&apos;t be saved.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => store.updateSession((current) => endEarly(current, now()))}>End practice</Button>
+        <Button onClick={() => setConfirming(false)}>Keep going</Button>
+      </div>
     </div>
   );
 }

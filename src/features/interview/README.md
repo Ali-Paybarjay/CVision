@@ -4,3 +4,4 @@
 - `server/session-store.ts`: ذخیره و خواندن `InterviewSession` در جدول `interview_sessions` برای کاربر واردشده (آگهی‌های نمونه ذخیره نمی‌شوند).
 - `server/completion-event.ts`: جزئیات رویداد `interview.session_completed`، فقط عدد و برچسب، بدون متن پرسش و جواب.
 - `engine/stages.ts` · `suggestAnswer`: بعد از «End here» (#205)، برای هر پرسش بی‌جواب یک جواب پیشنهادی فقط از روی رزومه، یک درخواست برای هر پرسش. قاعده‌های دقت در `engine/checks.ts` (`suggestionProblems`)؛ اگر جواب مدل حتی بعد از تلاش دوباره قبول نشود، نسخهٔ امن ساخته‌شده با کد (`fallbackSuggestion`) نشان داده می‌شود.
+- `engine/session.ts` · `nextStep` بعد از «End here»: فقط پرسش‌های جواب‌داده (`reportQuestionIds`) نمره می‌گیرند، بقیه جواب پیشنهادی (`suggest`)، و گزارش کلی مدل نوشته نمی‌شود. صفحه: دکمهٔ `EndHere` در `_practice/flow.tsx` و `EndedReport` در `_practice/report.tsx`؛ کارت پرسش‌های جواب‌داده همان کارت همیشگی است.
