@@ -40,7 +40,19 @@ function fakeSupabase(tables: Tables, userId: string, options: { failJobs?: bool
 
 const userId = "user-1";
 const today = "2026-10-25";
-const job = (id: string, title: string, company: string, owner = userId) => ({ id, user_id: owner, data: { title, company } });
+// A whole saved job, which its ad page can open, with no closing date.
+const ad = {
+  location: "Leeds",
+  salary: null,
+  contractType: null,
+  hours: null,
+  workMode: null,
+  description: "The full ad, as pasted.",
+  requirements: { essential: [], desirable: [] },
+  url: null,
+  source: "pasted",
+};
+const job = (id: string, title: string, company: string, owner = userId) => ({ id, user_id: owner, data: { ...ad, id, title, company } });
 const row = (data: Application, createdAt: string, owner = userId) => ({ id: data.id, job_id: data.jobId, user_id: owner, created_at: createdAt, data });
 
 const older: Application = { id: "app-1", jobId: "job-1", date: "2026-10-10", status: "interview", nextStep: "Prepare" };
@@ -115,6 +127,18 @@ describe("loadTracker", () => {
     const tracker = await loadTracker(today);
 
     expect(tracker.kind === "account" && tracker.items[0]).toEqual({ application: newer, job: null, hasAd: false });
+  });
+
+  it("shows the title of a job its ad page cannot open, but no link to its ad", async () => {
+    tables.jobs[1].data = { title: "Graduate Data Analyst", company: "Irwell Energy" };
+
+    const tracker = await loadTracker(today);
+
+    expect(tracker.kind === "account" && tracker.items[0]).toEqual({
+      application: newer,
+      job: { title: "Graduate Data Analyst", company: "Irwell Energy" },
+      hasAd: false,
+    });
   });
 
   it("gives no link to the ad of a job that has gone", async () => {

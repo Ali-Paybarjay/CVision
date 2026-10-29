@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { JobAd } from "./job-ad";
@@ -7,8 +7,14 @@ import { JobAd } from "./job-ad";
 // The page a row's "Job ad" link opens (#208): the full ad as pasted, and not found for any job that is not the
 // user's own. Which rows get the link is tested in application-list.test.tsx.
 
-const { getMyJob, getMyDataSource } = vi.hoisted(() => ({ getMyJob: vi.fn(), getMyDataSource: vi.fn() }));
-vi.mock("@/features/profile/my-data", () => ({ getMyJob, getMyDataSource }));
+const { getMyJob, getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
+  getMyJob: vi.fn(),
+  getCurrentUser: vi.fn(),
+  createSupabaseServerClient: vi.fn(),
+}));
+vi.mock("@/features/profile/my-data", () => ({ getMyJob }));
+vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
+vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...props}>
@@ -25,6 +31,12 @@ const job: Job = {
 };
 const notFound = { digest: "NEXT_HTTP_ERROR_FALLBACK;404" };
 
+beforeEach(() => {
+  // Signed in, with Supabase connected.
+  createSupabaseServerClient.mockResolvedValue({});
+  getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
+});
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -32,7 +44,6 @@ afterEach(() => {
 describe("the job ad page", () => {
   it("shows the job's title and company, the whole ad exactly as pasted and a way back to the dashboard", async () => {
     getMyJob.mockResolvedValue(job);
-    getMyDataSource.mockResolvedValue("account");
 
     const html = renderToStaticMarkup(await JobAd({ jobId }));
 
@@ -45,10 +56,26 @@ describe("the job ad page", () => {
     expect(html).toMatch(/<a href="\/dashboard"[^>]*>Back to your dashboard<\/a>/);
   });
 
-  it("opens Sara's sample jobs while there are no accounts", async () => {
+  it("is not found for a job that is missing or another user's, which row-level security keeps out", async () => {
+    getMyJob.mockResolvedValue(null);
+
+    await expect(JobAd({ jobId })).rejects.toMatchObject(notFound);
+  });
+
+  it("asks a signed-out visitor to sign in and come back to this ad, and shows no sample ad", async () => {
+    getCurrentUser.mockResolvedValue(null);
+
+    const html = renderToStaticMarkup(await JobAd({ jobId: personas.sara.jobs[0].id }));
+
+    expect(html).toMatch(/<h1[^>]*>Sign in to see this job ad<\/h1>/);
+    expect(html).toContain(`href="/sign-in?next=%2Fdashboard%2Fjobs%2F${personas.sara.jobs[0].id}"`);
+    expect(html).not.toContain(personas.sara.jobs[0].company);
+    expect(getMyJob).not.toHaveBeenCalled();
+  });
+
+  it("opens Sara's sample jobs while Supabase is not connected", async () => {
+    createSupabaseServerClient.mockResolvedValue(null);
     const sample = personas.sara.jobs[1];
-    getMyJob.mockResolvedValue(sample);
-    getMyDataSource.mockResolvedValue("sample");
 
     const html = renderToStaticMarkup(await JobAd({ jobId: sample.id }));
 
@@ -56,17 +83,12 @@ describe("the job ad page", () => {
     expect(html).toContain("Sara&#x27;s sample ad, as she pasted it.");
   });
 
-  it("is not found for a job that is missing or another user's, which row-level security keeps out", async () => {
-    getMyJob.mockResolvedValue(null);
-    getMyDataSource.mockResolvedValue("account");
+  it.each(["no-such-job", personas.reza.jobs[0].id])(
+    "is not found for %s in sample mode, as only Sara's rows link to an ad",
+    async (id) => {
+      createSupabaseServerClient.mockResolvedValue(null);
 
-    await expect(JobAd({ jobId })).rejects.toMatchObject(notFound);
-  });
-
-  it("is not found for an unknown id in sample mode, where the sample data answers with Sara's first job", async () => {
-    getMyJob.mockResolvedValue(personas.sara.jobs[0]);
-    getMyDataSource.mockResolvedValue("sample");
-
-    await expect(JobAd({ jobId: "no-such-job" })).rejects.toMatchObject(notFound);
-  });
+      await expect(JobAd({ jobId: id })).rejects.toMatchObject(notFound);
+    },
+  );
 });

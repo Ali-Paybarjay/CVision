@@ -132,10 +132,13 @@ test("a row's Job ad link opens the full ad on its own page (#208)", async ({ pa
   await expect(row.getByRole("button", { name: "Save" })).toBeVisible();
 });
 
-test("a job ad that is not the user's own is not found (#208)", async ({ page }) => {
-  await page.goto("/dashboard/jobs/no-such-job");
+// Another user's job needs row-level security, so the unit tests in job-ad.test.tsx cover it.
+for (const jobId of ["no-such-job", "reza-job-1"]) {
+  test(`the sample job ad page is not found for ${jobId}, only for Sara's two jobs (#208)`, async ({ page }) => {
+    await page.goto(`/dashboard/jobs/${jobId}`);
 
-  await expect(page.getByRole("heading", { level: 1, name: "We could not find this job ad" })).toBeVisible();
-  await expect(page.getByText("Pennine Health Analytics")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Back to your dashboard" })).toHaveAttribute("href", "/dashboard");
-});
+    await expect(page.getByRole("heading", { level: 1, name: "We could not find this job ad" })).toBeVisible();
+    await expect(page.getByRole("article", { name: "Job ad" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Back to your dashboard" })).toHaveAttribute("href", "/dashboard");
+  });
+}
