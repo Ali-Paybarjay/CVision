@@ -49,7 +49,11 @@ export async function loadTracker(today: string): Promise<Tracker> {
   );
   return {
     kind: "account",
-    items: applications.map((application) => ({ application, job: summaries.get(application.jobId) ?? null })),
+    items: applications.map((application) => {
+      const job = summaries.get(application.jobId) ?? null;
+      // The job's row is there, so its ad page can open it.
+      return { application, job, hasAd: job !== null };
+    }),
   };
 }
 

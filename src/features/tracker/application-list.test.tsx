@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Application } from "@/shared/contracts";
+import { personas } from "@/shared/sample-data";
 import { ApplicationList } from "./application-list";
 import type { TrackedApplication } from "./model";
 import { sampleApplications } from "./sample";
@@ -132,6 +133,27 @@ describe("the dashboard's application list", () => {
     expect(text(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")]))).toContain("Closing date 24 Oct 2026 ");
     expect(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")])).not.toContain("border-warning");
     expect(text(render([row("1", "ready", "2026-10-20", "Data Analyst", null)]))).not.toContain("Closing date");
+  });
+});
+
+describe("the link to a job's ad", () => {
+  it("sits under the title and company, and opens the job's own ad page", () => {
+    const html = render([{ ...row("1", "applied", "2026-10-20", "Data Analyst"), hasAd: true }]);
+
+    expect(text(html)).toContain("Data Analyst Etherow Freight Job ad for Data Analyst at Etherow Freight Applied on");
+    expect(html).toMatch(/<a href="\/dashboard\/jobs\/job-1"[^>]*>Job ad<span class="sr-only">/);
+  });
+
+  it("is not shown when the job has no ad to open, or cannot be read", () => {
+    expect(render([row("1", "applied", "2026-10-20", "Data Analyst")])).not.toContain("Job ad");
+    expect(render([{ ...row("1", "applied", "2026-10-20", "Data Analyst"), job: null, hasAd: true }])).not.toContain("Job ad");
+  });
+
+  it("does not bring the ad's text to the dashboard", () => {
+    const html = render(sampleApplications);
+
+    for (const job of personas.sara.jobs) expect(html).not.toContain(job.description.slice(0, 40));
+    expect(html.match(/>Job ad</g)).toHaveLength(2);
   });
 });
 

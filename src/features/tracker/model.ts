@@ -6,8 +6,16 @@ import { ApplicationStatusSchema, type Application, type ApplicationStatus, type
 /** What the dashboard shows of a job: its name and, when the ad gives one, its closing date. */
 export type JobSummary = Pick<Job, "title" | "company" | "deadline">;
 
-/** One row on the dashboard: the application and the job it is for (null when the job cannot be read). */
-export type TrackedApplication = { application: Application; job: JobSummary | null };
+/**
+ * One row on the dashboard: the application and the job it is for (null when the job cannot be read). `hasAd` is
+ * true when the job's full ad can be opened on its own page (jobAdPath): a saved job, or one of the sample jobs.
+ */
+export type TrackedApplication = { application: Application; job: JobSummary | null; hasAd?: boolean };
+
+/** The page that shows a job's full ad as the user pasted it. The ad itself never comes to the dashboard. */
+export function jobAdPath(jobId: string): string {
+  return `/dashboard/jobs/${encodeURIComponent(jobId)}`;
+}
 
 export type UpdateApplicationResult =
   | { ok: true; application: Application }
