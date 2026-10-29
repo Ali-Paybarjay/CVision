@@ -25,7 +25,7 @@ export const notDeletedStraightAway = [
   },
   {
     where: "OpenRouter, which passes your text to the AI model",
-    what: "Its terms say it deletes the text of your CV, job ads and answers promptly after the answer is ready, unless the law requires it to keep it or it detects misuse. It keeps technical details of each request, such as its size and how long it took, without the text, and does not say for how long. It may also categorise a small sample of requests anonymously, without linking them to our account. Apart from the text itself, we send it nothing that identifies you, such as your account ID or sign-in email.",
+    what: "Its terms say it deletes the text of your CV or profile, job ads and answers promptly after the answer is ready, unless the law requires it to keep it or it detects misuse. It keeps technical details of each request, such as its size and how long it took, without the text, and does not say for how long. It may also categorise a small sample of requests anonymously, without linking them to our account. Apart from the text itself, we send it nothing that identifies you, such as your account ID or sign-in email.",
   },
   {
     where: "Records from before you signed in",

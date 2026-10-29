@@ -3,7 +3,7 @@
 import { z } from "zod";
 import type { Gap, Job, Profile, TailoringChange } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
-import { normalise, requirementTerms } from "./nothing-invented";
+import { cvLines, normalise, requirementTerms } from "./nothing-invented";
 import { buildTailoredCv } from "./tailored-cv";
 import type { GapAnswer } from "./types";
 
@@ -66,11 +66,13 @@ export function sampleCoverLetter({ profile, job, changes }: CoverLetterInput): 
 
 /**
  * Words the letter must not contain: the requirements of gaps the user said they have not done.
- * A letter that mentions one of them is not used (Nothing invented).
+ * A letter that mentions one of them is not used (Nothing invented). Only the CV lines and the user's
+ * follow-up answers count as evidence, not the rest of the Profile: preferences say what the user wants,
+ * so "Move into team leadership" must not let a letter claim team leadership (#164).
  */
 export function inventedTerms(letter: string, gaps: Gap[], answers: GapAnswer[], profile: Profile): string[] {
   const text = normalise(letter);
-  const cv = normalise(JSON.stringify(profile));
+  const cv = normalise([...cvLines(profile), ...profile.followUpAnswers.map((item) => item.answer)].join("\n"));
   return answers
     .filter((answer) => !answer.hasExperience)
     .flatMap((answer) => {

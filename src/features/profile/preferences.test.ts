@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { JobPreferences } from "@/shared/contracts";
+import { JobPreferencesSchema, type JobPreferences } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
-import { describePreferences, draftFromPreferences, preferencesFromDraft, readPounds, type PreferencesDraft } from "./preferences";
+import {
+  describePreferences,
+  draftFromPreferences,
+  MAX_NOTES_CHARACTERS,
+  noteLines,
+  preferencesFromDraft,
+  readPounds,
+  type PreferencesDraft,
+} from "./preferences";
 
 const empty: JobPreferences = { salary: null, location: "", workModes: [], contractTypes: [], hours: [] };
 
@@ -43,6 +51,50 @@ describe("job preferences", () => {
       errors: { minimumPay: "Enter an amount in pounds, for example 30000." },
     });
     expect(preferencesFromDraft({ ...draft, minimumPay: " " })).toMatchObject({ ok: true, preferences: { salary: null } });
+  });
+});
+
+describe("must-haves and deal-breakers", () => {
+  const withNotes = (notes: string) => preferencesFromDraft({ ...draftFromPreferences(empty), notes });
+
+  it("keeps one per line, trimmed, without blank lines", () => {
+    const result = withNotes("  Move into team leadership \r\n\n No night shifts\n  \nNot in gambling\n");
+
+    expect(result.ok && result.preferences.notes).toBe("Move into team leadership\nNo night shifts\nNot in gambling");
+  });
+
+  it("gives saved notes back unchanged", () => {
+    const preferences: JobPreferences = { ...empty, notes: "No night shifts\nWithin 45 minutes of Leeds" };
+
+    expect(preferencesFromDraft(draftFromPreferences(preferences))).toEqual({ ok: true, preferences });
+  });
+
+  it("leaves them out when nothing is written", () => {
+    const result = withNotes(" \n \n");
+
+    expect(result.ok && "notes" in result.preferences).toBe(false);
+  });
+
+  it("asks for a shorter note, counting what is saved", () => {
+    expect(withNotes("a".repeat(MAX_NOTES_CHARACTERS + 1))).toEqual({
+      ok: false,
+      errors: { notes: "Keep this to 500 characters or fewer." },
+    });
+    expect(withNotes(` ${"a".repeat(MAX_NOTES_CHARACTERS)} \n\n`)).toMatchObject({ ok: true });
+  });
+
+  it("has the same limit as the contract", () => {
+    expect(JobPreferencesSchema.safeParse({ ...empty, notes: "a".repeat(MAX_NOTES_CHARACTERS) }).success).toBe(true);
+    expect(JobPreferencesSchema.safeParse({ ...empty, notes: "a".repeat(MAX_NOTES_CHARACTERS + 1) }).success).toBe(false);
+  });
+
+  it("reads saved notes as lines, and nothing as no lines", () => {
+    expect(noteLines("No night shifts\nNot in gambling")).toEqual(["No night shifts", "Not in gambling"]);
+    expect(noteLines(undefined)).toEqual([]);
+  });
+
+  it("are not part of the plain preference lines", () => {
+    expect(describePreferences({ ...empty, notes: "No night shifts" })).toEqual([]);
   });
 });
 

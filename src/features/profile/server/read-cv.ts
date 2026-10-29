@@ -1,7 +1,7 @@
 import "server-only";
 import { cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import { extractDocxText } from "./docx";
-import { extractPdfText, PdfTooSlowError } from "./pdf";
+import { extractPdfText, PdfOutOfMemoryError, PdfTooSlowError } from "./pdf";
 
 export { cvFileMessages, MAX_CV_BYTES };
 
@@ -64,7 +64,10 @@ export async function readCvText(file: { name: string; bytes: Uint8Array }): Pro
     if (error instanceof Error && error.name === "PasswordException") {
       throw new CvFileError("password", cvFileMessages.password);
     }
-    if (error instanceof PdfTooSlowError) throw new CvFileError("too-slow", cvFileMessages.tooSlow);
+    // Too slow or too big to read: either way, the Word version or the PDF saved again fixes it.
+    if (error instanceof PdfTooSlowError || error instanceof PdfOutOfMemoryError) {
+      throw new CvFileError("too-slow", cvFileMessages.tooSlow);
+    }
     throw new CvFileError("unreadable", cvFileMessages.unreadable);
   }
 

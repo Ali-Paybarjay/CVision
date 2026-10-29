@@ -15,7 +15,7 @@ export default function SignUpPage({ searchParams }: PageProps<"/sign-up">) {
   return (
     <Page
       title="Create your free account"
-      description="Upload your CV once, then tailor it to every job you apply for."
+      description="Build your profile once, then tailor your CV to every job you apply for."
     >
       {!connected && accountsOffNotice}
       <Card className="max-w-md">

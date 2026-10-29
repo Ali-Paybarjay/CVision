@@ -13,7 +13,7 @@ const variants: Record<Variant, string> = {
   quiet: "text-accent underline-offset-4 hover:underline",
 };
 
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant };
+type ButtonProps = React.ComponentProps<"button"> & { variant?: Variant };
 
 export function Button({ variant = "secondary", className, type = "button", ...props }: ButtonProps) {
   return <button type={type} className={cn(base, variants[variant], className)} {...props} />;

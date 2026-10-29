@@ -8,8 +8,8 @@ export const brand = {
   /** The plan: three steps, one outcome. */
   steps: [
     {
-      title: "Upload your CV.",
-      detail: "Your CV is the source. Everything we write comes from it and from what you tell us.",
+      title: "Build your profile.",
+      detail: "Upload your CV or fill in your details. Everything we write comes from your profile and from what you tell us.",
     },
     {
       title: "Paste a job ad.",

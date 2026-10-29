@@ -36,11 +36,11 @@
 
 | قدم | رسیدن به قدم یعنی دست‌کم یکی از این رویدادها |
 |---|---|
-| ۱. Upload your CV | `profile.cv_uploaded` |
+| ۱. Build your profile | `profile.cv_uploaded` یا `profile.approved` |
 | ۲. Paste a job ad | `jobs.ad_pasted` |
 | ۳. Get a tailored CV and cover letter | `tailor.change_approved`، `tailor.cover_letter_created` یا `tailor.cv_exported` |
 
-هر نفر در هر قدمی که به آن رسیده شمرده می‌شود، و رسیدن به یک قدم یعنی قدم‌های پیش از آن را هم رفته است. پس کسی که فقط `jobs.ad_pasted` دارد (مثلاً Profile را روی دستگاه دیگری ساخته)، در قدم ۱ و ۲ هر دو شمرده می‌شود، نه فقط در قدم آخرش. «نفر» یعنی `user_id`، یا `anonymous_id` برای کسی که حساب ندارد.
+هر نفر در هر قدمی که به آن رسیده شمرده می‌شود، و رسیدن به یک قدم یعنی قدم‌های پیش از آن را هم رفته است. پس کسی که فقط `jobs.ad_pasted` دارد (مثلاً Profile را روی دستگاه دیگری ساخته)، در قدم ۱ و ۲ هر دو شمرده می‌شود، نه فقط در قدم آخرش. «نفر» یعنی `user_id`، یا `anonymous_id` برای کسی که حساب ندارد. کسی که پروفایلش را بدون رزومه خودش پر کرده، `profile.cv_uploaded` ندارد و با `profile.approved` در قدم ۱ شمرده می‌شود (کارت #179).
 
 ## کوئری‌ها
 
@@ -66,6 +66,7 @@ order by day desc, name;
 with step_events (name, step) as (
   values
     ('profile.cv_uploaded', 1),
+    ('profile.approved', 1),
     ('jobs.ad_pasted', 2),
     ('tailor.change_approved', 3),
     ('tailor.cover_letter_created', 3),
@@ -86,7 +87,7 @@ select
   (select count(*) from furthest where furthest.step >= steps.step) as people
 from (
   values
-    (1, 'Upload your CV'),
+    (1, 'Build your profile'),
     (2, 'Paste a job ad'),
     (3, 'Get a tailored CV and cover letter')
 ) as steps (step, title)

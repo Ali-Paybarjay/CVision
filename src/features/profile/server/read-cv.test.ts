@@ -1,10 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { cvFileMessages } from "../cv-limits";
+import { extractPdfText, PdfOutOfMemoryError, PdfTooSlowError } from "./pdf";
 import { cleanCvText, CvFileError, detectCvFormat, MAX_CV_BYTES, MAX_CV_CHARACTERS, readCvText } from "./read-cv";
-import { makeTestPdf } from "./test-pdf";
+import { makePasswordProtectedTestPdf, makeTestPdf } from "./test-pdf";
 import { writeZip } from "./zip";
+
+// The real PDF reader, which a test can make fail once.
+vi.mock("./pdf", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./pdf")>();
+  return { ...actual, extractPdfText: vi.fn(actual.extractPdfText) };
+});
 
 const sampleCv = (name: string) => new Uint8Array(readFileSync(join(process.cwd(), "sample-data", "cvs", `${name}.docx`)));
 const oleHeader = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0, 0, 0]);
@@ -71,6 +78,21 @@ describe("readCvText", () => {
 
   it("explains when a PDF has no text, such as a scanned image", async () => {
     expect((await failure({ name: "scan.pdf", bytes: makeTestPdf([]) })).code).toBe("no-text");
+  });
+
+  it("recognises a password-protected PDF", async () => {
+    expect((await failure({ name: "cv.pdf", bytes: makePasswordProtectedTestPdf() })).code).toBe("password");
+  });
+
+  it("asks for another file when a PDF takes too long or needs far too much memory to read", async () => {
+    for (const problem of [new PdfTooSlowError(), new PdfOutOfMemoryError()]) {
+      vi.mocked(extractPdfText).mockRejectedValueOnce(problem);
+
+      const error = await failure({ name: "cv.pdf", bytes: makeTestPdf(["Emma Walsh"]) });
+
+      expect(error.code).toBe("too-slow");
+      expect(error.message).toBe(cvFileMessages.tooSlow);
+    }
   });
 
   it("refuses a damaged PDF", async () => {
