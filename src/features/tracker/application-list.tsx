@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useActionState, useLayoutEffect, useRef, useState } from "react";
 import { ApplicationStatusSchema, type Application } from "@/shared/contracts";
 import { Button, ButtonLink, CheckIcon, ErrorIcon, Field, InfoIcon, Input, Select, WarningIcon } from "@/shared/ui";
@@ -13,6 +14,7 @@ import {
   daysWithoutNews,
   formatDate,
   isClosed,
+  jobAdPath,
   nextStepMaxLength,
   noNewsDays,
   openAndClosed,
@@ -150,6 +152,13 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
         <div className="flex flex-col gap-1">
           <Heading className="text-lg leading-snug">{job ? job.title : "Job details unavailable"}</Heading>
           {job && <p className="text-text-muted">{job.company}</p>}
+          {job && item.hasAd && (
+            <Link
+              href={jobAdPath(saved.jobId)}
+              className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent underline underline-offset-4">
+              Job ad<span className="sr-only">{` for ${job.title} at ${job.company}`}</span>
+            </Link>
+          )}
           <p className="text-sm text-text-muted">
             {statusDateLabels[saved.status]} <time dateTime={saved.date}>{formatDate(saved.date)}</time>
           </p>
