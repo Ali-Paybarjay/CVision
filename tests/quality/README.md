@@ -73,6 +73,7 @@
 - [ ] بعد از reload، Profile ذخیره‌شده با ویرایش تو سر جایش است.
 - [ ] انتخابگر فایل فقط PDF و Word را نشان می‌دهد، پس عکس انتخاب‌شدنی نیست. یک PDF یا Word بالای ۴ مگابایت پیام روشن می‌گیرد.
 - [ ] یک PDF هم امتحان کن (`sara.docx` را در Word یا Google Docs به PDF ذخیره کن).
+- [ ] **بایدها و نبایدها (#199):** زیر «What you’re looking for» «Change what you’re looking for» (یا «Add what you’re looking for») را بزن، در «Must-haves and deal-breakers (optional)» دو خط با یک خط خالی بینشان بنویس و «Save preferences» را بزن. در خلاصه، زیر «Must-haves and deal-breakers»، همان دو خط بی خط خالی می‌آیند و بعد از reload سر جایشان هستند.
 - [ ] **بدون رزومه (#179):** با یک حساب آزمایشی دوم (`<you>+qa2@gmail.com`) در کارت «No CV to upload?» «Fill in my details» را بزن. صفحهٔ «Add your details» خالی می‌آید. نام، یک کار و یک مهارت از Sara را بنویس، تیک «I agree that CVision saves these details as my profile.» را بزن و «Approve and save» را بزن. «Your profile is saved.» می‌آید و بعد از reload سر جایش است.
 
 ### قدم ۲ · آگهی و تطابق (`/jobs`)
