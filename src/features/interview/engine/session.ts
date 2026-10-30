@@ -184,6 +184,29 @@ export function isNewerSession(a: InterviewSession, b: InterviewSession): boolea
   return progressOf(a) > progressOf(b);
 }
 
+/** What the practice page for one job opens on (#206). */
+export type OpeningView = "browser" | "resume" | "last-report" | "intro";
+
+/**
+ * This browser's practice, unless the account has a later copy of it ("resume"). With nothing in this browser: the
+ * account's unfinished practice, then its last report, then the intro. After "Practise again" the report is skipped,
+ * so the button leads to a new practice rather than back to the same report.
+ */
+export function openingView(options: {
+  /** This browser's practice for the job; its session is null while the first stage runs. */
+  inBrowser: { session: InterviewSession | null } | null;
+  /** The account's latest session for the job, finished or not. */
+  saved: InterviewSession | null;
+  lastReport: InterviewSession | null;
+  practiseAgain: boolean;
+}): OpeningView {
+  const { inBrowser, saved, lastReport, practiseAgain } = options;
+  if (inBrowser) return saved && inBrowser.session && isNewerSession(saved, inBrowser.session) ? "resume" : "browser";
+  if (saved && nextStep(saved).step !== "done") return "resume";
+  if (lastReport && !practiseAgain) return "last-report";
+  return "intro";
+}
+
 function question(session: InterviewSession, questionId: string) {
   const found = session.questions.find((q) => q.id === questionId);
   if (!found) throw new InterviewRuleError(`Unknown question ${questionId}.`);
