@@ -36,7 +36,9 @@ describe.each(fixtures)("a full mock session for $id", (fixture) => {
     expect(session.plan).toEqual({ composition: { technical: 6, behavioural: 0 }, roleLevel: fixture.analyse.roleProfile.roleLevel });
     expect(session.questions.every((q) => (q.followUps?.length ?? 0) >= 2)).toBe(true);
     expect(session.followUpDecisions?.length).toBe(6);
-    expect(Object.keys(session.versions?.prompts ?? {}).sort()).toEqual(Object.values(stageConfig).map((s) => s.prompt).sort());
+    // Every stage of a full session; suggested answers come only after "End here" (#205).
+    const fullSessionPrompts = Object.values(stageConfig).map((s) => s.prompt).filter((prompt) => prompt !== stageConfig.suggest.prompt);
+    expect(Object.keys(session.versions?.prompts ?? {}).sort()).toEqual(fullSessionPrompts.sort());
     expect(session.versions?.mode).toBe("mock");
     expect(session.usage?.every((u) => u.estimated && u.inputTokens > 0)).toBe(true);
   });

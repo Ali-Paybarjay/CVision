@@ -1,5 +1,5 @@
 import type { Job, Profile } from "@/shared/contracts";
-import type { AnalyseOutput, EvaluateOutput, FollowUpOutput, GenerateOutput, ReportOutput, ReviewOutput } from "../engine/schemas";
+import type { AnalyseOutput, EvaluateOutput, FollowUpOutput, GenerateOutput, ReportOutput, ReviewOutput, SuggestOutput } from "../engine/schemas";
 
 /** The kinds of sample answer the fixtures cover between them. */
 export type SampleKind = "strong" | "adequate" | "shallow" | "technically-wrong" | "dont-know" | "injection";
@@ -30,4 +30,6 @@ export type InterviewFixture = {
   report: ReportOutput;
   /** By question id. */
   answers: Record<string, SampleAnswer>;
+  /** Suggested answers after "End here" (#205), by question id. Questions without one get the code-built version. */
+  suggestions?: Record<string, SuggestOutput>;
 };

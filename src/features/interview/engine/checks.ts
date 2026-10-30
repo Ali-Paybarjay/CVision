@@ -10,10 +10,10 @@ import type {
   TechnicalInterviewQuestion,
   TechnicalQuestionType,
 } from "../contracts";
-import { countWords, isVerbatim } from "./text";
+import { countWords, isVerbatim, splitSentences, type CvLine } from "./text";
 
 /** The soft length rules. A problem that names one is recorded, not sent back to the model (see isLengthProblem). */
-export type LengthRule = "question-words" | "follow-up-length" | "quote-words" | "improvement-length";
+export type LengthRule = "question-words" | "follow-up-length" | "quote-words" | "improvement-length" | "sample-answer-words";
 
 export type Problem = { path: (string | number)[]; message: string; lengthRule?: LengthRule };
 
@@ -179,12 +179,8 @@ export function genericFeedbackHits(text: string): string[] {
   return genericFeedbackPatterns.filter(([, pattern]) => pattern.test(text)).map(([term]) => term);
 }
 
-/** Sentences end at . ! or ? before a capital letter, so "e.g. vibration" or "etc. and" do not end one. */
 function sentenceCount(text: string): number {
-  return text
-    .trim()
-    .split(/(?<!\b(?:e\.g|i\.e|etc|vs|approx|incl|cf)\.)(?<=[.!?])\s+(?=["“(]?\p{Lu})/u)
-    .filter(Boolean).length;
+  return splitSentences(text).length;
 }
 
 /** Exactly one question mark, at the end. */
@@ -534,6 +530,165 @@ export function reportProblems(output: ReportDraft, context: ReportContext): Pro
   // The voice never puts "redundant" in a heading, and each priority title is shown as one.
   if (output.priorities.some((p) => /redundan/i.test(p.title))) {
     problems.push({ path: ["priorities"], message: 'Never use "redundant" in a priority title.' });
+  }
+  return problems;
+}
+
+/** What the model writes for one suggested answer (#205). The code adds the question id and copies the CV lines. */
+export type SuggestionDraft = {
+  kind: "evidence" | "gap";
+  points: { lookForId: string; text: string; evidenceLineIds: string[] }[];
+  sampleAnswer: string;
+  honestLine: string | null;
+  followUpTips: { followUpId: string; tip: string }[];
+  uncertainty: string | null;
+};
+
+export type SuggestionContext = {
+  question: TechnicalInterviewQuestion;
+  role: RoleProfile;
+  candidate: CandidateProfile;
+  /** The CV as numbered lines (cvEvidenceLines). */
+  lines: CvLine[];
+  cv: string;
+  jobDescription: string;
+};
+
+/** True when the analysis found nothing in the CV for the question's competency, so its suggested answer is a gap. */
+export function hasNoCvEvidence(question: TechnicalInterviewQuestion, candidate: CandidateProfile): boolean {
+  const evidence = candidate.evidence.find((e) => e.competencyId === question.competencyId);
+  const gap = candidate.gaps.find((g) => g.competencyId === question.competencyId);
+  return !evidence || evidence.cvQuote === null || gap?.evidence === "none";
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** True when a text names a term as a whole word or phrase, so "Git" is not found in "digital". "R" must match case. */
+export function mentions(text: string, term: string): boolean {
+  const trimmed = term.trim();
+  if (!trimmed) return false;
+  const pattern = escapeRegExp(trimmed).replace(/\s+/g, "\\s+");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, trimmed.length <= 2 ? "u" : "iu").test(text);
+}
+
+/** The tools, methods and standards the job ad names that the CV never mentions. */
+export function namedItemsAbsentFromCv(role: RoleProfile, cv: string): string[] {
+  return [...new Set(role.namedItems.map((item) => item.text.trim()))].filter((item) => item && !mentions(cv, item));
+}
+
+const firstPerson = /\b(?:I|[Mm]e|[Mm]y|[Ww]e|[Oo]ur|[Uu]s)\b/;
+/** The candidate in their own answer (I, we) or in advice to them (you): points and tips speak to the candidate. */
+const aboutTheCandidate = /\b(?:I|[Mm]e|[Mm]y|[Ww]e|[Oo]ur|[Uu]s|[Yy]ou|[Yy]our)\b/;
+/** What the candidate would do, not what they did: "I'd…", "we would…", "you would…", or a sentence that opens with "If". */
+const hypothetical = /\b(?:I|we|you)(?:['’]d|['’]ll| would| will| might)\b|^\s*if\b/i;
+
+function figures(text: string): string[] {
+  return (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((figure) => figure.replace(/,/g, "").replace(/\.0+$/, ""));
+}
+
+/** A sentence that says what the candidate did, not what they would do. */
+function isClaim(sentence: string): boolean {
+  return aboutTheCandidate.test(sentence) && !hypothetical.test(sentence);
+}
+
+/**
+ * Figures in sentences about what the candidate did that appear in none of the sources. [Placeholders] are skipped,
+ * and so is what they would do ("I'd compare 60 out of 400"); "I cut errors by 20 per cent, so the team could trust
+ * it" is not. For a problem-solving question, pass its text as `workingFrom`: a sentence that uses its figures is
+ * working on the question ("so I get 800 kilograms of dry solids from the 1,000"), not a claim about the past.
+ */
+export function inventedFigures(text: string, sources: string, workingFrom = ""): string[] {
+  const known = new Set(figures(sources));
+  const given = new Set(figures(workingFrom));
+  return splitSentences(text.replace(/\[[^\]]*\]/g, " "))
+    .filter((sentence) => isClaim(sentence) && !figures(sentence).some((figure) => given.has(figure)))
+    .flatMap((sentence) => figures(sentence).filter((figure) => !known.has(figure)));
+}
+
+/** An honest line says what the candidate has not done: "I haven't…", "not yet", "I'm new to…". */
+const honestWording = /\b(?:not|never|no|yet|new to)\b|n['’]t\b/i;
+
+/** Every rule a suggested answer must pass (#205). Messages name the rule, never the CV, job ad or answer text. */
+export function suggestionProblems(output: SuggestionDraft, context: SuggestionContext): Problem[] {
+  const problems: Problem[] = [];
+  const { question } = context;
+
+  // R2: one point per look-for, so the answer is built against the rubric that scores it.
+  const lookForIds = question.lookFors.map((l) => l.id);
+  const pointIds = output.points.map((p) => p.lookForId);
+  if (pointIds.length !== lookForIds.length || lookForIds.some((id) => !pointIds.includes(id)) || duplicates(pointIds).length) {
+    problems.push({ path: ["points"], message: "Give exactly one point for each look-for." });
+  }
+  // R1: evidence by line id only; the code copies the lines.
+  const lineIds = new Set(context.lines.map((line) => line.id));
+  output.points.forEach((point, i) => {
+    const path = ["points", i, "evidenceLineIds"];
+    if (point.evidenceLineIds.length > 2) problems.push({ path, message: "Cite at most 2 CV lines for a point." });
+    if (point.evidenceLineIds.some((id) => !lineIds.has(id))) problems.push({ path, message: "Cite only line ids listed in the CV." });
+  });
+  if (output.kind === "evidence" && output.points.every((p) => p.evidenceLineIds.length === 0)) {
+    problems.push({ path: ["points"], message: "An evidence answer must cite at least one CV line." });
+  }
+  const plannedIds = question.followUps.map((f) => f.id);
+  const tipIds = output.followUpTips.map((t) => t.followUpId);
+  if (tipIds.length !== plannedIds.length || plannedIds.some((id) => !tipIds.includes(id)) || duplicates(tipIds).length) {
+    problems.push({ path: ["followUpTips"], message: "Give exactly one tip for each planned follow-up." });
+  }
+
+  // R5 and R6: a gap is said plainly, never hidden.
+  if (hasNoCvEvidence(question, context.candidate) && output.kind !== "gap") {
+    problems.push({ path: ["kind"], message: 'The CV shows no evidence for this competency: set kind to "gap".' });
+  }
+  if (output.kind === "gap" && output.honestLine === null) problems.push({ path: ["honestLine"], message: "A gap answer needs an honest line." });
+  const honest = output.honestLine ?? "";
+  if (output.honestLine !== null) {
+    if (!isVerbatim(honest, output.sampleAnswer)) problems.push({ path: ["honestLine"], message: "Put the honest line word for word in the sample answer." });
+    if (!honestWording.test(honest)) problems.push({ path: ["honestLine"], message: "The honest line must say plainly what the CV does not show." });
+  }
+
+  // R4: a tool, method or regulation the CV never names is never claimed. It may appear in the honest line, in what the
+  // candidate would do ("In Power BI I'd…") and in plain facts about it ("DSEAR needs the area zoned"), never in what they did.
+  const answerOutsideHonest = honest ? splitSentences(output.sampleAnswer).filter((sentence) => !isVerbatim(honest, sentence)) : splitSentences(output.sampleAnswer);
+  const elsewhere = [...answerOutsideHonest, ...[...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip), output.uncertainty ?? ""].flatMap(splitSentences)];
+  const claimed = namedItemsAbsentFromCv(context.role, context.cv).filter((item) => elsewhere.some((sentence) => mentions(sentence, item) && isClaim(sentence)));
+  if (claimed.length) {
+    problems.push({
+      path: ["sampleAnswer"],
+      message: "Claims a tool or method from the job ad that the CV never mentions: use it only in what the candidate would do, and say plainly in honestLine that they have not used it.",
+    });
+  }
+
+  // R3: a figure about what the candidate did comes from the CV, the job ad or the question.
+  const sources = [context.cv, context.jobDescription, question.text, ...question.lookFors.map((l) => l.text), ...question.followUps.map((f) => f.text)].join("\n");
+  const written = [output.sampleAnswer, ...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip)];
+  const workingFrom = question.type === "problem-solving" ? question.text : "";
+  if (written.some((text) => inventedFigures(text, sources, workingFrom).length > 0)) {
+    problems.push({ path: ["sampleAnswer"], message: "A figure about what the candidate did is not in the CV, the job ad or the question: use a [placeholder]." });
+  }
+
+  // R7: the voice, and nothing personal about the candidate.
+  const all = [...written, honest, output.uncertainty ?? ""].join("\n");
+  const quotable = [context.cv, context.jobDescription, question.text, ...context.role.namedItems.map((item) => item.text)].join("\n");
+  if (brandPhraseHits(all).length) problems.push({ path: ["sampleAnswer"], message: "Uses a phrase the brand bans." });
+  if (usSpellingHits(all, quotable).length) problems.push({ path: ["sampleAnswer"], message: "Use UK spelling." });
+  const sourceTopics = bannedTopicHits(quotable);
+  const personal = written.flatMap((text) => splitSentences(text).filter((sentence) => firstPerson.test(sentence))).flatMap((sentence) => bannedTopicHits(sentence));
+  if (personal.some((term) => !sourceTopics.includes(term))) problems.push({ path: ["sampleAnswer"], message: "Touches a protected or personal topic." });
+  // A line id in the text is a citation leaking out, unless the CV or job ad itself says it ("BTEC L3 Diploma").
+  if (context.lines.some((line) => mentions(all, line.id) && !mentions(quotable, line.id))) {
+    problems.push({ path: ["sampleAnswer"], message: "Never write line ids in the text: they belong in evidenceLineIds." });
+  }
+
+  // R8: over the soft limit a sample answer is kept and recorded; over the hard cap it is rejected.
+  const words = countWords(output.sampleAnswer);
+  const lengthMessage = `Keep the sample answer to ${limits.suggestedAnswerMaxWords} words.`;
+  if (words > limits.suggestedAnswerHardMaxWords) problems.push({ path: ["sampleAnswer"], message: lengthMessage });
+  else if (words > limits.suggestedAnswerMaxWords) problems.push({ path: ["sampleAnswer"], message: lengthMessage, lengthRule: "sample-answer-words" });
+  const shortTexts = [...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip), honest, output.uncertainty ?? ""];
+  if (shortTexts.some((text) => countWords(text) > limits.suggestionTextMaxWords)) {
+    problems.push({ path: ["points"], message: `Keep each point, tip, honest line and uncertainty to ${limits.suggestionTextMaxWords} words.` });
   }
   return problems;
 }

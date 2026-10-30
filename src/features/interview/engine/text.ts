@@ -50,6 +50,15 @@ export function firstWords(text: string, max: number): string {
   return text.trim().split(/\s+/).slice(0, max).join(" ");
 }
 
+/** Sentences end at . ! or ? before a capital letter, so "e.g. vibration" or "etc. and" do not end one. */
+export function splitSentences(text: string): string[] {
+  return text
+    .trim()
+    .split(/(?<!\b(?:e\.g|i\.e|etc|vs|approx|incl|cf)\.)(?<=[.!?])\s+(?=["“(]?\p{Lu})/u)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
 // cleanModelText first, so a quote from the model (which never saw the hidden characters) still matches the raw text (#68).
 function normalise(text: string): string {
   return cleanModelText(text)
@@ -128,6 +137,27 @@ export function profileToCvText(profile: Profile): string {
     lines.push("");
   }
   return lines.join("\n").trim();
+}
+
+/** One line of the CV that a suggested answer may cite, numbered L1, L2… for the model to point at. */
+export type CvLine = { id: string; text: string };
+
+/** The section headings profileToCvText writes, which are never evidence. */
+const cvHeadings = new Set(["summary", "skills", "experience", "education", "certifications", "additional information from the candidate"]);
+
+/**
+ * The CV as numbered lines, one sentence each, for evidence by id: the model names a line and the code copies it, so a
+ * quote can never be misremembered (the pattern of src/features/profile/match.ts). Built from the same CV text every
+ * stage sees (profileToCvText, or the text pasted in the lab), so every line is word for word in the CV.
+ */
+export function cvEvidenceLines(cv: string): CvLine[] {
+  const texts: string[] = [];
+  for (const raw of cv.split(/\r?\n/)) {
+    const line = raw.trim().replace(/^(?:[-•*]\s+|Answer:\s+)/, "");
+    if (!line || cvHeadings.has(line.toLowerCase()) || line.startsWith("Question:")) continue;
+    texts.push(...splitSentences(line));
+  }
+  return texts.map((text, i) => ({ id: `L${i + 1}`, text }));
 }
 
 /** The job ad as plain text for the prompts: title line, then the full ad as pasted. */

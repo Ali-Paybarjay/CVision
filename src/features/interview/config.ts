@@ -1,6 +1,6 @@
 import type { LevelBand, TechnicalQuestionType } from "./contracts";
 
-export type StageName = "analyse" | "generate" | "review" | "followUp" | "evaluate" | "report";
+export type StageName = "analyse" | "generate" | "review" | "followUp" | "evaluate" | "report" | "suggest";
 
 export type StageSettings = {
   /** prompts/<prompt>.md */
@@ -31,6 +31,8 @@ export const stageConfig: Record<StageName, StageSettings> = {
   // The eval's target is a spread of 1 point or less per dimension; raise effort to high if medium misses it.
   evaluate: { prompt: "interview-evaluate-technical", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
   report: { prompt: "interview-report", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
+  // One request per unanswered question after "End here" (#205), run in parallel, so the wait is the slowest one.
+  suggest: { prompt: "interview-suggest", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
 };
 
 /**
@@ -86,6 +88,11 @@ export const limits = {
   /** The one thing to do next time: a single specific action, not a list. */
   improvementMaxWords: 60,
   improvementMaxSentences: 3,
+  /** A suggested answer is about a minute aloud. Over this it is kept and recorded; over the hard cap it is rejected. */
+  suggestedAnswerMaxWords: 200,
+  suggestedAnswerHardMaxWords: 350,
+  /** Every other text in a suggestion: a point, a follow-up tip, the honest line, the uncertainty. */
+  suggestionTextMaxWords: 60,
 };
 
 /** Overall score thresholds for the readiness label. */

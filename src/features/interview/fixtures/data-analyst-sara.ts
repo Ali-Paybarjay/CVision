@@ -2,7 +2,7 @@
 // sample-data, so this fixture runs on the team's shared fictional data. Her CV shows L1, below the role's L2.
 import { personas } from "@/shared/sample-data";
 import type { DraftQuestion } from "../engine/checks";
-import type { ReviewOutput } from "../engine/schemas";
+import type { ReviewOutput, SuggestOutput } from "../engine/schemas";
 import type { InterviewFixture } from "./types";
 
 const questions: DraftQuestion[] = [
@@ -213,6 +213,66 @@ const review: ReviewOutput = {
 };
 
 const noFollowUp = (reason: string) => ({ askFollowUp: false, gapType: "none" as const, plannedFollowUpId: null, followUpText: null, reason });
+
+/**
+ * Suggested answers after "End here" (#205), one of each kind: q1 rests on CV evidence, q3 has weak evidence and an
+ * honest line, q6 has none. Line ids are Sara's CV lines (cvEvidenceLines): L5 joining the store data, L7 the stock
+ * report, L13 her Monday walk-throughs. The other questions get the code-built version in mock mode.
+ */
+const suggestions: Record<string, SuggestOutput> = {
+  q1: {
+    kind: "evidence",
+    points: [
+      { lookForId: "q1-l1", text: "Walk through the pipeline: the weekly sales data from 120 stores, cleaned and joined in SQL and Python, then [how the report was built from it].", evidenceLineIds: ["L5", "L7"] },
+      { lookForId: "q1-l2", text: "Explain how you made sure the automated figures matched the manual report: [what you compared, and for how long]. If you did not check, say what you would do now.", evidenceLineIds: ["L7"] },
+      { lookForId: "q1-l3", text: "Say what happened when a store's data arrived late or incomplete: [what the script did, or what you did by hand].", evidenceLineIds: [] },
+      { lookForId: "q1-l4", text: "Say how the team could keep running it after you left: [the notes or handover you left].", evidenceLineIds: [] },
+    ],
+    sampleAnswer:
+      "At Northgate Retail Insights I automated the weekly stock report, which cut preparation time from 4 hours to 30 minutes. I used SQL and Python to clean and join the weekly sales data from 120 stores, then [how the script built the report from that data]. To make sure the numbers were right, [how you checked the automated figures against the manual report before switching over]. When a store's data arrived late or incomplete, [what the script did, or what you did by hand]. So the team could keep using it after my internship, [the notes or handover you left]. If I built it again, I'd run the old and new reports side by side for a few weeks before switching over.",
+    honestLine: null,
+    followUpTips: [
+      { followUpId: "q1-f1", tip: "List the manual steps in order, such as [exporting the data and copying it into Excel], and say which part of your code replaced each one." },
+      { followUpId: "q1-f2", tip: "Name what you compared and for how long. If you did not compare them, say so plainly and explain the side-by-side check you would run now." },
+      { followUpId: "q1-f3", tip: "Describe what really happened. If nothing handled it, say what check or alert you would add." },
+    ],
+    uncertainty: null,
+  },
+  q3: {
+    kind: "evidence",
+    points: [
+      { lookForId: "q3-l1", text: "Start by listening: ask what the manager is seeing, and on which days and at what times the ward feels full.", evidenceLineIds: [] },
+      { lookForId: "q3-l2", text: "Check how and when occupancy is counted, for example once a day at midnight against the daytime peak.", evidenceLineIds: [] },
+      { lookForId: "q3-l3", text: "Explain the difference in plain English, as you did each week for the regional managers.", evidenceLineIds: ["L13"] },
+      { lookForId: "q3-l4", text: "Agree a next step, such as a peak occupancy view, and check back that it matches what the ward sees.", evidenceLineIds: [] },
+    ],
+    sampleAnswer:
+      "I haven't yet had a manager challenge one of my figures, but I know how I'd handle it. First I'd thank the manager and ask what they are seeing: which days and times the ward feels full, and how many beds are free then. Then I'd check how the dashboard measures occupancy. If it counts beds once a day, at midnight for example, it can show 85 per cent while the ward is full during the day, when admissions and discharges overlap. I'd explain that difference in plain English, as I did every Monday when I walked the regional managers through the dashboard on a call during my internship. Finally I'd agree a next step, such as adding a peak occupancy view, and check back after a week that it matches what the ward sees.",
+    honestLine: "I haven't yet had a manager challenge one of my figures, but I know how I'd handle it.",
+    followUpTips: [
+      { followUpId: "q3-f1", tip: "Name one check: how occupancy is defined and the time of day it is counted. Then compare it with the ward's own count for the same days." },
+      { followUpId: "q3-f2", tip: "Give one plain sentence, for example: the dashboard counts beds once a day, so it misses the daytime peak. Then say what you would add to show the peak." },
+    ],
+    uncertainty: "Check how this employer's dashboards count bed occupancy: some count once a day, others also track daytime peaks.",
+  },
+  q6: {
+    kind: "gap",
+    points: [
+      { lookForId: "q6-l1", text: "Data minimisation: an analyst needs to count and compare patients, not to know who they are.", evidenceLineIds: [] },
+      { lookForId: "q6-l2", text: "Pseudonymised data is still personal data under UK GDPR, so it must be kept secure and used only for the agreed purpose.", evidenceLineIds: [] },
+      { lookForId: "q6-l3", text: "If it is lost or sent to the wrong person, far less harm is done than with names and NHS numbers.", evidenceLineIds: [] },
+      { lookForId: "q6-l4", text: "A consistent code for each patient still lets you link records across tables, as you joined store data on a key.", evidenceLineIds: ["L5"] },
+    ],
+    sampleAnswer:
+      "I haven't worked with NHS or patient data yet. My nearest experience is joining weekly sales data from 120 stores, where every row had to match on the right key. But I understand why a trust would pseudonymise. First, data minimisation: an analyst needs to count and compare patients, not to know who they are. Second, pseudonymised data is still personal data under UK GDPR, so I'd still keep it secure, use it only for the agreed purpose and delete it when the work is done. Third, if it were lost or sent to the wrong person, far less harm would be done than with names and NHS numbers. And because the trust gives each patient a consistent code, I could still link admissions to transfers without knowing who anyone is.",
+    honestLine: "I haven't worked with NHS or patient data yet.",
+    followUpTips: [
+      { followUpId: "q6-f1", tip: "Say it is still personal data under UK GDPR: keep it secure, use it only for the agreed purpose, never try to re-identify anyone, and delete it when the work ends." },
+      { followUpId: "q6-f2", tip: "Explain that the same code for the same patient lets you link records across tables, just as you joined store data on a shared key." },
+    ],
+    uncertainty: "Check the trust's data sharing agreement: what you may link, and for how long you may keep the data, can differ between agreements.",
+  },
+};
 
 export const dataAnalystSara: InterviewFixture = {
   id: "data-analyst-sara",
@@ -537,4 +597,5 @@ export const dataAnalystSara: InterviewFixture = {
       },
     },
   },
+  suggestions,
 };

@@ -291,6 +291,26 @@ export const InterviewReportSchema = z.object({
 });
 export type InterviewReport = z.infer<typeof InterviewReportSchema>;
 
+/** A suggested answer to a question left unanswered after "End here" (#205), built only from the candidate's CV. */
+export const AnswerSuggestionSchema = z.object({
+  questionId: IdSchema,
+  /** "evidence": the CV shows the competency the question tests. "gap": it does not, and the answer says so plainly. */
+  kind: z.enum(["evidence", "gap"]),
+  /** One per look-for, in the question's order. `evidence` holds CV lines copied by the code, never written by the model. */
+  points: z.array(z.object({ lookForId: IdSchema, text: z.string().min(1), evidence: z.array(z.string().min(1)) })),
+  /** First person, as spoken, with [placeholders] where the CV gives no detail. Null when the code built the suggestion. */
+  sampleAnswer: z.string().min(1).nullable(),
+  /** One sentence saying plainly what the CV does not show, word for word in sampleAnswer. Every model-written gap has one. */
+  honestLine: z.string().min(1).nullable(),
+  /** One tip per planned follow-up. */
+  followUpTips: z.array(z.object({ followUpId: IdSchema, tip: z.string().min(1) })),
+  /** A technical point to check with a practitioner, or null. */
+  uncertainty: z.string().min(1).nullable(),
+  /** True when the model's suggestion failed the checks and the code built this one from the question's look-fors. */
+  fallback: z.boolean(),
+});
+export type AnswerSuggestion = z.infer<typeof AnswerSuggestionSchema>;
+
 /** Tokens and cost of one model request. */
 export const StageUsageSchema = z.object({
   /** The engine stage, e.g. "analyse" or "evaluate". */
@@ -325,6 +345,10 @@ export const InterviewSessionSchema = SharedInterviewSessionSchema.extend({
   followUpDecisions: z.array(FollowUpDecisionSchema).optional(),
   evaluations: z.array(AnswerEvaluationSchema).optional(),
   report: InterviewReportSchema.optional(),
+  /** When the candidate chose "End here" (#205): no more answers are taken after it. */
+  endedAt: DateTimeSchema.optional(),
+  /** Suggested answers for the questions left unanswered after "End here" (#205). */
+  suggestions: z.array(AnswerSuggestionSchema).optional(),
   usage: z.array(StageUsageSchema).optional(),
   /** What produced this session, so phase 2 can replay or re-score it. */
   versions: z

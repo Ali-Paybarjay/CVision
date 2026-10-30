@@ -19,10 +19,12 @@ import {
   isLengthProblem,
   questionSetProblems,
   reportProblems,
+  suggestionProblems,
   type EvaluationContext,
   type Problem,
   type QuestionSetContext,
   type ReportContext,
+  type SuggestionContext,
 } from "./checks";
 import { IdSchema } from "@/shared/contracts";
 import { limits } from "../config";
@@ -157,4 +159,19 @@ export type ReportOutput = z.infer<typeof ReportOutputSchema>;
 
 export function reportOutputSchema(context: ReportContext) {
   return withProblems(ReportOutputSchema, (value) => reportProblems(value, context));
+}
+
+/** One suggested answer (#205). Evidence is by CV line id only: the code copies the lines. */
+export const SuggestOutputSchema = z.object({
+  kind: z.enum(["evidence", "gap"]),
+  points: z.array(z.object({ lookForId: IdSchema, text: z.string().min(1), evidenceLineIds: z.array(z.string()) })),
+  sampleAnswer: z.string().min(1),
+  honestLine: z.string().min(1).nullable(),
+  followUpTips: z.array(z.object({ followUpId: IdSchema, tip: z.string().min(1) })),
+  uncertainty: z.string().min(1).nullable(),
+});
+export type SuggestOutput = z.infer<typeof SuggestOutputSchema>;
+
+export function suggestOutputSchema(context: SuggestionContext) {
+  return withProblems(SuggestOutputSchema, (value) => suggestionProblems(value, context));
 }
