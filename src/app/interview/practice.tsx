@@ -167,7 +167,7 @@ export function InterviewPractice({
   if (!hydrated) return <p className="text-text-muted">Loading…</p>;
   if (!envelope) {
     if (view === "last-report" && lastReport) return <LastPractice report={lastReport} onPractiseAgain={() => setPractiseAgain(true)} />;
-    return <Intro signedIn={signedIn} canSave={canSave} onStart={start} />;
+    return <Intro signedIn={signedIn} canSave={canSave} onStart={start} focusHeading={practiseAgain} />;
   }
 
   const done = session !== null && nextStep(session).step === "done";
@@ -175,11 +175,14 @@ export function InterviewPractice({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
-        <Button onClick={restart}>{done ? "Practise again" : "Start again"}</Button>
+        {!done && <Button onClick={restart}>Start again</Button>}
       </div>
       <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
       {session && done ? (
-        <FeedbackReport session={session} />
+        <>
+          <FeedbackReport session={session} />
+          <PractiseAgain onPractiseAgain={restart} />
+        </>
       ) : (
         session && <InterviewFlow store={store} session={session} jobs={jobs} run={runOf(envelope)} samples={samples} />
       )}
@@ -187,24 +190,40 @@ export function InterviewPractice({
   );
 }
 
-function LastPractice({ report, onPractiseAgain }: { report: LastReport; onPractiseAgain: () => void }) {
+export function LastPractice({ report, onPractiseAgain }: { report: LastReport; onPractiseAgain: () => void }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-text-muted">
-          Your last practice · <time dateTime={report.practisedAt}>{practisedOn(report.practisedAt)}</time>
-        </p>
-        <Button onClick={onPractiseAgain}>Practise again</Button>
-      </div>
+      <p className="text-sm text-text-muted">
+        Your last practice · <time dateTime={report.practisedAt}>{practisedOn(report.practisedAt)}</time>
+      </p>
       <FeedbackReport session={report.session} />
+      <PractiseAgain onPractiseAgain={onPractiseAgain} />
     </div>
   );
 }
 
-function Intro({ signedIn, canSave, onStart }: { signedIn: boolean; canSave: boolean; onStart: () => void }) {
+/** Below the report, not above it, so the feedback is read before a new practice starts. */
+function PractiseAgain({ onPractiseAgain }: { onPractiseAgain: () => void }) {
   return (
     <Card className="space-y-4">
-      <h2 className="text-xl">How it works</h2>
+      <p>Read your feedback first. When you are ready, practise again.</p>
+      <Button onClick={onPractiseAgain}>Practise again</Button>
+    </Card>
+  );
+}
+
+function Intro({ signedIn, canSave, onStart, focusHeading }: { signedIn: boolean; canSave: boolean; onStart: () => void; focusHeading: boolean }) {
+  // After "Practise again" or "Start again", the button that was pressed is gone: focus (and the view) moves here.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focusHeading) headingRef.current?.focus();
+  }, [focusHeading]);
+
+  return (
+    <Card className="space-y-4">
+      <h2 ref={headingRef} tabIndex={-1} className="text-xl">
+        How it works
+      </h2>
       <ul className="list-disc space-y-2 pl-5">
         <li>{defaultComposition.technical} technical questions, written from this job ad and your CV.</li>
         <li>
