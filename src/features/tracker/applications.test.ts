@@ -5,12 +5,15 @@ import { loadTracker } from "./applications";
 import { closingDate, isClosed, nextStepDue, openAndClosed, suggestClosing } from "./model";
 import { sampleApplications, sampleApplicationsOn } from "./sample";
 
-const { getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
+const { getCurrentUser, createSupabaseServerClient, listPracticeSummaries } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   createSupabaseServerClient: vi.fn(),
+  listPracticeSummaries: vi.fn(),
 }));
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
 vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
+// Marzieh's store, tested in src/features/interview: the latest finished practice per job, [] on any error.
+vi.mock("@/features/interview/server/session-store", () => ({ listPracticeSummaries }));
 
 type Row = Record<string, unknown>;
 type Tables = { jobs: Row[]; applications: Row[] };
@@ -66,6 +69,7 @@ beforeEach(() => {
   };
   getCurrentUser.mockResolvedValue({ id: userId, email: null });
   createSupabaseServerClient.mockImplementation(async () => fakeSupabase(tables, userId));
+  listPracticeSummaries.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -150,6 +154,28 @@ describe("loadTracker", () => {
       ["app-2", true],
       ["app-1", false],
     ]);
+  });
+
+  it("gives each job with a finished practice the latest score, for its Interview report link", async () => {
+    listPracticeSummaries.mockResolvedValue([
+      { jobId: "job-1", practisedAt: "2026-10-22T10:00:00Z", overall: 3.4 },
+      { jobId: "job-9", practisedAt: "2026-10-21T10:00:00Z", overall: 4.5 },
+    ]);
+
+    const tracker = await loadTracker(today);
+
+    expect(tracker.kind === "account" && tracker.items.map((item) => [item.application.id, item.report])).toEqual([
+      ["app-2", undefined],
+      ["app-1", { overall: 3.4 }],
+    ]);
+  });
+
+  it("does not look for practice reports when there are no applications", async () => {
+    tables.applications = [];
+
+    await loadTracker(today);
+
+    expect(listPracticeSummaries).not.toHaveBeenCalled();
   });
 
   it("reports an error when the jobs cannot be read", async () => {

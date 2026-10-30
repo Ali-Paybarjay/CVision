@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { Application } from "@/shared/contracts";
+import { ApplicationStatusSchema, type Application } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { ApplicationList } from "./application-list";
 import type { TrackedApplication } from "./model";
@@ -223,6 +223,53 @@ describe("the link to a job's ad", () => {
 
     for (const job of personas.sara.jobs) expect(html).not.toContain(job.description.slice(0, 40));
     expect(html.match(/>Job ad</g)).toHaveLength(2);
+  });
+});
+
+// The report link needs a finished practice, which only an account has (listPracticeSummaries), so it is tested
+// here rather than in tests/e2e, where Sara's sample rows have no report.
+describe("the link to a job's interview report", () => {
+  const reported = (status: Application["status"], overall: number): TrackedApplication => ({
+    ...row("1", status, "2026-10-20", "Data Analyst"),
+    hasAd: true,
+    report: { overall },
+  });
+
+  it("sits next to the Job ad link, with the latest score, and opens the report on the interview page", () => {
+    const html = render([reported("applied", 3.4)]);
+
+    expect(text(html)).toContain("Etherow Freight Job ad for Data Analyst at Etherow Freight Interview report for");
+    expect(html).toMatch(/<a href="\/interview\?job=job-1"[^>]*>Interview report<span class="sr-only">/);
+  });
+
+  it("shows a short score on screen, and the job and score in words to a screen reader", () => {
+    const html = render([reported("applied", 4)]);
+
+    expect(html).toContain('<span class="sr-only"> for Data Analyst at Etherow Freight, 4.0 out of 5</span>');
+    expect(html).toContain('<span aria-hidden="true">\u00a0(4.0 / 5)</span>');
+  });
+
+  it("is shown in every status, open or closed", () => {
+    for (const status of ApplicationStatusSchema.options) expect(render([reported(status, 3.4)])).toContain(">Interview report<");
+  });
+
+  it("replaces the Practise button at interview stage, which stays when there is no report", () => {
+    expect(render([reported("interview", 3.4)])).not.toContain("Practise for this interview");
+    expect(render([row("1", "interview", "2026-10-20", "Data Analyst")])).toMatch(
+      /<a href="\/interview\?job=job-1"[^>]*>Practise for this interview<\/a>/,
+    );
+  });
+
+  it("is not shown without a finished practice, or when the job cannot be read", () => {
+    expect(render([row("1", "applied", "2026-10-20", "Data Analyst")])).not.toContain("Interview report");
+    const unreadable = { ...reported("interview", 3.4), job: null };
+    expect(render([unreadable])).not.toContain("Interview report");
+    // With no title to name the link, the Practise button stays.
+    expect(render([unreadable])).toContain("Practise for this interview");
+  });
+
+  it("is not shown for Sara's sample rows, which have no saved practice", () => {
+    expect(render(sampleApplications)).not.toContain("Interview report");
   });
 });
 
