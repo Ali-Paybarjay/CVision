@@ -234,9 +234,12 @@ export function isNewerSession(a: InterviewSession, b: InterviewSession): boolea
 export type OpeningView = "browser" | "resume" | "last-report" | "intro";
 
 /**
- * This browser's practice, unless the account has a later copy of it ("resume"). With nothing in this browser: the
- * account's unfinished practice, then its last report, then the intro. After "Practise again" the report is skipped,
- * so the button leads to a new practice rather than back to the same report.
+ * The practice is this browser's, unless the account has a later copy of it ("resume"); with nothing in this browser,
+ * the account's unfinished practice. A link to the job (the dashboard's "Interview report", the job list's "See your
+ * report") opens the account's last report even over an unfinished practice, and the page offers to continue it. Once
+ * this tab chooses the practice ("Start practice" or "Continue your practice"), it stays on it, through a reload too.
+ * After "Practise again" the report and the unfinished practice are skipped, so the button leads to a new practice
+ * rather than back to the same report.
  */
 export function openingView(options: {
   /** This browser's practice for the job; its session is null while the first stage runs. */
@@ -245,12 +248,32 @@ export function openingView(options: {
   saved: InterviewSession | null;
   lastReport: InterviewSession | null;
   practiseAgain: boolean;
+  /** This tab chose the practice over the last report. */
+  practising: boolean;
 }): OpeningView {
-  const { inBrowser, saved, lastReport, practiseAgain } = options;
-  if (inBrowser) return saved && inBrowser.session && isNewerSession(saved, inBrowser.session) ? "resume" : "browser";
-  if (saved && nextStep(saved).step !== "done") return "resume";
-  if (lastReport && !practiseAgain) return "last-report";
-  return "intro";
+  const { inBrowser, saved, lastReport, practiseAgain, practising } = options;
+  const practice = practiceToShow(inBrowser, saved, practiseAgain);
+  // A finished practice is the latest report, so the practice view shows it as it is.
+  if (lastReport && !practiseAgain && !practising && !(practice && isDone(practice.session))) return "last-report";
+  return practice?.view ?? "intro";
+}
+
+function practiceToShow(
+  inBrowser: { session: InterviewSession | null } | null,
+  saved: InterviewSession | null,
+  practiseAgain: boolean,
+): { view: "browser" | "resume"; session: InterviewSession | null } | null {
+  if (inBrowser) {
+    return saved && inBrowser.session && isNewerSession(saved, inBrowser.session)
+      ? { view: "resume", session: saved }
+      : { view: "browser", session: inBrowser.session };
+  }
+  if (saved && !isDone(saved) && !practiseAgain) return { view: "resume", session: saved };
+  return null;
+}
+
+function isDone(session: InterviewSession | null): boolean {
+  return session !== null && nextStep(session).step === "done";
 }
 
 function question(session: InterviewSession, questionId: string) {
