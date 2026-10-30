@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "27 October 2026";
+const lastUpdated = "29 October 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -120,8 +120,8 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
           it cost and whether it worked. Never the text itself.
         </p>
         <p>
-          We use these to set daily limits on AI use. We also add them up by day, without saying whose they are, to see
-          what the AI costs and how often it fails.
+          We use these to set daily limits on AI use. We also add them up by day, or over a set time when we test the app,
+          without saying whose they are, to see what the AI costs and how often it fails.
         </p>
       </>
     ),
