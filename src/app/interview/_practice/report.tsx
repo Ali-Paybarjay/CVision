@@ -2,8 +2,9 @@
 // what worked, what cost marks and one specific thing to do next time (prompts/_voice.md: outcome first). After
 // "End here" (#205), answered questions keep the same cards and every other question shows a suggested answer.
 import type { AnswerEvaluation, AnswerSuggestion, InterviewReport, InterviewSession, TechnicalInterviewQuestion } from "@/features/interview/contracts";
-import { readinessLabels, sessionOverall } from "@/features/interview/engine/scoring";
+import { readinessLabels } from "@/features/interview/engine/scoring";
 import {
+  endedOverall,
   evaluationFor,
   followUpAnswer,
   followUpQuestion,
@@ -133,19 +134,20 @@ export function FeedbackReport({ session }: { session: InterviewSession }) {
  */
 function EndedReport({ session }: { session: InterviewSession }) {
   const answeredIds = reportQuestionIds(session);
-  const evaluations = answeredIds.flatMap((id) => evaluationFor(session, id) ?? []);
+  // The same score the job list and the dashboard show for this practice.
+  const overall = endedOverall(session);
   const total = session.questions.length;
 
   return (
     <div className="space-y-4">
       <Card>
-        {evaluations.length > 0 ? (
+        {overall !== null ? (
           <>
             <p className="text-sm text-text-muted">
               Based on the {answeredIds.length} of {total} questions you answered
             </p>
             <p className="mt-1 text-4xl font-bold">
-              {sessionOverall(evaluations).toFixed(1)}
+              {overall.toFixed(1)}
               <span className="text-lg font-semibold text-text-muted"> / 5</span>
             </p>
             <p className="mt-3">You ended the practice early. Your answers are scored below, and every other question has a suggested answer built from your CV.</p>
@@ -158,7 +160,7 @@ function EndedReport({ session }: { session: InterviewSession }) {
         )}
       </Card>
 
-      {evaluations.length === 0 && <FromYourCv session={session} />}
+      {overall === null && <FromYourCv session={session} />}
 
       <h2 className="pt-2 text-xl">Question by question</h2>
       {technicalQuestions(session).map((question, index) => {

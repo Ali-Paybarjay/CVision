@@ -16,6 +16,7 @@ import {
   type TechnicalInterviewQuestion,
 } from "../contracts";
 import type { StageName } from "../config";
+import { sessionOverall } from "./scoring";
 import { isNonAnswer } from "./text";
 
 /** Which prompt and model produced a stage's output. */
@@ -196,6 +197,12 @@ export type SessionStep =
 export function reportQuestionIds(session: InterviewSession): string[] {
   const unanswered = new Set(unansweredQuestionIds(session));
   return session.questions.filter((q) => !unanswered.has(q.id)).map((q) => q.id);
+}
+
+/** The score after "End here": the average of the answered questions only, or null when none was answered. */
+export function endedOverall(session: InterviewSession): number | null {
+  const evaluations = reportQuestionIds(session).flatMap((id) => evaluationFor(session, id) ?? []);
+  return evaluations.length > 0 ? sessionOverall(evaluations) : null;
 }
 
 /** What the session needs next. Lets a page resume a saved session exactly where it stopped. */

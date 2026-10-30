@@ -8,9 +8,12 @@ import {
   applySuggestion,
   askQuestion,
   endEarly,
+  endedOverall,
+  evaluationFor,
   nextStep,
   reportQuestionIds,
 } from "./engine/session";
+import { sessionOverall } from "./engine/scoring";
 import { evaluateAnswer, suggestAnswer, writeReport } from "./engine/stages";
 import { dataAnalystSara as fixture } from "./fixtures/data-analyst-sara";
 import { sessionEndedEarlyProperties } from "./server/completion-event";
@@ -49,6 +52,18 @@ describe("after 'End here'", () => {
     }
     expect(nextStep(session)).toEqual({ step: "done" });
     expect(session.report).toBeUndefined();
+    // The score the report header, the job list and the dashboard show: q2 only.
+    expect(endedOverall(session)).toBe(sessionOverall([scored.evaluation]));
+  });
+
+  it("scores only the genuine answers, even a non-answer scored before End, and gives no score without one", async () => {
+    let session = askQuestion(readySessionFor(fixture), "q1", at, "t1");
+    session = addAnswer(session, { questionId: "q1", kind: "main", text: "I don't know", startedAt: at, submittedAt: at, id: "t2" });
+    session = applyFollowUpDecision(session, noFollowUp("q1"), at, "t3");
+    session = applyEvaluation(session, (await evaluateAnswer(session, "q1")).evaluation);
+    const ended = endEarly(session, later);
+    expect(evaluationFor(ended, "q1")).toBeDefined();
+    expect(endedOverall(ended)).toBeNull();
   });
 
   it("scores every question, as before, while the practice has not ended", () => {
