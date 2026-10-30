@@ -4,6 +4,7 @@ import { uniqueLines, type CvExtraction } from "./cv-extraction";
 import { fitsProfileLimit, profileTooLongMessage } from "./cv-limits";
 import { phoneProblem, tidyPhone } from "./phone";
 import { count } from "./ui/format";
+import { yearMonthProblem } from "./year-month";
 
 // The review step: the user checks every item read from their CV (or, with no CV, fills the page in themselves),
 // corrects what is wrong, then approves the whole page at once. Nothing is saved until they approve and every item
@@ -17,7 +18,7 @@ export type ExperienceDraft = {
   title: string;
   company: string;
   location: string;
-  /** YYYY-MM, as typed. */
+  /** YYYY-MM, or "YYYY-" / "-MM" while only one of the Month and Year menus is chosen (year-month.ts). */
   startDate: string;
   endDate: string;
   current: boolean;
@@ -355,8 +356,20 @@ export function approvalFor(checked: ReviewDraft, base: ProfileBase, consentMiss
 
 // --- Validation -------------------------------------------------------------------------------
 
-const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-const monthExample = "Use a month in the form YYYY-MM, for example 2021-09.";
+/** What to say about a date picked with the Month and Year menus (#186), or undefined when it is whole. */
+function dateError(value: string, missing: string | undefined): string | undefined {
+  const problem = yearMonthProblem(value);
+  if (problem === null) return undefined;
+  if (problem === "missing") return missing;
+  if (problem === "month") return "Choose the month too.";
+  if (problem === "year") return "Choose the year too.";
+  return "Choose the month and year.";
+}
+
+/** True when both dates are whole and the end comes before the start. */
+function endsBeforeStart(start: string, end: string): boolean {
+  return yearMonthProblem(start) === null && yearMonthProblem(end) === null && end.trim() < start.trim();
+}
 
 export function validateContact(value: ContactDraft): FieldErrors {
   const errors: FieldErrors = {};
@@ -377,13 +390,12 @@ export function validateExperience(value: ExperienceDraft): FieldErrors {
   const errors: FieldErrors = {};
   if (!value.title.trim()) errors.title = "Add the job title.";
   if (!value.company.trim()) errors.company = "Add the employer’s name.";
-  const start = value.startDate.trim();
-  const end = value.endDate.trim();
-  if (!YEAR_MONTH.test(start)) errors.startDate = `Add the month you started. ${monthExample}`;
+  const startError = dateError(value.startDate, "Add the month and year you started.");
+  if (startError) errors.startDate = startError;
   if (!value.current) {
-    if (!end) errors.endDate = "Add the month you left, or tick “I still work here”.";
-    else if (!YEAR_MONTH.test(end)) errors.endDate = monthExample;
-    else if (YEAR_MONTH.test(start) && end < start) errors.endDate = "The end month is before the start month.";
+    const endError = dateError(value.endDate, "Add the month and year you left, or tick “I still work here”.");
+    if (endError) errors.endDate = endError;
+    else if (endsBeforeStart(value.startDate, value.endDate)) errors.endDate = "The end month is before the start month.";
   }
   return errors;
 }
@@ -392,12 +404,13 @@ export function validateEducation(value: EducationDraft): FieldErrors {
   const errors: FieldErrors = {};
   if (!value.qualification.trim()) errors.qualification = "Add the qualification, for example BSc or A levels.";
   if (!value.institution.trim()) errors.institution = "Add where you studied.";
-  const start = value.startDate.trim();
-  const end = value.endDate.trim();
-  if (start && !YEAR_MONTH.test(start)) errors.startDate = monthExample;
-  if (!value.current && end) {
-    if (!YEAR_MONTH.test(end)) errors.endDate = monthExample;
-    else if (YEAR_MONTH.test(start) && end < start) errors.endDate = "The end month is before the start month.";
+  // Both dates are optional here, so only a half-chosen date is a problem.
+  const startError = dateError(value.startDate, undefined);
+  if (startError) errors.startDate = startError;
+  if (!value.current) {
+    const endError = dateError(value.endDate, undefined);
+    if (endError) errors.endDate = endError;
+    else if (endsBeforeStart(value.startDate, value.endDate)) errors.endDate = "The end month is before the start month.";
   }
   return errors;
 }
