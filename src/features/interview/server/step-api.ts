@@ -5,7 +5,7 @@ import { limits } from "../config";
 import { InterviewSessionSchema } from "../contracts";
 import { MockFixtureMissingError } from "../engine/mock";
 import { InterviewRuleError } from "../engine/session";
-import { InterviewStageError } from "../engine/stages";
+import { InterviewStageError, questionsNotWritten } from "../engine/stages";
 
 /**
  * A session sent by the browser. Everything in it reaches a prompt, so answers have a length limit and the whole
@@ -27,10 +27,16 @@ export function badRequest(issues: { code: string; message: string }[]): Respons
   return Response.json({ error }, { status: 400 });
 }
 
-/** The response for a step that threw. Logs the kind of failure only: never the CV, the job description or an answer. */
-export function stepFailed(source: string, step: string, error: unknown): Response {
+const startupSteps = new Set(["analyse", "generate", "review"]);
+
+/**
+ * The response for a step that threw. Logs the kind of failure only: never the CV, the job description or an answer.
+ * With `plain`, a start-up step whose answer broke a rule twice shows a plain message, not the rule (#220).
+ */
+export function stepFailed(source: string, step: string, error: unknown, { plain = false } = {}): Response {
   const reason = error instanceof AskModelError ? error.reason : undefined;
   console.error(`${source}: ${step} failed (${error instanceof Error ? error.name : "unknown"}${reason ? `, ${reason}` : ""})`);
+  if (plain && reason === "invalid-answer" && startupSteps.has(step)) return Response.json({ error: questionsNotWritten }, { status: 422 });
   const known =
     error instanceof AskModelError ||
     error instanceof MockFixtureMissingError ||

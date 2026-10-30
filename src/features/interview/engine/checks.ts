@@ -15,11 +15,33 @@ import { countWords, isVerbatim } from "./text";
 /** The soft length rules. A problem that names one is recorded, not sent back to the model (see isLengthProblem). */
 export type LengthRule = "question-words" | "follow-up-length" | "quote-words" | "improvement-length";
 
-export type Problem = { path: (string | number)[]; message: string; lengthRule?: LengthRule };
+/**
+ * The review rules the code repairs rather than sending back to the model (#220): a follow-up that breaks one is
+ * dropped, a question that breaks one goes back to its version from before the review, and a set-level rule (mix,
+ * CV anchors, probe-gap, stretch) is only recorded. Protected topics and the structure stay hard rules.
+ */
+export type ReviewRule =
+  | "follow-up-shape"
+  | "follow-up-speakable"
+  | "question-shape"
+  | "question-speakable"
+  | "jd-quote"
+  | "cv-quote"
+  | "type-mix"
+  | "cv-anchors"
+  | "probe-gap"
+  | "stretch";
+
+export type Problem = { path: (string | number)[]; message: string; lengthRule?: LengthRule; reviewRule?: ReviewRule };
 
 /** Length rules never fail a stage: a reply that is one sentence too long is still worth showing. */
 export function isLengthProblem(problem: Problem): boolean {
   return problem.lengthRule !== undefined;
+}
+
+/** Problems the schema lets through: length rules are recorded, review rules are repaired (repairReviewedSet). */
+export function isSoftProblem(problem: Problem): boolean {
+  return problem.lengthRule !== undefined || problem.reviewRule !== undefined;
 }
 
 /**
@@ -335,7 +357,7 @@ function followUpProblems(followUps: PlannedFollowUp[], path: (string | number)[
   if (strict) {
     followUps.forEach((followUp, i) => {
       if (!isFollowUpShape(followUp.text)) {
-        problems.push({ path: [...path, i, "text"], message: "Must be one question on one line, with no notes." });
+        problems.push({ path: [...path, i, "text"], message: "Must be one question on one line, with no notes.", reviewRule: "follow-up-shape" });
       }
       if (!isFollowUpLength(followUp.text)) {
         problems.push({
@@ -344,7 +366,9 @@ function followUpProblems(followUps: PlannedFollowUp[], path: (string | number)[
           lengthRule: "follow-up-length",
         });
       }
-      if (!isSpeakable(followUp.text)) problems.push({ path: [...path, i, "text"], message: "Must be speakable: no symbols or abbreviated units." });
+      if (!isSpeakable(followUp.text)) {
+        problems.push({ path: [...path, i, "text"], message: "Must be speakable: no symbols or abbreviated units.", reviewRule: "follow-up-speakable" });
+      }
       if (bannedTopicHits(followUp.text).length) problems.push({ path: [...path, i, "text"], message: "Touches a protected or personal topic." });
     });
   }
@@ -391,14 +415,18 @@ export function questionSetProblems(
       if (countWords(question.text) > limits.questionMaxWords) {
         problems.push({ path: [...path, "text"], message: `Must be at most ${limits.questionMaxWords} words.`, lengthRule: "question-words" });
       }
-      if (!isSingleQuestion(question.text)) problems.push({ path: [...path, "text"], message: "Must be one question with a single question mark at the end." });
-      if (!isSpeakable(question.text)) problems.push({ path: [...path, "text"], message: "Must be speakable: no symbols or abbreviated units." });
+      if (!isSingleQuestion(question.text)) {
+        problems.push({ path: [...path, "text"], message: "Must be one question with a single question mark at the end.", reviewRule: "question-shape" });
+      }
+      if (!isSpeakable(question.text)) {
+        problems.push({ path: [...path, "text"], message: "Must be speakable: no symbols or abbreviated units.", reviewRule: "question-speakable" });
+      }
       if (bannedTopicHits(question.text).length) problems.push({ path: [...path, "text"], message: "Touches a protected or personal topic." });
       if (!isVerbatim(question.rationale.jdQuote, context.jobDescription)) {
-        problems.push({ path: [...path, "rationale", "jdQuote"], message: "Must be copied exactly from the job description." });
+        problems.push({ path: [...path, "rationale", "jdQuote"], message: "Must be copied exactly from the job description.", reviewRule: "jd-quote" });
       }
       if (question.rationale.cvQuote && !isVerbatim(question.rationale.cvQuote, context.cv)) {
-        problems.push({ path: [...path, "rationale", "cvQuote"], message: "Must be copied exactly from the CV." });
+        problems.push({ path: [...path, "rationale", "cvQuote"], message: "Must be copied exactly from the CV.", reviewRule: "cv-quote" });
       }
     }
   });
@@ -409,22 +437,79 @@ export function questionSetProblems(
   if (stage === "review") {
     const roleLevel = context.roleProfile.roleLevel;
     if (mixDistance(questions.map((q) => q.type), roleLevel) > 1) {
-      problems.push({ path: ["questions"], message: "The mix of question types must be within one question of the level table." });
+      problems.push({ path: ["questions"], message: "The mix of question types must be within one question of the level table.", reviewRule: "type-mix" });
     }
     const anchored = questions.filter((q) => q.rationale.cvQuote).length;
     const neededAnchors = levelIndex(roleLevel) >= 3 ? 2 : 1;
     if (anchored < neededAnchors) {
-      problems.push({ path: ["questions"], message: `At least ${neededAnchors} questions must be anchored to a CV quote.` });
+      problems.push({ path: ["questions"], message: `At least ${neededAnchors} questions must be anchored to a CV quote.`, reviewRule: "cv-anchors" });
     }
     const gaps = mustHaveGapIds(context.roleProfile, context.candidateProfile);
     if (gaps.length && !questions.some((q) => q.focus === "probe-gap" && gaps.includes(q.competencyId))) {
-      problems.push({ path: ["questions"], message: "Include a probe-gap question on a weak must-have competency." });
+      problems.push({ path: ["questions"], message: "Include a probe-gap question on a weak must-have competency.", reviewRule: "probe-gap" });
     }
     if (isLevelBelow(context.candidateProfile.cvLevel, roleLevel) && !questions.some((q) => q.stretch)) {
-      problems.push({ path: ["questions"], message: "Mark one question as the stretch question." });
+      problems.push({ path: ["questions"], message: "Mark one question as the stretch question.", reviewRule: "stretch" });
     }
   }
   return problems;
+}
+
+type QuestionSet = { blueprint: DraftBlueprint; questions: DraftQuestion[] };
+
+/** What repairReviewedSet did: the set to use (null when it cannot be repaired), every review rule the reply broke, and the questions put back. */
+export type ReviewRepair<T extends QuestionSet> = { set: T | null; broken: ReviewRule[]; restored: string[] };
+
+/**
+ * Repairs a reviewed set one item at a time, so one slip no longer fails the whole session (#220). A follow-up that
+ * breaks a review rule is dropped while a clean one is left; otherwise the question goes back to its version from
+ * before the review, if that version passes every rule. Set-level rules are only reported. The set is null when a
+ * question cannot be repaired either way.
+ */
+export function repairReviewedSet<T extends QuestionSet>(reviewed: T, before: QuestionSet, context: QuestionSetContext): ReviewRepair<T> {
+  const problems = questionSetProblems(reviewed, context, "review");
+  const broken = problems.flatMap((p) => (p.reviewRule ? [p.reviewRule] : []));
+  if (broken.length === 0) return { set: reviewed, broken, restored: [] };
+
+  const beforeProblems = questionSetProblems(before, context, "review");
+  const questions = [...reviewed.questions];
+  const slots = [...reviewed.blueprint.slots];
+  const restored: string[] = [];
+  for (const [i, question] of reviewed.questions.entries()) {
+    const own = usableQuestion(question, problemsAt(problems, i));
+    if (own) {
+      questions[i] = own;
+      continue;
+    }
+    const earlier = before.questions[i];
+    const fallback = earlier?.id === question.id ? usableQuestion(earlier, problemsAt(beforeProblems, i)) : null;
+    if (!fallback) return { set: null, broken, restored };
+    questions[i] = fallback;
+    slots[i] = before.blueprint.slots[i];
+    restored.push(fallback.id);
+  }
+  return { set: { ...reviewed, blueprint: { ...reviewed.blueprint, slots }, questions }, broken, restored };
+}
+
+/** The problems of the question at position i: its own, its follow-ups' and its blueprint slot's. */
+function problemsAt(problems: Problem[], i: number): Problem[] {
+  return problems.filter(({ path }) => (path[0] === "questions" && path[1] === i) || (path[0] === "blueprint" && path[1] === "slots" && path[2] === i));
+}
+
+/** The question without the follow-ups that break a review rule, or null when anything else breaks a rule. */
+function usableQuestion(question: DraftQuestion, problems: Problem[]): DraftQuestion | null {
+  const dropped = new Set<number>();
+  for (const problem of problems) {
+    // Kept and recorded, as before (#165).
+    if (problem.lengthRule) continue;
+    const followUp = problem.path[2] === "followUps" ? problem.path[3] : undefined;
+    const droppable = problem.reviewRule === "follow-up-shape" || problem.reviewRule === "follow-up-speakable";
+    if (typeof followUp === "number" && droppable) dropped.add(followUp);
+    else return null;
+  }
+  if (dropped.size === 0) return question;
+  const followUps = question.followUps.filter((_, j) => !dropped.has(j));
+  return followUps.length > 0 ? { ...question, followUps } : null;
 }
 
 export type EvaluationDraft = {

@@ -1,8 +1,10 @@
 // The size limits on a session the browser sends back: everything in it can reach a prompt.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { AskModelError } from "@/shared/ai";
 import { limits } from "./config";
 import { fixtures } from "./fixtures";
-import { badRequest, RequestSessionSchema } from "./server/step-api";
+import { questionsNotWritten } from "./engine/stages";
+import { badRequest, RequestSessionSchema, stepFailed } from "./server/step-api";
 import { runMockSession } from "./test-support";
 
 describe("a session sent by the browser", () => {
@@ -20,5 +22,22 @@ describe("a session sent by the browser", () => {
     expect(parsed.success).toBe(false);
     const response = badRequest(parsed.error!.issues);
     expect(response.status).toBe(400);
+  });
+});
+
+describe("a start-up step whose answer broke a rule twice (#220)", () => {
+  const invalid = new AskModelError("The interview-review answer did not match its schema: questions.4.followUps.0.text: Must be one question.", "invalid-answer");
+
+  it("shows the user a plain message, not the rule", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = stepFailed("interview", "review", invalid, { plain: true });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: questionsNotWritten });
+  });
+
+  it("still shows the rule in the lab and on the later steps", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await stepFailed("interview lab", "review", invalid).json()).error).toBe(invalid.message);
+    expect((await stepFailed("interview", "evaluate", invalid, { plain: true }).json()).error).toBe(invalid.message);
   });
 });

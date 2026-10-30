@@ -8,7 +8,9 @@ import {
   mixDistance,
   mustHaveGapIds,
   questionSetProblems,
+  repairReviewedSet,
 } from "./engine/checks";
+import { reviewOutputSchema } from "./engine/schemas";
 import { countWords, isNonAnswer, isVerbatim } from "./engine/text";
 import { fixtures } from "./fixtures";
 import { questionSetContextFor } from "./test-support";
@@ -159,5 +161,62 @@ describe("analysis checks", () => {
     expect(analysisProblems(output, context.jobDescription, context.cv).map((p) => p.message)).toContain(
       "A must-have competency with no CV evidence must be listed in gaps.",
     );
+  });
+});
+
+describe("repairing a reviewed set that breaks a review rule (#220)", () => {
+  const fixture = fixtures[0];
+  const context = questionSetContextFor(fixture);
+  const clean = fixture.review;
+  // One question of the set changed, the rest as reviewed.
+  const withQuestion = (i: number, change: (q: (typeof clean.questions)[number]) => (typeof clean.questions)[number]) => ({
+    ...clean,
+    questions: clean.questions.map((q, j) => (j === i ? change(q) : q)),
+  });
+  const symbolFollowUp = (q: (typeof clean.questions)[number], j: number) => ({
+    ...q,
+    followUps: q.followUps.map((f, k) => (k === j ? { ...f, text: "Which CI/CD step would you check first?" } : f)),
+  });
+
+  it("keeps a clean set as it is", () => {
+    expect(repairReviewedSet(clean, clean, context)).toEqual({ set: clean, broken: [], restored: [] });
+  });
+
+  it("drops a follow-up with a symbol and keeps the rest of the question", () => {
+    const reviewed = withQuestion(4, (q) => symbolFollowUp(q, 0));
+    const repair = repairReviewedSet(reviewed, clean, context);
+    expect(repair.broken).toEqual(["follow-up-speakable"]);
+    expect(repair.restored).toEqual([]);
+    expect(repair.set?.questions[4].followUps).toEqual(clean.questions[4].followUps.slice(1));
+    expect(repair.set && questionSetProblems(repair.set, context, "review").filter((p) => p.reviewRule)).toEqual([]);
+  });
+
+  it("puts a question back as it was before the review when its text breaks a rule", () => {
+    const reviewed = withQuestion(1, (q) => ({ ...q, text: "Which query would you write? And why?" }));
+    const repair = repairReviewedSet(reviewed, clean, context);
+    expect(repair.broken).toEqual(["question-shape"]);
+    expect(repair.restored).toEqual(["q2"]);
+    expect(repair.set?.questions[1]).toEqual(clean.questions[1]);
+    expect(repair.set?.blueprint.slots[1]).toEqual(clean.blueprint.slots[1]);
+  });
+
+  it("puts a question back when none of its follow-ups is left", () => {
+    const reviewed = withQuestion(2, (q) => q.followUps.reduce((acc, _, j) => symbolFollowUp(acc, j), q));
+    const repair = repairReviewedSet(reviewed, clean, context);
+    expect(repair.restored).toEqual(["q3"]);
+    expect(repair.set?.questions[2]).toEqual(clean.questions[2]);
+  });
+
+  it("gives up only when the version from before the review breaks a rule too", () => {
+    const broken = withQuestion(0, (q) => ({ ...q, rationale: { ...q.rationale, jdQuote: "Words that are not in the job ad at all" } }));
+    const repair = repairReviewedSet(broken, broken, context);
+    expect(repair.set).toBeNull();
+    expect(repair.broken).toEqual(["jd-quote"]);
+  });
+
+  it("lets the schema pass repairable rules but still rejects a protected topic", () => {
+    expect(reviewOutputSchema(context).safeParse(withQuestion(4, (q) => symbolFollowUp(q, 0))).success).toBe(true);
+    const personal = withQuestion(4, (q) => ({ ...q, followUps: q.followUps.map((f, k) => (k === 0 ? { ...f, text: "What is your age?" } : f)) }));
+    expect(reviewOutputSchema(context).safeParse(personal).success).toBe(false);
   });
 });

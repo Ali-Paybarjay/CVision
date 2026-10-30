@@ -1,6 +1,7 @@
 // The six stages of the technical interview engine. Each loads its prompt, calls askModel, checks the answer
 // against the stage's schema (askModel retries once, then fails clearly) and records what it used.
 // Length rules are checked after the reply: a reply that breaks one is kept and recorded as interview.length_over.
+// The review's repairable rules too: the code repairs the item and records interview.review_rule_broken (#220).
 import "server-only";
 import { askModel, getAiMode, loadPrompt, type ModelUsage, type Requester } from "@/shared/ai";
 import { track } from "@/shared/analytics/track";
@@ -27,13 +28,12 @@ import {
   bannedTopicHits,
   evaluationProblems,
   isCleanFollowUp,
-  isLengthProblem,
   isLevelBelow,
   isSpeakable,
   questionSetProblems,
+  repairReviewedSet,
   type DraftQuestion,
   type EvaluationContext,
-  type LengthRule,
   type Problem,
   type QuestionSetContext,
 } from "./checks";
@@ -103,20 +103,26 @@ function data(value: unknown): string {
 }
 
 export const lengthOverEvent = "interview.length_over";
+export const reviewRuleEvent = "interview.review_rule_broken";
+
+/** What the user sees when the questions cannot be written, instead of the rule that failed (#220). */
+export const questionsNotWritten = "We could not finish writing your questions this time. Try again: it usually works on the second go.";
 
 /**
- * Records each length rule a kept reply breaks, by stage and rule name only, never the text. The event is stored
- * only for a signed-in user's live request, so mock runs and the eval leave the events table alone.
+ * Records each rule a kept reply breaks, by stage and rule name only, never the text. The event is stored only for
+ * a signed-in user's live request, so mock runs and the eval leave the events table alone.
  */
-async function recordLengthOver(stage: StageName, problems: Problem[], requester?: Requester): Promise<void> {
-  const counts = new Map<LengthRule, number>();
-  for (const problem of problems) {
-    if (problem.lengthRule) counts.set(problem.lengthRule, (counts.get(problem.lengthRule) ?? 0) + 1);
-  }
+async function recordRules(event: string, stage: StageName, rules: string[], requester?: Requester): Promise<void> {
+  const counts = new Map<string, number>();
+  for (const rule of rules) counts.set(rule, (counts.get(rule) ?? 0) + 1);
   for (const [rule, count] of counts) {
-    console.info(`interview length over: ${stage} ${rule} x${count}`);
-    if (requester) await track(lengthOverEvent, { stage, rule, count }, requester);
+    console.info(`${event}: ${stage} ${rule} x${count}`);
+    if (requester) await track(event, { stage, rule, count }, requester);
   }
+}
+
+function lengthRules(problems: Problem[]): string[] {
+  return problems.flatMap((p) => (p.lengthRule ? [p.lengthRule] : []));
 }
 
 async function callStage<T>(options: {
@@ -149,8 +155,7 @@ async function callStage<T>(options: {
       reports.push(used);
     },
   })) as T;
-  const over = options.problems?.(output).filter(isLengthProblem) ?? [];
-  if (over.length) await recordLengthOver(options.stage, over, options.run.requester);
+  await recordRules(lengthOverEvent, options.stage, lengthRules(options.problems?.(output) ?? []), options.run.requester);
   // Live requests report their real tokens, thinking and any retry included; mock mode has nothing to report.
   const usage =
     reports.length > 0
@@ -298,13 +303,20 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
       questions: data(technicalQuestions(session).map(toDraft)),
     },
     schema: reviewOutputSchema(context),
-    problems: (value) => questionSetProblems(value, context, "review"),
     sample: sampleFixture(session.jobId).review,
     voice: false,
     run,
   });
-  const questions = output.questions.map((q) => toTechnicalQuestion(q, context));
-  return applyQuestions(session, { blueprint: output.blueprint, questions, changelog: output.changelog }, usage, provenance);
+  const before = { blueprint: session.blueprint, questions: technicalQuestions(session).map(toDraft) };
+  const repair = repairReviewedSet(output, before, context);
+  await recordRules(reviewRuleEvent, "review", repair.broken, run.requester);
+  if (!repair.set) throw new InterviewStageError(questionsNotWritten);
+  const kept = repair.set;
+  await recordRules(lengthOverEvent, "review", lengthRules(questionSetProblems(kept, context, "review")), run.requester);
+  const questions = kept.questions.map((q) => toTechnicalQuestion(q, context));
+  // A question put back as it was before the review no longer has the review's changes.
+  const changelog = kept.changelog.filter((change) => !repair.restored.includes(change.questionId));
+  return applyQuestions(session, { blueprint: kept.blueprint, questions, changelog }, usage, provenance);
 }
 
 /** Stages 1 to 3 back to back, for the eval. The page calls them one by one to show progress. */
