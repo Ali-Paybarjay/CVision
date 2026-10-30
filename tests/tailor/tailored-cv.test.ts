@@ -25,6 +25,7 @@ function allText(cv: ReturnType<typeof buildTailoredCv>): string[] {
   return [
     cv.summary?.text ?? "",
     ...cv.skills.map((line) => line.text),
+    ...cv.technicalSkills.map((line) => line.text),
     ...cv.experience.flatMap((job) => job.lines.map((line) => line.text)),
     ...cv.education.map((line) => line.text),
     ...cv.certifications.map((line) => line.text),
@@ -35,7 +36,8 @@ describe("the tailored CV (You approve everything)", () => {
   it("with no changes, is the CV as the user wrote it", () => {
     const cv = buildTailoredCv(profile, []);
     expect(cv.fullName).toBe(profile.fullName);
-    expect(cv.skills.map((line) => line.text)).toEqual(profile.skills);
+    expect(cv.skills).toEqual([]);
+    expect(cv.technicalSkills.map((line) => line.text)).toEqual(profile.skills);
     expect(allText(cv).some((text) => text.includes("Built Tableau dashboards for the regional sales team"))).toBe(true);
     expect(cv.experience.flatMap((job) => job.lines).every((line) => !line.tailored)).toBe(true);
   });
@@ -60,9 +62,24 @@ describe("the tailored CV (You approve everything)", () => {
     expect(lines.map((line) => line.text)).not.toContain(approved.before);
   });
 
-  it("adds an approved new skill at the end of the skills", () => {
+  it("adds an approved tool to the technical skills, never to the six main skills", () => {
     const cv = buildTailoredCv(profile, [change("approved", { section: "skills", before: null, after: "Git and GitHub" })]);
-    expect(cv.skills.at(-1)).toEqual({ text: "Git and GitHub", tailored: true });
+    expect(cv.technicalSkills.at(-1)).toEqual({ text: "Git and GitHub", tailored: true });
+    expect(cv.skills).toEqual([]);
+  });
+
+  it("adds an approved main skill to the main skills and marks the CV line that shows it", () => {
+    const line = "Built Tableau dashboards for the regional sales team";
+    const cv = buildTailoredCv(profile, [change("approved", { gapId: undefined, section: "skills", before: null, after: "Communication", evidence: line, evidenceSource: "cv" })]);
+    expect(cv.skills).toEqual([{ text: "Communication", tailored: true }]);
+    expect(cv.experience.flatMap((job) => job.lines).find((item) => item.text === line)?.label).toBe("Communication:");
+  });
+
+  it("leaves a main skill the user has not approved off the CV", () => {
+    const line = "Built Tableau dashboards for the regional sales team";
+    const cv = buildTailoredCv(profile, [change("proposed", { gapId: undefined, section: "skills", before: null, after: "Communication", evidence: line, evidenceSource: "cv" })]);
+    expect(cv.skills).toEqual([]);
+    expect(cv.experience.flatMap((job) => job.lines).some((item) => item.label)).toBe(false);
   });
 
   it("keeps the approved change and drops a rejected one for the same line", () => {

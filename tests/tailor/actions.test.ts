@@ -53,6 +53,28 @@ describe("answerGap", () => {
     ]);
   });
 
+  it.each(["3+ years of Python experience", "Experience managing a team", "First-class degree in Statistics", "Strong SQL"])(
+    "does not put %s on the CV from a plain tap: the tap does not confirm all of it",
+    async (requirement) => {
+      const { personas } = await import("@/shared/sample-data");
+      const original = personas.sara.match.gaps[1].requirement;
+      personas.sara.match.gaps[1].requirement = requirement;
+      const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, where: "study" });
+      personas.sara.match.gaps[1].requirement = original;
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.changes.filter((change) => change.after === requirement)).toEqual([]);
+    },
+  );
+
+  it("takes the option the user tapped as their answer, and any detail after it", async () => {
+    const chosen = "I built Power BI dashboards at work";
+    const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "For the sales team.", hasExperience: true, chosen });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.answer).toBe(`${chosen}. For the sales team.`);
+  });
+
   it("needs only a tap: a plain yes to one tool adds it as a skill, quoting the user's answer (#191)", async () => {
     const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, where: "study" });
     expect(result.ok).toBe(true);

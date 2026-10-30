@@ -76,7 +76,7 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file (You approve everythin
   it("keeps every heading of the preview as real text, in order", async () => {
     const cv = buildTailoredCv(profile, []);
     const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
-    const headings = ["Professional summary", "Skills", "Experience", "Education"].map((heading) => text.indexOf(heading));
+    const headings = ["PROFESSIONAL SUMMARY", "EDUCATION", "PROFESSIONAL SKILLS DEMONSTRATED", "CERTIFICATES AND SKILLS"].map((heading) => text.indexOf(heading));
     expect(headings.every((index) => index >= 0)).toBe(true);
     expect([...headings].sort((a, b) => a - b)).toEqual(headings);
   });
@@ -87,6 +87,28 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file (You approve everythin
     for (const line of ["Dear Hiring Manager,", "I am applying for the role.", "Yours faithfully,", "Sara Ahmadi"]) {
       expect(text).toContain(line);
     }
+  });
+});
+
+describe.each<ExportFormat>(["pdf", "docx"])("the %s file follows the templates", (format) => {
+  const head = { fullName: "Sara Ahmadi", contact: ["Manchester", "07700 900000 | sara@example.com"], date: "30 October 2026" };
+
+  it("puts the letterhead and the date above the letter, and the name once at the end", async () => {
+    const letter = "Dear Hiring Manager,\n\nI am applying for the role.\n\nYours sincerely,\n\nSara Ahmadi";
+    const text = await fileText(await blocksToFile(letterBlocks(letter, head), format, { title: "Letter", author: "Sara" }), format);
+    for (const line of ["Manchester", "07700 900000 | sara@example.com", "30 October 2026", "Yours sincerely,"]) expect(text).toContain(line);
+    expect(text.indexOf("30 October 2026")).toBeLessThan(text.indexOf("Dear Hiring Manager,"));
+    expect(text.split("Sara Ahmadi")).toHaveLength(3);
+  });
+
+  it("lists every main skill and prints a line with the skill it shows", async () => {
+    const line = "Built Tableau dashboards for the regional sales team";
+    const skill = { id: "s", jobId: "j", section: "skills" as const, before: null, evidence: line, evidenceSource: "cv" as const, status: "approved" as const };
+    const cv = buildTailoredCv(profile, ["Communication", "Leadership", "Teamwork"].map((after) => ({ ...skill, id: after, after })));
+    const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
+    for (const name of ["Communication", "Leadership", "Teamwork"]) expect(text).toContain(name);
+    expect(text).toContain(`Communication: ${line}`);
+    expect(text).toContain("Skills and tools:");
   });
 });
 

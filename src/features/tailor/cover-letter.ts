@@ -24,9 +24,19 @@ export type CoverLetterInput = {
   requester?: Requester;
 };
 
-/** The letter as plain text, the form the user edits and the export uses. */
+/** The closing line of every letter; only the code adds it and the name, so neither can appear twice. */
+export const letterSignOff = "Yours sincerely,";
+
+/** A paragraph that is really a closing line or the name, which a model sometimes adds to the body. */
+function isClosing(paragraph: string, fullName: string): boolean {
+  const text = paragraph.trim().toLowerCase();
+  return text === fullName.trim().toLowerCase() || /^(yours (faithfully|sincerely)|sincerely|kind regards|best regards|regards)\b[,.]?(\s|$)/.test(text);
+}
+
+/** The letter as plain text, the form the user edits and the export uses. It ends with one closing line and one name. */
 export function coverLetterText(letter: CoverLetter, fullName: string): string {
-  return [letter.greeting, ...letter.paragraphs, `${letter.signOff}\n${fullName}`].join("\n\n");
+  const body = letter.paragraphs.filter((paragraph) => !isClosing(paragraph, fullName));
+  return [letter.greeting, ...body, `${letterSignOff}\n\n${fullName}`].join("\n\n");
 }
 
 function asSentence(line: string): string {
@@ -50,7 +60,8 @@ export function sampleCoverLetter({ profile, job, changes }: CoverLetterInput): 
   const lines = [...recentLines.filter((line) => line.tailored), ...recentLines.filter((line) => !line.tailored)]
     .map((line) => line.text)
     .slice(0, 3);
-  const skills = [...cv.skills.filter((line) => line.tailored), ...cv.skills.filter((line) => !line.tailored)]
+  const allSkills = [...cv.skills, ...cv.technicalSkills];
+  const skills = [...allSkills.filter((line) => line.tailored), ...allSkills.filter((line) => !line.tailored)]
     .map((line) => line.text)
     .slice(0, 5);
 
@@ -61,7 +72,7 @@ export function sampleCoverLetter({ profile, job, changes }: CoverLetterInput): 
     "I would welcome the chance to talk about the role at an interview.",
   ].filter(Boolean);
 
-  return { greeting: "Dear Hiring Manager,", paragraphs, signOff: "Yours faithfully," };
+  return { greeting: "Dear Hiring Manager,", paragraphs, signOff: letterSignOff };
 }
 
 /**
@@ -85,7 +96,7 @@ export function inventedTerms(letter: string, gaps: Gap[], answers: GapAnswer[],
 export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLetter> {
   const { profile, job, changes, answers } = input;
   const prompt = await loadPrompt("tailor-cover-letter", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
+    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
     cv: JSON.stringify(
       {
         fullName: profile.fullName,

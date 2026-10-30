@@ -16,6 +16,7 @@ import { defaultGapQuestion } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
 import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
+import { letterHead } from "./letter-state";
 import { modelFailureMessage, tailorModelAccess } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
 import { buildTailoredCv, fitsCv } from "./tailored-cv";
@@ -36,6 +37,8 @@ const AnswerGapSchema = z.object({
   hasExperience: z.boolean(),
   /** Which "yes" the user tapped: at work, or in study or on their own. */
   where: z.enum(["work", "study"]).optional(),
+  /** The answer option the user tapped, or the words they wrote instead: what they say they have done. */
+  chosen: z.string().trim().min(1).max(300).optional(),
   /** The user's answers to the job's other gaps, so a "no" there still counts here (Nothing invented). */
   earlierAnswers: z.array(EarlierAnswerSchema).max(30).optional(),
 });
@@ -60,9 +63,13 @@ function answerSentence(requirement: string, where: "work" | "study", detail: st
   return detail ? `${base} ${detail}` : base;
 }
 
-/** A requirement short and single enough to go on the CV as one skill, e.g. "Power BI" but not "Asana or Jira". */
+/**
+ * A requirement that is just the name of one tool or skill, e.g. "Power BI", so a plain "yes" can go on the CV as it is.
+ * Not "Asana or Jira", and not "3+ years of Python experience" or "First-class degree": a tap does not confirm those.
+ */
 function isOneSkill(requirement: string): boolean {
-  return !/\s+or\s+|,|\/|\band\b/i.test(requirement) && requirement.trim().split(/\s+/).length <= 5;
+  if (/\s+or\s+|,|\/|\band\b|\d|\b(years?|experience|experienced|strong|proficiency|proficient|knowledge|degree|ability|managing)\b/i.test(requirement)) return false;
+  return requirement.trim().split(/\s+/).length <= 5;
 }
 
 /**
@@ -82,7 +89,12 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
   const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   const gap = match?.gaps.find((item) => item.id === gapId);
   if (!profile || !job || !match || !gap) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
-  const answer = hasExperience ? answerSentence(gap.requirement, parsed.data.where ?? "work", detail) : detail || "I haven't done this.";
+  const chosen = parsed.data.chosen;
+  const answer = !hasExperience
+    ? detail || "I haven't done this."
+    : chosen
+      ? [chosen, detail].filter(Boolean).join(". ")
+      : answerSentence(gap.requirement, parsed.data.where ?? "work", detail);
 
   // Only answers to this job's real gaps count; the current gap's answer is the one just sent.
   const earlier: GapAnswer[] = (parsed.data.earlierAnswers ?? []).flatMap((item) => {
@@ -319,7 +331,7 @@ export async function exportDocument(request: ExportRequest): Promise<ExportResu
   if (document === "cover-letter" && !letter?.trim()) return { ok: false, message: "Approve your cover letter first, then download it." };
 
   const changes = parsed.data.changes.filter((change) => change.jobId === jobId);
-  const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes)) : letterBlocks(letter ?? "");
+  const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes)) : letterBlocks(letter ?? "", letterHead(profile, new Date()));
   const title = `${document === "cv" ? "CV" : "Cover letter"}: ${job.title}, ${job.company}`;
   const warning =
     format === "pdf" && pdfLosesLetters(blocks, { title, author: profile.fullName })

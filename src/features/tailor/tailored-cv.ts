@@ -1,16 +1,36 @@
 // The tailored CV: the user's Profile with only their approved changes applied (You approve everything).
 // Pure code, shared by the preview and the PDF and Word export.
 import type { Profile, TailoringChange } from "@/shared/contracts";
+import { isBigSix } from "./big-six";
 import { normalise } from "./nothing-invented";
 
 /** One line of the tailored CV; `tailored` marks a line that came from an approved change. */
-export type CvLine = { text: string; tailored: boolean };
+export type CvLine = {
+  text: string;
+  tailored: boolean;
+  /** Printed in bold before the text, e.g. the main skill a line shows: "Communication:" before "Walked managers through…". */
+  label?: string;
+};
+
+/** The section headings of the CV template (docs/tailor-templates), the same in the preview and the files. */
+export const cvHeadings = {
+  summary: "PROFESSIONAL SUMMARY",
+  skills: "PROFESSIONAL SKILLS AND INTERESTS",
+  education: "EDUCATION",
+  experience: "PROFESSIONAL SKILLS DEMONSTRATED",
+  other: "CERTIFICATES AND SKILLS",
+  certificates: "Certificates:",
+  technical: "Skills and tools:",
+};
 
 export type TailoredCv = {
   fullName: string;
   contact: string[];
   summary: CvLine | null;
+  /** The six main skills, such as Communication. */
   skills: CvLine[];
+  /** Software, tools and anything else that is not a main skill, listed as "Skills and tools" in the last section of the CV. */
+  technicalSkills: CvLine[];
   experience: {
     title: string;
     company: string;
@@ -90,16 +110,37 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[]): T
       .slice(0, max)
       .map((change) => (used.add(change.id), { text: change.after, tailored: true }));
 
+  // Approving a main skill also marks the CV line that shows it, as the template does.
+  const shown = approved.filter((change) => change.section === "skills" && change.before === null && change.evidenceSource === "cv" && isBigSix(change.after));
+  const withSkill = (original: string, line: CvLine): CvLine => {
+    const skill = shown.find((change) => normalise(original).includes(normalise(change.evidence)));
+    return skill ? { ...line, label: `${skill.after.trim()}:` } : line;
+  };
+
   const summary = profile.summary.trim() ? apply(profile.summary, "summary") : (added("summary", 1)[0] ?? null);
 
   const experience = profile.experience.map((job) => ({
     title: job.title,
     company: job.company,
     dates: [formatMonth(job.startDate), formatMonth(job.endDate)].filter(Boolean).join(" – "),
-    lines: [...job.duties, ...job.achievements].map((line) => apply(line, "experience")),
+    lines: [...job.duties, ...job.achievements].map((line) => withSkill(line, apply(line, "experience"))),
   }));
   // A new experience line has no role to sit under, so it goes under the most recent one.
   if (experience[0]) experience[0].lines.push(...added("experience"));
+
+  const skills = [...profile.skills.map((skill) => apply(skill, "skills")), ...added("skills")];
+  // Laid out as the template: "MSc (Data Science), Merit." in bold, then the institution. A tailored line stays as approved.
+  const education = profile.education.map((item) => {
+    const line = apply(educationLine(item), "education");
+    if (line.tailored) return line;
+    const degree = `${item.qualification}${item.subject ? ` (${item.subject})` : ""}${item.grade ? `, ${item.grade}` : ""}.`;
+    return { ...line, label: degree, text: item.institution };
+  });
+  const certifications = profile.certifications.map((item) => {
+    const line = apply(certificationLine(item), "certifications");
+    if (line.tailored) return line;
+    return { ...line, text: `${item.name}${item.issuer ? ` – ${item.issuer}` : ""}${item.year ? ` (${item.year})` : ""}` };
+  });
 
   return {
     fullName: profile.fullName,
@@ -107,13 +148,11 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[]): T
       (item): item is string => Boolean(item),
     ),
     summary,
-    skills: [...profile.skills.map((skill) => apply(skill, "skills")), ...added("skills")],
+    skills: skills.filter((line) => isBigSix(line.text)),
+    technicalSkills: skills.filter((line) => !isBigSix(line.text)),
     experience,
-    education: [...profile.education.map((item) => apply(educationLine(item), "education")), ...added("education")],
-    certifications: [
-      ...profile.certifications.map((item) => apply(certificationLine(item), "certifications")),
-      ...added("certifications"),
-    ],
+    education: [...education, ...added("education")],
+    certifications: [...certifications, ...added("certifications")],
     unplaced: approved.filter((change) => !used.has(change.id)),
   };
 }

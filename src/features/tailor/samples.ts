@@ -188,7 +188,7 @@ export const sampleProposals: Record<PersonaName, Proposal> = {
 
 /**
  * The mock suggestions made from the CV alone, before any question: each persona's summary, rewritten for the job
- * with a fact from one of their own CV lines (the evidence).
+ * with a fact from one of their own CV lines (the evidence), and main skills their lines show.
  */
 export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
   sara: {
@@ -199,6 +199,20 @@ export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
         after:
           "Data science graduate with hands-on experience cleaning and analysing retail sales data in Python and SQL, and building Tableau dashboards for a regional sales team. Looking for a first analyst role in Manchester.",
         evidence: "Built Tableau dashboards for the regional sales team",
+        evidenceSource: "cv",
+      },
+      {
+        section: "skills",
+        before: null,
+        after: "Communication",
+        evidence: "Built Tableau dashboards for the regional sales team",
+        evidenceSource: "cv",
+      },
+      {
+        section: "skills",
+        before: null,
+        after: "Attention to detail",
+        evidence: "Cleaned and joined weekly sales data from 120 stores using SQL and Python",
         evidenceSource: "cv",
       },
     ],
@@ -214,6 +228,20 @@ export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
         evidence: "Coordinated the move to a new school timetable for 1,100 students and 80 staff, delivered on time",
         evidenceSource: "cv",
       },
+      {
+        section: "skills",
+        before: null,
+        after: "Organisation",
+        evidence: "Coordinated the move to a new school timetable for 1,100 students and 80 staff, delivered on time",
+        evidenceSource: "cv",
+      },
+      {
+        section: "skills",
+        before: null,
+        after: "Management",
+        evidence: "Managed the year group's £15,000 trips and activities budget",
+        evidenceSource: "cv",
+      },
     ],
     nextSteps: [],
   },
@@ -227,6 +255,13 @@ export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
         evidence: "Build and maintain React and TypeScript websites for six agency clients",
         evidenceSource: "cv",
       },
+      {
+        section: "skills",
+        before: null,
+        after: "Problem solving",
+        evidence: "Rebuilt a client's booking form, reducing abandoned bookings by 18%",
+        evidenceSource: "cv",
+      },
     ],
     nextSteps: [],
   },
@@ -238,6 +273,20 @@ export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
         after:
           "Retail store manager with 15 years of experience running large teams and multi-million-pound budgets, and reporting weekly sales, waste and availability KPIs. Ready for an operations management role in the West Midlands.",
         evidence: "Report weekly sales, waste and availability KPIs to the area manager",
+        evidenceSource: "cv",
+      },
+      {
+        section: "skills",
+        before: null,
+        after: "Leadership",
+        evidence: "Run a store with 45 staff and a turnover of £9 million a year",
+        evidenceSource: "cv",
+      },
+      {
+        section: "skills",
+        before: null,
+        after: "Problem solving",
+        evidence: "Cut stock loss from 2.1% to 1.3% of sales in two years",
         evidenceSource: "cv",
       },
     ],

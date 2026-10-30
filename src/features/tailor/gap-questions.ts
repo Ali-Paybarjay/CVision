@@ -2,6 +2,15 @@ import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
+/** Things that are not skills or experience. No CV line can come from them, so they are never asked about. */
+const notAboutSkills =
+  /driv(ing|er'?s?) licen[cs]e|full (uk )?licen[cs]e|own (car|vehicle|transport)|right to work|visa|sponsorship|security clearance|\bdbs\b|\bbpss\b|relocat|willing(ness)? to travel|shifts?\b|weekends?\b|availab|notice period|salary|nationality|based in\b|commut/i;
+
+/** The gaps worth a question: what the job asks the person to know or have done. */
+export function skillGaps(gaps: Gap[]): Gap[] {
+  return gaps.filter((gap) => !notAboutSkills.test(gap.requirement));
+}
+
 /** A plain yes-or-no question for one gap, used as the mock answer and as a fallback. */
 export function defaultGapQuestion(gap: Gap): GapQuestion {
   const question =
@@ -11,7 +20,7 @@ export function defaultGapQuestion(gap: Gap): GapQuestion {
   return { gapId: gap.id, question };
 }
 
-/** One question about the user's real experience for every gap in the match. */
+/** A question about the user's real experience for each gap worth asking about, with answers they can tap. */
 export async function askGapQuestions(input: {
   profile: Profile;
   job: Job;
@@ -20,23 +29,24 @@ export async function askGapQuestions(input: {
   requester?: Requester;
 }): Promise<GapQuestion[]> {
   const { profile, job, match, requester } = input;
-  if (match.gaps.length === 0) return [];
+  const gaps = skillGaps(match.gaps);
+  if (gaps.length === 0) return [];
 
   const prompt = await loadPrompt("tailor-gap-questions", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
-    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience }, null, 2),
-    gaps: JSON.stringify(match.gaps, null, 2),
+    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
+    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience, education: profile.education, certifications: profile.certifications }, null, 2),
+    gaps: JSON.stringify(gaps, null, 2),
   });
 
   const { questions } = await askModel({
     feature: "tailor-gap-questions",
     prompt,
     schema: GapQuestionListSchema,
-    sample: { questions: match.gaps.map(defaultGapQuestion) },
+    sample: { questions: gaps.map(defaultGapQuestion) },
     effort: "low",
     requester,
   });
 
-  // Exactly one question per gap, in the match's order, even if the model skips or repeats one.
-  return match.gaps.map((gap) => questions.find((item) => item.gapId === gap.id) ?? defaultGapQuestion(gap));
+  // In the match's order, at most one per gap. A gap the model left out is one the CV already covers or that gives no CV line.
+  return gaps.flatMap((gap) => questions.find((item) => item.gapId === gap.id) ?? []);
 }

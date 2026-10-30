@@ -74,6 +74,13 @@ export function CvSuggestions({ jobId, changes, loaded, onSuggested, onDecide }:
       {changes.map((change) => (
         <ChangeCard key={change.id} change={change} onDecide={onDecide} />
       ))}
+      {state === "done" && (
+        <div>
+          <Button variant="quiet" onClick={ask}>
+            Suggest again
+          </Button>
+        </div>
+      )}
     </section>
   );
 }

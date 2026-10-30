@@ -14,18 +14,20 @@ This rule overrides everything else.
 ## What to suggest
 
 - Up to five changes, the most useful for this job first.
-- Rewrite a line so it shows what the job asks for, using the ad's words only where the CV line already shows the same thing. For example, if the CV says "explained the dashboard to the sales managers every week" and the ad asks for "communication with non-technical stakeholders", you may write "explained the dashboard to non-technical sales managers every week".
+- Start a rewritten experience line with a clear action verb where it fits the person's real work and tense, for example: {{actionVerbs}}. Rewrite a line so it shows what the job asks for, using the ad's words only where the CV line already shows the same thing. For example, if the CV says "explained the dashboard to the sales managers every week" and the ad asks for "communication with non-technical stakeholders", you may write "explained the dashboard to non-technical sales managers every week".
 - The summary is the best place to start: bring forward the one or two facts from the CV that matter most for this job.
 - Keep the person's own words, tense and style. Short lines. No template phrases ("results-driven", "proven track record", "passionate", "dynamic", "team player").
 - If a line already fits the job, leave it alone. Make no change rather than a change for its own sake.
 
-## Skills the CV shows but does not list
+## The six main skills
 
-The tailored CV lists six main skills. This CV's skills list can take {{skillsToAdd}} more.
+The tailored CV lists six main skills: broad abilities such as Communication, Leadership or Teamwork, never software, tools, languages or qualifications. This CV can take {{skillsToAdd}} more.
 
-- If that number is 0, suggest no new skills.
-- Otherwise suggest up to that many skills, the most useful for this job first. Each must be a skill the CV clearly shows in another line, such as a tool named in an experience line, and must not already be in the skills list.
-- A new skill is a change with `section: "skills"`, `before: null`, `after` the short skill name only, and `evidence` the CV line that shows it, copied exactly. The skill name must appear in that line.
+- If that number is 0, suggest no skills.
+- Otherwise suggest up to that many, the ones this job needs most first. Use only these names, exactly as written: {{mainSkills}}.
+- Suggest a skill only if a line of the experience clearly shows the person doing it. "Led a team of five" shows Leadership; "Used Excel" shows none of them. Fewer honest skills are better than six weak ones.
+- Do not reuse a name already in the skills list, and use a different line for each skill where you can.
+- A main skill is a change with `section: "skills"`, `before: null`, `after` the skill name only, and `evidence` the whole line that shows it, copied exactly from the experience lines.
 
 ## Shape
 

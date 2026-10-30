@@ -11,14 +11,15 @@ import { ApplyPanel } from "./apply-panel";
 import { CoverLetterPanel } from "./cover-letter-panel";
 import { CvPreview } from "./cv-preview";
 import { CvSuggestions } from "./cv-suggestions";
-import { ExportPanel } from "./export-panel";
+import { DownloadBar } from "./download-bar";
 import { GapCard, type GapPrompt, type GapState } from "./gap-card";
+import { GapHelp } from "./gap-help";
 import { unreachableMessage } from "./messages";
 
 export type { GapPrompt };
 
 /** At most this many questions open at once; the rest wait under "More ways to strengthen your CV". */
-const mainQuestions = 3;
+const mainQuestions = 5;
 
 type TailorWorkspaceProps = {
   jobId: string;
@@ -30,9 +31,14 @@ type TailorWorkspaceProps = {
   savedChanges?: TailoringChange[];
 };
 
+/** "Suggest again" brings back suggestions lost on an earlier visit; one the page already has is not shown twice. */
+function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]): TailoringChange[] {
+  return suggested.filter((change) => !current.some((other) => other.section === change.section && other.before === change.before && other.after === change.after));
+}
+
 /**
- * The Tailor workspace for one job: suggestions from the CV first, then a one-tap question for each thing the job
- * asks for that the CV does not show, the cover letter, download and Apply, beside the CV preview, which shows
+ * The Tailor workspace for one job: a one-tap question for each thing the job asks for that the CV does not show
+ * first, then suggestions from the CV, the cover letter and Apply, under a download bar and beside the CV preview, which shows
  * approved changes only.
  */
 export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, savedChanges = [] }: TailorWorkspaceProps) {
@@ -100,7 +106,9 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, save
   const fromCv = changes.filter((change) => !change.gapId);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,32rem)]">
+    <div className="flex flex-col gap-6">
+      <DownloadBar jobId={jobId} changes={changes} letter={approvedLetter} />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,32rem)]">
       <div className="flex flex-col gap-8">
         <p className="rounded-md border border-line bg-surface px-4 py-3 text-sm" aria-live="polite">
           <span className="font-semibold">✓ Approved: {counts.approved}</span> · ✕ Rejected: {counts.rejected} · Waiting:{" "}
@@ -108,21 +116,8 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, save
         </p>
         {saveNote && <Notice tone="info">{saveNote}</Notice>}
 
-        <CvSuggestions
-          jobId={jobId}
-          changes={fromCv}
-          loaded={fromCv.length > 0}
-          onSuggested={(suggested) => setChanges((current) => [...current, ...suggested])}
-          onDecide={update}
-        />
-
         <section className="flex flex-col gap-4" aria-labelledby="questions-heading">
-          <div>
-            <h2 id="questions-heading" className="text-xl">
-              What the job asks for that your CV does not show
-            </h2>
-            <p className="mt-1 text-sm text-text-muted">One tap each. We add only what you tell us you have done.</p>
-          </div>
+          <GapHelp />
           {prompts.length === 0 && (
             <Notice tone="success" title="Your CV already covers this job's requirements.">
               There is nothing to ask. Check your CV on this page before you apply.
@@ -139,14 +134,20 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, save
           )}
         </section>
 
-        <CoverLetterPanel jobId={jobId} changes={changes} answers={Object.values(answers)} letter={approvedLetter} setLetter={setLetter} />
+        <CvSuggestions
+          jobId={jobId}
+          changes={fromCv}
+          loaded={fromCv.length > 0}
+          onSuggested={(suggested) => setChanges((current) => [...current, ...withoutRepeats(suggested, current)])}
+          onDecide={update}
+        />
 
-        <ExportPanel jobId={jobId} changes={changes} letter={approvedLetter} />
+        <CoverLetterPanel jobId={jobId} profile={profile} changes={changes} answers={Object.values(answers)} letter={approvedLetter} setLetter={setLetter} />
 
         <ApplyPanel jobId={jobId} jobUrl={jobUrl} company={company} />
       </div>
 
-      <aside className="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start" aria-labelledby="preview-heading">
+      <aside className="flex flex-col gap-3 lg:sticky lg:top-24 lg:self-start" aria-labelledby="preview-heading">
         <h2 id="preview-heading" className="text-xl">
           Your CV for this job
         </h2>
@@ -160,6 +161,7 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, save
         )}
         <CvPreview cv={cv} />
       </aside>
+      </div>
     </div>
   );
 }
