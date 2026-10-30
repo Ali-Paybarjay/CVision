@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase } from "./test-database";
 
 // The stats schema (issue #162): stats.team_user_ids turns the team's emails into user ids for the daily-stats
-// workflow, whose role cvision_stats may read public.events and run that function, and sees nobody's email.
+// workflow, whose role cvision_stats may read public.events and public.ai_usage and run that function, and sees nobody's email.
 // supabase/tests/active-users-query.test.ts runs the whole query as that role.
 
 const ali = randomUUID();
@@ -133,7 +133,7 @@ describe("the cvision_stats role", () => {
     ]);
   });
 
-  it("may select from public.events and do nothing else with any table or column, however granted", async () => {
+  it("may select from public.ai_usage and public.events and do nothing else with any table or column, however granted", async () => {
     // Every table and view outside Postgres's own catalogs, and each thing the role may do with it or any of its columns.
     const { rows } = await db.query<{ name: string; privilege: string }>(
       `select n.nspname || '.' || c.relname as name, p.privilege
@@ -151,7 +151,10 @@ describe("the cvision_stats role", () => {
          )
        order by 1, 2`,
     );
-    expect(rows).toEqual([{ name: "public.events", privilege: "SELECT" }]);
+    expect(rows).toEqual([
+      { name: "public.ai_usage", privilege: "SELECT" },
+      { name: "public.events", privilege: "SELECT" },
+    ]);
   });
 
   it("gets a permission error on auth.users, emails and ids alike", async () => {

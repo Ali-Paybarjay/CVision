@@ -4,7 +4,7 @@
 import type { InterviewSession, TechnicalInterviewQuestion } from "../contracts";
 import { fixtureForJob, fixtures } from "../fixtures";
 import type { InterviewFixture, SampleAnswer } from "../fixtures/types";
-import type { EvaluateOutput, FollowUpOutput, ReportOutput } from "./schemas";
+import type { EvaluateOutput, FollowUpOutput, ReportOutput, SuggestOutput } from "./schemas";
 import { readinessLabels } from "./scoring";
 import { countWords, firstWords, isNonAnswer } from "./text";
 import { answerGuide } from "../config";
@@ -90,6 +90,11 @@ export function mockEvaluation(session: InterviewSession, question: TechnicalInt
     strongerAnswerOutline: question.lookFors.slice(0, 5).map((lookFor) => `Cover this point: ${lookFor.text}`),
     followUpClosedGap: asked ? false : null,
   };
+}
+
+/** The fixture's suggested answer for a question, when it has one. Without one, mock mode uses the code-built version. */
+export function mockSuggestion(jobId: string, questionId: string): SuggestOutput | undefined {
+  return fixtureForJob(jobId)?.suggestions?.[questionId];
 }
 
 /** True when every evaluation in the session came from a fixture sample, so the fixture's report fits it. */

@@ -109,3 +109,36 @@ test("a row closed from its own form moves under Closed and keeps the focus", as
   await expect(row.getByRole("status")).toBeFocused();
   await expect(row).toContainText("Withdrawn on");
 });
+
+test("a row's Job ad link opens the full ad on its own page (#208)", async ({ page }) => {
+  await page.goto("/dashboard");
+  const row = trackerRow(page, "Junior Data Analyst");
+
+  // Only rows whose job has an ad to show get the link, and the ad itself stays off the dashboard.
+  await expect(trackerRow(page, "Reporting Analyst").getByRole("link", { name: /^Job ad/ })).toHaveCount(0);
+  await expect(page.getByText("You will write SQL to pull data from our warehouse")).toHaveCount(0);
+
+  await row.getByRole("link", { name: "Job ad for Junior Data Analyst at Pennine Health Analytics" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/jobs\/sara-job-1$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Junior Data Analyst" })).toBeVisible();
+  await expect(page.getByRole("main")).toContainText("Pennine Health Analytics");
+  await expect(page.getByRole("article", { name: "Job ad" })).toContainText("You will write SQL to pull data from our warehouse");
+
+  // Back on the dashboard, the row's Status, Next step and Save are as they were.
+  await page.getByRole("link", { name: "Back to your dashboard" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(row.getByLabel("Status")).toHaveValue("interview");
+  await expect(row.getByLabel("Next step")).toHaveValue("Practise the interview questions before Thursday");
+  await expect(row.getByRole("button", { name: "Save" })).toBeVisible();
+});
+
+// Another user's job needs row-level security, so the unit tests in job-ad.test.tsx cover it.
+for (const jobId of ["no-such-job", "reza-job-1"]) {
+  test(`the sample job ad page is not found for ${jobId}, only for Sara's two jobs (#208)`, async ({ page }) => {
+    await page.goto(`/dashboard/jobs/${jobId}`);
+
+    await expect(page.getByRole("heading", { level: 1, name: "We could not find this job ad" })).toBeVisible();
+    await expect(page.getByRole("article", { name: "Job ad" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Back to your dashboard" })).toHaveAttribute("href", "/dashboard");
+  });
+}

@@ -3,7 +3,8 @@ import { personas } from "@/shared/sample-data";
 import { addDays, daysBetween, type JobSummary, type TrackedApplication } from "./model";
 
 // Sara's tracker, shown until Supabase is connected. Her first job is an interview fixture, so the
-// interview link opens practice in mock mode too. The other four jobs are fictional, like Sara.
+// interview link opens practice in mock mode too. Her two sample jobs have a full ad to open; the other four
+// jobs are fictional, like Sara, and have only a title.
 const [interviewJob, appliedJob] = personas.sara.jobs;
 
 const summary = (job: Job): JobSummary => ({ title: job.title, company: job.company, deadline: job.deadline });
@@ -25,6 +26,7 @@ export const sampleApplications: TrackedApplication[] = [
       nextStep: "Practise the interview questions before Thursday",
     }),
     job: summary(interviewJob),
+    hasAd: true,
   },
   {
     application: ApplicationSchema.parse({
@@ -45,6 +47,7 @@ export const sampleApplications: TrackedApplication[] = [
       nextStep: "Email the recruiter if there is no reply by Friday",
     }),
     job: summary(appliedJob),
+    hasAd: true,
   },
   {
     application: ApplicationSchema.parse({
@@ -84,7 +87,8 @@ export const sampleApplications: TrackedApplication[] = [
  */
 export function sampleApplicationsOn(today: string): TrackedApplication[] {
   const shift = daysBetween(writtenOn, today);
-  return sampleApplications.map(({ application, job }) => ({
+  return sampleApplications.map(({ application, job, ...rest }) => ({
+    ...rest,
     application: { ...application, date: addDays(application.date, shift) },
     job: job && { ...job, deadline: job.deadline && addDays(job.deadline, shift) },
   }));

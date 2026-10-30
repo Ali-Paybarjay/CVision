@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Application } from "@/shared/contracts";
+import { personas } from "@/shared/sample-data";
 import { loadTracker } from "./applications";
 import { closingDate, isClosed, openAndClosed, suggestClosing } from "./model";
 import { sampleApplications, sampleApplicationsOn } from "./sample";
@@ -39,7 +40,19 @@ function fakeSupabase(tables: Tables, userId: string, options: { failJobs?: bool
 
 const userId = "user-1";
 const today = "2026-10-25";
-const job = (id: string, title: string, company: string, owner = userId) => ({ id, user_id: owner, data: { title, company } });
+// A whole saved job, which its ad page can open, with no closing date.
+const ad = {
+  location: "Leeds",
+  salary: null,
+  contractType: null,
+  hours: null,
+  workMode: null,
+  description: "The full ad, as pasted.",
+  requirements: { essential: [], desirable: [] },
+  url: null,
+  source: "pasted",
+};
+const job = (id: string, title: string, company: string, owner = userId) => ({ id, user_id: owner, data: { ...ad, id, title, company } });
 const row = (data: Application, createdAt: string, owner = userId) => ({ id: data.id, job_id: data.jobId, user_id: owner, created_at: createdAt, data });
 
 const older: Application = { id: "app-1", jobId: "job-1", date: "2026-10-10", status: "interview", nextStep: "Prepare" };
@@ -60,12 +73,12 @@ afterEach(() => {
 });
 
 describe("loadTracker", () => {
-  it("lists the user's applications newest first, with each job's title and company", async () => {
+  it("lists the user's applications newest first, with each job's title and company and a link to its ad", async () => {
     expect(await loadTracker(today)).toEqual({
       kind: "account",
       items: [
-        { application: newer, job: { title: "Graduate Data Analyst", company: "Irwell Energy" } },
-        { application: older, job: { title: "Junior Data Analyst", company: "Pennine Health Analytics" } },
+        { application: newer, job: { title: "Graduate Data Analyst", company: "Irwell Energy" }, hasAd: true },
+        { application: older, job: { title: "Junior Data Analyst", company: "Pennine Health Analytics" }, hasAd: true },
       ],
     });
   });
@@ -108,12 +121,35 @@ describe("loadTracker", () => {
     ]);
   });
 
-  it("still shows an application whose job cannot be read", async () => {
+  it("still shows an application whose job cannot be read, with no link to its ad", async () => {
     tables.jobs[1].data = { description: "No title or company" };
 
     const tracker = await loadTracker(today);
 
-    expect(tracker.kind === "account" && tracker.items[0]).toEqual({ application: newer, job: null });
+    expect(tracker.kind === "account" && tracker.items[0]).toEqual({ application: newer, job: null, hasAd: false });
+  });
+
+  it("shows the title of a job its ad page cannot open, but no link to its ad", async () => {
+    tables.jobs[1].data = { title: "Graduate Data Analyst", company: "Irwell Energy" };
+
+    const tracker = await loadTracker(today);
+
+    expect(tracker.kind === "account" && tracker.items[0]).toEqual({
+      application: newer,
+      job: { title: "Graduate Data Analyst", company: "Irwell Energy" },
+      hasAd: false,
+    });
+  });
+
+  it("gives no link to the ad of a job that has gone", async () => {
+    tables.jobs = tables.jobs.filter((saved) => saved.id !== "job-1");
+
+    const tracker = await loadTracker(today);
+
+    expect(tracker.kind === "account" && tracker.items.map((item) => [item.application.id, item.hasAd])).toEqual([
+      ["app-2", true],
+      ["app-1", false],
+    ]);
   });
 
   it("reports an error when the jobs cannot be read", async () => {
@@ -160,6 +196,12 @@ describe("sampleApplications", () => {
       expect(openAndClosed(items).closed.map((item) => item.application.status)).toEqual(["rejected"]);
       expect(items.filter((item) => isClosed(item.application.status))).toHaveLength(1);
     }
+  });
+
+  it("links only Sara's two sample jobs to their ad, as the other four have no ad to show", () => {
+    const linked = sampleApplicationsOn("2026-11-04").filter((item) => item.hasAd);
+
+    expect(linked.map((item) => item.application.jobId)).toEqual(personas.sara.jobs.map((job) => job.id));
   });
 
   it("moves every date by the same number of days and changes nothing else", () => {

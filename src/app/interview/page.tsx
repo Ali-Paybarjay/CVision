@@ -7,8 +7,15 @@ import { getCurrentUser } from "@/features/account/current-user";
 import { withNext } from "@/features/account/safe-redirect";
 import { fixtureForJob } from "@/features/interview/fixtures";
 import { getMyJob, getMyProfile, listMyJobs } from "@/features/interview/server/my-data";
-import { isStoredJobId, loadLatestInterviewSession } from "@/features/interview/server/session-store";
+import {
+  isStoredJobId,
+  listPracticeSummaries,
+  loadLatestInterviewSession,
+  loadLatestReport,
+  type PracticeSummary,
+} from "@/features/interview/server/session-store";
 import type { SampleAnswers } from "./_practice/flow";
+import { practisedOn } from "./_practice/ui";
 import { InterviewPractice } from "./practice";
 
 export const metadata: Metadata = { title: "Interview practice" };
@@ -58,7 +65,7 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
             Choose one of your jobs below.
           </Notice>
         )}
-        <JobList jobs={await listMyJobs()} />
+        <JobList jobs={await listMyJobs()} practised={await listPracticeSummaries()} />
       </>
     );
   }
@@ -83,7 +90,7 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
         <Notice tone="info" title="Practice for this job opens when live AI is switched on">
           Until then, you can try it on a sample job.
         </Notice>
-        <JobList jobs={(await listMyJobs()).filter((j) => fixtureForJob(j.id))} />
+        <JobList jobs={(await listMyJobs()).filter((j) => fixtureForJob(j.id))} practised={[]} />
       </>
     );
   }
@@ -92,12 +99,19 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     mode === "mock" && fixture
       ? Object.fromEntries(Object.entries(fixture.answers).map(([id, answer]) => [id, { main: answer.main, followUp: answer.followUp }]))
       : undefined;
-  const saved = user ? await loadLatestInterviewSession(job.id) : null;
+  const [saved, lastReport] = user ? await Promise.all([loadLatestInterviewSession(job.id), loadLatestReport(job.id)]) : [null, null];
 
   return (
     <>
       <JobHeading job={job} mock={mode === "mock"} />
-      <InterviewPractice jobId={job.id} signedIn={Boolean(user)} canSave={isStoredJobId(job.id)} saved={saved} samples={samples} />
+      <InterviewPractice
+        jobId={job.id}
+        signedIn={Boolean(user)}
+        canSave={isStoredJobId(job.id)}
+        saved={saved}
+        lastReport={lastReport}
+        samples={samples}
+      />
     </>
   );
 }
@@ -111,7 +125,7 @@ function JobHeading({ job, mock = false }: { job: Job; mock?: boolean }) {
   );
 }
 
-function JobList({ jobs }: { jobs: Job[] }) {
+function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeSummary[] }) {
   if (jobs.length === 0) {
     return (
       <Notice tone="info" title="No jobs yet">
@@ -123,21 +137,29 @@ function JobList({ jobs }: { jobs: Job[] }) {
     <section>
       <h2 className="text-xl">Which interview are you preparing for?</h2>
       <ul className="mt-4 space-y-3">
-        {jobs.map((job) => (
-          <li key={job.id}>
-            <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold">{job.title}</p>
-                <p className="text-sm text-text-muted">
-                  {job.company} · {job.location}
-                </p>
-              </div>
-              <ButtonLink href={`/interview?job=${encodeURIComponent(job.id)}`} className="self-start sm:self-auto">
-                Practise for this job
-              </ButtonLink>
-            </Card>
-          </li>
-        ))}
+        {jobs.map((job) => {
+          const last = practised.find((p) => p.jobId === job.id);
+          return (
+            <li key={job.id}>
+              <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold">{job.title}</p>
+                  <p className="text-sm text-text-muted">
+                    {job.company} · {job.location}
+                  </p>
+                  {last && (
+                    <p className="mt-1 text-sm">
+                      Practised <time dateTime={last.practisedAt}>{practisedOn(last.practisedAt)}</time> · {last.overall.toFixed(1)} / 5
+                    </p>
+                  )}
+                </div>
+                <ButtonLink href={`/interview?job=${encodeURIComponent(job.id)}`} className="self-start sm:self-auto">
+                  {last ? "See your report" : "Practise for this job"}
+                </ButtonLink>
+              </Card>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

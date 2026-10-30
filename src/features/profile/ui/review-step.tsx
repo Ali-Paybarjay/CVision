@@ -20,6 +20,7 @@ import {
 import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
 import { ConsentBox } from "./consent-box";
 import { useFocusHeading } from "./focus-heading";
+import { MonthYearField } from "./month-year-field";
 import { Steps } from "./steps";
 
 /** Where the details on this page come from: a CV just read, the user typing them in by hand, or the saved profile. */
@@ -543,6 +544,7 @@ function EducationFields({ value, errors, onChange }: FieldsProps<EducationDraft
         endGuessed={value.endGuessed}
         currentLabel="I’m still studying for this"
         optional
+        finishYearsAhead={6}
         errors={errors}
         onChange={onChange}
       />
@@ -584,40 +586,48 @@ type MonthRangeProps = {
   endGuessed: boolean;
   currentLabel: string;
   optional?: boolean;
+  /** How many years after this one "Finished" offers, for a course with a known end date that hasn't come yet. */
+  finishYearsAhead?: number;
   errors: FieldErrors;
   onChange: (change: { startDate?: string; endDate?: string; current?: boolean }) => void;
 };
 
-function MonthRange({ start, end, current, startGuessed, endGuessed, currentLabel, optional, errors, onChange }: MonthRangeProps) {
+function MonthRange({
+  start,
+  end,
+  current,
+  startGuessed,
+  endGuessed,
+  currentLabel,
+  optional,
+  finishYearsAhead = 0,
+  errors,
+  onChange,
+}: MonthRangeProps) {
   const suffix = optional ? " (optional)" : "";
   const hint = (guessed: boolean, month: string) =>
-    guessed ? `Your CV gives only the year, so we put ${month}. Check the month.` : "Month and year";
+    guessed ? `Your CV gives only the year, so we put ${month}. Check the month.` : undefined;
+  const thisYear = new Date().getFullYear();
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={`Started${suffix}`} hint={hint(startGuessed, "January")} error={errors.startDate}>
-          {(props) => (
-            <Input
-              {...props}
-              type="month"
-              placeholder="YYYY-MM"
-              value={start}
-              onChange={(event) => onChange({ startDate: event.target.value })}
-            />
-          )}
-        </Field>
+        <MonthYearField
+          legend={`Started${suffix}`}
+          hint={hint(startGuessed, "January")}
+          error={errors.startDate}
+          value={start}
+          latestYear={thisYear}
+          onChange={(startDate) => onChange({ startDate })}
+        />
         {!current && (
-          <Field label={`Finished${suffix}`} hint={hint(endGuessed, "December")} error={errors.endDate}>
-            {(props) => (
-              <Input
-                {...props}
-                type="month"
-                placeholder="YYYY-MM"
-                value={end}
-                onChange={(event) => onChange({ endDate: event.target.value })}
-              />
-            )}
-          </Field>
+          <MonthYearField
+            legend={`Finished${suffix}`}
+            hint={hint(endGuessed, "December")}
+            error={errors.endDate}
+            value={end}
+            latestYear={thisYear + finishYearsAhead}
+            onChange={(endDate) => onChange({ endDate })}
+          />
         )}
       </div>
       <label className="flex cursor-pointer items-center gap-3">

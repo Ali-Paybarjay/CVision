@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { JobSchema, ProfileSchema } from "@/shared/contracts";
 import { TechnicalInterviewQuestionSchema } from "./contracts";
-import { isLevelBelow } from "./engine/checks";
+import { isLevelBelow, suggestionProblems } from "./engine/checks";
 import {
   analyseOutputSchema,
   evaluateOutputSchema,
@@ -9,11 +9,12 @@ import {
   generateOutputSchema,
   reportOutputSchema,
   reviewOutputSchema,
+  suggestOutputSchema,
 } from "./engine/schemas";
 import { questionOverall } from "./engine/scoring";
-import { settleFollowUp, toTechnicalQuestion } from "./engine/stages";
+import { settleFollowUp, suggestionContext, toTechnicalQuestion } from "./engine/stages";
 import { fixtures } from "./fixtures";
-import { inputsFor, questionSetContextFor } from "./test-support";
+import { endedSessionFor, inputsFor, questionSetContextFor } from "./test-support";
 
 function issues(result: { success: boolean; error?: { issues: { path: PropertyKey[]; message: string }[] } }) {
   return result.success ? [] : (result.error?.issues ?? []).map((issue) => `${issue.path.join(".")}: ${issue.message}`);
@@ -80,6 +81,15 @@ describe.each(fixtures)("fixture $id passes runtime validation at every stage", 
     const levelGap = isLevelBelow(fixture.analyse.candidateProfile.cvLevel, fixture.analyse.roleProfile.roleLevel);
     expect(issues(reportOutputSchema({ levelGap, lowConfidenceIds }).safeParse(fixture.report))).toEqual([]);
     expect(evaluations.every((e) => questionOverall(e.scores) >= 1)).toBe(true);
+  });
+
+  it.skipIf(!fixture.suggestions)("stage 7: suggested answers pass every rule, the soft ones included", () => {
+    const session = endedSessionFor(fixture);
+    for (const [questionId, sample] of Object.entries(fixture.suggestions ?? {})) {
+      const suggestionInputs = suggestionContext(session, questionId, inputs);
+      expect(issues(suggestOutputSchema(suggestionInputs).safeParse(sample)), questionId).toEqual([]);
+      expect(suggestionProblems(sample, suggestionInputs), questionId).toEqual([]);
+    }
   });
 });
 

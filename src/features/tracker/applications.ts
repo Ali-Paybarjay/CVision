@@ -44,12 +44,17 @@ export async function loadTracker(today: string): Promise<Tracker> {
   const summaries = new Map(
     jobs.data.flatMap((row) => {
       const parsed = JobSummarySchema.safeParse(row.data);
-      return parsed.success ? [[row.id as string, parsed.data] as const] : [];
+      // The ad page reads the job with getMyJob, which needs the whole contract, so only then is there a link.
+      const hasAd = JobSchema.safeParse(row.data).success;
+      return parsed.success ? [[row.id as string, { job: parsed.data, hasAd }] as const] : [];
     }),
   );
   return {
     kind: "account",
-    items: applications.map((application) => ({ application, job: summaries.get(application.jobId) ?? null })),
+    items: applications.map((application) => {
+      const summary = summaries.get(application.jobId);
+      return { application, job: summary?.job ?? null, hasAd: summary?.hasAd ?? false };
+    }),
   };
 }
 
