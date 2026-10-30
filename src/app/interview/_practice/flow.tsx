@@ -110,10 +110,16 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
   }
 
   // After "End here" (#205): one request records it, and each unanswered question gets its suggested answer.
+  // The session never shows that the end was recorded, so it is sent once per tab; the server skips a repeat
+  // from a reload or another tab.
   if (session.endedAt && next.step !== "done") {
-    store.runJob(`${run}:end`, async () => {
-      await call({ step: "end", session });
-    });
+    store.runJob(
+      `${run}:end`,
+      async () => {
+        await call({ step: "end", session });
+      },
+      { once: true },
+    );
   }
   for (const questionId of missingSuggestionIds(session)) {
     store.runJob(`${run}:suggest:${questionId}`, async () => {
