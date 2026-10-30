@@ -4,7 +4,7 @@ import type { Application } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { ApplicationList } from "./application-list";
 import type { TrackedApplication } from "./model";
-import { sampleApplications } from "./sample";
+import { sampleApplications, sampleApplicationsOn } from "./sample";
 
 // What the dashboard rows say about days and closing dates, what the closing suggestion offers, and the Save button
 // mid-save. Saving and closing are tested in actions.test.ts and model.test.ts, and where the focus goes after a save
@@ -54,6 +54,10 @@ const row = (id: string, status: Application["status"], date: string, title: str
   application: { id, jobId: `job-${id}`, date, status, nextStep: null },
   job: { title, company: "Etherow Freight", deadline },
 });
+const withStep = (item: TrackedApplication, nextStep: string, nextStepDate?: string): TrackedApplication => ({
+  ...item,
+  application: { ...item.application, nextStep, nextStepDate },
+});
 
 describe("the dashboard's application list", () => {
   it("counts days without news for applied and interview only", () => {
@@ -61,9 +65,9 @@ describe("the dashboard's application list", () => {
 
     expect(html).toContain("Interview stage since 20 Oct 2026 No news for 5 days");
     expect(html).toContain("Applied on 16 Oct 2026 No news for 9 days");
-    // Straight on to the closing date or the form: no count for ready or closed rows.
+    // Straight on to the closing date or the next step: no count for ready or closed rows.
     expect(html).toContain("Ready to apply since 23 Oct 2026 Closes in 5 days.");
-    expect(html).toContain("Closed on 9 Oct 2026 Status");
+    expect(html).toContain("Closed on 9 Oct 2026 Next step:");
   });
 
   it("lists closed applications apart, under a Closed heading below the open ones", () => {
@@ -116,23 +120,88 @@ describe("the dashboard's application list", () => {
     expect(html).not.toContain("border-warning");
   });
 
-  it("keeps the Save button able to hold the focus while saving, and disables it only with nothing to save", () => {
-    const idle = render([row("1", "applied", "2026-10-20", "Data Analyst")]);
-    // Nothing to save yet, so the button is disabled and out of the way.
-    expect(idle).toMatch(/<button type="submit"[^>]* disabled=""[^>]*>Save<\/button>/);
-    expect(idle).not.toContain('aria-disabled="');
-
+  it("keeps the form open and the Save button able to hold the focus while saving", () => {
     // The saved row can come back before the save is done, with nothing left to save. Disabled then, the button would
     // drop the focus to the top of the page before its message could take it (#154).
-    const saving = renderMidSave([row("1", "applied", "2026-10-20", "Data Analyst")]);
+    const saving = renderMidSave([withStep(row("1", "applied", "2026-10-20", "Data Analyst"), "Call back")]);
     expect(saving).toMatch(/<button type="submit"[^>]* aria-disabled="true"[^>]*>Saving…<\/button>/);
     expect(saving).not.toContain('disabled=""');
+    expect(saving).toContain(">Cancel</button>");
   });
 
   it("shows only the date once the application has been sent, and nothing without a closing date", () => {
     expect(text(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")]))).toContain("Closing date 24 Oct 2026 ");
     expect(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")])).not.toContain("border-warning");
     expect(text(render([row("1", "ready", "2026-10-20", "Data Analyst", null)]))).not.toContain("Closing date");
+  });
+});
+
+describe("a row's next step (#210, #211)", () => {
+  const dated = (date: string, status: Application["status"] = "applied") =>
+    render([withStep(row("1", status, "2026-10-20", "Data Analyst"), "Call back", date)], "2026-10-29");
+
+  it("reads as text with an Edit button named for the job and company, and no form until Edit", () => {
+    const html = render([withStep(row("1", "applied", "2026-10-20", "Data Analyst"), "Call back on Friday")]);
+
+    expect(text(html)).toContain("Next step: Call back on Friday Edit Data Analyst at Etherow Freight");
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain("Save");
+  });
+
+  it("names the Edit button by the row's date when the job cannot be read", () => {
+    const html = text(render([{ ...withStep(row("1", "applied", "2026-10-20", "Data Analyst"), "Call back"), job: null }]));
+
+    expect(html).toContain("Edit the application from 20 Oct 2026");
+  });
+
+  it("says when there is no next step yet, with a button to add one", () => {
+    expect(text(render([row("1", "applied", "2026-10-20", "Data Analyst")]))).toContain(
+      "No next step yet Add a next step for Data Analyst at Etherow Freight",
+    );
+  });
+
+  it("says when it is due in words with an icon, never colour alone", () => {
+    expect(text(dated("2026-10-29"))).toContain("Next step: Call back Due today Edit");
+    expect(text(dated("2026-10-30"))).toContain("Next step: Call back Due tomorrow Edit");
+    expect(dated("2026-10-30")).toMatch(/font-semibold"><svg[^>]*aria-hidden="true"/);
+    expect(text(dated("2026-11-06"))).toContain("Next step: Call back By Fri 6 Nov Edit");
+    expect(dated("2026-11-06")).toMatch(/text-text-muted"><svg[^>]*aria-hidden="true"/);
+  });
+
+  it("warns like a passed closing date when it is overdue", () => {
+    const html = dated("2026-10-26");
+
+    expect(text(html)).toContain("Overdue. It was due Mon 26 Oct.");
+    expect(html).toMatch(/border-warning[^>]*><svg[^>]*aria-hidden="true"/);
+  });
+
+  it("only shows the date, muted, on a closed application", () => {
+    const html = dated("2026-10-26", "rejected");
+
+    expect(text(html)).toContain("Next step: Call back By Mon 26 Oct Edit");
+    expect(html).not.toContain("Overdue");
+    expect(html).not.toContain("border-warning");
+  });
+
+  it("shows Sara's sample with one next step due tomorrow and one overdue, on any day", () => {
+    // The texts name no weekday, as the dates move with today and would soon say another day.
+    for (const [today, overdue] of [
+      ["2026-10-25", "Fri 23 Oct"],
+      ["2026-10-30", "Wed 28 Oct"],
+    ]) {
+      const html = text(render(sampleApplicationsOn(today), today));
+
+      expect(html).toContain("Next step: Practise the interview questions Due tomorrow");
+      expect(html).toContain(`Next step: Email the recruiter if there is no reply yet Overdue. It was due ${overdue}.`);
+    }
+  });
+
+  it("keeps a saved date outside the When menu, chosen, so saving a new status alone does not drop it", () => {
+    // Drawn mid-save, the form is open with the saved values.
+    const html = renderMidSave([withStep(row("1", "applied", "2026-10-20", "Data Analyst"), "Call back", "2026-10-20")]);
+
+    expect(html).toMatch(/<option value="2026-10-20" selected="">Keep · Tue 20 Oct<\/option><option value="">No date<\/option>/);
+    expect(html).toContain('<option value="2026-10-25">Today · Sun 25 Oct</option>');
   });
 });
 

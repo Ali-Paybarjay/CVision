@@ -157,6 +157,15 @@ describe("Application", () => {
       expect(ApplicationSchema.safeParse({ ...application, followUps: [followUp] }).success, JSON.stringify(followUp)).toBe(false);
     }
   });
+
+  it("is valid without nextStepDate, with null and with a calendar date, and adds no default (#211)", () => {
+    expect(ApplicationSchema.parse(application)).not.toHaveProperty("nextStepDate");
+    expect(ApplicationSchema.parse({ ...application, nextStepDate: null }).nextStepDate).toBeNull();
+    expect(ApplicationSchema.parse({ ...application, nextStepDate: "2026-10-31" }).nextStepDate).toBe("2026-10-31");
+    for (const nextStepDate of ["Friday", "31 October", 2]) {
+      expect(ApplicationSchema.safeParse({ ...application, nextStepDate }).success, String(nextStepDate)).toBe(false);
+    }
+  });
 });
 
 describe("Job", () => {
