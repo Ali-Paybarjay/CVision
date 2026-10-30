@@ -4,7 +4,7 @@ import type { Application } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { ApplicationList } from "./application-list";
 import type { TrackedApplication } from "./model";
-import { sampleApplications } from "./sample";
+import { sampleApplications, sampleApplicationsOn } from "./sample";
 
 // What the dashboard rows say about days and closing dates, what the closing suggestion offers, and the Save button
 // mid-save. Saving and closing are tested in actions.test.ts and model.test.ts, and where the focus goes after a save
@@ -148,6 +148,12 @@ describe("a row's next step (#210, #211)", () => {
     expect(html).not.toContain("Save");
   });
 
+  it("names the Edit button by the row's date when the job cannot be read", () => {
+    const html = text(render([{ ...withStep(row("1", "applied", "2026-10-20", "Data Analyst"), "Call back"), job: null }]));
+
+    expect(html).toContain("Edit the application from 20 Oct 2026");
+  });
+
   it("says when there is no next step yet, with a button to add one", () => {
     expect(text(render([row("1", "applied", "2026-10-20", "Data Analyst")]))).toContain(
       "No next step yet Add a next step for Data Analyst at Etherow Freight",
@@ -177,11 +183,17 @@ describe("a row's next step (#210, #211)", () => {
     expect(html).not.toContain("border-warning");
   });
 
-  it("shows Sara's sample with one next step due tomorrow and one overdue", () => {
-    const html = text(render(sampleApplications));
+  it("shows Sara's sample with one next step due tomorrow and one overdue, on any day", () => {
+    // The texts name no weekday, as the dates move with today and would soon say another day.
+    for (const [today, overdue] of [
+      ["2026-10-25", "Fri 23 Oct"],
+      ["2026-10-30", "Wed 28 Oct"],
+    ]) {
+      const html = text(render(sampleApplicationsOn(today), today));
 
-    expect(html).toContain("Next step: Practise the interview questions before Thursday Due tomorrow");
-    expect(html).toContain("Next step: Email the recruiter if there is no reply by Friday Overdue. It was due Fri 23 Oct.");
+      expect(html).toContain("Next step: Practise the interview questions Due tomorrow");
+      expect(html).toContain(`Next step: Email the recruiter if there is no reply yet Overdue. It was due ${overdue}.`);
+    }
   });
 
   it("keeps a saved date outside the When menu, chosen, so saving a new status alone does not drop it", () => {

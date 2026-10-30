@@ -191,7 +191,7 @@ test("a row's Job ad link opens the full ad on its own page (#208)", async ({ pa
   await page.getByRole("link", { name: "Back to your dashboard" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(row).toContainText("Interview stage since");
-  await expect(row).toContainText("Next step: Practise the interview questions before Thursday");
+  await expect(row).toContainText("Next step: Practise the interview questions");
   await expect(row.getByRole("button", { name: "Edit Junior Data Analyst at Pennine Health Analytics" })).toBeVisible();
 });
 

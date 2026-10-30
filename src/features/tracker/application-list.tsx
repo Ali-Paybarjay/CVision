@@ -187,8 +187,9 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
   // The date goes with the next step: with none written, there is no date to save.
   const nextStepDate = nextStepText ? when : "";
   const unsaved = status !== saved.status || nextStepText !== (saved.nextStep ?? "") || nextStepDate !== (saved.nextStepDate ?? "");
-  // Screen readers hear which application Edit is for, so two jobs with one title do not share a button name.
-  const name = job ? `${job.title} at ${job.company}` : "this application";
+  // Screen readers hear which application Edit is for, so two jobs with one title do not share a button name. With
+  // the job missing, the row's date tells it apart instead.
+  const name = job ? `${job.title} at ${job.company}` : `the application from ${formatDate(saved.date)}`;
   // All three worked out on each render from today's date, never saved.
   const days = daysWithoutNews(saved, today);
   const closing = closingDate(saved, job, today);
@@ -288,7 +289,11 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
                 className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
                 {pending ? "Saving…" : "Save"}
               </Button>
-              <Button variant="quiet" onClick={cancel} aria-disabled={pending || undefined} className="aria-disabled:cursor-not-allowed">
+              <Button
+                variant="quiet"
+                onClick={cancel}
+                aria-disabled={pending || undefined}
+                className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
                 Cancel
               </Button>
             </div>
