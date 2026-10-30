@@ -16,7 +16,7 @@ import {
 import {
   analysisProblems,
   evaluationProblems,
-  isLengthProblem,
+  isSoftProblem,
   questionSetProblems,
   reportProblems,
   suggestionProblems,
@@ -39,9 +39,12 @@ export const InterviewInputsSchema = z.object({
 });
 export type InterviewInputs = z.infer<typeof InterviewInputsSchema>;
 
-function withProblems<S extends z.ZodType>(schema: S, find: (value: z.output<S>) => Problem[]): S {
+/** `onRejected` hears the problems of each answer the checks send back, so a caller can record their rules. */
+function withProblems<S extends z.ZodType>(schema: S, find: (value: z.output<S>) => Problem[], onRejected?: (problems: Problem[]) => void): S {
   return schema.superRefine((value, ctx) => {
-    for (const problem of find(value).filter((p) => !isLengthProblem(p))) {
+    const hard = find(value).filter((p) => !isSoftProblem(p));
+    if (hard.length) onRejected?.(hard);
+    for (const problem of hard) {
       ctx.addIssue({ code: "custom", path: problem.path, message: problem.message });
     }
   }) as unknown as S;
@@ -99,15 +102,19 @@ export const ReviewOutputSchema = GenerateOutputSchema.extend({
 });
 export type ReviewOutput = z.infer<typeof ReviewOutputSchema>;
 
-export function reviewOutputSchema(context: QuestionSetContext) {
-  return withProblems(ReviewOutputSchema, (value) => {
-    const problems = questionSetProblems(value, context, "review");
-    const ids = new Set(value.questions.map((q) => q.id));
-    value.changelog.forEach((change, i) => {
-      if (!ids.has(change.questionId)) problems.push({ path: ["changelog", i, "questionId"], message: "Must be a question id in the set." });
-    });
-    return problems;
-  });
+export function reviewOutputSchema(context: QuestionSetContext, onRejected?: (problems: Problem[]) => void) {
+  return withProblems(
+    ReviewOutputSchema,
+    (value) => {
+      const problems = questionSetProblems(value, context, "review");
+      const ids = new Set(value.questions.map((q) => q.id));
+      value.changelog.forEach((change, i) => {
+        if (!ids.has(change.questionId)) problems.push({ path: ["changelog", i, "questionId"], message: "Must be a question id in the set." });
+      });
+      return problems;
+    },
+    onRejected,
+  );
 }
 
 /** Deliberately loose: the code checks the follow-up text itself and falls back to the planned text. */
