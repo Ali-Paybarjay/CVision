@@ -260,7 +260,7 @@ export type OpeningView = "browser" | "resume" | "last-report" | "intro";
  * the account's unfinished practice. A link to the job (the dashboard's "Interview report", the job list's "See your
  * report") opens the account's last report even over an unfinished practice, and the page offers to continue it. Once
  * this tab chooses the practice ("Start practice" or "Continue your practice"), it stays on it, through a reload too.
- * After "Practise again" the report and the unfinished practice are skipped, so the button leads to a new practice
+ * After "New practice" the report and the unfinished practice are skipped, so the button leads to a new practice
  * rather than back to the same report.
  */
 export function openingView(options: {

@@ -100,7 +100,7 @@ export function InterviewPractice({
   const session = envelope?.session ?? null;
   const autoSave = signedIn && canSave;
 
-  // Set by "Practise again", so the page goes to the intro rather than back to the account's last report.
+  // Set by "New practice", so the page goes to the intro rather than back to the account's last report.
   const [practiseAgain, setPractiseAgain] = useState(false);
   // Read on the first render after hydration, so a reload in the middle of a practice resumes it.
   const markedInAddress = useSyncExternalStore(subscribeToHash, practiceMarkSnapshot, serverHydratedSnapshot);
@@ -197,7 +197,7 @@ export function InterviewPractice({
     store.clearJobs();
     store.writeEnvelope({ sourceId: jobId, inputs: null, session: null, startedAtMs: Date.now(), startupMs: null });
   };
-  // Also "Practise again" under the last report, which drops an unfinished practice in this browser.
+  // Also "New practice" under the last report, which drops an unfinished practice in this browser.
   const restart = () => {
     setPractising(false);
     store.writeEnvelope(null);
@@ -282,14 +282,14 @@ export function LastPractice({
 function PractiseAgain({ onPractiseAgain }: { onPractiseAgain: () => void }) {
   return (
     <Card className="space-y-4">
-      <p>Read your feedback first. When you are ready, practise again.</p>
-      <Button onClick={onPractiseAgain}>Practise again</Button>
+      <p>Read your feedback first. When you are ready, start a new practice.</p>
+      <Button onClick={onPractiseAgain}>New practice</Button>
     </Card>
   );
 }
 
 function Intro({ signedIn, canSave, onStart, focusHeading }: { signedIn: boolean; canSave: boolean; onStart: () => void; focusHeading: boolean }) {
-  // After "Practise again" or "Start again", the button that was pressed is gone: focus (and the view) moves here.
+  // After "New practice" or "Start again", the button that was pressed is gone: focus (and the view) moves here.
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusHeading) headingRef.current?.focus();

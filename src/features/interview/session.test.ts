@@ -111,7 +111,7 @@ describe("what the practice page for a job opens on (#206)", () => {
     expect(openingView({ ...base, inBrowser: null, saved: unfinished })).toBe("resume");
   });
 
-  it("after Practise again, goes to the intro instead of back to the same report or the unfinished practice", async () => {
+  it("after New practice, goes to the intro instead of back to the same report or the unfinished practice", async () => {
     const finished = await runMockSession(fixtures[0]);
     const unfinished = { ...finished, id: "another", startedAt: "2026-10-23T09:00:00.000Z", evaluations: [], report: undefined };
     const base = { inBrowser: null, lastReport: finished, practiseAgain: true, practising: false };

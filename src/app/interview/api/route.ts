@@ -30,7 +30,7 @@ const RequestSchema = z.discriminatedUnion("step", [
 export async function POST(request: Request): Promise<Response> {
   const user = await getCurrentUser();
   // Live requests spend the team's credit, so they need a signed-in user and count towards that user's daily limit.
-  if (getAiMode() === "live" && !user) return Response.json({ error: "Sign in to practise for this interview." }, { status: 401 });
+  if (getAiMode() === "live" && !user) return Response.json({ error: "Sign in for interview practice." }, { status: 401 });
   const requester: Requester | undefined = getAiMode() === "live" && user ? { userId: user.id } : undefined;
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));

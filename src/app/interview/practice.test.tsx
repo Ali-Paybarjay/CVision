@@ -1,4 +1,4 @@
-// The last practice (#206): the report is read first, and "Practise again" sits below it.
+// The last practice (#206): the report is read first, and "New practice" sits below it.
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
@@ -8,18 +8,18 @@ import { LastPractice } from "./practice";
 const noop = () => {};
 
 describe("the last practice", () => {
-  it("shows the date, then the whole report, then the line and the Practise again button", async () => {
+  it("shows the date, then the whole report, then the line and the New practice button", async () => {
     const session = await runMockSession(dataAnalystSara);
     const html = renderToStaticMarkup(
       <LastPractice report={{ session, practisedAt: "2026-10-29T10:00:00Z" }} unfinishedSince={null} onContinue={noop} onPractiseAgain={noop} />,
     );
 
-    const line = html.indexOf("Read your feedback first. When you are ready, practise again.");
+    const line = html.indexOf("Read your feedback first. When you are ready, start a new practice.");
     expect(html.indexOf("Your last practice")).toBeLessThan(html.indexOf("Overall score"));
     // After the last answer card, so nothing in the report sits below the button.
     expect(html.lastIndexOf("Do this next time")).toBeLessThan(line);
-    expect(html.match(/>Practise again<\/button>/g)).toHaveLength(1);
-    expect(html.indexOf(">Practise again</button>")).toBeGreaterThan(line);
+    expect(html.match(/>New practice<\/button>/g)).toHaveLength(1);
+    expect(html.indexOf(">New practice</button>")).toBeGreaterThan(line);
     expect(html).not.toContain("unfinished practice");
   });
 
@@ -39,7 +39,7 @@ describe("the last practice", () => {
     expect(html.match(/>Continue your practice<\/button>/g)).toHaveLength(1);
     expect(html.indexOf(">Continue your practice</button>")).toBeLessThan(html.indexOf("Your last practice"));
     expect(html.indexOf("Your last practice")).toBeLessThan(html.indexOf("Overall score"));
-    // Practise again still starts a new practice, below the report.
-    expect(html.match(/>Practise again<\/button>/g)).toHaveLength(1);
+    // New practice still starts a new practice, below the report.
+    expect(html.match(/>New practice<\/button>/g)).toHaveLength(1);
   });
 });
