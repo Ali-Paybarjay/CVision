@@ -1,5 +1,6 @@
 import "server-only";
 import { getCurrentUser } from "@/features/account/current-user";
+import { listPracticeSummaries } from "@/features/interview/server/session-store";
 import { ApplicationSchema, JobSchema } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import type { TrackedApplication } from "./model";
@@ -38,8 +39,10 @@ export async function loadTracker(today: string): Promise<Tracker> {
   if (applications.length === 0) return { kind: "account", items: [] };
 
   const jobIds = [...new Set(applications.map((application) => application.jobId))];
-  const jobs = await supabase.from("jobs").select("id, data").in("id", jobIds);
+  // The latest finished practice for each job. It reads as empty on any error, so a row then just has no report link.
+  const [jobs, practices] = await Promise.all([supabase.from("jobs").select("id, data").in("id", jobIds), listPracticeSummaries()]);
   if (jobs.error) return failed("read the jobs", jobs.error.code);
+  const reports = new Map(practices.map((practice) => [practice.jobId, { overall: practice.overall }]));
 
   const summaries = new Map(
     jobs.data.flatMap((row) => {
@@ -53,7 +56,8 @@ export async function loadTracker(today: string): Promise<Tracker> {
     kind: "account",
     items: applications.map((application) => {
       const summary = summaries.get(application.jobId);
-      return { application, job: summary?.job ?? null, hasAd: summary?.hasAd ?? false };
+      const report = reports.get(application.jobId);
+      return { application, job: summary?.job ?? null, hasAd: summary?.hasAd ?? false, ...(report && { report }) };
     }),
   };
 }

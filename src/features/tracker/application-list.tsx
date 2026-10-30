@@ -14,6 +14,8 @@ import {
   daysWithoutNews,
   formatDate,
   formatDay,
+  formatScore,
+  interviewPath,
   isClosed,
   jobAdPath,
   nextStepDue,
@@ -108,6 +110,9 @@ type ApplicationRowProps = {
  */
 type RowResult = UpdateApplicationResult & { moved?: boolean; focus?: boolean };
 
+// The small links under a row's title: the job's ad and its interview report. 44px tall, so a thumb can tap them.
+const rowLinkClass = "inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent underline underline-offset-4";
+
 /**
  * One application. The next step reads as text with an Edit button (#210), which opens the form: Status, Next step,
  * When (#211), Save and Cancel.
@@ -201,12 +206,21 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
         <div className="flex flex-col gap-1">
           <Heading className="text-lg leading-snug">{job ? job.title : "Job details unavailable"}</Heading>
           {job && <p className="text-text-muted">{job.company}</p>}
-          {job && item.hasAd && (
-            <Link
-              href={jobAdPath(saved.jobId)}
-              className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent underline underline-offset-4">
-              Job ad<span className="sr-only">{` for ${job.title} at ${job.company}`}</span>
-            </Link>
+          {job && (item.hasAd || item.report) && (
+            <div className="flex flex-wrap gap-x-5">
+              {item.hasAd && (
+                <Link href={jobAdPath(saved.jobId)} className={rowLinkClass}>
+                  Job ad<span className="sr-only">{` for ${job.title} at ${job.company}`}</span>
+                </Link>
+              )}
+              {item.report && (
+                <Link href={interviewPath(saved.jobId)} className={rowLinkClass}>
+                  Interview report
+                  <span className="sr-only">{` for ${job.title} at ${job.company}, ${formatScore(item.report.overall)} out of 5`}</span>
+                  <span aria-hidden="true">{` (${formatScore(item.report.overall)} / 5)`}</span>
+                </Link>
+              )}
+            </div>
           )}
           <p className="text-sm text-text-muted">
             {statusDateLabels[saved.status]} <time dateTime={saved.date}>{formatDate(saved.date)}</time>
@@ -214,8 +228,9 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
           {days !== null && days > 0 && <p className="text-sm text-text-muted">No news for {dayCount(days)}</p>}
           {closing && <ClosingDateLine closing={closing} />}
         </div>
-        {saved.status === "interview" && (
-          <ButtonLink href={`/interview?job=${encodeURIComponent(saved.jobId)}`}>Practise for this interview</ButtonLink>
+        {/* With a report, the Interview report link above leads to practice instead. */}
+        {saved.status === "interview" && !(job && item.report) && (
+          <ButtonLink href={interviewPath(saved.jobId)}>Practise for this interview</ButtonLink>
         )}
       </div>
 
