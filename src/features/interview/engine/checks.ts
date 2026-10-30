@@ -17,20 +17,11 @@ export type LengthRule = "question-words" | "follow-up-length" | "quote-words" |
 
 /**
  * The review rules the code repairs rather than sending back to the model (#220): a follow-up that breaks one is
- * dropped, a question that breaks one goes back to its version from before the review, and a set-level rule (mix,
- * CV anchors, probe-gap, stretch) is only recorded. Protected topics and the structure stay hard rules.
+ * dropped, and a set-level rule (mix, CV anchors, probe-gap, stretch) is only recorded. The rules on a question's
+ * own text and quotes stay in the schema, because the model's retry fixes them better than the code can (eval of
+ * 30 Oct), and so do protected topics and the structure.
  */
-export type ReviewRule =
-  | "follow-up-shape"
-  | "follow-up-speakable"
-  | "question-shape"
-  | "question-speakable"
-  | "jd-quote"
-  | "cv-quote"
-  | "type-mix"
-  | "cv-anchors"
-  | "probe-gap"
-  | "stretch";
+export type ReviewRule = "follow-up-shape" | "follow-up-speakable" | "type-mix" | "cv-anchors" | "probe-gap" | "stretch";
 
 export type Problem = { path: (string | number)[]; message: string; lengthRule?: LengthRule; reviewRule?: ReviewRule };
 
@@ -415,18 +406,14 @@ export function questionSetProblems(
       if (countWords(question.text) > limits.questionMaxWords) {
         problems.push({ path: [...path, "text"], message: `Must be at most ${limits.questionMaxWords} words.`, lengthRule: "question-words" });
       }
-      if (!isSingleQuestion(question.text)) {
-        problems.push({ path: [...path, "text"], message: "Must be one question with a single question mark at the end.", reviewRule: "question-shape" });
-      }
-      if (!isSpeakable(question.text)) {
-        problems.push({ path: [...path, "text"], message: "Must be speakable: no symbols or abbreviated units.", reviewRule: "question-speakable" });
-      }
+      if (!isSingleQuestion(question.text)) problems.push({ path: [...path, "text"], message: "Must be one question with a single question mark at the end." });
+      if (!isSpeakable(question.text)) problems.push({ path: [...path, "text"], message: "Must be speakable: no symbols or abbreviated units." });
       if (bannedTopicHits(question.text).length) problems.push({ path: [...path, "text"], message: "Touches a protected or personal topic." });
       if (!isVerbatim(question.rationale.jdQuote, context.jobDescription)) {
-        problems.push({ path: [...path, "rationale", "jdQuote"], message: "Must be copied exactly from the job description.", reviewRule: "jd-quote" });
+        problems.push({ path: [...path, "rationale", "jdQuote"], message: "Must be copied exactly from the job description." });
       }
       if (question.rationale.cvQuote && !isVerbatim(question.rationale.cvQuote, context.cv)) {
-        problems.push({ path: [...path, "rationale", "cvQuote"], message: "Must be copied exactly from the CV.", reviewRule: "cv-quote" });
+        problems.push({ path: [...path, "rationale", "cvQuote"], message: "Must be copied exactly from the CV." });
       }
     }
   });
@@ -462,9 +449,9 @@ export type ReviewRepair<T extends QuestionSet> = { set: T | null; broken: Revie
 
 /**
  * Repairs a reviewed set one item at a time, so one slip no longer fails the whole session (#220). A follow-up that
- * breaks a review rule is dropped while a clean one is left; otherwise the question goes back to its version from
- * before the review, if that version passes every rule. Set-level rules are only reported. The set is null when a
- * question cannot be repaired either way.
+ * breaks a review rule is dropped while a clean one is left; when none is left, the question goes back to its version
+ * from before the review, if that version passes every rule. Set-level rules are only reported. The set is null when
+ * a question cannot be repaired either way.
  */
 export function repairReviewedSet<T extends QuestionSet>(reviewed: T, before: QuestionSet, context: QuestionSetContext): ReviewRepair<T> {
   const problems = questionSetProblems(reviewed, context, "review");

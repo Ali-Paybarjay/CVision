@@ -191,32 +191,28 @@ describe("repairing a reviewed set that breaks a review rule (#220)", () => {
     expect(repair.set && questionSetProblems(repair.set, context, "review").filter((p) => p.reviewRule)).toEqual([]);
   });
 
-  it("puts a question back as it was before the review when its text breaks a rule", () => {
-    const reviewed = withQuestion(1, (q) => ({ ...q, text: "Which query would you write? And why?" }));
-    const repair = repairReviewedSet(reviewed, clean, context);
-    expect(repair.broken).toEqual(["question-shape"]);
-    expect(repair.restored).toEqual(["q2"]);
-    expect(repair.set?.questions[1]).toEqual(clean.questions[1]);
-    expect(repair.set?.blueprint.slots[1]).toEqual(clean.blueprint.slots[1]);
-  });
+  const noCleanFollowUp = (q: (typeof clean.questions)[number]) => q.followUps.reduce((acc, _, j) => symbolFollowUp(acc, j), q);
 
-  it("puts a question back when none of its follow-ups is left", () => {
-    const reviewed = withQuestion(2, (q) => q.followUps.reduce((acc, _, j) => symbolFollowUp(acc, j), q));
-    const repair = repairReviewedSet(reviewed, clean, context);
+  it("puts a question back as it was before the review when none of its follow-ups is left", () => {
+    const repair = repairReviewedSet(withQuestion(2, noCleanFollowUp), clean, context);
     expect(repair.restored).toEqual(["q3"]);
     expect(repair.set?.questions[2]).toEqual(clean.questions[2]);
+    expect(repair.set?.blueprint.slots[2]).toEqual(clean.blueprint.slots[2]);
   });
 
-  it("gives up only when the version from before the review breaks a rule too", () => {
-    const broken = withQuestion(0, (q) => ({ ...q, rationale: { ...q.rationale, jdQuote: "Words that are not in the job ad at all" } }));
+  it("gives up only when the version from before the review cannot be used either", () => {
+    const broken = withQuestion(2, noCleanFollowUp);
     const repair = repairReviewedSet(broken, broken, context);
     expect(repair.set).toBeNull();
-    expect(repair.broken).toEqual(["jd-quote"]);
+    expect(repair.broken.every((rule) => rule === "follow-up-speakable")).toBe(true);
   });
 
-  it("lets the schema pass repairable rules but still rejects a protected topic", () => {
-    expect(reviewOutputSchema(context).safeParse(withQuestion(4, (q) => symbolFollowUp(q, 0))).success).toBe(true);
+  it("lets the schema pass repairable rules, but sends a question's own text and protected topics back to the model", () => {
+    const schema = reviewOutputSchema(context);
+    expect(schema.safeParse(withQuestion(4, (q) => symbolFollowUp(q, 0))).success).toBe(true);
+    // The model's retry fixes these better than the code can (eval of 30 Oct).
+    expect(schema.safeParse(withQuestion(1, (q) => ({ ...q, text: "Which query would you write? And why?" }))).success).toBe(false);
     const personal = withQuestion(4, (q) => ({ ...q, followUps: q.followUps.map((f, k) => (k === 0 ? { ...f, text: "What is your age?" } : f)) }));
-    expect(reviewOutputSchema(context).safeParse(personal).success).toBe(false);
+    expect(schema.safeParse(personal).success).toBe(false);
   });
 });
