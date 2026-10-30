@@ -25,19 +25,26 @@ describe("a session sent by the browser", () => {
   });
 });
 
-describe("a start-up step whose answer broke a rule twice (#220)", () => {
+describe("a step whose answer broke a rule twice (#220)", () => {
   const invalid = new AskModelError("The interview-review answer did not match its schema: questions.4.followUps.0.text: Must be one question.", "invalid-answer");
 
-  it("shows the user a plain message, not the rule", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+  it("shows the user a plain message, not the rule, and logs the rule", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const response = stepFailed("interview", "review", invalid, { plain: true });
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({ error: questionsNotWritten });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("questions.4.followUps.0.text: Must be one question."));
   });
 
-  it("still shows the rule in the lab and on the later steps", async () => {
+  it("gives the later steps a plain message of their own", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const evaluate = (await stepFailed("interview", "evaluate", invalid, { plain: true }).json()).error;
+    expect(evaluate).toBe("We could not score this answer this time. Try again: it usually works on the second go.");
+    expect((await stepFailed("interview", "report", invalid, { plain: true }).json()).error).toMatch(/^We could not write your report/);
+  });
+
+  it("still shows the rule in the lab", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect((await stepFailed("interview lab", "review", invalid).json()).error).toBe(invalid.message);
-    expect((await stepFailed("interview", "evaluate", invalid, { plain: true }).json()).error).toBe(invalid.message);
   });
 });

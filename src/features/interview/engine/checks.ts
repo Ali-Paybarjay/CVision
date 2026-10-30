@@ -23,7 +23,18 @@ export type LengthRule = "question-words" | "follow-up-length" | "quote-words" |
  */
 export type ReviewRule = "follow-up-shape" | "follow-up-speakable" | "type-mix" | "cv-anchors" | "probe-gap" | "stretch";
 
-export type Problem = { path: (string | number)[]; message: string; lengthRule?: LengthRule; reviewRule?: ReviewRule };
+/**
+ * The review rules that still send the answer back to the model, named so that a rejected answer is recorded
+ * without its text (interview.review_rejected, #220). Any other rejected rule counts as "structure".
+ */
+export type RetryRule = "question-shape" | "question-speakable" | "question-topic" | "follow-up-topic" | "jd-quote" | "cv-quote";
+
+export type Problem = { path: (string | number)[]; message: string; lengthRule?: LengthRule; reviewRule?: ReviewRule; retryRule?: RetryRule };
+
+/** The name a problem that rejected the answer is recorded under. */
+export function retryRuleName(problem: Problem): RetryRule | "structure" {
+  return problem.retryRule ?? "structure";
+}
 
 /** Length rules never fail a stage: a reply that is one sentence too long is still worth showing. */
 export function isLengthProblem(problem: Problem): boolean {
@@ -356,7 +367,9 @@ function followUpProblems(followUps: PlannedFollowUp[], path: (string | number)[
       if (!isSpeakable(followUp.text)) {
         problems.push({ path: [...path, i, "text"], message: "Must be speakable: no symbols or abbreviated units.", reviewRule: "follow-up-speakable" });
       }
-      if (bannedTopicHits(followUp.text).length) problems.push({ path: [...path, i, "text"], message: "Touches a protected or personal topic." });
+      if (bannedTopicHits(followUp.text).length) {
+        problems.push({ path: [...path, i, "text"], message: "Touches a protected or personal topic.", retryRule: "follow-up-topic" });
+      }
     });
   }
   return problems;
@@ -402,14 +415,20 @@ export function questionSetProblems(
       if (countWords(question.text) > limits.questionMaxWords) {
         problems.push({ path: [...path, "text"], message: `Must be at most ${limits.questionMaxWords} words.`, lengthRule: "question-words" });
       }
-      if (!isSingleQuestion(question.text)) problems.push({ path: [...path, "text"], message: "Must be one question with a single question mark at the end." });
-      if (!isSpeakable(question.text)) problems.push({ path: [...path, "text"], message: "Must be speakable: no symbols or abbreviated units." });
-      if (bannedTopicHits(question.text).length) problems.push({ path: [...path, "text"], message: "Touches a protected or personal topic." });
+      if (!isSingleQuestion(question.text)) {
+        problems.push({ path: [...path, "text"], message: "Must be one question with a single question mark at the end.", retryRule: "question-shape" });
+      }
+      if (!isSpeakable(question.text)) {
+        problems.push({ path: [...path, "text"], message: "Must be speakable: no symbols or abbreviated units.", retryRule: "question-speakable" });
+      }
+      if (bannedTopicHits(question.text).length) {
+        problems.push({ path: [...path, "text"], message: "Touches a protected or personal topic.", retryRule: "question-topic" });
+      }
       if (!isVerbatim(question.rationale.jdQuote, context.jobDescription)) {
-        problems.push({ path: [...path, "rationale", "jdQuote"], message: "Must be copied exactly from the job description." });
+        problems.push({ path: [...path, "rationale", "jdQuote"], message: "Must be copied exactly from the job description.", retryRule: "jd-quote" });
       }
       if (question.rationale.cvQuote && !isVerbatim(question.rationale.cvQuote, context.cv)) {
-        problems.push({ path: [...path, "rationale", "cvQuote"], message: "Must be copied exactly from the CV." });
+        problems.push({ path: [...path, "rationale", "cvQuote"], message: "Must be copied exactly from the CV.", retryRule: "cv-quote" });
       }
     }
   });

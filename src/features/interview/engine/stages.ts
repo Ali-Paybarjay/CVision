@@ -35,6 +35,7 @@ import {
   namedItemsAbsentFromCv,
   questionSetProblems,
   repairReviewedSet,
+  retryRuleName,
   suggestionProblems,
   type DraftQuestion,
   type EvaluationContext,
@@ -113,13 +114,15 @@ function data(value: unknown): string {
 
 export const lengthOverEvent = "interview.length_over";
 export const reviewRuleEvent = "interview.review_rule_broken";
+export const reviewRejectedEvent = "interview.review_rejected";
 
 /** What the user sees when the questions cannot be written, instead of the rule that failed (#220). */
 export const questionsNotWritten = "We could not finish writing your questions this time. Try again: it usually works on the second go.";
 
 /**
- * Records each rule a kept reply breaks, by stage and rule name only, never the text. The event is stored only for
- * a signed-in user's live request, so mock runs and the eval leave the events table alone.
+ * Records each rule a reply breaks (one that is kept, or for the review one that is sent back), by stage and rule
+ * name only, never the text. The event is stored only for a signed-in user's live request, so mock runs and the
+ * eval leave the events table alone.
  */
 async function recordRules(event: string, stage: StageName, rules: string[], requester?: Requester): Promise<void> {
   const counts = new Map<string, number>();
@@ -304,6 +307,8 @@ export async function generateStep(session: InterviewSession, inputs: InterviewI
 export async function reviewStep(session: InterviewSession, inputs: InterviewInputs, run: StageRun = {}): Promise<InterviewSession> {
   const context = questionSetContext(session, inputs);
   if (!session.blueprint || session.questions.length === 0) throw new InterviewStageError("There are no questions to review yet.");
+  // The rules of each answer sent back to the model, recorded whether the retry passes or the step fails.
+  const rejected: string[] = [];
   const { output, usage, provenance } = await callStage<ReviewOutput>({
     stage: "review",
     values: {
@@ -311,11 +316,11 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
       blueprint: data(session.blueprint),
       questions: data(technicalQuestions(session).map(toDraft)),
     },
-    schema: reviewOutputSchema(context),
+    schema: reviewOutputSchema(context, (problems) => rejected.push(...problems.map(retryRuleName))),
     sample: sampleFixture(session.jobId).review,
     voice: false,
     run,
-  });
+  }).finally(() => recordRules(reviewRejectedEvent, "review", rejected, run.requester));
   const before = { blueprint: session.blueprint, questions: technicalQuestions(session).map(toDraft) };
   const repair = repairReviewedSet(output, before, context);
   await recordRules(reviewRuleEvent, "review", repair.broken, run.requester);
