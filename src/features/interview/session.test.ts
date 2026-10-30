@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InterviewSessionSchema as SharedInterviewSessionSchema } from "@/shared/contracts";
 import { stageConfig } from "./config";
-import { isNewerSession, nextStep, parseSession, serialiseSession } from "./engine/session";
+import { isNewerSession, nextStep, openingView, parseSession, serialiseSession } from "./engine/session";
 import { fixtures } from "./fixtures";
 import { runMockSession } from "./test-support";
 
@@ -36,7 +36,9 @@ describe.each(fixtures)("a full mock session for $id", (fixture) => {
     expect(session.plan).toEqual({ composition: { technical: 6, behavioural: 0 }, roleLevel: fixture.analyse.roleProfile.roleLevel });
     expect(session.questions.every((q) => (q.followUps?.length ?? 0) >= 2)).toBe(true);
     expect(session.followUpDecisions?.length).toBe(6);
-    expect(Object.keys(session.versions?.prompts ?? {}).sort()).toEqual(Object.values(stageConfig).map((s) => s.prompt).sort());
+    // Every stage of a full session; suggested answers come only after "End here" (#205).
+    const fullSessionPrompts = Object.values(stageConfig).map((s) => s.prompt).filter((prompt) => prompt !== stageConfig.suggest.prompt);
+    expect(Object.keys(session.versions?.prompts ?? {}).sort()).toEqual(fullSessionPrompts.sort());
     expect(session.versions?.mode).toBe("mock");
     expect(session.usage?.every((u) => u.estimated && u.inputTokens > 0)).toBe(true);
   });
@@ -66,5 +68,30 @@ describe("two copies of a session from different devices", () => {
     expect(isNewerSession(finished, finished)).toBe(false);
     const later = { ...earlier, id: "another", startedAt: "2026-10-23T09:00:00.000Z" };
     expect(isNewerSession(later, finished)).toBe(true);
+  });
+});
+
+describe("what the practice page for a job opens on (#206)", () => {
+  it("shows this browser's practice, or the account's copy when it went further", async () => {
+    const finished = await runMockSession(fixtures[0]);
+    const earlier = { ...finished, turns: finished.turns?.slice(0, 4), evaluations: [], report: undefined };
+    const base = { saved: null, lastReport: null, practiseAgain: false };
+    expect(openingView({ ...base, inBrowser: { session: earlier } })).toBe("browser");
+    expect(openingView({ ...base, inBrowser: { session: null }, saved: finished })).toBe("browser");
+    expect(openingView({ ...base, inBrowser: { session: earlier }, saved: finished })).toBe("resume");
+    expect(openingView({ ...base, inBrowser: { session: finished }, saved: earlier, lastReport: finished })).toBe("browser");
+  });
+
+  it("with an empty browser, resumes an unfinished practice before showing the last report", async () => {
+    const finished = await runMockSession(fixtures[0]);
+    const unfinished = { ...finished, id: "another", startedAt: "2026-10-23T09:00:00.000Z", evaluations: [], report: undefined };
+    expect(openingView({ inBrowser: null, saved: unfinished, lastReport: finished, practiseAgain: false })).toBe("resume");
+    expect(openingView({ inBrowser: null, saved: finished, lastReport: finished, practiseAgain: false })).toBe("last-report");
+    expect(openingView({ inBrowser: null, saved: null, lastReport: null, practiseAgain: false })).toBe("intro");
+  });
+
+  it("after Practise again, goes to the intro instead of back to the same report", async () => {
+    const finished = await runMockSession(fixtures[0]);
+    expect(openingView({ inBrowser: null, saved: finished, lastReport: finished, practiseAgain: true })).toBe("intro");
   });
 });

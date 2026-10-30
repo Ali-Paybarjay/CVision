@@ -3,6 +3,7 @@
 import {
   InterviewSessionSchema,
   type AnswerEvaluation,
+  type AnswerSuggestion,
   type CandidateProfile,
   type FollowUpDecision,
   type InterviewReport,
@@ -15,6 +16,7 @@ import {
   type TechnicalInterviewQuestion,
 } from "../contracts";
 import type { StageName } from "../config";
+import { isNonAnswer } from "./text";
 
 /** Which prompt and model produced a stage's output. */
 export type Provenance = { stage: StageName; prompt: string; version: string; model: string };
@@ -138,6 +140,48 @@ export function isQuestionFinished(session: InterviewSession, questionId: string
   return !decision.askFollowUp || followUpAnswer(session, questionId) !== null;
 }
 
+/** A finished question with a genuine answer. "I don't know" or "skip" is not one: after "End here" it gets a suggestion. */
+export function isAnswered(session: InterviewSession, questionId: string): boolean {
+  return isQuestionFinished(session, questionId) && !isNonAnswer(mainAnswer(session, questionId) ?? "");
+}
+
+/** The questions that get a suggested answer: none until "End here", then every question without a genuine answer. */
+export function unansweredQuestionIds(session: InterviewSession): string[] {
+  if (!session.endedAt) return [];
+  return session.questions.filter((q) => !isAnswered(session, q.id)).map((q) => q.id);
+}
+
+export function suggestionFor(session: InterviewSession, questionId: string): AnswerSuggestion | undefined {
+  return (session.suggestions ?? []).find((suggestion) => suggestion.questionId === questionId);
+}
+
+/** Unanswered questions still waiting for their suggested answer. */
+export function missingSuggestionIds(session: InterviewSession): string[] {
+  return unansweredQuestionIds(session).filter((id) => !suggestionFor(session, id));
+}
+
+/**
+ * "End here" (#205): the practice stops once the questions are ready, while at least one has no genuine answer. A
+ * follow-up still waiting for its answer is recorded as skipped (an empty answer), so the main answer is still scored.
+ */
+export function endEarly(session: InterviewSession, at: string): InterviewSession {
+  if (session.endedAt) return session;
+  if (!session.reviewChangelog || session.questions.length === 0) throw new InterviewRuleError("The questions are not ready yet.");
+  if (session.questions.every((q) => isAnswered(session, q.id))) throw new InterviewRuleError("Every question is already answered.");
+  let ended = session;
+  for (const q of session.questions) {
+    if (followUpQuestion(ended, q.id) !== null && followUpAnswer(ended, q.id) === null) {
+      ended = addAnswer(ended, { questionId: q.id, kind: "follow-up", text: "", startedAt: at, submittedAt: at, id: `${q.id}-follow-up-skipped` });
+    }
+  }
+  return { ...ended, endedAt: at };
+}
+
+/** After "End here" the record is closed: no question, answer or follow-up is added. */
+function assertNotEnded(session: InterviewSession): void {
+  if (session.endedAt) throw new InterviewRuleError("The practice has ended.");
+}
+
 export type SessionStep =
   | { step: "analyse" | "generate" | "review" }
   | { step: "ask"; questionId: string }
@@ -174,7 +218,9 @@ export function progressOf(session: InterviewSession): number {
     (session.turns?.length ?? 0) +
     (session.followUpDecisions?.length ?? 0) +
     (session.evaluations?.length ?? 0) +
-    (session.report ? 1 : 0)
+    (session.report ? 1 : 0) +
+    (session.endedAt ? 1 : 0) +
+    (session.suggestions?.length ?? 0)
   );
 }
 
@@ -182,6 +228,29 @@ export function progressOf(session: InterviewSession): number {
 export function isNewerSession(a: InterviewSession, b: InterviewSession): boolean {
   if (a.id !== b.id) return Date.parse(a.startedAt) > Date.parse(b.startedAt);
   return progressOf(a) > progressOf(b);
+}
+
+/** What the practice page for one job opens on (#206). */
+export type OpeningView = "browser" | "resume" | "last-report" | "intro";
+
+/**
+ * This browser's practice, unless the account has a later copy of it ("resume"). With nothing in this browser: the
+ * account's unfinished practice, then its last report, then the intro. After "Practise again" the report is skipped,
+ * so the button leads to a new practice rather than back to the same report.
+ */
+export function openingView(options: {
+  /** This browser's practice for the job; its session is null while the first stage runs. */
+  inBrowser: { session: InterviewSession | null } | null;
+  /** The account's latest session for the job, finished or not. */
+  saved: InterviewSession | null;
+  lastReport: InterviewSession | null;
+  practiseAgain: boolean;
+}): OpeningView {
+  const { inBrowser, saved, lastReport, practiseAgain } = options;
+  if (inBrowser) return saved && inBrowser.session && isNewerSession(saved, inBrowser.session) ? "resume" : "browser";
+  if (saved && nextStep(saved).step !== "done") return "resume";
+  if (lastReport && !practiseAgain) return "last-report";
+  return "intro";
 }
 
 function question(session: InterviewSession, questionId: string) {
@@ -192,6 +261,7 @@ function question(session: InterviewSession, questionId: string) {
 
 /** The interviewer asks a question's main text. */
 export function askQuestion(session: InterviewSession, questionId: string, at: string, id: string): InterviewSession {
+  assertNotEnded(session);
   const asked = question(session, questionId);
   if (findTurn(session, questionId, "interviewer", "main")) return session;
   const turn: InterviewTurn = {
@@ -212,6 +282,7 @@ export function addAnswer(
   session: InterviewSession,
   answer: { questionId: string; kind: InterviewTurn["kind"]; text: string; startedAt: string; submittedAt: string; id: string },
 ): InterviewSession {
+  assertNotEnded(session);
   const { questionId, kind } = answer;
   question(session, questionId);
   if (!findTurn(session, questionId, "interviewer", kind)) {
@@ -253,6 +324,7 @@ export function applyFollowUpDecision(
   usage?: StageUsage,
   provenance?: Provenance,
 ): InterviewSession {
+  assertNotEnded(session);
   const { questionId } = decision;
   question(session, questionId);
   if (mainAnswer(session, questionId) === null) throw new InterviewRuleError(`${questionId} has no answer yet.`);
@@ -303,6 +375,16 @@ export function applyEvaluation(
 
 export function applyReport(session: InterviewSession, report: InterviewReport, usage?: StageUsage, provenance?: Provenance): InterviewSession {
   return record({ ...session, report, summary: report.verdict }, usage, provenance);
+}
+
+/** Adds or replaces a question's suggested answer. Only a question left unanswered after "End here" takes one. */
+export function applySuggestion(session: InterviewSession, suggestion: AnswerSuggestion, usage?: StageUsage, provenance?: Provenance): InterviewSession {
+  question(session, suggestion.questionId);
+  if (!unansweredQuestionIds(session).includes(suggestion.questionId)) {
+    throw new InterviewRuleError(`${suggestion.questionId} takes feedback, not a suggested answer.`);
+  }
+  const suggestions = [...(session.suggestions ?? []).filter((s) => s.questionId !== suggestion.questionId), suggestion];
+  return record({ ...session, suggestions }, usage, provenance);
 }
 
 /** Questions in the order they were asked, as technical questions (every field present). */

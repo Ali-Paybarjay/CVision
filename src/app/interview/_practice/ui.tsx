@@ -27,3 +27,8 @@ export function Status({ tone, children }: { tone: Tone; children: ReactNode }) 
     </span>
   );
 }
+
+/** When a practice was saved, as "26 Oct 2026", in UK time so the server and the browser agree. */
+export function practisedOn(at: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "short", year: "numeric" }).format(new Date(at));
+}

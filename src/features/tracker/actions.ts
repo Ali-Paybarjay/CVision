@@ -89,8 +89,9 @@ export async function recordApplication(jobId: unknown): Promise<RecordApplicati
 }
 
 /**
- * Saves the status and next step the user chose on the dashboard. A new status also moves the date to today
- * and records tracker.status_changed; a new next step alone changes neither.
+ * Saves the status, next step and its date the user chose on the dashboard, the only place that writes the date. A
+ * new status also moves the application's date to today and records tracker.status_changed; a new next step or
+ * date alone changes neither.
  */
 export async function updateApplication(applicationId: unknown, change: unknown): Promise<UpdateApplicationResult> {
   const parsedChange = ApplicationChangeSchema.safeParse(change);
@@ -115,7 +116,8 @@ export async function updateApplication(applicationId: unknown, change: unknown)
   if (!saved.success) return saveFailed("read the tracker", "invalid-data");
 
   const application = applyChange(saved.data, parsedChange.data, londonToday());
-  if (application.status === saved.data.status && application.nextStep === saved.data.nextStep) {
+  const sameDate = (application.nextStepDate ?? null) === (saved.data.nextStepDate ?? null);
+  if (application.status === saved.data.status && application.nextStep === saved.data.nextStep && sameDate) {
     return { ok: true, application: saved.data };
   }
 

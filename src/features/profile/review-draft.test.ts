@@ -111,7 +111,31 @@ describe("review draft", () => {
     const draft = approve(
       apply(draftFromProfile(sara), { type: "edit-experience", key: "experience-0", change: { endDate: "", current: false } }),
     );
-    expect(draft.experience[0].errors.endDate).toBe("Add the month you left, or tick “I still work here”.");
+    expect(draft.experience[0].errors.endDate).toBe("Add the month and year you left, or tick “I still work here”.");
+  });
+
+  // #186: dates come from a Month and a Year menu, so a half-made choice is kept and the message says what is missing.
+  it("keeps a date with only the month or only the year, and asks for the other part", () => {
+    const draft = approve(
+      apply(draftFromProfile(sara), { type: "edit-experience", key: "experience-0", change: { startDate: "2019-", endDate: "-06" } }),
+    );
+
+    expect(draft.experience[0].value).toMatchObject({ startDate: "2019-", endDate: "-06" });
+    expect(draft.experience[0].errors).toMatchObject({ startDate: "Choose the month too.", endDate: "Choose the year too." });
+    expect(Object.values(draft.experience[0].errors).join(" ")).not.toContain("YYYY-MM");
+  });
+
+  it("leaves an education's dates optional, but asks for the other part of a half-chosen one", () => {
+    let draft = apply(draftFromProfile(sara), { type: "add", section: "education", key: "new-course" });
+    const course = { qualification: "BSc", institution: "University of Leeds" };
+    draft = approve(apply(draft, { type: "edit-education", key: "new-course", change: { ...course, startDate: "", endDate: "" } }));
+    expect(draft.education.at(-1)?.errors).toEqual({});
+
+    draft = approve(apply(draft, { type: "edit-education", key: "new-course", change: { startDate: "-09", endDate: "2030-" } }));
+    expect(draft.education.at(-1)?.errors).toEqual({ startDate: "Choose the year too.", endDate: "Choose the month too." });
+
+    draft = approve(apply(draft, { type: "edit-education", key: "new-course", change: { startDate: "2027-09", endDate: "2026-06" } }));
+    expect(draft.education.at(-1)?.errors).toEqual({ endDate: "The end month is before the start month." });
   });
 
   it("accepts a LinkedIn link typed without https://, but never a script link", () => {
@@ -186,7 +210,7 @@ describe("a draft from a CV just read (#33)", () => {
     expect(itemsWithProblems(draft)).toEqual(["contact", "experience-0"]);
     expect(draft.contact.errors.fullName).toBe("Add your full name.");
     expect(draft.experience[0].errors).toMatchObject({ company: "Add the employer’s name." });
-    expect(draft.experience[0].errors.startDate).toContain("Add the month you started.");
+    expect(draft.experience[0].errors.startDate).toBe("Add the month and year you started.");
   });
 
   it("turns a year alone into January or December, marked as a guess until the user edits it", () => {

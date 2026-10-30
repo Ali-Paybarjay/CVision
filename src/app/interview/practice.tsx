@@ -5,12 +5,13 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { answerGuide, defaultComposition } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
-import { isNewerSession, nextStep } from "@/features/interview/engine/session";
+import { nextStep, openingView } from "@/features/interview/engine/session";
+import type { LastReport } from "@/features/interview/server/session-store";
 import { drive, InterviewFlow, Progress, runOf, type SampleAnswers } from "./_practice/flow";
 import { FeedbackReport } from "./_practice/report";
 import { createPracticeStore, parseEnvelope, type PracticeStore } from "./_practice/store";
 import { Button, Card } from "@/shared/ui";
-import { Status } from "./_practice/ui";
+import { practisedOn, Status } from "./_practice/ui";
 
 // One practice per job, each under its own key, so opening another job never replaces a practice in progress.
 const stores = new Map<string, PracticeStore>();
@@ -56,6 +57,7 @@ export function InterviewPractice({
   signedIn,
   canSave,
   saved,
+  lastReport,
   samples,
 }: {
   jobId: string;
@@ -64,6 +66,8 @@ export function InterviewPractice({
   canSave: boolean;
   /** The latest session in the user's account, to resume when this browser has none. */
   saved: InterviewSession | null;
+  /** The account's latest finished practice, shown first when this browser has nothing for this job (#206). */
+  lastReport: LastReport | null;
   /** Mock mode only. */
   samples?: SampleAnswers;
 }) {
@@ -76,20 +80,22 @@ export function InterviewPractice({
   const session = envelope?.session ?? null;
   const autoSave = signedIn && canSave;
 
+  // Set by "Practise again", so the page goes to the intro rather than back to the account's last report.
+  const [practiseAgain, setPractiseAgain] = useState(false);
+  const view = openingView({ inBrowser: envelope, saved, lastReport: lastReport?.session ?? null, practiseAgain });
+
   // Resume from the account once: when this browser has nothing for this job, or an older copy of it (another
-  // device went further). A finished session is not resumed into an empty browser, so "Practise again" sticks.
+  // device went further). A finished session is not resumed into an empty browser: its report is shown read-only.
   const resumed = useRef(false);
   // The session as the account holds it, so an unchanged session is not sent back.
   const accountCopy = useRef(saved ? JSON.stringify(saved) : null);
   useEffect(() => {
     if (!hydrated || resumed.current) return;
     resumed.current = true;
-    if (!saved) return;
-    const resume = session ? isNewerSession(saved, session) : !envelope && nextStep(saved).step !== "done";
-    if (resume) {
+    if (saved && view === "resume") {
       store.writeEnvelope({ sourceId: jobId, inputs: null, session: saved, startedAtMs: Date.parse(saved.startedAt), startupMs: null });
     }
-  }, [store, hydrated, envelope, session, saved, jobId]);
+  }, [store, hydrated, view, saved, jobId]);
 
   useEffect(() => {
     if (envelope) drive(store, envelope, { jobId });
@@ -155,10 +161,14 @@ export function InterviewPractice({
     store.writeEnvelope(null);
     store.clearJobs();
     setSaveState("idle");
+    setPractiseAgain(true);
   };
 
   if (!hydrated) return <p className="text-text-muted">Loading…</p>;
-  if (!envelope) return <Intro signedIn={signedIn} canSave={canSave} onStart={start} />;
+  if (!envelope) {
+    if (view === "last-report" && lastReport) return <LastPractice report={lastReport} onPractiseAgain={() => setPractiseAgain(true)} />;
+    return <Intro signedIn={signedIn} canSave={canSave} onStart={start} />;
+  }
 
   const done = session !== null && nextStep(session).step === "done";
   return (
@@ -173,6 +183,20 @@ export function InterviewPractice({
       ) : (
         session && <InterviewFlow store={store} session={session} jobs={jobs} run={runOf(envelope)} samples={samples} />
       )}
+    </div>
+  );
+}
+
+function LastPractice({ report, onPractiseAgain }: { report: LastReport; onPractiseAgain: () => void }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-text-muted">
+          Your last practice · <time dateTime={report.practisedAt}>{practisedOn(report.practisedAt)}</time>
+        </p>
+        <Button onClick={onPractiseAgain}>Practise again</Button>
+      </div>
+      <FeedbackReport session={report.session} />
     </div>
   );
 }

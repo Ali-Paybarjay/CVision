@@ -8,19 +8,22 @@ import {
   GenerateOutputSchema,
   ReportOutputSchema,
   ReviewOutputSchema,
+  SuggestOutputSchema,
   analyseOutputSchema,
   generateOutputSchema,
   reportOutputSchema,
   reviewOutputSchema,
+  suggestOutputSchema,
 } from "./engine/schemas";
 import { evaluationProblems, isLengthProblem } from "./engine/checks";
 import { competencyMap, questionOverall, readinessFor, sessionOverall } from "./engine/scoring";
+import { suggestionContext } from "./engine/stages";
 import { isVerbatim } from "./engine/text";
 import { mainAnswer, followUpAnswer } from "./engine/session";
 import { fixtures } from "./fixtures";
 import { managementAccountant } from "./fixtures/management-accountant";
 import { processEngineer } from "./fixtures/process-engineer";
-import { questionSetContextFor, runMockSession } from "./test-support";
+import { endedSessionFor, inputsFor, questionSetContextFor, runMockSession } from "./test-support";
 
 describe("scores", () => {
   it.each(fixtures.flatMap((f) => Object.entries(f.answers).map(([id, a]) => [`${f.id} ${id}`, a.evaluation.scores] as const)))(
@@ -128,6 +131,8 @@ describe("structured output formats", () => {
     ["evaluate (with checks)", evaluateOutputSchema({ lookForIds: [], mainAnswer: "", followUpAnswer: null, followUpAsked: false })],
     ["report", ReportOutputSchema],
     ["report (with checks)", reportOutputSchema({ levelGap: false, lowConfidenceIds: [] })],
+    ["suggest", SuggestOutputSchema],
+    ["suggest (with checks)", suggestOutputSchema(suggestionContext(endedSessionFor(fixture), "q1", inputsFor(fixture)))],
   ])("%s converts to a JSON schema for live mode", (_, schema) => {
     expect(() => zodOutputFormat(schema)).not.toThrow();
   });

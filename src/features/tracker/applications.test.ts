@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Application } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { loadTracker } from "./applications";
-import { closingDate, isClosed, openAndClosed, suggestClosing } from "./model";
+import { closingDate, isClosed, nextStepDue, openAndClosed, suggestClosing } from "./model";
 import { sampleApplications, sampleApplicationsOn } from "./sample";
 
 const { getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
@@ -195,6 +195,8 @@ describe("sampleApplications", () => {
       expect(suggestClosing(items, day).map((item) => item.application.id)).toEqual(["sara-application-5", "sara-application-6"]);
       expect(openAndClosed(items).closed.map((item) => item.application.status)).toEqual(["rejected"]);
       expect(items.filter((item) => isClosed(item.application.status))).toHaveLength(1);
+      // One next step due tomorrow and one overdue (#211).
+      expect(items.flatMap((item) => nextStepDue(item.application, day)?.when ?? [])).toEqual(["tomorrow", "overdue"]);
     }
   });
 
@@ -209,7 +211,9 @@ describe("sampleApplications", () => {
 
     expect(later.map((item) => item.application.date)).toEqual(["2026-10-30", "2026-11-02", "2026-10-26", "2026-10-19", "2026-09-03", "2026-08-31"]);
     expect(later[1].job?.deadline).toBe("2026-11-09");
-    const undated = (items: typeof later) => items.map(({ application, job }) => ({ ...application, date: "", job: job && { ...job, deadline: "" } }));
+    expect(later.map((item) => item.application.nextStepDate)).toEqual(["2026-11-05", undefined, "2026-11-02", undefined, undefined, undefined]);
+    const undated = (items: typeof later) =>
+      items.map(({ application, job }) => ({ ...application, date: "", nextStepDate: "", job: job && { ...job, deadline: "" } }));
     expect(undated(later)).toEqual(undated(sampleApplications));
   });
 });
