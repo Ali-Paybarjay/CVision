@@ -246,7 +246,7 @@ describe("the link to a job's interview report", () => {
     const html = render([reported("applied", 4)]);
 
     expect(html).toContain('<span class="sr-only"> for Data Analyst at Etherow Freight, 4.0 out of 5</span>');
-    expect(html).toContain('<span aria-hidden="true"> (4.0 / 5)</span>');
+    expect(html).toContain('<span aria-hidden="true">\u00a0(4.0 / 5)</span>');
   });
 
   it("is shown in every status, open or closed", () => {

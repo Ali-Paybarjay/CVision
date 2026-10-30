@@ -217,7 +217,8 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
                 <Link href={interviewPath(saved.jobId)} className={rowLinkClass}>
                   Interview report
                   <span className="sr-only">{` for ${job.title} at ${job.company}, ${formatScore(item.report.overall)} out of 5`}</span>
-                  <span aria-hidden="true">{` (${formatScore(item.report.overall)} / 5)`}</span>
+                  {/* A non-breaking space: inside the inline-flex link, a plain leading space would collapse. */}
+                  <span aria-hidden="true">{`\u00a0(${formatScore(item.report.overall)} / 5)`}</span>
                 </Link>
               )}
             </div>
