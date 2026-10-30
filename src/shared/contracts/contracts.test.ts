@@ -154,6 +154,19 @@ describe("Profile: languages, projects and volunteering (#226)", () => {
     expect(ProfileSchema.safeParse({ ...profile, projects: [{ name: "Dashboard", startDate: "January 2025", details: [] }] }).success).toBe(false);
   });
 
+  it("takes a project link only over http or https", () => {
+    const project = { name: "Dashboard", details: [] };
+    expect(ProfileSchema.safeParse({ ...profile, projects: [{ ...project, url: "https://github.com/sara/dashboard" }] }).success).toBe(true);
+    for (const url of ["javascript:alert(1)", "data:text/html,hi", "ftp://example.com/file"]) {
+      expect(ProfileSchema.safeParse({ ...profile, projects: [{ ...project, url }] }).success, url).toBe(false);
+    }
+  });
+
+  it("keeps volunteering that names no organisation", () => {
+    const withRoleOnly = { ...profile, volunteering: [{ role: "Volunteer tutor", details: [] }] };
+    expect(ProfileSchema.parse(withRoleOnly)).toEqual(withRoleOnly);
+  });
+
   it("travels with a saved tailored CV", () => {
     const cv = { ...profile, languages: [{ name: "Urdu", level: "Native" }] };
     expect(TailoredCvSchema.parse(tailoredCv({ cv })).cv.languages).toEqual([{ name: "Urdu", level: "Native" }]);

@@ -57,14 +57,16 @@ export const ProjectSchema = z.object({
   endDate: YearMonthSchema.nullable().optional(),
   /** What the user did and what came of it, as their CV says it. */
   details: z.array(z.string()),
-  url: z.url().optional(),
+  /** A web link only: http or https, never javascript: or data:, as it may be shown as a link on the CV. */
+  url: z.httpUrl().optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 
-/** Unpaid work. CVs often give no dates for it, so they are optional, unlike a job's. */
+/** Unpaid work. CVs often give no dates or organisation for it, so they are optional, unlike a job's. */
 export const VolunteeringSchema = z.object({
   role: z.string().min(1),
-  organisation: z.string().min(1),
+  /** Many CVs name only the role ("Volunteer tutor"), so the organisation is optional too. */
+  organisation: z.string().min(1).optional(),
   location: z.string().optional(),
   startDate: YearMonthSchema.optional(),
   /** null while the user still does it. */
