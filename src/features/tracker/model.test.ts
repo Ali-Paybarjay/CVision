@@ -10,10 +10,13 @@ import {
   daysBetween,
   daysWithoutNews,
   formatDate,
+  formatDay,
   londonToday,
   markNoResponse,
+  nextStepDue,
   openAndClosed,
   suggestClosing,
+  whenOptions,
   type TrackedApplication,
 } from "./model";
 
@@ -32,12 +35,75 @@ describe("applyChange", () => {
   it("keeps the date when only the next step changes", () => {
     expect(applyChange(applied, { status: "applied", nextStep: null }, "2026-10-22")).toEqual({ ...applied, nextStep: null });
   });
+
+  it("sets, keeps and clears the next step's date (#211)", () => {
+    const dated = { ...applied, nextStepDate: "2026-10-20" };
+    expect(applyChange(applied, { status: "applied", nextStep: "Call back", nextStepDate: "2026-10-24" }, "2026-10-22")).toEqual({
+      ...applied,
+      nextStepDate: "2026-10-24",
+    });
+    // A new status alone keeps it, whether the change sends the same date (Keep) or none at all.
+    expect(applyChange(dated, { status: "interview", nextStep: "Call back", nextStepDate: "2026-10-20" }, "2026-10-22").nextStepDate).toBe("2026-10-20");
+    expect(applyChange(dated, { status: "interview", nextStep: "Call back" }, "2026-10-22").nextStepDate).toBe("2026-10-20");
+    // No date clears it, and so does clearing the next step, whatever date comes with it.
+    expect(applyChange(dated, { status: "applied", nextStep: "Call back", nextStepDate: null }, "2026-10-22")).toEqual(applied);
+    expect(applyChange(dated, { status: "applied", nextStep: null, nextStepDate: "2026-10-24" }, "2026-10-22")).toEqual({ ...applied, nextStep: null });
+  });
+});
+
+describe("the When menu (#211)", () => {
+  const today = "2026-10-29";
+
+  it("offers No date, then today and every day for two weeks, each with its day and date", () => {
+    const options = whenOptions(today, null);
+
+    expect(options).toHaveLength(16);
+    expect(options.slice(0, 4)).toEqual([
+      { value: "", label: "No date" },
+      { value: "2026-10-29", label: "Today · Thu 29 Oct" },
+      { value: "2026-10-30", label: "Tomorrow · Fri 30 Oct" },
+      { value: "2026-10-31", label: "In 2 days · Sat 31 Oct" },
+    ]);
+    expect(options.at(-1)).toEqual({ value: "2026-11-12", label: "In 14 days · Thu 12 Nov" });
+  });
+
+  it("keeps a saved date that is not in the list, first, so a status change alone never drops it", () => {
+    expect(whenOptions(today, "2026-10-26")[0]).toEqual({ value: "2026-10-26", label: "Keep · Mon 26 Oct" });
+    expect(whenOptions(today, "2026-11-13")[0]).toEqual({ value: "2026-11-13", label: "Keep · Fri 13 Nov" });
+    // A saved date in the list is simply chosen there.
+    expect(whenOptions(today, "2026-11-12").map((option) => option.label)).not.toContain("Keep · Thu 12 Nov");
+    expect(whenOptions(today, "2026-11-12")).toHaveLength(16);
+  });
+});
+
+describe("nextStepDue (#211)", () => {
+  const dated = (date: string, status: ApplicationStatus = "applied"): Application => ({ ...applied, status, nextStepDate: date });
+
+  it("says whether the next step is overdue, due today, tomorrow or later, by London's today", () => {
+    expect(nextStepDue(dated("2026-10-26"), "2026-10-29")).toEqual({ date: "2026-10-26", when: "overdue" });
+    expect(nextStepDue(dated("2026-10-29"), "2026-10-29")?.when).toBe("today");
+    expect(nextStepDue(dated("2026-10-30"), "2026-10-29")?.when).toBe("tomorrow");
+    expect(nextStepDue(dated("2026-11-06"), "2026-10-29")?.when).toBe("later");
+  });
+
+  it("only shows the date on a closed application, and nothing without a date or a next step", () => {
+    expect(nextStepDue(dated("2026-10-26", "rejected"), "2026-10-29")?.when).toBe("closed");
+    expect(nextStepDue(applied, "2026-10-29")).toBeNull();
+    expect(nextStepDue({ ...dated("2026-10-26"), nextStep: null }, "2026-10-29")).toBeNull();
+  });
 });
 
 describe("ApplicationChangeSchema", () => {
   it("trims the next step and saves an empty one as null", () => {
     expect(ApplicationChangeSchema.parse({ status: "offer", nextStep: "  Reply by Monday " })).toEqual({ status: "offer", nextStep: "Reply by Monday" });
     expect(ApplicationChangeSchema.parse({ status: "offer", nextStep: "   " })).toEqual({ status: "offer", nextStep: null });
+  });
+
+  it("saves No date as null, and leaves out a date that was not sent", () => {
+    expect(ApplicationChangeSchema.parse({ status: "offer", nextStep: "Reply", nextStepDate: "" }).nextStepDate).toBeNull();
+    expect(ApplicationChangeSchema.parse({ status: "offer", nextStep: "Reply", nextStepDate: "2026-10-31" }).nextStepDate).toBe("2026-10-31");
+    expect(ApplicationChangeSchema.parse({ status: "offer", nextStep: "Reply" })).not.toHaveProperty("nextStepDate");
+    expect(ApplicationChangeSchema.safeParse({ status: "offer", nextStep: "Reply", nextStepDate: "Friday" }).success).toBe(false);
   });
 
   it("refuses an unknown status and a next step over 200 characters", () => {
@@ -51,6 +117,7 @@ describe("dates", () => {
   it("formats a calendar date the UK way", () => {
     expect(formatDate("2026-10-22")).toBe("22 Oct 2026");
     expect(formatDate("2026-01-01")).toBe("1 Jan 2026");
+    expect(formatDay("2026-10-26")).toBe("Mon 26 Oct");
   });
 
   it("gives today's date in London, not UTC", () => {

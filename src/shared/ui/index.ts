@@ -5,7 +5,7 @@ export { cn } from "./cn";
 export { CvPaper } from "./cv-paper";
 export { FitLine } from "./fit-line";
 export { Field, Input, Select, Textarea } from "./form";
-export { CheckIcon, ErrorIcon, InfoIcon, WarningIcon } from "./icons";
+export { CalendarIcon, CheckIcon, ErrorIcon, InfoIcon, WarningIcon } from "./icons";
 export { Notice } from "./notice";
 export { Page } from "./page";
 export { SiteFooter } from "./site-footer";

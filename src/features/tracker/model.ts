@@ -1,7 +1,7 @@
 // What the tracker shares between the server and the dashboard's browser code: status words, the change a
 // user can make, and dates. No server-only imports, so the client rows can use it in sample mode too.
 import { z } from "zod";
-import { ApplicationStatusSchema, type Application, type ApplicationStatus, type Job } from "@/shared/contracts";
+import { ApplicationStatusSchema, DateSchema, type Application, type ApplicationStatus, type Job } from "@/shared/contracts";
 
 /** What the dashboard shows of a job: its name and, when the ad gives one, its closing date. */
 export type JobSummary = Pick<Job, "title" | "company" | "deadline">;
@@ -50,7 +50,10 @@ export const statusDateLabels: Record<ApplicationStatus, string> = {
 
 export const nextStepMaxLength = 200;
 
-/** What the user can change on a row. An empty next step is saved as null. */
+/**
+ * What the user can change on a row. An empty next step is saved as null, and so is an empty date ("No date"). A
+ * change with no date at all keeps the saved one.
+ */
 export const ApplicationChangeSchema = z.object({
   status: ApplicationStatusSchema,
   nextStep: z
@@ -58,13 +61,59 @@ export const ApplicationChangeSchema = z.object({
     .trim()
     .max(nextStepMaxLength)
     .transform((text) => text || null),
+  nextStepDate: DateSchema.or(z.literal(""))
+    .nullable()
+    .transform((date) => date || null)
+    .optional(),
 });
 export type ApplicationChange = z.infer<typeof ApplicationChangeSchema>;
 
-/** The application after the change. The date moves only when the status does, as the contract says. */
+/**
+ * The application after the change. The date moves only when the status does, as the contract says. The next step's
+ * date goes with its next step: clearing the next step clears it.
+ */
 export function applyChange(saved: Application, change: ApplicationChange, today: string): Application {
+  const { nextStepDate: savedDate, ...rest } = saved;
   const statusChanged = change.status !== saved.status;
-  return { ...saved, status: change.status, nextStep: change.nextStep, date: statusChanged ? today : saved.date };
+  const nextStepDate = change.nextStep === null ? null : change.nextStepDate === undefined ? savedDate : change.nextStepDate;
+  return {
+    ...rest,
+    status: change.status,
+    nextStep: change.nextStep,
+    date: statusChanged ? today : saved.date,
+    ...(nextStepDate ? { nextStepDate } : {}),
+  };
+}
+
+/** The When menu goes this many days ahead of today. */
+export const whenDays = 14;
+
+/**
+ * The When menu for a next step: No date, then today and every day for two weeks, each with its day and date. A saved
+ * date outside those days (past, or further off) comes first as "Keep", so saving only a new status never drops it.
+ */
+export function whenOptions(today: string, saved: string | null | undefined): { value: string; label: string }[] {
+  const days = Array.from({ length: whenDays + 1 }, (_, index) => addDays(today, index));
+  const inDays = (index: number) => (index === 0 ? "Today" : index === 1 ? "Tomorrow" : `In ${index} days`);
+  return [
+    ...(saved && !days.includes(saved) ? [{ value: saved, label: `Keep · ${formatDay(saved)}` }] : []),
+    { value: "", label: "No date" },
+    ...days.map((date, index) => ({ value: date, label: `${inDays(index)} · ${formatDay(date)}` })),
+  ];
+}
+
+/**
+ * When the next step is due, worked out on each render from today's date. "closed": the application is closed, so
+ * the date is only shown. Null without a next step or a date.
+ */
+export type NextStepDue = { date: string; when: "overdue" | "today" | "tomorrow" | "later" | "closed" };
+
+export function nextStepDue(application: Application, today: string): NextStepDue | null {
+  const date = application.nextStepDate;
+  if (!date || !application.nextStep) return null;
+  if (isClosed(application.status)) return { date, when: "closed" };
+  const days = daysBetween(today, date);
+  return { date, when: days < 0 ? "overdue" : days === 0 ? "today" : days === 1 ? "tomorrow" : "later" };
 }
 
 /** Statuses that end an application. They are listed apart, under Closed, and never count days. */
@@ -172,6 +221,11 @@ export function londonToday(now = new Date()): string {
 /** "22 Oct 2026" for "2026-10-22". Read as UTC, so no time zone can move it a day. */
 export function formatDate(date: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(date));
+}
+
+/** "Mon 26 Oct" for "2026-10-26": the day of the week first, as people plan by it. Read as UTC, like formatDate. */
+export function formatDay(date: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(date));
 }
 
 /** "1 day" or "5 days". */

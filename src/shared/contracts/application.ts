@@ -35,6 +35,11 @@ export const ApplicationSchema = z.object({
   status: ApplicationStatusSchema,
   /** What the user plans to do next, e.g. "Follow up by email on Friday". */
   nextStep: z.string().nullable(),
+  /**
+   * The day the user plans to take the next step. Only the dashboard writes it, and only beside a next step: clearing
+   * the next step clears it. Missing or null: no date (Apply creates applications without it).
+   */
+  nextStepDate: DateSchema.nullable().optional(),
   /** The follow-ups the user has sent. Missing on applications saved before this field. */
   followUps: z.array(ApplicationFollowUpSchema).optional(),
 });

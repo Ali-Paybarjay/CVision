@@ -14,7 +14,8 @@ const writtenOn = "2026-10-25";
 
 /**
  * Sara's sample applications as on 25 October 2026: one at interview, one applied 9 days ago, one ready with
- * 5 days to its closing date, two applied with no news for over 60 days, and one unsuccessful.
+ * 5 days to its closing date, two applied with no news for over 60 days, and one unsuccessful. The interview's next
+ * step is due tomorrow and the applied one's is overdue, so the dashboard always shows both.
  */
 export const sampleApplications: TrackedApplication[] = [
   {
@@ -24,6 +25,7 @@ export const sampleApplications: TrackedApplication[] = [
       date: "2026-10-20",
       status: "interview",
       nextStep: "Practise the interview questions before Thursday",
+      nextStepDate: "2026-10-26",
     }),
     job: summary(interviewJob),
     hasAd: true,
@@ -45,6 +47,7 @@ export const sampleApplications: TrackedApplication[] = [
       date: "2026-10-16",
       status: "applied",
       nextStep: "Email the recruiter if there is no reply by Friday",
+      nextStepDate: "2026-10-23",
     }),
     job: summary(appliedJob),
     hasAd: true,
@@ -89,7 +92,11 @@ export function sampleApplicationsOn(today: string): TrackedApplication[] {
   const shift = daysBetween(writtenOn, today);
   return sampleApplications.map(({ application, job, ...rest }) => ({
     ...rest,
-    application: { ...application, date: addDays(application.date, shift) },
+    application: {
+      ...application,
+      date: addDays(application.date, shift),
+      ...(application.nextStepDate ? { nextStepDate: addDays(application.nextStepDate, shift) } : {}),
+    },
     job: job && { ...job, deadline: job.deadline && addDays(job.deadline, shift) },
   }));
 }
