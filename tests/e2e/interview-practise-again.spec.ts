@@ -7,6 +7,11 @@ test.setTimeout(300_000);
 test("after a practice, Practise again sits below the report and leads to How it works", async ({ page }) => {
   await page.goto("/interview?job=sara-job-1");
   await page.getByRole("button", { name: "Start practice" }).click();
+  // The mark that keeps a reload on the practice, where a link to the job opens the account's last report.
+  await expect(page).toHaveURL(/\/interview\?job=sara-job-1#practice$/);
+  await expect(page.getByText("Question 1 of 6")).toBeVisible({ timeout: 120_000 });
+  await page.reload();
+  await expect(page).toHaveURL(/#practice$/);
 
   for (let n = 1; n <= 6; n++) {
     await expect(page.getByText(`Question ${n} of 6`)).toBeVisible({ timeout: 120_000 });
@@ -37,4 +42,5 @@ test("after a practice, Practise again sits below the report and leads to How it
   const heading = page.getByRole("heading", { name: "How it works" });
   await expect(heading).toBeFocused();
   await expect(heading).toBeInViewport();
+  await expect(page).toHaveURL(/\/interview\?job=sara-job-1$/);
 });

@@ -10,7 +10,7 @@ import type { LastReport } from "@/features/interview/server/session-store";
 import { drive, InterviewFlow, Progress, runOf, type SampleAnswers } from "./_practice/flow";
 import { FeedbackReport } from "./_practice/report";
 import { createPracticeStore, parseEnvelope, type PracticeStore } from "./_practice/store";
-import { Button, Card } from "@/shared/ui";
+import { Button, Card, Notice } from "@/shared/ui";
 import { practisedOn, Status } from "./_practice/ui";
 
 // One practice per job, each under its own key, so opening another job never replaces a practice in progress.
@@ -43,6 +43,26 @@ function moveLegacyPractice(jobId: string, key: string) {
 
 const hydratedSnapshot = () => true;
 const serverHydratedSnapshot = () => false;
+
+// "#practice" in the address: this tab chose the practice over the last report, so a reload (or a phone reopening
+// the tab) stays on the practice, while a link to the job, which has no mark, opens the report.
+const practiceMark = "#practice";
+const practiceMarkSnapshot = () => window.location.hash === practiceMark;
+
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+
+function writePracticeMark(on: boolean) {
+  const url = new URL(window.location.href);
+  url.hash = on ? practiceMark : "";
+  window.history.replaceState(null, "", url);
+}
+
+function resumeFromAccount(store: PracticeStore, jobId: string, session: InterviewSession) {
+  store.writeEnvelope({ sourceId: jobId, inputs: null, session, startedAtMs: Date.parse(session.startedAt), startupMs: null });
+}
 
 type SaveState = "idle" | "saving" | "saved" | "retrying" | "failed";
 
@@ -82,7 +102,14 @@ export function InterviewPractice({
 
   // Set by "Practise again", so the page goes to the intro rather than back to the account's last report.
   const [practiseAgain, setPractiseAgain] = useState(false);
-  const view = openingView({ inBrowser: envelope, saved, lastReport: lastReport?.session ?? null, practiseAgain });
+  // Read on the first render after hydration, so a reload in the middle of a practice resumes it.
+  const markedInAddress = useSyncExternalStore(subscribeToHash, practiceMarkSnapshot, serverHydratedSnapshot);
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const practising = chosen ?? markedInAddress;
+  const choices = { inBrowser: envelope, saved, lastReport: lastReport?.session ?? null, practiseAgain };
+  const view = openingView({ ...choices, practising });
+  // When the last report is shown over an unfinished practice, the practice "Continue your practice" opens.
+  const behindReport = view === "last-report" ? openingView({ ...choices, practising: true }) : "intro";
 
   // Resume from the account once: when this browser has nothing for this job, or an older copy of it (another
   // device went further). A finished session is not resumed into an empty browser: its report is shown read-only.
@@ -92,14 +119,22 @@ export function InterviewPractice({
   useEffect(() => {
     if (!hydrated || resumed.current) return;
     resumed.current = true;
-    if (saved && view === "resume") {
-      store.writeEnvelope({ sourceId: jobId, inputs: null, session: saved, startedAtMs: Date.parse(saved.startedAt), startupMs: null });
-    }
+    if (saved && view === "resume") resumeFromAccount(store, jobId, saved);
   }, [store, hydrated, view, saved, jobId]);
 
+  // Behind the last report, an unfinished practice waits: no model calls until it is continued.
   useEffect(() => {
-    if (envelope) drive(store, envelope, { jobId });
-  }, [store, envelope, jobs, jobId]);
+    if (envelope && view !== "last-report") drive(store, envelope, { jobId });
+  }, [store, envelope, jobs, jobId, view]);
+
+  // After "Continue your practice", the button is gone: focus moves to the answer box, where the practice goes on.
+  const practiceRef = useRef<HTMLDivElement>(null);
+  const focusAnswer = useRef(false);
+  useEffect(() => {
+    if (!focusAnswer.current || view === "last-report" || !envelope) return;
+    focusAnswer.current = false;
+    practiceRef.current?.querySelector("textarea")?.focus();
+  }, [view, envelope]);
 
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // Failed saves of the current session; a new value of `retry` runs the effect again.
@@ -153,26 +188,45 @@ export function InterviewPractice({
     };
   }, [store, autoSave, session, jobId, retry]);
 
+  const setPractising = (on: boolean) => {
+    writePracticeMark(on);
+    setChosen(on);
+  };
   const start = () => {
+    setPractising(true);
     store.clearJobs();
     store.writeEnvelope({ sourceId: jobId, inputs: null, session: null, startedAtMs: Date.now(), startupMs: null });
   };
+  // Also "Practise again" under the last report, which drops an unfinished practice in this browser.
   const restart = () => {
+    setPractising(false);
     store.writeEnvelope(null);
     store.clearJobs();
     setSaveState("idle");
     setPractiseAgain(true);
   };
+  const continuePractice = () => {
+    // The account's copy goes into this browser first, so the intro never shows in between.
+    if (behindReport === "resume" && saved) resumeFromAccount(store, jobId, saved);
+    focusAnswer.current = true;
+    setPractising(true);
+  };
 
   if (!hydrated) return <p className="text-text-muted">Loading…</p>;
-  if (!envelope) {
-    if (view === "last-report" && lastReport) return <LastPractice report={lastReport} onPractiseAgain={() => setPractiseAgain(true)} />;
-    return <Intro signedIn={signedIn} canSave={canSave} onStart={start} focusHeading={practiseAgain} />;
+  if (view === "last-report" && lastReport) {
+    const unfinishedSince =
+      behindReport === "resume" && saved
+        ? saved.startedAt
+        : behindReport === "browser" && envelope
+          ? (envelope.session?.startedAt ?? new Date(envelope.startedAtMs).toISOString())
+          : null;
+    return <LastPractice report={lastReport} unfinishedSince={unfinishedSince} onContinue={continuePractice} onPractiseAgain={restart} />;
   }
+  if (!envelope) return <Intro signedIn={signedIn} canSave={canSave} onStart={start} focusHeading={practiseAgain} />;
 
   const done = session !== null && nextStep(session).step === "done";
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={practiceRef} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
         {!done && <Button onClick={restart}>Start again</Button>}
@@ -190,9 +244,31 @@ export function InterviewPractice({
   );
 }
 
-export function LastPractice({ report, onPractiseAgain }: { report: LastReport; onPractiseAgain: () => void }) {
+export function LastPractice({
+  report,
+  unfinishedSince,
+  onContinue,
+  onPractiseAgain,
+}: {
+  report: LastReport;
+  /** When a later practice was left unfinished: when it started. Offered above the report, so it is not missed. */
+  unfinishedSince: string | null;
+  onContinue: () => void;
+  onPractiseAgain: () => void;
+}) {
   return (
     <div className="flex flex-col gap-4">
+      {unfinishedSince && (
+        <Notice tone="info" title="You have an unfinished practice">
+          <p>
+            Started <time dateTime={unfinishedSince}>{practisedOn(unfinishedSince)}</time>. The report below is from your last finished
+            practice.
+          </p>
+          <Button className="mt-3" onClick={onContinue}>
+            Continue your practice
+          </Button>
+        </Notice>
+      )}
       <p className="text-sm text-text-muted">
         Your last practice · <time dateTime={report.practisedAt}>{practisedOn(report.practisedAt)}</time>
       </p>
