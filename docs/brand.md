@@ -343,8 +343,9 @@ In Tailwind, point each colour at its variable (for example `canvas: 'var(--colo
 ### Calls to action
 *One direct button, repeated on every page.*
 
-- **Direct:** “Get started free”. The app is free in the first stage. The wording can be revisited when pricing is added.
-- **Transitional:** “Free 2-minute CV check”. “Is your CV ready for UK employers?”
+- **Direct:** “Tailor my CV to a job”, with the small line “Free account. Add your CV or your details, then paste a job ad.” One action has one name: the header, the home page, the dashboard and the end of the CV check all use it.
+- **Transitional:** “Check my CV in 2 minutes”, with the small line “No sign-up. Nothing is saved.” It answers “Is your CV ready for UK employers?”. The feature itself is the free 2-minute CV check.
+- **Free:** stays out of the button labels and goes in the small line under them. The app is free in the first stage; the wording can be revisited when pricing is added.
 
 ### Our Honest CV Promise
 *Four promises we keep.*

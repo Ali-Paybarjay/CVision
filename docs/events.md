@@ -12,7 +12,7 @@
 
 | رویداد | صاحب | کی ثبت می‌شود | جزئیات مجاز | وضعیت |
 |---|---|---|---|---|
-| `home.cta_clicked` | علی | کلیک روی Get started free یا Free 2-minute CV check در صفحهٔ اصلی | `cta`: `get_started` یا `cv_check`؛ `placement`: `header` یا `hero` | ثبت می‌شود (#41) |
+| `home.cta_clicked` | علی | کلیک روی Tailor my CV to a job یا Check my CV in 2 minutes در صفحهٔ اصلی | `cta`: `get_started` یا `cv_check`؛ `placement`: `header` یا `hero` | ثبت می‌شود (#41) |
 | `cvcheck.completed` | مرضیه | نتیجهٔ چک دودقیقه‌ای رزومه نشان داده شد | نمرهٔ کلی و تعداد ایرادها | کارت #53 |
 | `profile.cv_uploaded` | شایان | رزومه خوانده شد | بدون متن رزومه | کارت #47 |
 | `profile.approved` | شایان | کاربر Profile را تأیید و ذخیره کرد: از رزومهٔ تازه، پر کردن دستی بدون رزومه، یا ویرایش | `newCv`، `manual` (پروفایل را خودش بدون رزومه پر کرد)، `consentVersion` (نسخهٔ رضایت تازه، وگرنه null)، و تعداد `jobs`، `skills` و `answers`؛ بدون متن رزومه | کارت #47؛ `manual` از کارت #179 |
