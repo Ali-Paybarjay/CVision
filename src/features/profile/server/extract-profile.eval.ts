@@ -5,7 +5,7 @@ import { getAiProvider } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { extractProfile } from "./extract-profile";
 import { readCvText } from "./read-cv";
-import { buildSampleCv, emmaWithMoreSections, sampleCvFileName, samplePersonaNames } from "./sample-cvs";
+import { emmaWithMoreSections, moreSectionsCvFileName, sampleCvFileName, samplePersonaNames } from "./sample-cvs";
 
 // Prompt evals for prompts/profile-extract.md: real requests to the model, so they cost money.
 // Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY).
@@ -93,7 +93,8 @@ describe.skipIf(!getAiProvider())("profile-extract on a CV with volunteering, pr
   let reading: Promise<{ cvText: string; profile: Awaited<ReturnType<typeof extractProfile>> }> | undefined;
   const result = () =>
     (reading ??= (async () => {
-      const cv = await readCvText({ name: "emma-more-sections.docx", bytes: buildSampleCv("emma", expected) });
+      const bytes = new Uint8Array(readFileSync(join(process.cwd(), "sample-data", "cvs", moreSectionsCvFileName)));
+      const cv = await readCvText({ name: moreSectionsCvFileName, bytes });
       return { cvText: cv.text, profile: await extractProfile(cv.text) };
     })());
 

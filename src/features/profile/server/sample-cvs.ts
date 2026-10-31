@@ -3,9 +3,10 @@ import type { Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { writeZip, type ZipEntry } from "./zip";
 
-// Builds the four fictional Word CVs in sample-data/cvs from the personas, for testing the upload
-// and the profile-extract evals. Each uses a different layout that real CVs use, so extraction is
-// tested on more than one shape. To rebuild the files after a persona changes:
+// Builds the fictional Word CVs in sample-data/cvs from the personas, for testing the upload
+// and the profile-extract evals: one per persona, plus Emma's with volunteering, projects and languages (#227).
+// Each persona uses a different layout that real CVs use, so extraction is tested on more than one shape.
+// To rebuild the files after a persona changes:
 //   WRITE_SAMPLE_CVS=1 npx vitest run src/features/profile/server/sample-cvs.test.ts
 
 export const samplePersonaNames = ["sara", "reza", "emma", "daniel"] as const satisfies readonly PersonaName[];
@@ -31,7 +32,7 @@ const layouts: Record<(typeof samplePersonaNames)[number], Layout> = {
 
 /**
  * Emma with the three sections the personas don't have (#227), each with one item as sparse as a CV may give it:
- * no dates, no organisation, no level. The evals build her CV with buildSampleCv("emma", emmaWithMoreSections).
+ * no dates, no organisation, no level. Her CV is sample-data/cvs/emma-more-sections.docx, in Emma's layout.
  */
 export const emmaWithMoreSections: Profile = {
   ...personas.emma.profile,
@@ -58,6 +59,8 @@ export const emmaWithMoreSections: Profile = {
   ],
   languages: [{ name: "English", level: "Native" }, { name: "Spanish", level: "B2" }, { name: "British Sign Language" }],
 };
+
+export const moreSectionsCvFileName = "emma-more-sections.docx";
 
 export function sampleCvFileName(name: PersonaName): string {
   return `${name}.docx`;

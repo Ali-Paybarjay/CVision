@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { personas } from "@/shared/sample-data";
 import { extractDocxText } from "./docx";
-import { buildSampleCv, emmaWithMoreSections, sampleCvFileName, samplePersonaNames } from "./sample-cvs";
+import { buildSampleCv, emmaWithMoreSections, moreSectionsCvFileName, sampleCvFileName, samplePersonaNames } from "./sample-cvs";
 
 // Checks that the Word CVs in sample-data/cvs match the personas.
 // After changing a persona, rebuild them with:
@@ -16,6 +16,7 @@ if (process.env.WRITE_SAMPLE_CVS === "1") {
   for (const name of samplePersonaNames) {
     writeFileSync(join(folder, sampleCvFileName(name)), buildSampleCv(name));
   }
+  writeFileSync(join(folder, moreSectionsCvFileName), buildSampleCv("emma", emmaWithMoreSections));
 }
 
 describe.each(samplePersonaNames)("sample-data/cvs/%s.docx", (name) => {
@@ -44,8 +45,12 @@ describe.each(samplePersonaNames)("sample-data/cvs/%s.docx", (name) => {
   });
 });
 
-describe("a CV built from a profile with volunteering, projects and languages (#227)", () => {
-  const text = extractDocxText(buildSampleCv("emma", emmaWithMoreSections));
+describe(`sample-data/cvs/${moreSectionsCvFileName}: Emma's CV with volunteering, projects and languages (#227)`, () => {
+  const text = extractDocxText(readFileSync(join(folder, moreSectionsCvFileName)));
+
+  it("is up to date with emmaWithMoreSections", () => {
+    expect(text).toBe(extractDocxText(buildSampleCv("emma", emmaWithMoreSections)));
+  });
 
   it("holds each of them, with a level only where the profile has one and the link without https://", () => {
     for (const heading of ["VOLUNTEERING", "PROJECTS", "LANGUAGES"]) expect(text).toContain(heading);
