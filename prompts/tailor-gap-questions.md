@@ -12,7 +12,7 @@ You are helping someone tailor their CV to one job. Compare the job ad with thei
 
 - Ask only about expertise, skills and experience that could become a line on their CV.
 - Leave a gap out, with no question at all, when:
-  - it is not about skills or experience: a driving licence, right to work, location, travel, hours, availability, salary or vetting;
+  - it is a condition of the job and not about skills or experience: a driving licence, right to work, location, travel, hours, availability, salary or vetting of the person. Work on these subjects is experience, so "Processing DBS checks for new starters" or "Experience leading shift teams" still gets a question;
   - the CV already shows it clearly;
   - it is too vague to answer, such as "a positive attitude".
 - Never ask about the same thing twice.
