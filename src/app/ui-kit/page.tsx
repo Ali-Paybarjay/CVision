@@ -22,6 +22,7 @@ export default function UiKitPage() {
           <Button variant="primary">Tailor my CV</Button>
           <Button>Upload a different CV</Button>
           <Button variant="quiet">Skip this question</Button>
+          <Button size="compact">Compact, for the top menu</Button>
         </div>
       </Card>
 

@@ -23,9 +23,19 @@ export const brand = {
   motto: "Paste. Tailor. Apply.",
   /** Proof of competence: the brand is the guide, never the hero. */
   proof: "Every line in your CV traces back to something you told us. Nothing invented.",
+  /**
+   * Each button says what you get. One action has one name everywhere (header, home page, dashboard, CV check).
+   * "Free" stays out of the button labels and lives in the small line under them.
+   */
   cta: {
-    primary: "Get started free",
+    primary: "Tailor my CV to a job",
+    /** Under the primary button: works for people with a CV and for those who fill in their details instead. */
+    primaryNote: "Free account. Add your CV or your details, then paste a job ad.",
+    /** The feature's name, e.g. the CV check page's title. */
     cvCheck: "Free 2-minute CV check",
+    /** The button that leads to the CV check. */
+    cvCheckAction: "Check my CV in 2 minutes",
+    cvCheckNote: "No sign-up. Nothing is saved.",
     cvCheckQuestion: "Is your CV ready for UK employers?",
   },
   /** Our Honest CV Promise: four promises we keep. */

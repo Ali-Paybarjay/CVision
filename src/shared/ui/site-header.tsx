@@ -7,7 +7,7 @@ import { Wordmark } from "./wordmark";
 export function SiteHeader() {
   return (
     <header className="relative border-b border-line bg-surface">
-      <nav aria-label="Main" className="mx-auto flex min-h-16 max-w-6xl items-center gap-8 px-4">
+      <nav aria-label="Main" className="mx-auto flex min-h-16 max-w-6xl items-center gap-4 px-4 lg:gap-8">
         <Link href="/" className="text-xl" aria-label="CVision home">
           <Wordmark />
         </Link>
