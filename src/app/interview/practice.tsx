@@ -208,7 +208,7 @@ function Intro({ signedIn, canSave, onStart }: { signedIn: boolean; canSave: boo
       <h2 className="text-xl">How it works</h2>
       <ul className="list-disc space-y-2 pl-5">
         <li>
-          {defaultComposition.technical} technical questions, written from this job ad and your CV. Getting them ready takes about {startupSeconds} seconds.
+          {defaultComposition.technical} technical questions, written from this job ad and your profile. Getting them ready takes about {startupSeconds} seconds.
         </li>
         <li>
           Type each answer: aim for {answerGuide.minWords} to {answerGuide.maxWords} words, about {answerGuide.suggestedMinutes} minutes. The

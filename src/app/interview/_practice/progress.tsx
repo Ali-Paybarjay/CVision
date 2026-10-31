@@ -10,7 +10,7 @@ import { Button, Card } from "@/shared/ui";
 import { Status } from "./ui";
 
 const startupStages = [
-  { key: "analyse", label: "Reading the role and your CV" },
+  { key: "analyse", label: "Reading the role and your profile" },
   { key: "generate", label: "Writing questions" },
   { key: "review", label: "Checking the questions" },
 ] as const;

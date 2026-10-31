@@ -59,7 +59,7 @@ describe("Preparing your interview", () => {
     expect(html).toContain("Preparing your interview");
     expect(html).toContain("About 90 seconds left");
     expect(html).toContain("Keep this page open.");
-    expect(html).toMatch(/motion-safe:animate-pulse"><span[^>]*>.*Working…<\/span><\/span><span>Reading the role and your CV/);
+    expect(html).toMatch(/motion-safe:animate-pulse"><span[^>]*>.*Working…<\/span><\/span><span>Reading the role and your profile/);
     expect(html).not.toContain("This interview will test");
   });
 
@@ -68,8 +68,8 @@ describe("Preparing your interview", () => {
     const competencies = finished.roleProfile!.competencies;
     const html = render({ ...finished, questions: [], reviewChangelog: undefined }, 20);
 
-    expect(html).toContain("Done</span><span>Reading the role and your CV");
-    expect(html).toContain('role="status" class="sr-only">Done: Reading the role and your CV.</p>');
+    expect(html).toContain("Done</span><span>Reading the role and your profile");
+    expect(html).toContain('role="status" class="sr-only">Done: Reading the role and your profile.</p>');
     expect(html).toContain("This interview will test");
     for (const competency of competencies) expect(html).toContain(`>${competency.name}</li>`);
     const mustHave = competencies.find((c) => c.priority === "must-have")!;
