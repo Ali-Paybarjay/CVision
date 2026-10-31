@@ -178,7 +178,7 @@ export function InterviewPractice({
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
         <Button onClick={restart}>{done ? "Practise again" : "Start again"}</Button>
       </div>
-      <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startedAtMs={envelope.startedAtMs} startupMs={envelope.startupMs} />
+      <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startedAtMs={envelope.startedAtMs} />
       {session && done ? (
         <FeedbackReport session={session} />
       ) : (

@@ -12,7 +12,7 @@ const store = {} as PracticeStore;
 
 function render(session: Parameters<typeof Progress>[0]["session"], seconds: number, jobs: Record<string, JobState> = {}) {
   vi.setSystemTime(startedAtMs + seconds * 1000);
-  return renderToStaticMarkup(<Progress store={store} session={session} jobs={jobs} run={run} startedAtMs={startedAtMs} startupMs={null} />);
+  return renderToStaticMarkup(<Progress store={store} session={session} jobs={jobs} run={run} startedAtMs={startedAtMs} />);
 }
 
 beforeEach(() => {
@@ -85,13 +85,10 @@ describe("Preparing your interview", () => {
     expect(html).not.toContain("seconds left");
   });
 
-  it("is replaced by the start time once the questions are ready", async () => {
+  it("leaves the page to the first question once the questions are ready, with no start time (#243)", async () => {
     const finished = await runMockSession(dataAnalystSara);
     vi.setSystemTime(startedAtMs + 95_000);
-    const html = renderToStaticMarkup(
-      <Progress store={store} session={finished} jobs={{}} run={run} startedAtMs={startedAtMs} startupMs={88_400} />,
-    );
 
-    expect(html).toBe('<p class="text-sm text-text-muted">Questions ready in 88.4 seconds.</p>');
+    expect(renderToStaticMarkup(<Progress store={store} session={finished} jobs={{}} run={run} startedAtMs={startedAtMs} />)).toBe("");
   });
 });

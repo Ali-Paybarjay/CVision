@@ -56,7 +56,6 @@ export function Progress({
   jobs,
   run,
   startedAtMs,
-  startupMs,
 }: {
   store: PracticeStore;
   session: InterviewSession | null;
@@ -64,13 +63,11 @@ export function Progress({
   run: string;
   /** When "Start practice" was pressed. */
   startedAtMs: number;
-  startupMs: number | null;
 }) {
   const done = stagesDone(session);
   const now = useNow(done < startupStages.length);
-  if (done === startupStages.length) {
-    return startupMs === null ? null : <p className="text-sm text-text-muted">Questions ready in {(startupMs / 1000).toFixed(1)} seconds.</p>;
-  }
+  // The first question takes its place. How long the start took is for the lab only (#243).
+  if (done === startupStages.length) return null;
 
   const elapsedMs = Math.max(0, now - startedAtMs);
   const failed = startupStages.some((stage) => jobs[`${run}:${stage.key}`]?.status === "failed");

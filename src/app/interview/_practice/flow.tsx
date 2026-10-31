@@ -260,7 +260,7 @@ function AnswerForm({
       </label>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className={`text-sm ${tone}`} aria-live="polite">
-          {words} {words === 1 ? "word" : "words"} · aim for {answerGuide.minWords} to {answerGuide.maxWords}
+          {words} {words === 1 ? "word" : "words"} · aim for {answerGuide.minWords} to {answerGuide.maxWords} words
         </p>
         <div className="flex flex-wrap gap-2">
           {sample && (
