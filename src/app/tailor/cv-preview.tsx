@@ -21,7 +21,7 @@ function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
-  return <h3 className="mt-6 text-base font-bold">{children}</h3>;
+  return <h3 className="mt-6 text-base font-bold text-accent">{children}</h3>;
 }
 
 /** The tailored CV in the layout of the template, as the download will look, with approved lines on Fit. */

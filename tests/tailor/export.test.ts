@@ -166,3 +166,12 @@ describe("exportDocument", () => {
     expect(track).not.toHaveBeenCalled();
   });
 });
+
+describe("the CV's section headings are the brand's Teal (#216)", () => {
+  it("in the Word file", async () => {
+    const bytes = await blocksToFile([{ kind: "heading", text: "EDUCATION" }, { kind: "text", text: "Body text" }], "docx", { title: "CV", author: "Sara" });
+    const xml = await (await JSZip.loadAsync(bytes)).file("word/document.xml")!.async("string");
+    expect(xml).toMatch(/<w:color w:val="167480"\/>.*EDUCATION/);
+    expect(xml.match(/167480/g)).toHaveLength(1);
+  });
+});
