@@ -413,6 +413,22 @@ describe("profile screens", () => {
     expect(html).toContain("Download my data");
     expect(html).toContain("Delete my profile");
     expect(html).toContain("Paste a job ad");
+    // The personas have no volunteering, projects or languages, so their summary is as it was before #227.
+    expect(html).not.toMatch(/Volunteering|Projects|Languages/);
+  });
+
+  it("counts volunteering, projects and languages in the summary when the profile has them (#227)", () => {
+    const profile = {
+      ...personas.emma.profile,
+      volunteering: [{ role: "Volunteer digital helper", details: [] }],
+      projects: [{ name: "Recipe finder", details: [] }, { name: "Accessible forms talk", details: [] }],
+      languages: [{ name: "English", level: "Native" }, { name: "Spanish" }, { name: "British Sign Language" }],
+    };
+    const html = overview(fromBrowser({ ...stored("emma"), profile }), "browser");
+
+    expect(html).toContain("Volunteering 1 role");
+    expect(html).toContain("Projects 2 projects");
+    expect(html).toContain("Languages 3 languages");
   });
 
   it("says a browser profile is in this browser, with the day consent was given", () => {

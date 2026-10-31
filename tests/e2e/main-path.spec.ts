@@ -45,7 +45,8 @@ test("step 1: upload a CV, check the details and save the Profile", async ({ pag
   await expect(page.getByRole("heading", { level: 2, name: "Sara Khan" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Paste a job ad" })).toHaveAttribute("href", "/jobs");
 
-  // The language was saved with the rest of the profile.
+  // The language was saved with the rest of the profile, and the summary counts it.
+  await expect(page.getByText("1 language", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Check and edit your details" }).click();
   await expect(page.getByLabel("Language", { exact: true })).toHaveValue("Welsh");
   await expect(page.getByLabel("Level (optional)")).toHaveValue("Fluent");
