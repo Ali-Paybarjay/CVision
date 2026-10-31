@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { brand } from "@/shared/brand";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { Button, ButtonLink, Card, Notice } from "@/shared/ui";
@@ -84,14 +85,23 @@ export function DataRightsView({ email, summary, downloadFailed }: { email: stri
           Download my data
         </h2>
         <p className="mt-1 max-w-[65ch] text-text-muted">
-          One ZIP file with everything listed above: your account’s details and records in data.json, and your
-          original CV files. data.json also lists what it leaves out, such as the IP address and browser details kept
-          for each device you sign in on.
+          A copy of everything listed above in one ZIP file, to keep or to take to another service:{" "}
+          {summary.cvFiles > 0 && "your original CV files, "}data.json with your account’s details and records, and a
+          README.txt that says what each file is. data.json also lists what it leaves out, such as the IP address and
+          browser details kept for each device you sign in on.
+        </p>
+        <p className="mt-2 max-w-[65ch] text-sm text-text-muted">
+          Looking for a tailored CV or cover letter as a PDF or Word file? This ZIP does not have those files. Download
+          them on the{" "}
+          <Link href="/tailor" className="font-semibold text-accent hover:underline">
+            Tailor page
+          </Link>{" "}
+          when you finish tailoring for a job.
         </p>
         {/* A plain form post, not a link: a link could be prefetched, and the download is built fresh each time. */}
         <form action={downloadPath} method="post" className="mt-5">
           <Button type="submit" variant="primary">
-            Download my data
+            Download a copy of my data
           </Button>
         </form>
         <BrowserDataDownload />

@@ -84,6 +84,29 @@ describe("the Your data page", () => {
     expect(text(failed)).toContain("We could not prepare your download");
   });
 
+  it("calls the download a copy of the account's data, and says tailored CVs are downloaded on the Tailor page", () => {
+    expect(text(html)).toContain("Download a copy of my data");
+    expect(text(html)).toContain("README.txt that says what each file is");
+    expect(text(html)).toContain("as a PDF or Word file? This ZIP does not have those files. Download them on the Tailor page");
+    expect(html).toContain('href="/tailor"');
+  });
+
+  it("opens what is not deleted straight away in a new tab, and says so to screen readers", () => {
+    const link = html.match(/<a [^>]*href="\/privacy#not-deleted-straight-away"[^>]*>(.*?)<\/a>/);
+    expect(link).not.toBeNull();
+    if (!link) return;
+    expect(link[0]).toContain('target="_blank"');
+    expect(link[0]).toContain('rel="noopener noreferrer"');
+    expect(text(link[1])).toContain("See which, and for how long (opens in a new tab)");
+  });
+
+  it("promises CV files in the ZIP only when there are some", () => {
+    expect(text(html)).toContain("your original CV files");
+    const none = renderToStaticMarkup(<DataRightsView email={null} summary={{ ...summary, cvFiles: 0 }} downloadFailed={false} />);
+    expect(text(none)).not.toContain("your original CV files");
+    expect(text(none)).toContain("another service: data.json with");
+  });
+
   it("says the download lists what it leaves out, and offers no browser data until the browser is read", () => {
     expect(text(html)).toContain("data.json also lists what it leaves out");
     // BrowserDataDownload reads localStorage only in the browser, so the server renders nothing for it.

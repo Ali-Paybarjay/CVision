@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { brand } from "@/shared/brand";
 import { deleteAccount, exportUserData, summariseUserData, totalRows, userTables } from "./data-rights";
 import { fakeAdmin, readZip, type FakeAdminOptions, type FakeData } from "./test-support";
 import { joinChunks } from "./zip";
@@ -15,6 +16,13 @@ const reza = "8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d";
 const now = new Date("2026-10-23T10:00:00Z");
 const bytes = (value: string) => new TextEncoder().encode(value);
 const contractTables = userTables.filter((table) => table !== "events" && table !== "ai_usage");
+const decode = (value: Uint8Array) => new TextDecoder().decode(value);
+/** One file of the export's ZIP, by its name. */
+function zipFile(chunks: Uint8Array[], name: string): string {
+  const file = readZip(joinChunks(chunks)).find((entry) => entry.name === name);
+  if (!file) throw new Error(`no ${name} in the ZIP`);
+  return decode(file.data);
+}
 
 let data: FakeData;
 /** The admin client (secret key), and the user's own client, which row-level security limits to their rows. */
@@ -161,11 +169,17 @@ describe("exportUserData", () => {
     if (!result.ok) throw new Error("export failed");
 
     const files = readZip(joinChunks(result.chunks));
-    expect(files.map((file) => file.name)).toEqual(["data.json", "cv-files/cv-2026.docx", "cv-files/cv.pdf", "cv-files/old/first-cv.pdf"]);
-    expect(new TextDecoder().decode(files[2].data)).toBe("%PDF sara");
-    expect(new TextDecoder().decode(files[3].data)).toBe("%PDF old");
+    expect(files.map((file) => file.name)).toEqual([
+      "README.txt",
+      "data.json",
+      "cv-files/cv-2026.docx",
+      "cv-files/cv.pdf",
+      "cv-files/old/first-cv.pdf",
+    ]);
+    expect(zipFile(result.chunks, "cv-files/cv.pdf")).toBe("%PDF sara");
+    expect(zipFile(result.chunks, "cv-files/old/first-cv.pdf")).toBe("%PDF old");
 
-    const json = JSON.parse(new TextDecoder().decode(files[0].data));
+    const json = JSON.parse(zipFile(result.chunks, "data.json"));
     expect(json.exportedAt).toBe("2026-10-23T10:00:00.000Z");
     expect(Object.keys(json.tables)).toEqual([...userTables]);
     for (const table of userTables) {
@@ -187,7 +201,7 @@ describe("exportUserData", () => {
     const result = await exportUserData(user, now);
     if (!result.ok) throw new Error("export failed");
 
-    const json = JSON.parse(new TextDecoder().decode(readZip(joinChunks(result.chunks))[0].data));
+    const json = JSON.parse(zipFile(result.chunks, "data.json"));
     expect(json.account).toEqual({
       id: sara,
       email: "sara@example.com",
@@ -205,6 +219,33 @@ describe("exportUserData", () => {
     expect(json.notIncluded.join(" ")).toContain("IP address and browser details");
     expect(json.notIncluded.join(" ")).toContain("saved only in a browser");
     expect(new TextDecoder().decode(joinChunks(result.chunks))).not.toContain("token-must-not-leak");
+  });
+
+  it("says in README.txt what each file is, where tailored CVs are, and what the ZIP leaves out", async () => {
+    const result = await exportUserData(user, now);
+    if (!result.ok) throw new Error("export failed");
+
+    const readme = zipFile(result.chunks, "README.txt");
+    expect(readme).toContain("Downloaded on 23 October 2026 at 11:00, UK time.");
+    for (const name of ["README.txt", "data.json", "cv-files"]) expect(readme).toContain(`- ${name}: `);
+    expect(readme).toContain("take your data to another service");
+    expect(readme).toContain("only when you download them, so there are none here. Download them on the Tailor page");
+    const json = JSON.parse(zipFile(result.chunks, "data.json"));
+    for (const item of json.notIncluded) expect(readme).toContain(`- ${item}`);
+    // Windows line endings, so Notepad shows the lines.
+    expect(readme.split("\r\n").length).toBeGreaterThan(10);
+    expect(readme.replaceAll("\r\n", "")).not.toContain("\n");
+    expect(readme).not.toContain("sara@example.com");
+    for (const phrase of brand.bannedPhrases) expect(readme.toLowerCase()).not.toContain(phrase.toLowerCase());
+  });
+
+  it("leaves cv-files out of README.txt when there are no CV files", async () => {
+    data.files = new Map([...data.files].filter(([path]) => !path.startsWith(sara)));
+    const result = await exportUserData(user, now);
+    if (!result.ok) throw new Error("export failed");
+
+    expect(readZip(joinChunks(result.chunks)).map((file) => file.name)).toEqual(["README.txt", "data.json"]);
+    expect(zipFile(result.chunks, "README.txt")).not.toContain("cv-files");
   });
 
   it("reads the user's own tables as the user, and only events and ai_usage as admin", async () => {
@@ -238,7 +279,7 @@ describe("exportUserData", () => {
     const result = await exportUserData(user, now);
     if (!result.ok) throw new Error("export failed");
 
-    const json = JSON.parse(new TextDecoder().decode(readZip(joinChunks(result.chunks))[0].data));
+    const json = JSON.parse(zipFile(result.chunks, "data.json"));
     expect(json.tables.ai_usage).toHaveLength(2502);
   });
 
