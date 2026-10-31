@@ -19,6 +19,16 @@ export const coverLetterCases = (Object.keys(personas) as PersonaName[]).map((na
   return { name, input, gaps: match.gaps };
 });
 
+/** A person who said no to one Essential requirement of the ad: the letter must not name or claim it (#251). */
+export const declinedCase = (() => {
+  const { profile, jobs, match } = personas.daniel;
+  const gap = { ...match.gaps[0], id: "daniel-gap-kpi", requirement: "KPI reporting to senior leadership", importance: "essential" as const, kind: "missing" as const };
+  const answers = [{ gapId: gap.id, question: "Did you report KPIs to senior leadership?", answer: "I haven't done this.", hasExperience: false }];
+  const job = { ...jobs[0], requirements: { ...jobs[0].requirements, essential: [...jobs[0].requirements.essential, gap.requirement] } };
+  const input: CoverLetterInput = { profile, job, answers, changes: [], declined: [gap.requirement] };
+  return { input, gaps: [gap], claims: /\b(kpis?|key performance|senior (leaders|leadership))\b/i };
+})();
+
 /** Template phrases that do not sound like anyone in particular. */
 export const templatePhrases = [
   "i am writing to express",

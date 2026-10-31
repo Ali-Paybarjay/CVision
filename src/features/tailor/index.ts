@@ -8,6 +8,7 @@ export { findBrandProblems, type BrandProblem } from "./brand-check";
 export {
   CoverLetterSchema,
   coverLetterText,
+  declinedRequirements,
   inventedTerms,
   sampleCoverLetter,
   writeCoverLetter,
