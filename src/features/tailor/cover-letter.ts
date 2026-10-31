@@ -20,6 +20,10 @@ export type CoverLetterInput = {
   /** Only approved changes are used; anything else is ignored. */
   changes: TailoringChange[];
   answers: GapAnswer[];
+  /** The requirements of gaps the user said no to, which the letter must not name, not even as what the employer wants. */
+  declined?: string[];
+  /** What the last draft named from `declined`, when this is a second attempt. */
+  namedInLastDraft?: string[];
   /** Whose daily limit the request counts against: { userId } for a signed-in user. */
   requester?: Requester;
 };
@@ -93,6 +97,14 @@ export function inventedTerms(letter: string, gaps: Gap[], answers: GapAnswer[],
     .filter((term) => text.includes(term) && !cv.includes(term));
 }
 
+/** The requirements of the gaps the user said no to and that their CV does not show, for the letter to leave out. */
+export function declinedRequirements(gaps: Gap[], answers: GapAnswer[], profile: Profile): string[] {
+  return gaps
+    .filter((gap) => answers.some((answer) => answer.gapId === gap.id && !answer.hasExperience))
+    .filter((gap) => inventedTerms(gap.requirement, gaps, answers, profile).length > 0)
+    .map((gap) => gap.requirement);
+}
+
 export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLetter> {
   const { profile, job, changes, answers } = input;
   const prompt = await loadPrompt("tailor-cover-letter", {
@@ -116,6 +128,7 @@ export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLe
       2,
     ),
     answers: JSON.stringify(answers, null, 2),
+    declined: JSON.stringify({ requirements: input.declined ?? [], namedInLastDraft: input.namedInLastDraft ?? [] }, null, 2),
   });
 
   return askModel({

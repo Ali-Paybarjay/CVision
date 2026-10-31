@@ -2,9 +2,16 @@
 import { describe, expect, it } from "vitest";
 import { coverLetterText, findBrandProblems, inventedTerms, writeCoverLetter } from "@/features/tailor";
 import { getAiProvider } from "@/shared/ai";
-import { coverLetterCases, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
+import { coverLetterCases, declinedCase, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
 
 describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
+  it("a requirement the user said no to is neither named nor claimed in other words (#251)", async () => {
+    const { input, gaps, claims } = declinedCase;
+    const text = coverLetterText(await writeCoverLetter(input), input.profile.fullName);
+    expect(inventedTerms(text, gaps, input.answers, input.profile)).toEqual([]);
+    expect(text).not.toMatch(claims);
+  });
+
   describe.each(coverLetterCases)("$name", ({ input, gaps }) => {
     let text = "";
 
