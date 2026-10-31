@@ -3,11 +3,12 @@
 // Interview practice for one job. The session lives in this browser (so a reload resumes it) and, for a
 // signed-in user on a saved job, in their account too: every change is saved, in order, a moment after it happens.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { answerGuide, defaultComposition } from "@/features/interview/config";
+import { answerGuide, defaultComposition, startupSeconds } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
 import { nextStep, openingView } from "@/features/interview/engine/session";
 import type { LastReport } from "@/features/interview/server/session-store";
-import { drive, InterviewFlow, Progress, runOf, type SampleAnswers } from "./_practice/flow";
+import { drive, InterviewFlow, runOf, type SampleAnswers } from "./_practice/flow";
+import { Progress } from "./_practice/progress";
 import { FeedbackReport } from "./_practice/report";
 import { createPracticeStore, parseEnvelope, type PracticeStore } from "./_practice/store";
 import { Button, Card } from "@/shared/ui";
@@ -177,7 +178,7 @@ export function InterviewPractice({
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
         <Button onClick={restart}>{done ? "Practise again" : "Start again"}</Button>
       </div>
-      <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
+      <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startedAtMs={envelope.startedAtMs} />
       {session && done ? (
         <FeedbackReport session={session} />
       ) : (
@@ -206,7 +207,9 @@ function Intro({ signedIn, canSave, onStart }: { signedIn: boolean; canSave: boo
     <Card className="space-y-4">
       <h2 className="text-xl">How it works</h2>
       <ul className="list-disc space-y-2 pl-5">
-        <li>{defaultComposition.technical} technical questions, written from this job ad and your CV.</li>
+        <li>
+          {defaultComposition.technical} technical questions, written from this job ad and your CV. Getting them ready takes about {startupSeconds} seconds.
+        </li>
         <li>
           Type each answer: aim for {answerGuide.minWords} to {answerGuide.maxWords} words, about {answerGuide.suggestedMinutes} minutes. The
           interviewer may ask one follow-up.

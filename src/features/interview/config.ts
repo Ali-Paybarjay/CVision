@@ -70,6 +70,12 @@ export const levelDescriptions: Record<LevelBand, string> = {
 /** Typed answers: the guide shown next to the word count, and stored on every question. */
 export const answerGuide = { minWords: 150, maxWords: 300, suggestedMinutes: 4 };
 
+/**
+ * The usual wait from "Start practice" to the first question, in seconds: 89.3 in the eval of 30 Oct 2026 (run
+ * 41052056548). The intro and "Preparing your interview" (#232) say it. Lower it when #100 makes the start faster.
+ */
+export const startupSeconds = 90;
+
 export const limits = {
   /** Longest job ad, CV and single answer the lab API accepts, in characters, so one request cannot run up a large bill. */
   jobDescriptionMaxChars: 15_000,
