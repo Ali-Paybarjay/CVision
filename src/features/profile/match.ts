@@ -7,7 +7,18 @@ import { formatPeriod } from "./ui/format";
 // then copies that line word for word as the evidence, so a strength can only ever quote what the user wrote
 // (Nothing invented). The score is worked out in code, so the same answers always give the same score.
 
-export type EvidenceKind = "summary" | "skill" | "role" | "duty" | "achievement" | "education" | "certification" | "answer";
+export type EvidenceKind =
+  | "summary"
+  | "skill"
+  | "role"
+  | "duty"
+  | "achievement"
+  | "volunteering"
+  | "education"
+  | "project"
+  | "certification"
+  | "language"
+  | "answer";
 
 /** One line of the profile that can show a requirement is met, numbered L1, L2… for the model to point at. */
 export type EvidenceLine = { id: string; kind: EvidenceKind; text: string; context?: string };
@@ -23,12 +34,26 @@ export function profileEvidenceLines(profile: Profile): EvidenceLine[] {
     for (const duty of job.duties) lines.push({ kind: "duty", text: duty, context: role });
     for (const achievement of job.achievements) lines.push({ kind: "achievement", text: achievement, context: role });
   }
+  // Volunteering, projects and languages (#227): before them, a spoken language read from a CV was a skill.
+  for (const unpaid of profile.volunteering ?? []) {
+    const role = unpaid.organisation ? `${unpaid.role} at ${unpaid.organisation}` : unpaid.role;
+    lines.push({ kind: "volunteering", text: role, context: formatPeriod(unpaid.startDate, unpaid.endDate) || undefined });
+    for (const detail of unpaid.details) lines.push({ kind: "volunteering", text: detail, context: role });
+  }
   for (const course of profile.education) {
     const award = course.subject ? `${course.qualification} in ${course.subject}` : course.qualification;
     lines.push({ kind: "education", text: [award, course.institution, course.grade].filter(Boolean).join(", ") });
   }
+  for (const project of profile.projects ?? []) {
+    const name = [project.name, project.organisation].filter(Boolean).join(", ");
+    lines.push({ kind: "project", text: name, context: formatPeriod(project.startDate, project.endDate) || undefined });
+    for (const detail of project.details) lines.push({ kind: "project", text: detail, context: name });
+  }
   for (const certificate of profile.certifications) {
     lines.push({ kind: "certification", text: [certificate.name, certificate.issuer, certificate.year].filter(Boolean).join(", ") });
+  }
+  for (const language of profile.languages ?? []) {
+    lines.push({ kind: "language", text: language.level ? `${language.name} (${language.level})` : language.name });
   }
   for (const answer of profile.followUpAnswers) lines.push({ kind: "answer", text: answer.answer, context: answer.question });
 
@@ -206,7 +231,19 @@ const FILLER = new Set(
 );
 
 /** Lines that show a skill in use come first, so they are picked as evidence before a bare skills-list entry. */
-const evidenceOrder: EvidenceKind[] = ["achievement", "duty", "answer", "role", "summary", "certification", "education", "skill"];
+const evidenceOrder: EvidenceKind[] = [
+  "achievement",
+  "duty",
+  "project",
+  "volunteering",
+  "answer",
+  "role",
+  "summary",
+  "certification",
+  "education",
+  "language",
+  "skill",
+];
 
 /** Judges each requirement by looking for its words in the profile: the mock answer for profile-match. */
 export function assessByRules(profile: Profile, job: Job): MatchAssessment {

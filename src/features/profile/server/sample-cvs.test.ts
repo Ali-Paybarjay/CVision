@@ -61,4 +61,13 @@ describe("a CV built from a profile with volunteering, projects and languages (#
     expect(text).not.toContain("https://example.com");
     expect(text).toContain("English (Native), Spanish (B2), British Sign Language");
   });
+
+  it("writes Present only for something still going, never for an end date the profile doesn't give", () => {
+    const startOnly = { ...emmaWithMoreSections, projects: [{ name: "Recipe finder", startDate: "2024-10", details: [] }] };
+    const startOnlyText = extractDocxText(buildSampleCv("emma", startOnly));
+
+    expect(startOnlyText).toContain("Oct 2024");
+    expect(startOnlyText).not.toContain("Oct 2024 – Present");
+    expect(startOnlyText).toContain("Sep 2022 – Present");
+  });
 });

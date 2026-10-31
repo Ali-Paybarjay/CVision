@@ -137,7 +137,10 @@ export function tidyExtraction(extraction: CvExtraction): CvExtraction {
         details: uniqueLines(project.details),
         url: optional(project.url),
       }))
-      .filter((project) => project.name !== "" || project.organisation !== undefined || project.details.length > 0),
+      .filter(
+        (project) =>
+          project.name !== "" || project.organisation !== undefined || project.details.length > 0 || project.url !== undefined,
+      ),
     volunteering: extraction.volunteering
       .map((role) => ({
         role: text(role.role),
@@ -148,8 +151,17 @@ export function tidyExtraction(extraction: CvExtraction): CvExtraction {
         current: role.current,
         details: uniqueLines(role.details),
       }))
-      .filter((role) => role.role !== "" || role.organisation !== undefined || role.details.length > 0),
+      .filter((role) => role.role !== "" || role.organisation !== undefined || role.details.length > 0)
+      // A role the CV lists among its jobs stays a job (prompts/profile-extract.md), so a copy of it here goes.
+      .filter(
+        (role) => !extraction.experience.some((job) => sameText(job.title, role.role) && sameText(job.company, role.organisation ?? "")),
+      ),
   };
+}
+
+/** The same words, ignoring case and the spaces around them. */
+function sameText(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 /** A profile written the way the model answers: the mock answer for a sample CV. */

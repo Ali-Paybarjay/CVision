@@ -73,6 +73,7 @@ describe("tidyExtraction (#33)", () => {
       projects: [
         { name: " Late buses dashboard ", startDate: "2025-01", endDate: "2025-05", current: true, details: ["Built it", "built it", " "], url: " " },
         { name: " ", ...noDates, details: [" "] },
+        { name: "", ...noDates, details: [], url: "https://example.com/sara/late-buses" },
       ],
       volunteering: [
         { role: "", organisation: "Ancoats Reading Club", ...noDates, details: [] },
@@ -82,8 +83,24 @@ describe("tidyExtraction (#33)", () => {
 
     expect(tidy.projects).toEqual([
       { name: "Late buses dashboard", startDate: "2025-01", endDate: "", current: true, details: ["Built it"], url: undefined },
+      { name: "", ...noDates, details: [], url: "https://example.com/sara/late-buses" },
     ]);
     expect(tidy.volunteering).toEqual([{ role: "", organisation: "Ancoats Reading Club", ...noDates, details: [] }]);
+  });
+
+  it("keeps a role the CV lists among its jobs as a job only, never in both lists", () => {
+    const job = { ...base.experience[0], title: "Volunteer maths tutor", company: "Ancoats Reading Club" };
+    const tidy = tidyExtraction({
+      ...base,
+      experience: [job],
+      volunteering: [
+        { role: " volunteer maths tutor ", organisation: "ANCOATS READING CLUB", startDate: "", endDate: "", current: false, details: [] },
+        { role: "Charity shop assistant", startDate: "", endDate: "", current: false, details: [] },
+      ],
+    });
+
+    expect(tidy.experience.map((item) => item.title)).toEqual(["Volunteer maths tutor"]);
+    expect(tidy.volunteering.map((role) => role.role)).toEqual(["Charity shop assistant"]);
   });
 
   it("never needs a guess from the model: every sample profile fits the loose format", () => {

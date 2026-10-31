@@ -109,9 +109,12 @@ function buildCvDocx(profile: Profile, layout: Layout): Uint8Array {
     }
   }
 
-  // Optional dates, as a course, a project or volunteering may have them.
-  const period = (start: string | undefined, end: string | null | undefined) =>
-    start ? `${month(start, layout)} – ${end ? month(end, layout) : "Present"}` : end ? `Completed ${month(end, layout)}` : "";
+  // Optional dates, as a course, a project or volunteering may have them: an end of null is still going, a missing one unknown.
+  const period = (start: string | undefined, end: string | null | undefined) => {
+    if (!start) return end ? `Completed ${month(end, layout)}` : "";
+    if (end === undefined) return month(start, layout);
+    return `${month(start, layout)} – ${end ? month(end, layout) : "Present"}`;
+  };
 
   // The personas have no volunteering, projects or languages, so their CVs stay as they were (#227).
   if (profile.volunteering?.length) {
