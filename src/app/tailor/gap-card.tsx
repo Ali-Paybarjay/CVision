@@ -42,12 +42,11 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
     startTransition(async () => {
       try {
         const earlier = earlierAnswers.map(({ gapId, answer, hasExperience }) => ({ gapId, answer, hasExperience }));
-        const hasExperience = chosen !== null;
         // Words the user wrote are the answer itself, so they are not sent twice.
-        const extra = chosen === detail.trim() ? "" : detail;
-        const result = await answerGap({ jobId, gapId: gap.id, answer: extra, hasExperience, chosen: chosen ?? undefined, earlierAnswers: earlier });
+        const typed = chosen === detail.trim();
+        const result = await answerGap({ jobId, gapId: gap.id, answer: typed ? "" : detail, hasExperience: chosen !== null, chosen: chosen ?? undefined, typed, earlierAnswers: earlier });
         if (!result.ok) return setState({ phase: "error", message: result.message });
-        onAnswered({ gapId: gap.id, question: prompt.question, answer: result.answer, hasExperience }, result.changes, result.nextSteps, result.hint);
+        onAnswered({ gapId: gap.id, question: prompt.question, answer: result.answer, hasExperience: result.hasExperience }, result.changes, result.nextSteps, result.hint);
       } catch {
         setState({ phase: "error", message: unreachableMessage });
       }
