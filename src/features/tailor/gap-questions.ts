@@ -2,9 +2,31 @@ import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
-/** Things that are not skills or experience. No CV line can come from them, so they are never asked about. */
-const notAboutSkills =
-  /driv(ing|er'?s?) licen[cs]e|full (uk )?licen[cs]e|own (car|vehicle|transport)|right to work|visa|sponsorship|security clearance|\bdbs\b|\bbpss\b|relocat|willing(ness)? to travel|shifts?\b|weekends?\b|availab|notice period|salary|nationality|based in\b|commut/i;
+/**
+ * Conditions of the job, not skills or experience. No CV line can come from them, so they are never asked about.
+ * Only whole phrases: "Experience leading shift teams" or "Processing DBS checks" are real experience to ask about.
+ * Anything less clear-cut is left to prompts/tailor-gap-questions.md, because the model sees the whole ad.
+ */
+const notAboutSkills = new RegExp(
+  [
+    "driv(ing|er'?s?) licen[cs]e",
+    "full (uk )?licen[cs]e",
+    "own (car|vehicle|transport)",
+    "^right to work$",
+    "right to work in\\b",
+    "visa sponsorship",
+    "willing(ness)? to (travel|relocate)",
+    "^(enhanced |basic |standard )?(dbs|bpss)( checks?| clearance)?( required)?$",
+    "^(current |active |valid )?security clearance",
+    "^available (to work|for)\\b",
+    "^(weekend|night|evening)s?\\b.*\\b(work|cover|shifts?)\\b",
+    "notice period",
+    "^nationality\\b",
+    "^based in\\b",
+    "able to commute",
+  ].join("|"),
+  "i",
+);
 
 /** The gaps worth a question: what the job asks the person to know or have done. */
 export function skillGaps(gaps: Gap[]): Gap[] {
