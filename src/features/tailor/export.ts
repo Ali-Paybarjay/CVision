@@ -2,7 +2,7 @@
 // The layout of docs/tailor-templates, with plain headings and real text, so applicant tracking systems read the file as the user does.
 // The Fit highlight is for the preview only and never reaches the file.
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TabStopType, TextRun } from "docx";
-import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { brand } from "@/shared/brand";
 import type { LetterHead } from "./letter-state";
 import { cvHeadings, type CvLine, type TailoredCv } from "./tailored-cv";
@@ -100,6 +100,9 @@ type Meta = { title: string; author: string };
 export async function blocksToFile(blocks: Block[], format: ExportFormat, meta: Meta): Promise<Uint8Array> {
   return format === "pdf" ? blocksToPdf(blocks, meta) : blocksToDocx(blocks, meta);
 }
+
+/** The brand's Teal for CV section headings (5.5:1 on white). Decoration only: the heading reads the same without it. */
+const teal = { hex: "167480", rgb: rgb(0x16 / 255, 0x74 / 255, 0x80 / 255) };
 
 // ---- PDF -----------------------------------------------------------------
 
@@ -237,7 +240,7 @@ async function blocksToPdf(blocks: Block[], meta: Meta): Promise<Uint8Array> {
         current.drawText(label, { x, y, size: style.size, font: bold });
         current.drawText(line.slice(label.length), { x: x + bold.widthOfTextAtSize(label, style.size), y, size: style.size, font });
       } else {
-        current.drawText(line, { x, y, size: style.size, font });
+        current.drawText(line, { x, y, size: style.size, font, color: block.kind === "heading" ? teal.rgb : undefined });
       }
       y -= leading - style.size;
     });
@@ -272,7 +275,7 @@ function blockToParagraph(block: Block): Paragraph {
       });
     }
     case "heading":
-      return new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 280, after: 80 }, children: [new TextRun({ text: block.text, bold: true, size: 24 })] });
+      return new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 280, after: 80 }, children: [new TextRun({ text: block.text, bold: true, size: 24, color: teal.hex })] });
     case "subheading":
       return new Paragraph({ spacing: { before: 120, after: 40 }, children: [new TextRun({ text: block.text, italics: true })] });
     case "organisation":
