@@ -13,15 +13,17 @@ const card = (prompt: GapPrompt) =>
   );
 
 describe("the gap card", () => {
-  it("shows the options to tap, with a plain no", () => {
+  it("shows the options to choose, with a plain no", () => {
     const html = card({ gap, question: "Have you used Power BI?", options: ["I built Power BI dashboards at work."] });
     expect(html).toContain("I built Power BI dashboards at work.");
     expect(html).toContain("No, I have not done this");
-    expect(html).not.toContain("Yes, at work");
+    expect(html).toContain("Save answer");
   });
 
-  it("falls back to yes or no when the question has no options", () => {
-    expect(card({ gap, question: "Have you done this?" })).toContain("Yes, at work");
+  it("asks for the answer in the user's own words when the question has no options", () => {
+    const html = card({ gap, question: "Have you done this?" });
+    expect(html).toContain("Your answer…");
+    expect(html).not.toContain("Or choose the one that fits");
   });
 });
 

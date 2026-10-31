@@ -12,6 +12,8 @@ type DownloadBarProps = {
   jobId: string;
   changes: TailoringChange[];
   letter: LetterState | null;
+  /** Opens the cover letter step, for a letter that is not approved yet. */
+  onGoToLetter: () => void;
 };
 
 function save(base64: string, mimeType: string, fileName: string) {
@@ -22,11 +24,8 @@ function save(base64: string, mimeType: string, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/**
- * Stays at the top of the Tailor page, so the downloads are always in sight: the tailored CV and the approved cover
- * letter as PDF or Word, which match the preview without the highlight.
- */
-export function DownloadBar({ jobId, changes, letter }: DownloadBarProps) {
+/** The downloads: the tailored CV and the approved cover letter as PDF or Word, which match the preview without the highlight. */
+export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBarProps) {
   const [pending, startTransition] = useTransition();
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +57,10 @@ export function DownloadBar({ jobId, changes, letter }: DownloadBarProps) {
     working === `${kind}-${format}` ? "Making your file…" : text;
 
   return (
-    <section aria-label="Download" className="sticky top-0 z-10 flex flex-col gap-2 rounded-md border border-line bg-surface p-3">
+    <section aria-labelledby="download-heading" className="flex flex-col gap-3">
+      <h4 id="download-heading" className="font-semibold">
+        Download
+      </h4>
       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
         <Button onClick={() => download("cv", "pdf")} disabled={pending} className="px-2 sm:px-5">
           {label("cv", "pdf", "Download CV (PDF)")}
@@ -76,9 +78,9 @@ export function DownloadBar({ jobId, changes, letter }: DownloadBarProps) {
             </Button>
           </>
         ) : (
-          <a href="#letter-heading" className="col-span-2 text-center text-sm text-accent underline underline-offset-4 sm:text-left">
+          <Button variant="quiet" onClick={onGoToLetter} className="col-span-2 underline sm:px-0">
             Approve your cover letter to download it
-          </a>
+          </Button>
         )}
       </div>
       {waiting > 0 && (

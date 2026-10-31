@@ -6,7 +6,7 @@ import { findBrandProblems } from "@/features/tailor/brand-check";
 import { letterBasis, letterHead, type LetterHead, type LetterState } from "@/features/tailor/letter-state";
 import type { GapAnswer } from "@/features/tailor/types";
 import type { Profile, TailoringChange } from "@/shared/contracts";
-import { Button, Card, CvPaper, Field, Notice, Textarea } from "@/shared/ui";
+import { Button, CvPaper, Field, Notice, Textarea } from "@/shared/ui";
 import { unreachableMessage } from "./messages";
 
 export type { LetterState };
@@ -54,16 +54,11 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
     });
 
   return (
-    <Card as="section" aria-labelledby="letter-heading" className="flex flex-col gap-4">
-      <div>
-        <h2 id="letter-heading" className="scroll-mt-32 text-xl">
-          Cover letter
-        </h2>
-        <p className="mt-1 text-sm text-text-muted">
-          Written only from your CV, the {approvedCount} {approvedCount === 1 ? "change" : "changes"} you approved and your own answers.
-          Read it, change anything, then approve it.
-        </p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-text-muted">
+        Written only from your CV, the {approvedCount} {approvedCount === 1 ? "change" : "changes"} you approved and your own answers.
+        Read it, change anything, then approve it.
+      </p>
 
       {letter?.error && <Notice tone="error">{letter.error}</Notice>}
       {letter?.stale && (
@@ -131,6 +126,6 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
           </>
         )}
       </div>
-    </Card>
+    </div>
   );
 }

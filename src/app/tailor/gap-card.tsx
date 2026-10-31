@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { answerGap } from "@/features/tailor/actions";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
-import { Button, Card, Field, Input, Notice } from "@/shared/ui";
+import { Button, Notice, Textarea } from "@/shared/ui";
 import { ChangeCard } from "./change-card";
 import { unreachableMessage } from "./messages";
 
@@ -28,23 +28,24 @@ type GapCardProps = {
 };
 
 /**
- * One thing the job asks for that the CV does not show, answered with one tap: one of the things the user may have
- * done (or yes at work, yes in study or on their own, when the question has none), or no. The detail is optional.
+ * One thing the job asks for that the CV does not show, answered in the user's own words, with one of the things they
+ * may have done when the question offers any, or with a plain no.
  */
 export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide }: GapCardProps) {
   const [detail, setDetail] = useState("");
   const [pending, startTransition] = useTransition();
+  const errorId = useId();
   const { gap, options = [] } = prompt;
 
-  const submit = (where: "work" | "study" | null, chosen?: string) => {
+  const submit = (chosen: string | null) => {
     setState({ phase: "working" });
     startTransition(async () => {
       try {
         const earlier = earlierAnswers.map(({ gapId, answer, hasExperience }) => ({ gapId, answer, hasExperience }));
-        const hasExperience = where !== null || chosen !== undefined;
-        // Words the user wrote instead of an option are the answer itself, so they are not sent twice.
+        const hasExperience = chosen !== null;
+        // Words the user wrote are the answer itself, so they are not sent twice.
         const extra = chosen === detail.trim() ? "" : detail;
-        const result = await answerGap({ jobId, gapId: gap.id, answer: extra, hasExperience, where: where ?? undefined, chosen, earlierAnswers: earlier });
+        const result = await answerGap({ jobId, gapId: gap.id, answer: extra, hasExperience, chosen: chosen ?? undefined, earlierAnswers: earlier });
         if (!result.ok) return setState({ phase: "error", message: result.message });
         onAnswered({ gapId: gap.id, question: prompt.question, answer: result.answer, hasExperience }, result.changes, result.nextSteps, result.hint);
       } catch {
@@ -54,56 +55,54 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
   };
 
   return (
-    <Card as="article" className="flex flex-col gap-4">
+    <article className="flex flex-col gap-4">
       <div>
-        <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
+        <p className="text-lg">{prompt.question}</p>
+        <p className="mt-1 text-sm text-text-muted">
           {gap.importance === "essential" ? "Essential" : "Desirable"} · {gap.requirement}
         </p>
-        <p className="mt-2 font-semibold">{prompt.question}</p>
       </div>
 
       {state.phase !== "answered" && (
-        <>
-          <div className={options.length > 0 ? "flex flex-col items-stretch gap-3" : "flex flex-wrap gap-3"} role="group" aria-label="Your answer">
-            {options.map((option) => (
-              <Button key={option} onClick={() => submit(null, option)} disabled={pending} className="h-auto py-2 text-left">
-                {option}
-              </Button>
-            ))}
-            {options.length === 0 && (
-              <>
-                <Button onClick={() => submit("work")} disabled={pending}>
-                  Yes, at work
-                </Button>
-                <Button onClick={() => submit("study")} disabled={pending}>
-                  Yes, in study or on my own
-                </Button>
-              </>
-            )}
-            <Button variant="quiet" onClick={() => submit(null)} disabled={pending}>
-              {options.length > 0 ? "No, I have not done this" : "No"}
-            </Button>
-          </div>
-          <Field
-            label={options.length > 0 ? "Add a detail, or say it in your own words (optional)" : "Add a detail if you like (optional)"}
-            hint="For example where, or a number. You can leave this empty."
-            error={state.phase === "error" ? state.message : undefined}
-          >
-            {(props) => <Input {...props} value={detail} onChange={(event) => setDetail(event.target.value)} maxLength={300} />}
-          </Field>
-          {options.length > 0 && detail.trim() && (
-            <div>
-              <Button onClick={() => submit(null, detail.trim())} disabled={pending}>
-                Use my own words
-              </Button>
-            </div>
-          )}
-          {pending && (
-            <p className="text-sm text-text-muted" aria-live="polite">
-              Writing a suggestion…
+        <div className="flex flex-col gap-3">
+          <Textarea
+            aria-label="Your answer"
+            aria-describedby={state.phase === "error" ? errorId : undefined}
+            placeholder="Your answer…"
+            className="min-h-24"
+            value={detail}
+            onChange={(event) => setDetail(event.target.value)}
+            maxLength={300}
+          />
+          {state.phase === "error" && (
+            <p id={errorId} className="text-sm text-error">
+              {state.message}
             </p>
           )}
-        </>
+          <button
+            type="button"
+            onClick={() => submit(detail.trim())}
+            disabled={pending || detail.trim() === ""}
+            className="min-h-11 w-full rounded-full bg-emphasis px-5 text-sm font-semibold text-on-emphasis transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending ? "Writing a suggestion…" : "Save answer"}
+          </button>
+          {options.length > 0 && (
+            <div className="flex flex-col gap-2" role="group" aria-label="Or choose an answer">
+              <p className="text-sm text-text-muted">Or choose the one that fits:</p>
+              {options.map((option) => (
+                <Button key={option} onClick={() => submit(option)} disabled={pending} className="h-auto py-2 text-left">
+                  {option}
+                </Button>
+              ))}
+            </div>
+          )}
+          <div>
+            <Button variant="quiet" onClick={() => submit(null)} disabled={pending} className="px-0">
+              No, I have not done this
+            </Button>
+          </div>
+        </div>
       )}
 
       {changes.map((change) => (
@@ -126,6 +125,6 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
           </div>
         </>
       )}
-    </Card>
+    </article>
   );
 }

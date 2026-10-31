@@ -48,9 +48,9 @@ export function CvSuggestions({ jobId, changes, loaded, onSuggested, onDecide }:
   return (
     <section className="flex flex-col gap-4" aria-labelledby="cv-suggestions-heading">
       <div>
-        <h2 id="cv-suggestions-heading" className="text-xl">
+        <h4 id="cv-suggestions-heading" className="font-semibold">
           Suggestions from your CV
-        </h2>
+        </h4>
         <p className="mt-1 text-sm text-text-muted">Lines from your own CV, written for this job. Approve the ones you like.</p>
       </div>
       {state === "waiting" && (
@@ -68,7 +68,7 @@ export function CvSuggestions({ jobId, changes, loaded, onSuggested, onDecide }:
       )}
       {state === "done" && changes.length === 0 && (
         <Notice tone="success" title="Your CV lines already fit this job">
-          There is nothing to rewrite. Check the questions below to add what the job asks for.
+          There is nothing to rewrite. Check the questions in step 2 to add what the job asks for.
         </Notice>
       )}
       {changes.map((change) => (

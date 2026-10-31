@@ -60,7 +60,7 @@ test("step 2: paste a job ad, see the match and go on to tailoring", async ({ pa
 
 test("step 3, for now: approve a suggested change on the sample job", async ({ page }) => {
   // Until Jobs hands over a real job, /tailor works on Sara's sample jobs (Nazanin, #49): it asks which job,
-  // suggests changes from the CV straight away, then asks a one-tap question per gap (#191).
+  // suggests changes from the CV straight away, then asks a question per gap (#191).
   await page.goto("/tailor");
   await expect(page.getByRole("heading", { name: "Which job is this CV for?" })).toBeVisible();
   await page.getByRole("link", { name: "Junior Data Analyst at Pennine Health Analytics" }).click();
@@ -69,6 +69,7 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(page.getByText("Sample data · mock mode")).toBeVisible();
 
   // Suggestions from the CV come without any question, and wait for the user: nothing goes in until they approve.
+  await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
   const fromCv = page.getByRole("region", { name: "Suggestions from your CV" });
   const tailoredLines = page.getByRole("complementary", { name: "Your CV for this job" }).getByText("(tailored for this job)");
   const approveFromCv = fromCv.getByRole("button", { name: "Approve", exact: true });
@@ -79,15 +80,15 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(page.getByText("✓ Approved: 1")).toBeVisible();
   await expect(tailoredLines).toHaveCount(1);
 
-  // A gap is answered with one tap; there is no box to fill in.
-  const gap = page
-    .getByRole("region", { name: "What the job asks for that your CV does not show" })
-    .getByRole("article")
-    .filter({ hasText: "Clear communication with non-technical stakeholders" });
-  await gap.getByRole("button", { name: "Yes, at work" }).click();
+  // A gap is answered in the user's own words, one question at a time.
+  await page.getByRole("button", { name: /^2\. Questions about your experience/ }).click();
+  const gap = page.getByRole("region", { name: "2. Questions about your experience" }).getByRole("article").filter({ visible: true });
+  await gap.getByRole("textbox", { name: "Your answer" }).fill("I explained my dashboards to the regional sales team every Monday.");
+  await gap.getByRole("button", { name: "Save answer" }).click();
   const approveGap = gap.getByRole("button", { name: "Approve", exact: true });
   await expect(approveGap.first()).toBeVisible();
   await approveGap.first().click();
+  await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
   await expect(page.getByText("✓ Approved: 2")).toBeVisible();
   await expect(tailoredLines).toHaveCount(2);
 });

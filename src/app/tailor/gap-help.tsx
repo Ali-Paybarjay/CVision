@@ -2,16 +2,14 @@
 
 import { useState } from "react";
 
-/** The heading of the gap questions, with a "?" that explains what a gap is and why the questions are worth answering. */
-export function GapHelp() {
+/** A line about the gap questions, with a "?" that explains what a gap is and why the questions are worth answering. */
+export function GapHelp({ children }: { children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div>
-      <div className="flex items-center gap-1">
-        <h2 id="questions-heading" className="text-xl">
-          What the job asks for that your CV does not show
-        </h2>
+      <div className="flex items-center justify-between gap-1">
+        <p className="text-sm text-text-muted">{children}</p>
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -25,9 +23,8 @@ export function GapHelp() {
           </span>
         </button>
       </div>
-      <p className="mt-1 text-sm text-text-muted">One tap each. We add only what you tell us you have done.</p>
       {open && (
-        <div id="gap-help" className="mt-3 flex flex-col gap-2 rounded-md border border-line bg-surface p-4 text-sm">
+        <div id="gap-help" className="mb-2 flex flex-col gap-2 rounded-md border border-line bg-surface p-4 text-sm">
           <p>
             <span className="font-semibold">What is a gap?</span> Something this job asks for that your CV does not show clearly. You may well have
             the experience; your CV just does not say so yet.
