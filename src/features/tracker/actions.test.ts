@@ -242,6 +242,26 @@ describe("updateApplication", () => {
     expect(deferred).toHaveLength(0);
   });
 
+  it("saves the next step's date, keeps it when only the status changes, and clears it with the next step (#211)", async () => {
+    await updateApplication(applicationId, { status: "applied", nextStep: "Call back", nextStepDate: "2026-10-24" });
+    expect(tables.applications[0].data).toEqual({ ...applied, nextStep: "Call back", nextStepDate: "2026-10-24" });
+    await runDeferred();
+    expect(track).not.toHaveBeenCalled();
+
+    // The When menu sends the saved date back as Keep: a new status changes nothing else.
+    await updateApplication(applicationId, { status: "interview", nextStep: "Call back", nextStepDate: "2026-10-24" });
+    expect(tables.applications[0].data).toMatchObject({ status: "interview", nextStepDate: "2026-10-24" });
+
+    // A new date alone is a change worth saving.
+    revalidatePath.mockClear();
+    await updateApplication(applicationId, { status: "interview", nextStep: "Call back", nextStepDate: "2026-10-30" });
+    expect(tables.applications[0].data).toMatchObject({ nextStepDate: "2026-10-30" });
+    expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
+
+    await updateApplication(applicationId, { status: "interview", nextStep: "", nextStepDate: "2026-10-30" });
+    expect(tables.applications[0].data).toEqual({ ...applied, status: "interview", date: "2026-10-22", nextStep: null });
+  });
+
   it("does not find an application from another account", async () => {
     const othersId = "b8f5d3c2-1e4a-4f6b-8c7d-2e3f4a5b6c7d";
     tables.applications.push({ id: othersId, job_id: othersJobId, data: { ...applied, id: othersId }, user_id: "user-2" });

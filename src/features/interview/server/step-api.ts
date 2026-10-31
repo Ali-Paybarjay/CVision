@@ -5,7 +5,7 @@ import { limits } from "../config";
 import { InterviewSessionSchema } from "../contracts";
 import { MockFixtureMissingError } from "../engine/mock";
 import { InterviewRuleError } from "../engine/session";
-import { InterviewStageError } from "../engine/stages";
+import { InterviewStageError, questionsNotWritten } from "../engine/stages";
 
 /**
  * A session sent by the browser. Everything in it reaches a prompt, so answers have a length limit and the whole
@@ -27,10 +27,29 @@ export function badRequest(issues: { code: string; message: string }[]): Respons
   return Response.json({ error }, { status: 400 });
 }
 
-/** The response for a step that threw. Logs the kind of failure only: never the CV, the job description or an answer. */
-export function stepFailed(source: string, step: string, error: unknown): Response {
+const secondGo = "Try again: it usually works on the second go.";
+
+/** What the user sees when a step's answer broke a rule twice, by step. */
+const plainMessages: Record<string, string> = {
+  analyse: questionsNotWritten,
+  generate: questionsNotWritten,
+  review: questionsNotWritten,
+  evaluate: `We could not score this answer this time. ${secondGo}`,
+  report: `We could not write your report this time. ${secondGo}`,
+};
+
+/**
+ * The response for a step that threw. Logs the kind of failure, and for an invalid answer the rules it broke (their
+ * messages name the field and the rule, never the CV, the job description or an answer). With `plain`, a step whose
+ * answer broke a rule twice shows a plain message, not the rule (#220).
+ */
+export function stepFailed(source: string, step: string, error: unknown, { plain = false } = {}): Response {
   const reason = error instanceof AskModelError ? error.reason : undefined;
-  console.error(`${source}: ${step} failed (${error instanceof Error ? error.name : "unknown"}${reason ? `, ${reason}` : ""})`);
+  const rules = reason === "invalid-answer" ? `: ${(error as Error).message}` : "";
+  console.error(`${source}: ${step} failed (${error instanceof Error ? error.name : "unknown"}${reason ? `, ${reason}` : ""})${rules}`);
+  if (plain && reason === "invalid-answer") {
+    return Response.json({ error: plainMessages[step] ?? `We could not finish this step this time. ${secondGo}` }, { status: 422 });
+  }
   const known =
     error instanceof AskModelError ||
     error instanceof MockFixtureMissingError ||

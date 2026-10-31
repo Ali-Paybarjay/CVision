@@ -73,7 +73,7 @@ export async function POST(request: Request): Promise<Response> {
     }
   } catch (error) {
     if (error instanceof MissingProfileError) return Response.json({ error: "We could not find your Profile." }, { status: 404 });
-    return stepFailed("interview", body.step, error);
+    return stepFailed("interview", body.step, error, { plain: true });
   }
 }
 

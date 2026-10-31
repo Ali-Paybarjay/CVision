@@ -56,52 +56,115 @@ test("closing applications with no news closes only the ticked ones (#69)", asyn
   await expect(close).toHaveText("Close as No response");
 });
 
-test("a row saved with the keyboard keeps the focus where it is (#154)", async ({ page }) => {
+/** Presses `button` with the keyboard until the page's script has loaded and `done` holds. */
+async function pressUntil(button: Locator, done: () => Promise<void>) {
+  await untilItTakes(async () => {
+    await button.focus({ timeout: 1_000 });
+    await button.press("Enter", { timeout: 1_000 });
+  }, done);
+}
+
+test("a row's next step is read-only until Edit, and the keyboard keeps its place (#154, #210, #211)", async ({ page }) => {
   await page.goto("/dashboard");
   const row = trackerRow(page, "Data Analyst");
+  const status = row.getByLabel("Status");
   const nextStep = row.getByLabel("Next step");
-  const save = row.getByRole("button", { name: "Save" });
+  const when = row.getByLabel("When");
+  const saved = row.getByText("Saved", { exact: true });
+  const edit = row.getByRole("button", { name: "Edit Data Analyst at Etherow Freight" });
 
-  await untilItTakes(
-    async () => {
-      await nextStep.fill("");
-      await nextStep.fill("Email the hiring manager on Monday");
-    },
-    () => expect(save).toBeEnabled({ timeout: 1_000 }),
+  // No form until Edit: the row says it has no next step yet, with a button to add one.
+  await expect(row).toContainText("No next step yet");
+  await expect(nextStep).toHaveCount(0);
+  await pressUntil(row.getByRole("button", { name: "Add a next step for Data Analyst at Etherow Freight" }), () =>
+    expect(status).toBeFocused({ timeout: 1_000 }),
   );
-  await save.focus();
-  await page.keyboard.press("Enter");
 
-  // The button has nothing left to save, so the focus moves to the row's message, not back to the top of the page.
-  // Taking the focus reads it out, so the status line stays empty rather than read it a second time.
-  await expect(row.getByText("Saved", { exact: true })).toBeFocused();
-  await expect(row.getByRole("status")).toBeEmpty();
-  await expect(save).toBeDisabled();
-  await expect(nextStep).toHaveValue("Email the hiring manager on Monday");
-  // The keyboard carries on from the same row: back past the disabled button to the field just saved.
-  await page.keyboard.press("Shift+Tab");
+  // The When menu comes once a next step is written. Saved from the Save button, the form closes and the focus moves
+  // to the row's message, which reads it out, so the status line stays empty rather than read it a second time.
+  await page.keyboard.press("Tab");
   await expect(nextStep).toBeFocused();
+  await expect(when).toHaveCount(0);
+  await page.keyboard.type("Email the hiring manager on Monday");
+  const inTwoDays = when.locator("option", { hasText: /^In 2 days · / });
+  const day = (await inTwoDays.textContent())?.split(" · ")[1];
+  await when.selectOption((await inTwoDays.getAttribute("value")) ?? "");
+  await row.getByRole("button", { name: "Save" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(saved).toBeFocused();
+  await expect(row.getByRole("status")).toBeEmpty();
+  await expect(nextStep).toHaveCount(0);
+  await expect(row).toContainText("Next step: Email the hiring manager on Monday");
+  await expect(row).toContainText(`By ${day}`);
 
-  // Saved with Enter in the field, the focus stays there and the status line says it.
+  // The keyboard carries on from the same row: back to Edit, which opens the form on its first field.
+  await page.keyboard.press("Shift+Tab");
+  await expect(edit).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(status).toBeFocused();
+  await expect(saved).toHaveCount(0);
+
+  // Enter in Next step saves too. The field has gone, so the focus moves to the message, and the date is kept.
+  await page.keyboard.press("Tab");
   await nextStep.fill("Email the hiring manager on Tuesday");
   await page.keyboard.press("Enter");
-  await expect(row.getByRole("status")).toHaveText("Saved");
-  await expect(nextStep).toBeFocused();
+  await expect(saved).toBeFocused();
+  await expect(row.getByRole("status")).toBeEmpty();
+  await expect(row).toContainText("Next step: Email the hiring manager on Tuesday");
+  await expect(row).toContainText(`By ${day}`);
+
+  // Escape and Cancel save nothing, close the form and put the focus back on Edit.
+  await edit.focus();
+  await page.keyboard.press("Enter");
+  await nextStep.fill("Something else");
+  await page.keyboard.press("Escape");
+  await expect(edit).toBeFocused();
+  await expect(nextStep).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await nextStep.fill("Something else");
+  await row.getByRole("button", { name: "Cancel" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(edit).toBeFocused();
+  await expect(row).toContainText("Next step: Email the hiring manager on Tuesday");
+  await expect(saved).toHaveCount(0);
+});
+
+test("an overdue next step keeps its date when only the status is saved (#211)", async ({ page }) => {
+  await page.goto("/dashboard");
+  const row = trackerRow(page, "Graduate Data Analyst");
+  const status = row.getByLabel("Status");
+  const when = row.getByLabel("When");
+
+  // Sara's sample always shows one next step due tomorrow and one overdue, in words.
+  await expect(trackerRow(page, "Junior Data Analyst")).toContainText("Due tomorrow");
+  const overdue = await row.getByText(/^Overdue\. It was due \w{3} \d{1,2} \w{3}\.$/).textContent();
+  const day = overdue?.match(/due (.+)\.$/)?.[1];
+
+  // The saved date is not in the two weeks ahead, so the menu keeps it, chosen.
+  await pressUntil(row.getByRole("button", { name: "Edit Graduate Data Analyst at Irwell Energy" }), () =>
+    expect(status).toBeFocused({ timeout: 1_000 }),
+  );
+  await expect(when.locator("option:checked")).toHaveText(`Keep · ${day}`);
+  await status.selectOption("Interview");
+  await row.getByRole("button", { name: "Save" }).click();
+
+  await expect(row.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(row).toContainText("Interview stage since");
+  await expect(row.getByText(overdue ?? "")).toBeVisible();
 });
 
 test("a row closed from its own form moves under Closed and keeps the focus", async ({ page }) => {
   await page.goto("/dashboard");
   const row = trackerRow(page, "Reporting Analyst");
+  const status = row.getByLabel("Status");
   const save = row.getByRole("button", { name: "Save" });
 
-  await untilItTakes(
-    async () => {
-      await row.getByLabel("Status").selectOption("Ready to apply");
-      await row.getByLabel("Status").selectOption("Withdrawn");
-    },
-    () => expect(save).toBeEnabled({ timeout: 1_000 }),
+  await pressUntil(row.getByRole("button", { name: "Edit Reporting Analyst at Medlock Housing Partnership" }), () =>
+    expect(status).toBeFocused({ timeout: 1_000 }),
   );
-  await save.click();
+  await status.selectOption("Withdrawn");
+  await save.focus();
+  await page.keyboard.press("Enter");
 
   const closed = page.getByRole("list", { name: /^Closed \(\d+\)$/ });
   await expect(closed.getByRole("heading", { name: "Reporting Analyst", exact: true })).toBeVisible();
@@ -117,6 +180,10 @@ test("a row's Job ad link opens the full ad on its own page (#208)", async ({ pa
   // Only rows whose job has an ad to show get the link, and the ad itself stays off the dashboard.
   await expect(trackerRow(page, "Reporting Analyst").getByRole("link", { name: /^Job ad/ })).toHaveCount(0);
   await expect(page.getByText("You will write SQL to pull data from our warehouse")).toHaveCount(0);
+  // Sample rows have no saved practice, so no Interview report link, and the interview row keeps its Practise button
+  // (the report link is tested in application-list.test.tsx).
+  await expect(page.getByRole("link", { name: /^Interview report/ })).toHaveCount(0);
+  await expect(row.getByRole("link", { name: "Practise for this interview" })).toHaveAttribute("href", "/interview?job=sara-job-1");
 
   await row.getByRole("link", { name: "Job ad for Junior Data Analyst at Pennine Health Analytics" }).click();
   await expect(page).toHaveURL(/\/dashboard\/jobs\/sara-job-1$/);
@@ -124,12 +191,12 @@ test("a row's Job ad link opens the full ad on its own page (#208)", async ({ pa
   await expect(page.getByRole("main")).toContainText("Pennine Health Analytics");
   await expect(page.getByRole("article", { name: "Job ad" })).toContainText("You will write SQL to pull data from our warehouse");
 
-  // Back on the dashboard, the row's Status, Next step and Save are as they were.
+  // Back on the dashboard, the row's next step and its Edit button are as they were.
   await page.getByRole("link", { name: "Back to your dashboard" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(row.getByLabel("Status")).toHaveValue("interview");
-  await expect(row.getByLabel("Next step")).toHaveValue("Practise the interview questions before Thursday");
-  await expect(row.getByRole("button", { name: "Save" })).toBeVisible();
+  await expect(row).toContainText("Interview stage since");
+  await expect(row).toContainText("Next step: Practise the interview questions");
+  await expect(row.getByRole("button", { name: "Edit Junior Data Analyst at Pennine Health Analytics" })).toBeVisible();
 });
 
 // Another user's job needs row-level security, so the unit tests in job-ad.test.tsx cover it.

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { startTransition, useActionState, useLayoutEffect, useRef, useState } from "react";
 import { ApplicationStatusSchema, type Application } from "@/shared/contracts";
-import { Button, ButtonLink, CheckIcon, ErrorIcon, Field, InfoIcon, Input, Select, WarningIcon } from "@/shared/ui";
+import { Button, ButtonLink, CalendarIcon, CheckIcon, ErrorIcon, Field, InfoIcon, Input, Select, WarningIcon } from "@/shared/ui";
 import { closeWithoutNews, updateApplication } from "./actions";
 import {
   ApplicationChangeSchema,
@@ -13,16 +13,22 @@ import {
   dayCount,
   daysWithoutNews,
   formatDate,
+  formatDay,
+  formatScore,
+  interviewPath,
   isClosed,
   jobAdPath,
+  nextStepDue,
   nextStepMaxLength,
   noNewsDays,
   openAndClosed,
   statusDateLabels,
   statusLabels,
   suggestClosing,
+  whenOptions,
   type ClosingDate,
   type CloseWithoutNewsResult,
+  type NextStepDue,
   type TrackedApplication,
   type UpdateApplicationResult,
 } from "./model";
@@ -100,51 +106,99 @@ type ApplicationRowProps = {
 
 /**
  * A save's outcome. `moved` marks the one that moved the row between the open and closed lists, and `focus` one
- * that ended with the focus still on the Save button.
+ * that ended with the focus still in the form.
  */
 type RowResult = UpdateApplicationResult & { moved?: boolean; focus?: boolean };
 
+// The small links under a row's title: the job's ad and its interview report. 44px tall, so a thumb can tap them.
+const rowLinkClass = "inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent underline underline-offset-4";
+
+/**
+ * One application. The next step reads as text with an Edit button (#210), which opens the form: Status, Next step,
+ * When (#211), Save and Cancel.
+ */
 function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved }: ApplicationRowProps) {
   const { application: saved, job } = item;
+  const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState(saved.status);
   const [nextStep, setNextStep] = useState(saved.nextStep ?? "");
+  const [when, setWhen] = useState(saved.nextStepDate ?? "");
   // When the saved application changes outside this form (closed from the suggestion above), the form follows it.
   const [formFor, setFormFor] = useState(saved);
-  if (formFor.status !== saved.status || formFor.nextStep !== saved.nextStep) {
+  if (formFor.status !== saved.status || formFor.nextStep !== saved.nextStep || formFor.nextStepDate !== saved.nextStepDate) {
     setFormFor(saved);
     setStatus(saved.status);
     setNextStep(saved.nextStep ?? "");
+    setWhen(saved.nextStepDate ?? "");
   }
-  const saveRef = useRef<HTMLButtonElement>(null);
-  const [result, save, pending] = useActionState<RowResult | null, { status: string; nextStep: string }>(
+  const formRef = useRef<HTMLFormElement>(null);
+  const [result, save, pending] = useActionState<RowResult | null, { status: string; nextStep: string; nextStepDate: string }>(
     async (_previous, change) => {
       const outcome = sample ? changeSample(saved, change, today) : await updateApplication(saved.id, change);
-      if (outcome.ok) onSaved(outcome.application);
-      // Whether the Save button still has the focus, asked once the save is done: a user who moved on meanwhile keeps
+      // Whether the focus is still in the form, asked once the save is done: a user who moved on meanwhile keeps
       // their place.
-      return { ...outcome, focus: document.activeElement === saveRef.current };
+      const focus = formRef.current?.contains(document.activeElement) ?? false;
+      if (outcome.ok) {
+        onSaved(outcome.application);
+        setEditing(false);
+      }
+      return { ...outcome, focus };
     },
     // Drawn here by the save that moved it, so it starts with that save's message.
     moved ? { ok: true, application: saved, moved: true } : null,
   );
+  // The form stays open while a save is under way, and after an error.
+  const open = editing || pending;
+  // The message Edit or Cancel cleared: it is not shown again.
+  const [cleared, setCleared] = useState<RowResult | null>(null);
 
   // The row left the list the keyboard was in: the focus follows it to its message, so it is not lost.
   const messageRef = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
     if (moved) messageRef.current?.focus();
   }, [moved]);
-  // Saved in place from the Save button: with nothing left to save the button is disabled, so the focus on it moves
-  // to the message too, and Tab goes on from this row. After an error there is no such message: the button is still
-  // enabled and keeps the focus.
+  // Saved in place from inside the form (Save, or Enter in Next step): the form has closed, so the focus moves to the
+  // message, and Tab goes on from this row. After an error the form stays open and the focus where it is.
   const focusedMessageRef = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
     if (result?.focus) focusedMessageRef.current?.focus();
   }, [result]);
+  // Edit puts the focus on the first field; Cancel and Escape put it back on Edit.
+  const statusRef = useRef<HTMLSelectElement>(null);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const focusOnToggle = useRef(false);
+  useLayoutEffect(() => {
+    if (!focusOnToggle.current) return;
+    focusOnToggle.current = false;
+    (editing ? statusRef : editRef).current?.focus();
+  }, [editing]);
 
-  const unsaved = status !== saved.status || nextStep.trim() !== (saved.nextStep ?? "");
-  // Both worked out on each render from today's date, never saved.
+  const edit = () => {
+    setStatus(saved.status);
+    setNextStep(saved.nextStep ?? "");
+    setWhen(saved.nextStepDate ?? "");
+    setCleared(result);
+    focusOnToggle.current = true;
+    setEditing(true);
+  };
+  const cancel = () => {
+    if (pending) return;
+    setCleared(result);
+    focusOnToggle.current = true;
+    setEditing(false);
+  };
+
+  const nextStepText = nextStep.trim();
+  // The date goes with the next step: with none written, there is no date to save.
+  const nextStepDate = nextStepText ? when : "";
+  const unsaved = status !== saved.status || nextStepText !== (saved.nextStep ?? "") || nextStepDate !== (saved.nextStepDate ?? "");
+  // Screen readers hear which application Edit is for, so two jobs with one title do not share a button name. With
+  // the job missing, the row's date tells it apart instead.
+  const name = job ? `${job.title} at ${job.company}` : `the application from ${formatDate(saved.date)}`;
+  // All three worked out on each render from today's date, never saved.
   const days = daysWithoutNews(saved, today);
   const closing = closingDate(saved, job, today);
+  const due = nextStepDue(saved, today);
 
   return (
     <li className="flex flex-col gap-5 p-5 sm:p-6">
@@ -152,12 +206,22 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
         <div className="flex flex-col gap-1">
           <Heading className="text-lg leading-snug">{job ? job.title : "Job details unavailable"}</Heading>
           {job && <p className="text-text-muted">{job.company}</p>}
-          {job && item.hasAd && (
-            <Link
-              href={jobAdPath(saved.jobId)}
-              className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent underline underline-offset-4">
-              Job ad<span className="sr-only">{` for ${job.title} at ${job.company}`}</span>
-            </Link>
+          {job && (item.hasAd || item.report) && (
+            <div className="flex flex-wrap gap-x-5">
+              {item.hasAd && (
+                <Link href={jobAdPath(saved.jobId)} className={rowLinkClass}>
+                  Job ad<span className="sr-only">{` for ${job.title} at ${job.company}`}</span>
+                </Link>
+              )}
+              {item.report && (
+                <Link href={interviewPath(saved.jobId)} className={rowLinkClass}>
+                  Interview report
+                  <span className="sr-only">{` for ${job.title} at ${job.company}, ${formatScore(item.report.overall)} out of 5`}</span>
+                  {/* A non-breaking space: inside the inline-flex link, a plain leading space would collapse. */}
+                  <span aria-hidden="true">{`\u00a0(${formatScore(item.report.overall)} / 5)`}</span>
+                </Link>
+              )}
+            </div>
           )}
           <p className="text-sm text-text-muted">
             {statusDateLabels[saved.status]} <time dateTime={saved.date}>{formatDate(saved.date)}</time>
@@ -165,60 +229,116 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
           {days !== null && days > 0 && <p className="text-sm text-text-muted">No news for {dayCount(days)}</p>}
           {closing && <ClosingDateLine closing={closing} />}
         </div>
-        {saved.status === "interview" && (
-          <ButtonLink href={`/interview?job=${encodeURIComponent(saved.jobId)}`}>Practise for this interview</ButtonLink>
+        {/* With a report, the Interview report link above leads to practice instead. */}
+        {saved.status === "interview" && !(job && item.report) && (
+          <ButtonLink href={interviewPath(saved.jobId)}>Practise for this interview</ButtonLink>
         )}
       </div>
 
-      <form
-        // Not a form action: React resets a form after its action, which would put the status back on screen.
-        onSubmit={(event) => {
-          event.preventDefault();
-          // While saving, the button is aria-disabled rather than disabled, so the focus stays where it is.
-          if (pending || !unsaved) return;
-          startTransition(() => save({ status, nextStep }));
-        }}
-        className="grid gap-4 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] sm:items-end">
-        <Field label="Status">
-          {(props) => (
-            <Select {...props} name="status" value={status} onChange={(event) => setStatus(ApplicationStatusSchema.parse(event.target.value))}>
-              {ApplicationStatusSchema.options.map((option) => (
-                <option key={option} value={option}>
-                  {statusLabels[option]}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
-        <Field label="Next step">
-          {(props) => (
-            <Input
-              {...props}
-              name="nextStep"
-              value={nextStep}
-              onChange={(event) => setNextStep(event.target.value)}
-              maxLength={nextStepMaxLength}
-              placeholder="For example, follow up by email on Friday"
-              autoComplete="off"
-            />
-          )}
-        </Field>
-        <Button
-          ref={saveRef}
-          type="submit"
-          disabled={!unsaved && !pending}
-          aria-disabled={pending || undefined}
-          className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
-          {pending ? "Saving…" : "Save"}
-        </Button>
+      <div className="flex flex-col gap-3">
+        {open ? (
+          <form
+            ref={formRef}
+            // Not a form action: React resets a form after its action, which would put the status back on screen.
+            onSubmit={(event) => {
+              event.preventDefault();
+              // While saving, the button is aria-disabled rather than disabled, so the focus stays where it is.
+              if (pending || !unsaved) return;
+              startTransition(() => save({ status, nextStep, nextStepDate }));
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              cancel();
+            }}
+            className="grid gap-4 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_minmax(0,14rem)] sm:items-end">
+            <Field label="Status">
+              {(props) => (
+                <Select
+                  {...props}
+                  ref={statusRef}
+                  name="status"
+                  value={status}
+                  onChange={(event) => setStatus(ApplicationStatusSchema.parse(event.target.value))}>
+                  {ApplicationStatusSchema.options.map((option) => (
+                    <option key={option} value={option}>
+                      {statusLabels[option]}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <div className={nextStepText ? undefined : "sm:col-span-2"}>
+              <Field label="Next step">
+                {(props) => (
+                  <Input
+                    {...props}
+                    name="nextStep"
+                    value={nextStep}
+                    onChange={(event) => setNextStep(event.target.value)}
+                    maxLength={nextStepMaxLength}
+                    placeholder="For example, follow up by email on Friday"
+                    autoComplete="off"
+                  />
+                )}
+              </Field>
+            </div>
+            {/* A date only means something beside a next step, so the menu comes once one is written. */}
+            {nextStepText && (
+              <Field label="When">
+                {(props) => (
+                  <Select {...props} name="nextStepDate" value={when} onChange={(event) => setWhen(event.target.value)}>
+                    {whenOptions(today, saved.nextStepDate).map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+            )}
+            <div className="flex flex-wrap gap-3 sm:col-span-3">
+              <Button
+                type="submit"
+                disabled={!unsaved && !pending}
+                aria-disabled={pending || undefined}
+                className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
+                {pending ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                variant="quiet"
+                onClick={cancel}
+                aria-disabled={pending || undefined}
+                className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50">
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              {saved.nextStep ? (
+                <p className="max-w-[65ch] break-words">
+                  <span className="font-semibold">Next step:</span> {saved.nextStep}
+                </p>
+              ) : (
+                <p className="text-text-muted">No next step yet</p>
+              )}
+              {due && <NextStepDueLine due={due} />}
+            </div>
+            <Button ref={editRef} onClick={edit} className="px-4">
+              {saved.nextStep ? "Edit" : "Add a next step"}
+              <span className="sr-only">{saved.nextStep ? ` ${name}` : ` for ${name}`}</span>
+            </Button>
+          </div>
+        )}
         <SaveMessage
           ref={messageRef}
           focusedRef={focusedMessageRef}
-          result={pending ? null : result}
-          unsaved={unsaved}
+          result={pending || result === cleared ? null : result}
           closed={isClosed(saved.status)}
         />
-      </form>
+      </div>
     </li>
   );
 }
@@ -242,20 +362,37 @@ function ClosingDateLine({ closing }: { closing: ClosingDate }) {
       );
     case "soon":
       return (
-        <ClosingWarning title={closesIn(closing.daysLeft)}>
+        <RowWarning title={closesIn(closing.daysLeft)}>
           Closing date {date}. {closeEarly}, so apply soon.
-        </ClosingWarning>
+        </RowWarning>
       );
     case "passed":
       return (
-        <ClosingWarning title="The closing date has passed">
+        <RowWarning title="The closing date has passed">
           It was {date}. Check the employer&apos;s page before you apply: the advert has probably closed.
-        </ClosingWarning>
+        </RowWarning>
       );
   }
 }
 
-function ClosingWarning({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * When the next step is due, always with an icon and words, never colour alone. Overdue is a warning like a passed
+ * closing date; today and tomorrow stand out; later dates, and any date on a closed application, are muted.
+ */
+function NextStepDueLine({ due }: { due: NextStepDue }) {
+  const day = <time dateTime={due.date}>{formatDay(due.date)}</time>;
+  if (due.when === "overdue") return <RowWarning title="Overdue">It was due {day}.</RowWarning>;
+  const soon = due.when === "today" || due.when === "tomorrow";
+  return (
+    <p className={soon ? "flex items-center gap-1.5 text-sm font-semibold" : "flex items-center gap-1.5 text-sm text-text-muted"}>
+      <CalendarIcon className="size-4 shrink-0" />
+      {soon ? <time dateTime={due.date}>{due.when === "today" ? "Due today" : "Due tomorrow"}</time> : <span>By {day}</span>}
+    </p>
+  );
+}
+
+/** A warning on a row, with an icon and words: a closing date soon or passed, or an overdue next step. */
+function RowWarning({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <p className="mt-1 flex max-w-[65ch] items-start gap-2 rounded-md border border-warning bg-warning-bg px-3 py-2 text-sm text-warning">
       <WarningIcon className="mt-px size-4 shrink-0" />
@@ -397,8 +534,8 @@ function CloseMessage({ result, ref }: { result: CloseWithoutNewsResult | null; 
 }
 
 type SaveMessageProps = {
+  /** Null while saving, and once Edit or Cancel has cleared it. */
   result: RowResult | null;
-  unsaved: boolean;
   /** Whether the row is in the closed list, for the message of a save that moved it. */
   closed: boolean;
   /** The status line, which takes the focus after a save that moved the row. */
@@ -407,13 +544,13 @@ type SaveMessageProps = {
   focusedRef: React.Ref<HTMLParagraphElement>;
 };
 
-/** "Saved" after a save, or what went wrong, across the whole form. Icon and words, never colour alone. */
-function SaveMessage({ result, unsaved, closed, ref, focusedRef }: SaveMessageProps) {
-  const saved = result?.ok && !unsaved;
+/** "Saved" after a save, or what went wrong. Icon and words, never colour alone. */
+function SaveMessage({ result, closed, ref, focusedRef }: SaveMessageProps) {
+  const saved = result?.ok;
   // The focus moves to this message, which reads it out, so it is not also put in the status line to be read twice.
   const focused = saved && result.focus;
   const words = !result?.moved ? "Saved" : closed ? "Saved and moved to Closed" : "Saved and moved to your open applications";
-  const shown = "flex items-center gap-1.5 text-sm font-semibold text-accent sm:col-span-3";
+  const shown = "flex items-center gap-1.5 text-sm font-semibold text-accent";
   const message = (
     <>
       <CheckIcon className="size-4 shrink-0" />
@@ -432,7 +569,7 @@ function SaveMessage({ result, unsaved, closed, ref, focusedRef }: SaveMessagePr
         </p>
       )}
       {result && !result.ok && (
-        <p role="alert" className="flex items-center gap-1.5 text-sm text-error sm:col-span-3">
+        <p role="alert" className="flex items-center gap-1.5 text-sm text-error">
           <ErrorIcon className="size-4 shrink-0" />
           {result.message}
         </p>

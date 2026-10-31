@@ -48,6 +48,6 @@ export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<H
   return <textarea className={cn(control, "min-h-40", className)} {...props} />;
 }
 
-export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Select({ className, ...props }: React.ComponentProps<"select">) {
   return <select className={cn(control, className)} {...props} />;
 }
