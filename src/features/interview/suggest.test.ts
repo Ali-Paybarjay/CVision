@@ -93,6 +93,20 @@ describe("naming a tool and quoting a figure", () => {
     expect(inventedFigures("I'd compare 60 out of 400 with 45 out of 450.", sources)).toEqual([]);
     expect(inventedFigures("If I built it again, I would run both for 3 weeks.", sources)).toEqual([]);
     expect(inventedFigures("Last month 60 out of 400 is 15 per cent.", sources)).toEqual([]);
+    expect(inventedFigures("I'd never compare 60 out of 400 with 45 out of 450.", sources)).toEqual([]);
+  });
+
+  it("reads 'I'd' before a past participle as 'I had': what the candidate did", () => {
+    const sources = `${inputs.cv}\n${inputs.jobDescription}`;
+    expect(inventedFigures("By the end I'd cut errors by 47 per cent.", sources)).toEqual(["47"]);
+    expect(inventedFigures("We’d already reduced the backlog to 12 items.", sources)).toEqual(["12"]);
+    expect(inventedFigures("I'd never used it before, and it saved 3 hours a week.", sources)).toEqual(["3"]);
+  });
+
+  it("does not excuse a sentence just because it opens with 'If'", () => {
+    const sources = `${inputs.cv}\n${inputs.jobDescription}`;
+    expect(inventedFigures("If I'm honest, I cut errors by 47 per cent.", sources)).toEqual(["47"]);
+    expect(inventedFigures("If the totals differ, I'd compare 60 out of 400 first.", sources)).toEqual([]);
   });
 
   it("treats a problem-solving answer's use of the question's figures as working, not a claim", () => {
@@ -177,6 +191,31 @@ describe("the rules every suggested answer passes", () => {
     curly.honestLine = "I haven't used Power BI yet.";
     curly.sampleAnswer = `I haven’t used  Power BI yet. ${curly.sampleAnswer}`;
     expect(messages(curly)).toEqual([]);
+    // "I'd" before a past participle is "I had", and "If" alone makes nothing hypothetical.
+    const had = sample("q1");
+    had.sampleAnswer += " I'd already built it in Power BI.";
+    expect(messages(had)).toContain(toolRule);
+    const ifOnly = sample("q1");
+    ifOnly.sampleAnswer += " If I'm honest, I built it in Power BI.";
+    expect(messages(ifOnly)).toContain(toolRule);
+  });
+
+  it("R4: the honest line itself claims nothing beyond the CV", () => {
+    const toolRule =
+      "Claims a tool or method from the job ad that the CV never mentions: use it only in what the candidate would do, and say plainly in honestLine that they have not used it.";
+    const mixed = sample("q6");
+    mixed.honestLine = "I've built Power BI dashboards for two years, but I haven't worked with NHS data.";
+    mixed.sampleAnswer = mixed.sampleAnswer.replace("I haven't worked with NHS or patient data yet.", mixed.honestLine);
+    expect(messages(mixed, "q6")).toContain(toolRule);
+    const joined = sample("q6");
+    joined.honestLine = "I've used Power BI and I haven't worked with NHS data yet.";
+    joined.sampleAnswer = joined.sampleAnswer.replace("I haven't worked with NHS or patient data yet.", joined.honestLine);
+    expect(messages(joined, "q6")).toContain(toolRule);
+    // Owning up to the tool in the honest line is what it is for.
+    const owned = sample("q6");
+    owned.honestLine = "I haven't used Power BI or worked with NHS data yet.";
+    owned.sampleAnswer = owned.sampleAnswer.replace("I haven't worked with NHS or patient data yet.", owned.honestLine);
+    expect(messages(owned, "q6")).toEqual([]);
   });
 
   it("R5 and R6: a gap is said plainly and never hidden", () => {
