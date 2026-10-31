@@ -436,8 +436,8 @@ export default function PrivacyPage() {
             <span className="font-semibold">To be told how your data is used.</span> This page does that.
           </li>
           <li>
-            <span className="font-semibold">To get a copy of your data and take it elsewhere.</span> Use Download my
-            data on the{" "}
+            <span className="font-semibold">To get a copy of your data and take it elsewhere.</span> Use Download a
+            copy of my data on the{" "}
             <Link href={yourDataPath} className={link}>
               Your data page
             </Link>

@@ -41,6 +41,15 @@ const removeBatchSize = 100;
 
 const notConnected = { ok: false, reason: "not-connected" } as const;
 
+/** What the download leaves out: listed in data.json, and in README.txt in plain words. */
+const notIncluded = [
+  "The IP address and browser details our sign-in service records for each device you sign in on. They are deleted when you sign out on that device or delete your account.",
+  `Anything ${brand.name} saved only in a browser, such as a profile or interview practice that is not saved to your account. Download it from the Your data page in that browser.`,
+  "Copies in our service providers' backups and logs, which they keep for a limited time. Our Privacy page lists them and how long each is kept.",
+];
+
+const downloadedAt = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/London" });
+
 /** How many rows of each table and how many CV files the user has: what "Delete my account" removes. */
 export async function summariseUserData(userId: string): Promise<{ ok: true; summary: DataSummary } | Failure> {
   const readers = await getReaders();
@@ -57,9 +66,9 @@ export function totalRows(summary: DataSummary): number {
 }
 
 /**
- * Everything we hold about the user in one ZIP: data.json with their account's details and every row of the user
- * tables, and their original CV files under cv-files/. Built in full before anything is sent, so a failure never
- * gives the user half a file.
+ * Everything we hold about the user in one ZIP: README.txt saying what each file is, data.json with their account's
+ * details and every row of the user tables, and their original CV files under cv-files/. Built in full before
+ * anything is sent, so a failure never gives the user half a file.
  */
 export async function exportUserData(user: CurrentUser, now: Date): Promise<({ ok: true } & DataExport) | Failure> {
   const readers = await getReaders();
@@ -79,22 +88,20 @@ export async function exportUserData(user: CurrentUser, now: Date): Promise<({ o
     const exportedAt = now.toISOString();
     const data = {
       about: `Everything ${brand.name} holds about your account, apart from what notIncluded lists. account has your account's details from our sign-in service, tables has every row we store for you, by table, and cvFiles lists the CV files saved next to this file.`,
-      notIncluded: [
-        "The IP address and browser details our sign-in service records for each device you sign in on. They are deleted when you sign out on that device or delete your account.",
-        `Anything ${brand.name} saved only in a browser, such as a profile or interview practice that is not saved to your account. Download it from the Your data page in that browser.`,
-        "Copies in our service providers' backups and logs, which they keep for a limited time. Our Privacy page lists them and how long each is kept.",
-      ],
+      notIncluded,
       exportedAt,
       account: accountDetails(auth.user),
       tables,
       cvFiles: files.map((file) => file.name),
     };
-    const json = new TextEncoder().encode(`${JSON.stringify(data, null, 2)}\n`);
+    const encoder = new TextEncoder();
+    const json = encoder.encode(`${JSON.stringify(data, null, 2)}\n`);
+    const readme = encoder.encode(readmeText(now, files.length > 0));
 
     return {
       ok: true,
       fileName: `cvision-data-${exportedAt.slice(0, 10)}.zip`,
-      chunks: zipChunks([{ name: "data.json", data: json }, ...files], now),
+      chunks: zipChunks([{ name: "README.txt", data: readme }, { name: "data.json", data: json }, ...files], now),
       summary: { rows: countsOf(tables), cvFiles: files.length },
     };
   } catch (error) {
@@ -210,6 +217,32 @@ function accountDetails(user: User) {
     })),
     user_metadata: user.user_metadata ?? {},
   };
+}
+
+/**
+ * README.txt (issue #237): what each file in the ZIP is, in plain words, and that tailored CVs and cover letters are
+ * downloaded on the Tailor page. data.json stays, as the structured, machine-readable copy UK GDPR (article 20) asks
+ * for. Windows line endings, so any text editor shows the lines.
+ */
+function readmeText(now: Date, hasCvFiles: boolean): string {
+  const lines = [
+    `Your ${brand.name} data`,
+    `Downloaded on ${downloadedAt.format(now)}, UK time.`,
+    "",
+    `This ZIP is a copy of everything ${brand.name} holds about your account, apart from what "Not in this ZIP" lists below.`,
+    "",
+    "What each file is",
+    "- README.txt: this note.",
+    "- data.json: your account's details and every record we store for you, such as your profile, the job ads you pasted, your tracker and your interview practice. It is in a standard format that computers can read, so you can keep it or take your data to another service. To read it yourself, open it in any text editor.",
+    ...(hasCvFiles ? ["- cv-files: the CV files you uploaded, as they were."] : []),
+    "",
+    `${brand.name} makes tailored CVs and cover letters as PDF or Word files only when you download them, so there are none here. Download them on the Tailor page when you finish tailoring for a job.`,
+    "",
+    "Not in this ZIP",
+    ...notIncluded.map((item) => `- ${item}`),
+    "",
+  ];
+  return lines.join("\r\n");
 }
 
 /** Every file under cvs/<user id>/, in folders at any depth, page by page. Paths are "<user id>/...". */

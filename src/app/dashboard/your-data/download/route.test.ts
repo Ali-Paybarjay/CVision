@@ -56,8 +56,8 @@ describe("POST /dashboard/your-data/download", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
 
     const files = readZip(new Uint8Array(await response.arrayBuffer()));
-    expect(files.map((file) => file.name)).toEqual(["data.json", "cv-files/cv.pdf"]);
-    const json = JSON.parse(new TextDecoder().decode(files[0].data));
+    expect(files.map((file) => file.name)).toEqual(["README.txt", "data.json", "cv-files/cv.pdf"]);
+    const json = JSON.parse(new TextDecoder().decode(files[1].data));
     expect(Object.keys(json.tables)).toEqual([...userTables]);
     for (const table of userTables) expect(json.tables[table]).toEqual([{ id: `${table}-1`, user_id: sara }]);
     expect(json.account).toMatchObject({ id: sara, email: "sara@example.com", created_at: "2026-10-21T09:00:00Z" });
