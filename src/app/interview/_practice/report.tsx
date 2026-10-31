@@ -150,12 +150,12 @@ function EndedReport({ session }: { session: InterviewSession }) {
               {overall.toFixed(1)}
               <span className="text-lg font-semibold text-text-muted"> / 5</span>
             </p>
-            <p className="mt-3">You ended the practice early. Your answers are scored below, and every other question has a suggested answer built from your CV.</p>
+            <p className="mt-3">You ended the practice early. Your answers are scored below, and every other question has a suggested answer built from your profile.</p>
           </>
         ) : (
           <>
-            <h2 className="text-xl">Suggested answers from your CV</h2>
-            <p className="mt-2">You ended before answering, so there is no score. Every question below has a suggested answer built from your CV.</p>
+            <h2 className="text-xl">Suggested answers from your profile</h2>
+            <p className="mt-2">You ended before answering, so there is no score. Every question below has a suggested answer built from your profile.</p>
           </>
         )}
       </Card>
@@ -205,11 +205,11 @@ function FromYourCv({ session }: { session: InterviewSession }) {
 
   return (
     <Card>
-      <h2 className="text-xl">From your CV</h2>
+      <h2 className="text-xl">From your profile</h2>
       <div className="mt-3 grid gap-4 md:grid-cols-2">
         {strongest.length > 0 && (
           <div>
-            <h3 className="text-sm text-text-muted">Where your CV is strongest</h3>
+            <h3 className="text-sm text-text-muted">Where your profile is strongest</h3>
             <ul className="mt-2 space-y-2 text-sm">
               {strongest.map((entry) => (
                 <li key={entry.id}>
@@ -226,7 +226,7 @@ function FromYourCv({ session }: { session: InterviewSession }) {
             <ul className="mt-2 space-y-2 text-sm">
               {gaps.map((gap) => (
                 <li key={gap.id}>
-                  <span className="font-semibold">{gap.name}</span>: the job asks for it and your CV shows little of it.
+                  <span className="font-semibold">{gap.name}</span>: the job asks for it and your profile shows little of it.
                 </li>
               ))}
               {claims.map((claim) => (
@@ -266,13 +266,13 @@ function SuggestionCard({ number, question, suggestion }: { number: number; ques
 
       {suggestion.fallback && (
         <div className="mt-3">
-          <Notice tone="info">We couldn&apos;t write a suggested answer we could check against your CV. Build yours from these points.</Notice>
+          <Notice tone="info">We couldn&apos;t write a suggested answer we could check against your profile. Build yours from these points.</Notice>
         </div>
       )}
 
       {suggestion.honestLine && (
         <div className="mt-3">
-          <Notice tone="warning" title="Your CV doesn't show this yet.">
+          <Notice tone="warning" title="Your profile doesn't show this yet.">
             If you have done this, use your own example. If not, say it plainly: “{suggestion.honestLine}”
           </Notice>
         </div>
@@ -286,7 +286,7 @@ function SuggestionCard({ number, question, suggestion }: { number: number; ques
             <p>{point.text}</p>
             {point.evidence.map((line) => (
               <p key={line} className="mt-1 border-l-2 border-fit-bar bg-fit px-2 py-1">
-                From your CV: <q className="italic">{line}</q>
+                From your profile: <q className="italic">{line}</q>
               </p>
             ))}
           </li>

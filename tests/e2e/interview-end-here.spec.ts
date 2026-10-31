@@ -37,11 +37,11 @@ test("ending at the first question gives a suggested answer for every question a
   await expect(page.getByText("Question 1 of 6")).toBeVisible({ timeout: 120_000 });
 
   await page.getByRole("button", { name: "End here and see suggested answers" }).click();
-  await expect(page.getByText("Each of the 6 questions gets a suggested answer built from your CV.")).toBeVisible();
+  await expect(page.getByText("Each of the 6 questions gets a suggested answer built from your profile.")).toBeVisible();
   await page.getByRole("button", { name: "End practice" }).click();
 
   await expect(page.getByText("there is no score", { exact: false })).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByRole("heading", { name: "From your CV", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "From your profile", exact: true })).toBeVisible();
   await expect(page.getByText("Not answered", { exact: true })).toHaveCount(6);
 
   // A reload shows the same report.

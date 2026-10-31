@@ -22,8 +22,8 @@ describe("the report after 'End here'", () => {
   it("with no answers: no score, the CV summary, and a suggested answer for every question", async () => {
     const html = renderToStaticMarkup(<FeedbackReport session={await withSuggestions(endedSessionFor(fixture))} />);
     expect(html).toContain("there is no score");
-    expect(html).toContain("From your CV");
-    expect(html).toContain("Where your CV is strongest");
+    expect(html).toContain("From your profile");
+    expect(html).toContain("Where your profile is strongest");
     expect(html.match(/Not answered/g)).toHaveLength(6);
     expect(html).not.toContain("Overall score");
   });
@@ -33,7 +33,7 @@ describe("the report after 'End here'", () => {
     expect(html).toContain("Read a suggested answer");
     expect(html).toMatch(/<mark[^>]*>\[how you checked the automated figures against the manual report before switching over\]<\/mark>/);
     expect(html).toContain("If you have done this, use your own example. If not, say it plainly: “I haven&#x27;t worked with NHS or patient data yet.”");
-    expect(html).toContain("From your CV: <q");
+    expect(html).toContain("From your profile: <q");
     // q1 has placeholders to swap; q3's answer has none.
     expect(html).toContain("Swap each highlighted part for your own detail");
     expect(html).toContain("Say it in your own words, and leave out anything that isn&#x27;t true.");
@@ -58,7 +58,7 @@ describe("the report after 'End here'", () => {
 
     const html = renderToStaticMarkup(<FeedbackReport session={session} />);
     expect(html).toContain("Based on the 2 of 6 questions you answered");
-    expect(html).not.toContain("From your CV</h2>");
+    expect(html).not.toContain("From your profile</h2>");
     expect(html.match(/Not answered/g)).toHaveLength(4);
     expect(html.match(/Do this next time/g)).toHaveLength(2);
     expect(html).toContain(mainAnswer(session, "q1")!.slice(0, 40).replace(/'/g, "&#x27;"));
@@ -68,7 +68,7 @@ describe("the report after 'End here'", () => {
     const ended = endedSessionFor(fixture);
     const session = applySuggestion(ended, fallbackSuggestion(suggestionContext(ended, "q2", inputs)));
     const html = renderToStaticMarkup(<FeedbackReport session={session} />);
-    expect(html).toContain("We couldn&#x27;t write a suggested answer we could check against your CV.");
+    expect(html).toContain("We couldn&#x27;t write a suggested answer we could check against your profile.");
     expect(html).not.toContain("Read a suggested answer");
   });
 

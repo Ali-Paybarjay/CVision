@@ -6,7 +6,7 @@ import { getAiMode, type Requester } from "@/shared/ai";
 import { getCurrentUser } from "@/features/account/current-user";
 import { applyReport, endEarly } from "@/features/interview/engine/session";
 import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, suggestAnswer, writeReport } from "@/features/interview/engine/stages";
-import { interviewInputsFor } from "@/features/interview/engine/text";
+import { interviewInputsFor, isCvTooThin } from "@/features/interview/engine/text";
 import { trackSessionCompleted, trackSessionEndedEarly } from "@/features/interview/server/completion-event";
 import { getMyJob, getMyProfile } from "@/features/interview/server/my-data";
 import { saveInterviewSession } from "@/features/interview/server/session-store";
@@ -52,8 +52,17 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     switch (body.step) {
-      case "analyse":
-        return Response.json({ session: await analyseStep(await inputs(), { id: body.id, startedAt: body.startedAt, requester }) });
+      case "analyse": {
+        const start = await inputs();
+        // Before any AI request: stage 1 cannot quote enough from a profile with almost nothing in it (#179).
+        if (isCvTooThin(start.cv)) {
+          return Response.json(
+            { error: "Add more to your profile first: your experience, education or skills. The questions are written from it." },
+            { status: 422 },
+          );
+        }
+        return Response.json({ session: await analyseStep(start, { id: body.id, startedAt: body.startedAt, requester }) });
+      }
       case "generate":
         return Response.json({ session: await generateStep(body.session, await inputs(), { requester }) });
       case "review":

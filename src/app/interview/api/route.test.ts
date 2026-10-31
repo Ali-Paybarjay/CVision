@@ -3,6 +3,7 @@ import { profileToCvText } from "@/features/interview/engine/text";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
 import { endedSessionFor, runMockSession } from "@/features/interview/test-support";
 import type { AskModelOptions } from "@/shared/ai";
+import type { Profile } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { POST } from "./route";
 
@@ -13,11 +14,13 @@ vi.mock("@/features/account/current-user", () => ({ getCurrentUser: async () => 
 
 // Sara's sample jobs, plus one with a database id, so saving can be tested.
 const profileReads = vi.hoisted(() => ({ count: 0 }));
+// Replaces Sara's profile for one test, e.g. a profile typed in by hand with only a name.
+const profileOverride = vi.hoisted(() => ({ value: null as Profile | null }));
 vi.mock("@/features/interview/server/my-data", async () => {
   const { personas } = await import("@/shared/sample-data");
   const jobs = [...personas.sara.jobs, { ...personas.sara.jobs[0], id: storedJobId }];
   return {
-    getMyProfile: async () => (profileReads.count++, personas.sara.profile),
+    getMyProfile: async () => (profileReads.count++, profileOverride.value ?? personas.sara.profile),
     listMyJobs: async () => jobs,
     getMyJob: async (id: string) => jobs.find((job) => job.id === id) ?? null,
   };
@@ -84,6 +87,7 @@ afterEach(() => {
   upserts.length = 0;
   recordedSessionIds.length = 0;
   profileReads.count = 0;
+  profileOverride.value = null;
 });
 
 describe("the interview API in mock mode", () => {
@@ -232,5 +236,30 @@ describe("the interview API in live mode", () => {
     const response = await analyse("sara-job-2");
     expect(response.status).toBe(422);
     expect(asked[0]?.requester).toEqual({ userId: "user-1" });
+  });
+});
+
+describe("a profile with too little in it (#179)", () => {
+  const empty: Profile = { ...personas.sara.profile, summary: "", skills: [], experience: [], education: [], certifications: [], followUpAnswers: [] };
+
+  it.each([
+    ["only a name", empty],
+    ["two lines", { ...empty, summary: "Data analyst.", skills: ["SQL"] }],
+  ])("refuses to start a practice from %s, before any AI request", async (_, profile) => {
+    vi.stubEnv("AI_MODE", "live");
+    currentUser.value = { id: "user-1", email: null };
+    profileOverride.value = profile;
+    const response = await analyse("sara-job-1");
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).toContain("Add more to your profile first");
+    expect(asked).toHaveLength(0);
+  });
+
+  it("asks the model from three lines", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    currentUser.value = { id: "user-1", email: null };
+    profileOverride.value = { ...empty, summary: "Data analyst.", skills: ["SQL"], certifications: [{ name: "Tableau Desktop Specialist" }] };
+    await analyse("sara-job-1");
+    expect(asked).toHaveLength(1);
   });
 });

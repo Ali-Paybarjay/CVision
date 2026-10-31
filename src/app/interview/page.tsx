@@ -5,6 +5,7 @@ import { getAiMode } from "@/shared/ai";
 import { ButtonLink, Card, Notice, Page } from "@/shared/ui";
 import { getCurrentUser } from "@/features/account/current-user";
 import { withNext } from "@/features/account/safe-redirect";
+import { isCvTooThin, profileToCvText } from "@/features/interview/engine/text";
 import { fixtureForJob } from "@/features/interview/fixtures";
 import { getMyJob, getMyProfile, listMyJobs } from "@/features/interview/server/my-data";
 import {
@@ -25,7 +26,7 @@ export default function InterviewPage({ searchParams }: PageProps<"/interview">)
   return (
     <Page
       title="Interview practice"
-      description="Get ready for an interview you have been invited to: six questions written for this job and your CV, then feedback on every answer."
+      description="Get ready for an interview you have been invited to: six questions written for this job and your profile, then feedback on every answer."
     >
       <Suspense fallback={<p className="text-text-muted">Loading your interview…</p>}>
         <InterviewView searchParams={searchParams} />
@@ -46,7 +47,7 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     return (
       <>
         <Notice tone="info" title="Sign in for interview practice">
-          Practice uses AI on your CV and answers, so it needs an account.
+          Practice uses AI on your profile and answers, so it needs an account.
         </Notice>
         <ButtonLink href={withNext("/sign-in", here)} variant="primary" className="self-start">
           Sign in
@@ -72,12 +73,28 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
 
   if (!profile) {
     return (
-      <Notice tone="info" title="Add your CV first">
-        The questions are written for your CV, so interview practice needs your Profile.{" "}
+      <Notice tone="info" title="Build your profile first">
+        The questions are written for your profile, so upload your CV or fill in your details first.{" "}
         <ButtonLink href="/profile" variant="quiet">
           Go to Profile
         </ButtonLink>
       </Notice>
+    );
+  }
+
+  // A profile typed in by hand can hold little more than a name; the API refuses it too, before any AI request (#179).
+  if (isCvTooThin(profileToCvText(profile))) {
+    return (
+      <>
+        <JobHeading job={job} />
+        <Notice tone="info" title="Add more to your profile first">
+          The questions are written from your profile, and there isn’t enough in it yet. Add your experience, education or
+          skills, then come back.{" "}
+          <ButtonLink href="/profile" variant="quiet">
+            Go to Profile
+          </ButtonLink>
+        </Notice>
+      </>
     );
   }
 
@@ -150,7 +167,7 @@ function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeResult[]
                   {last && (
                     <p className="mt-1 text-sm">
                       Last practice <time dateTime={last.practisedAt}>{practisedOn(last.practisedAt)}</time> ·{" "}
-                      {last.overall === null ? "Suggested answers from your CV" : `${last.overall.toFixed(1)} / 5`}
+                      {last.overall === null ? "Suggested answers from your profile" : `${last.overall.toFixed(1)} / 5`}
                     </p>
                   )}
                 </div>

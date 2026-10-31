@@ -253,7 +253,7 @@ export function InterviewFlow({
                     job={suggestJob}
                     jobKey={`${run}:suggest:${question.id}`}
                     failed="Suggested answer failed"
-                    working="Not answered: writing a suggested answer from your CV…"
+                    working="Not answered: writing a suggested answer from your profile…"
                   />
                 )}
               </p>
@@ -297,7 +297,7 @@ export function InterviewFlow({
               </li>
             )}
             <li>
-              Writing suggested answers from your CV: {unanswered.size - missingSuggestionIds(session).length} of {unanswered.size} ready
+              Writing suggested answers from your profile: {unanswered.size - missingSuggestionIds(session).length} of {unanswered.size} ready
             </li>
           </ul>
           {suggestFailure?.status === "failed" && (
@@ -379,8 +379,8 @@ export function EndHere({ store, session }: { store: PracticeStore; session: Int
       </p>
       <p className="text-sm">
         {answered > 0
-          ? `You've answered ${answered} of ${total} questions. Those get your feedback; the other ${left} get a suggested answer built from your CV.`
-          : `Each of the ${total} questions gets a suggested answer built from your CV.`}{" "}
+          ? `You've answered ${answered} of ${total} questions. Those get your feedback; the other ${left} get a suggested answer built from your profile.`
+          : `Each of the ${total} questions gets a suggested answer built from your profile.`}{" "}
         Anything you haven&apos;t submitted won&apos;t be saved.
       </p>
       <div className="flex flex-wrap gap-2">
