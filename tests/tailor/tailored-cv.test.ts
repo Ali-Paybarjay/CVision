@@ -129,3 +129,28 @@ describe("the tailored CV (You approve everything)", () => {
     expect(formatMonth(null)).toBe("Present");
   });
 });
+
+describe("at most six main skills on the tailored CV (#216)", () => {
+  const eight = ["Communication", "Teamwork", "Leadership", "Planning", "Negotiation", "Creativity", "Initiative", "Coaching"];
+  const many = { ...profile, skills: [...eight, "Python"] };
+  const approve = (after: string) => change("approved", { id: after, gapId: undefined, section: "skills", before: null, after, evidence: "x", evidenceSource: "cv" });
+
+  it("lists the first six of the Profile's, keeps tools apart, and leaves the Profile as it is", () => {
+    const cv = buildTailoredCv(many, []);
+    expect(cv.skills.map((line) => line.text)).toEqual(eight.slice(0, 6));
+    expect(cv.technicalSkills.map((line) => line.text)).toEqual(["Python"]);
+    expect(many.skills).toHaveLength(9);
+  });
+
+  it("puts a skill approved for this job first", () => {
+    const cv = buildTailoredCv(many, [approve("Problem solving")]);
+    expect(cv.skills.map((line) => line.text)).toEqual(["Problem solving", ...eight.slice(0, 5)]);
+  });
+
+  it("never drops a skill the user approved, even past six", () => {
+    const seven = ["Problem solving", "Adaptability", "Mentoring", "Presentation", "Organisation", "Networking", "Collaboration"];
+    const cv = buildTailoredCv(many, seven.map(approve));
+    expect(cv.skills.map((line) => line.text)).toEqual(seven);
+    expect(cv.unplaced).toEqual([]);
+  });
+});

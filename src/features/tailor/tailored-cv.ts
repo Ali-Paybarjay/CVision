@@ -1,7 +1,7 @@
 // The tailored CV: the user's Profile with only their approved changes applied (You approve everything).
 // Pure code, shared by the preview and the PDF and Word export.
 import type { Profile, TailoringChange } from "@/shared/contracts";
-import { isBigSix } from "./big-six";
+import { bigSixTarget, isBigSix } from "./big-six";
 import { normalise } from "./nothing-invented";
 
 /** One line of the tailored CV; `tailored` marks a line that came from an approved change. */
@@ -64,6 +64,16 @@ function educationLine(item: Profile["education"][number]): string {
 /** A certificate as one CV line, e.g. "Tableau Desktop Specialist, Tableau, 2023". */
 function certificationLine(item: Profile["certifications"][number]): string {
   return [item.name, item.issuer, item.year].filter(Boolean).join(", ");
+}
+
+/**
+ * The main skills the CV lists: every one the user approved for this job, then the Profile's own up to six.
+ * An approved line is never dropped (You approve everything); the rest stay in the Profile.
+ */
+function mainSkills(skills: CvLine[]): CvLine[] {
+  const all = skills.filter((line) => isBigSix(line.text));
+  const approved = all.filter((line) => line.tailored);
+  return [...approved, ...all.filter((line) => !line.tailored).slice(0, Math.max(0, bigSixTarget - approved.length))];
 }
 
 /** The CV's lines in one section, exactly as the tailored CV shows them: a change's `before` must be one of these. */
@@ -148,7 +158,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[]): T
       (item): item is string => Boolean(item),
     ),
     summary,
-    skills: skills.filter((line) => isBigSix(line.text)),
+    skills: mainSkills(skills),
     technicalSkills: skills.filter((line) => !isBigSix(line.text)),
     experience,
     education: [...education, ...added("education")],
