@@ -5,7 +5,7 @@ import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TabStopType, 
 import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import { brand } from "@/shared/brand";
 import type { LetterHead } from "./letter-state";
-import { cvHeadings, type CvLine, type TailoredCv } from "./tailored-cv";
+import { cvHeadings, type CvEntry, type CvLine, type TailoredCv } from "./tailored-cv";
 
 export type ExportFormat = "pdf" | "docx";
 export type ExportDocument = "cv" | "cover-letter";
@@ -31,10 +31,22 @@ export const mimeTypes: Record<ExportFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** The CV in the template's order: main skills in two columns, then education, experience, and certificates with other skills last. */
+/** The CV in the template's order: main skills in two columns, then education, experience, projects, volunteering, certificates with other skills, and languages last. */
 export function cvBlocks(cv: TailoredCv): Block[] {
   const bullets = (lines: CvLine[]): Block[] => lines.map((line) => ({ kind: "bullet", text: line.text, label: line.label }));
   const half = Math.ceil(cv.skills.length / 2);
+  const entries = (heading: string, items: CvEntry[]): Block[] =>
+    items.length === 0
+      ? []
+      : [
+          { kind: "heading", text: heading },
+          ...items.flatMap((item): Block[] => [
+            ...(item.company ? [{ kind: "organisation" as const, text: item.company.toUpperCase() }] : []),
+            ...(item.dates ? [{ kind: "dates" as const, text: item.dates }] : []),
+            { kind: "role", text: item.title },
+            ...bullets(item.lines),
+          ]),
+        ];
 
   return [
     { kind: "name", text: cv.fullName, right: cv.contact.join(" | ") || undefined },
@@ -43,19 +55,16 @@ export function cvBlocks(cv: TailoredCv): Block[] {
     ...cv.skills.slice(0, half).map((line, index): Block => ({ kind: "skills", text: line.text, right: cv.skills[half + index]?.text })),
     ...(cv.education.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.education }] : []),
     ...cv.education.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
-    ...(cv.experience.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.experience }] : []),
-    ...cv.experience.flatMap((job): Block[] => [
-      { kind: "organisation", text: job.company.toUpperCase() },
-      ...(job.dates ? [{ kind: "dates" as const, text: job.dates }] : []),
-      { kind: "role", text: job.title },
-      ...bullets(job.lines),
-    ]),
+    ...entries(cvHeadings.experience, cv.experience),
+    ...entries(cvHeadings.projects, cv.projects),
+    ...entries(cvHeadings.volunteering, cv.volunteering),
     ...(cv.certifications.length + cv.technicalSkills.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.other }] : []),
     ...(cv.certifications.length > 0 ? [{ kind: "subheading" as const, text: cvHeadings.certificates }] : []),
     ...bullets(cv.certifications),
     ...(cv.technicalSkills.length > 0
       ? [{ kind: "line" as const, label: cvHeadings.technical, text: cv.technicalSkills.map((line) => line.text).join(", ") }]
       : []),
+    ...(cv.languages.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.languages }, ...bullets(cv.languages)] : []),
   ];
 }
 

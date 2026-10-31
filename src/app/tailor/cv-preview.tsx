@@ -1,4 +1,4 @@
-import { cvHeadings, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
+import { cvHeadings, type CvEntry, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
 import { CvPaper, FitLine } from "@/shared/ui";
 
 function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
@@ -22,6 +22,29 @@ function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
 
 function Heading({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 text-base font-bold">{children}</h3>;
+}
+
+function Entries({ heading, items }: { heading: string; items: CvEntry[] }) {
+  if (items.length === 0) return null;
+  return (
+    <>
+      <Heading>{heading}</Heading>
+      {items.map((item, index) => (
+        <div key={index} className="mt-2">
+          {item.company && <p className="uppercase">{item.company}</p>}
+          {item.dates && <p>{item.dates}</p>}
+          <p className="font-semibold">{item.title}</p>
+          {item.lines.length > 0 && (
+            <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+              {item.lines.map((line, lineIndex) => (
+                <Line key={lineIndex} line={line} as="li" />
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </>
+  );
 }
 
 /** The tailored CV in the layout of the template, as the download will look, with approved lines on Fit. */
@@ -64,23 +87,9 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
         </>
       )}
 
-      {cv.experience.length > 0 && (
-        <>
-          <Heading>{cvHeadings.experience}</Heading>
-          {cv.experience.map((job, index) => (
-            <div key={index} className="mt-2">
-              <p className="uppercase">{job.company}</p>
-              {job.dates && <p>{job.dates}</p>}
-              <p className="font-semibold">{job.title}</p>
-              <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-                {job.lines.map((line, lineIndex) => (
-                  <Line key={lineIndex} line={line} as="li" />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </>
-      )}
+      <Entries heading={cvHeadings.experience} items={cv.experience} />
+      <Entries heading={cvHeadings.projects} items={cv.projects} />
+      <Entries heading={cvHeadings.volunteering} items={cv.volunteering} />
 
       {cv.certifications.length + cv.technicalSkills.length > 0 && (
         <>
@@ -100,6 +109,17 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
               <strong>{cvHeadings.technical}</strong> {cv.technicalSkills.map((line) => line.text).join(", ")}
             </p>
           )}
+        </>
+      )}
+
+      {cv.languages.length > 0 && (
+        <>
+          <Heading>{cvHeadings.languages}</Heading>
+          <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+            {cv.languages.map((line, index) => (
+              <Line key={index} line={line} as="li" />
+            ))}
+          </ul>
         </>
       )}
     </CvPaper>

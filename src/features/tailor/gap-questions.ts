@@ -34,7 +34,7 @@ export async function askGapQuestions(input: {
 
   const prompt = await loadPrompt("tailor-gap-questions", {
     job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
-    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience, education: profile.education, certifications: profile.certifications }, null, 2),
+    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience, education: profile.education, certifications: profile.certifications, languages: profile.languages, projects: profile.projects, volunteering: profile.volunteering }, null, 2),
     gaps: JSON.stringify(gaps, null, 2),
   });
 

@@ -166,3 +166,22 @@ describe("exportDocument", () => {
     expect(track).not.toHaveBeenCalled();
   });
 });
+
+describe("languages, projects and volunteering in the files (#228)", () => {
+  const full = {
+    ...profile,
+    languages: [{ name: "Welsh", level: "Fluent" }],
+    projects: [{ name: "Bus delay dashboard", details: ["Built a dashboard of bus delays"] }],
+    volunteering: [{ role: "Volunteer tutor", organisation: "Learn Together", details: ["Taught maths to adults"] }],
+  };
+
+  it.each(["pdf", "docx"] as const)("are in the %s, under their own headings", async (format) => {
+    const text = await fileText(await blocksToFile(cvBlocks(buildTailoredCv(full, [])), format, { title: "CV", author: "Sara" }), format);
+    for (const line of ["PROJECTS", "Bus delay dashboard", "VOLUNTEERING", "LEARN TOGETHER", "Volunteer tutor", "LANGUAGES", "Welsh (Fluent)"]) expect(text).toContain(line);
+  });
+
+  it("add no heading for a Profile without them", () => {
+    const headings = cvBlocks(buildTailoredCv(profile, [])).flatMap((block) => (block.kind === "heading" ? [block.text] : []));
+    for (const heading of ["PROJECTS", "VOLUNTEERING", "LANGUAGES"]) expect(headings).not.toContain(heading);
+  });
+});

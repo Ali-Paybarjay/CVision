@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildTailoredCv, fitsCv, formatMonth } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
+import { cvLines } from "@/features/tailor/nothing-invented";
 import { personas } from "@/shared/sample-data";
 
 const profile = personas.sara.profile;
@@ -127,5 +128,31 @@ describe("the tailored CV (You approve everything)", () => {
   it("writes CV dates in UK style", () => {
     expect(formatMonth("2024-06")).toBe("Jun 2024");
     expect(formatMonth(null)).toBe("Present");
+  });
+});
+
+describe("languages, projects and volunteering on the tailored CV (#228)", () => {
+  const full = {
+    ...profile,
+    languages: [{ name: "Welsh", level: "Fluent" }, { name: "Farsi" }],
+    projects: [{ name: "Bus delay dashboard", organisation: "University of Manchester", startDate: "2024-01", endDate: "2024-06", details: ["Built a dashboard of bus delays"] }],
+    volunteering: [{ role: "Volunteer tutor", details: ["Taught maths to adults every week"] }],
+  };
+
+  it("shows them as the Profile has them, and invents no level", () => {
+    const cv = buildTailoredCv(full, []);
+    expect(cv.languages.map((line) => line.text)).toEqual(["Welsh (Fluent)", "Farsi"]);
+    expect(cv.projects).toEqual([{ title: "Bus delay dashboard", company: "University of Manchester", dates: "Jan 2024 – Jun 2024", lines: [{ text: "Built a dashboard of bus delays", tailored: false }] }]);
+    expect(cv.volunteering).toEqual([{ title: "Volunteer tutor", company: "", dates: "", lines: [{ text: "Taught maths to adults every week", tailored: false }] }]);
+  });
+
+  it("leaves them empty for a Profile without them", () => {
+    const cv = buildTailoredCv(profile, []);
+    expect([cv.languages, cv.projects, cv.volunteering]).toEqual([[], [], []]);
+  });
+
+  it("counts them as evidence for Nothing invented", () => {
+    const lines = cvLines(full);
+    for (const line of ["Welsh", "Fluent", "Bus delay dashboard", "Built a dashboard of bus delays", "Volunteer tutor", "Taught maths to adults every week"]) expect(lines).toContain(line);
   });
 });

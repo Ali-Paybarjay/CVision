@@ -18,9 +18,20 @@ export const cvHeadings = {
   skills: "PROFESSIONAL SKILLS AND INTERESTS",
   education: "EDUCATION",
   experience: "PROFESSIONAL SKILLS DEMONSTRATED",
+  projects: "PROJECTS",
+  volunteering: "VOLUNTEERING",
   other: "CERTIFICATES AND SKILLS",
   certificates: "Certificates:",
   technical: "Skills and tools:",
+  languages: "LANGUAGES",
+};
+
+/** A job, project or volunteering role on the CV. `company` is empty when the CV names no organisation. */
+export type CvEntry = {
+  title: string;
+  company: string;
+  dates: string;
+  lines: CvLine[];
 };
 
 export type TailoredCv = {
@@ -31,14 +42,12 @@ export type TailoredCv = {
   skills: CvLine[];
   /** Software, tools and anything else that is not a main skill, listed as "Skills and tools" in the last section of the CV. */
   technicalSkills: CvLine[];
-  experience: {
-    title: string;
-    company: string;
-    dates: string;
-    lines: CvLine[];
-  }[];
+  experience: CvEntry[];
   education: CvLine[];
   certifications: CvLine[];
+  projects: CvEntry[];
+  volunteering: CvEntry[];
+  languages: CvLine[];
   /** Approved changes whose `before` line is not on the CV (or was already changed), so they could not be placed. */
   unplaced: TailoringChange[];
 };
@@ -64,6 +73,15 @@ function educationLine(item: Profile["education"][number]): string {
 /** A certificate as one CV line, e.g. "Tableau Desktop Specialist, Tableau, 2023". */
 function certificationLine(item: Profile["certifications"][number]): string {
   return [item.name, item.issuer, item.year].filter(Boolean).join(", ");
+}
+
+function dateRange(start: string | null | undefined, end: string | null | undefined): string {
+  return [formatMonth(start), formatMonth(end)].filter(Boolean).join(" – ");
+}
+
+/** A line the model never changes: these sections take no tailoring changes yet. */
+function asIs(text: string): CvLine {
+  return { text, tailored: false };
 }
 
 /** The CV's lines in one section, exactly as the tailored CV shows them: a change's `before` must be one of these. */
@@ -122,7 +140,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[]): T
   const experience = profile.experience.map((job) => ({
     title: job.title,
     company: job.company,
-    dates: [formatMonth(job.startDate), formatMonth(job.endDate)].filter(Boolean).join(" – "),
+    dates: dateRange(job.startDate, job.endDate),
     lines: [...job.duties, ...job.achievements].map((line) => withSkill(line, apply(line, "experience"))),
   }));
   // A new experience line has no role to sit under, so it goes under the most recent one.
@@ -153,6 +171,14 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[]): T
     experience,
     education: [...education, ...added("education")],
     certifications: [...certifications, ...added("certifications")],
+    projects: (profile.projects ?? []).map((item) => ({ title: item.name, company: item.organisation ?? "", dates: dateRange(item.startDate, item.endDate), lines: item.details.map(asIs) })),
+    volunteering: (profile.volunteering ?? []).map((item) => ({
+      title: item.role,
+      company: [item.organisation, item.location].filter(Boolean).join(", "),
+      dates: dateRange(item.startDate, item.endDate),
+      lines: item.details.map(asIs),
+    })),
+    languages: (profile.languages ?? []).map((item) => asIs(item.level ? `${item.name} (${item.level})` : item.name)),
     unplaced: approved.filter((change) => !used.has(change.id)),
   };
 }
