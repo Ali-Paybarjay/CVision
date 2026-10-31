@@ -41,6 +41,41 @@ export const CertificationSchema = z.object({
 });
 export type Certification = z.infer<typeof CertificationSchema>;
 
+/** A language the user speaks. The level is the one their CV gives ("Native", "Fluent", "B2"), never a guess. */
+export const LanguageSchema = z.object({
+  name: z.string().min(1),
+  level: z.string().min(1).optional(),
+});
+export type Language = z.infer<typeof LanguageSchema>;
+
+/** Something the user built or led outside a job: a course, personal or open-source project. */
+export const ProjectSchema = z.object({
+  name: z.string().min(1),
+  /** Where it was done, if anywhere: a course, a university, an organisation. */
+  organisation: z.string().optional(),
+  startDate: YearMonthSchema.optional(),
+  endDate: YearMonthSchema.nullable().optional(),
+  /** What the user did and what came of it, as their CV says it. */
+  details: z.array(z.string()),
+  /** A web link only: http or https, never javascript: or data:, as it may be shown as a link on the CV. */
+  url: z.httpUrl().optional(),
+});
+export type Project = z.infer<typeof ProjectSchema>;
+
+/** Unpaid work. CVs often give no dates or organisation for it, so they are optional, unlike a job's. */
+export const VolunteeringSchema = z.object({
+  role: z.string().min(1),
+  /** Many CVs name only the role ("Volunteer tutor"), so the organisation is optional too. */
+  organisation: z.string().min(1).optional(),
+  location: z.string().optional(),
+  startDate: YearMonthSchema.optional(),
+  /** null while the user still does it. */
+  endDate: YearMonthSchema.nullable().optional(),
+  /** What the user did, as their CV says it. */
+  details: z.array(z.string()),
+});
+export type Volunteering = z.infer<typeof VolunteeringSchema>;
+
 /** What kind of work the user is looking for. */
 export const JobPreferencesSchema = z.object({
   salary: SalarySchema.nullable(),
@@ -82,6 +117,13 @@ export const ProfileSchema = z.object({
   experience: z.array(WorkExperienceSchema),
   education: z.array(EducationSchema),
   certifications: z.array(CertificationSchema),
+  /**
+   * Issue #226. Optional, so profiles saved before them stay valid. Shayan's profile writes them (from the CV and the
+   * Profile page); Nazanin's tailored CV reads them. Each is the user's own evidence, like experience.
+   */
+  languages: z.array(LanguageSchema).optional(),
+  projects: z.array(ProjectSchema).optional(),
+  volunteering: z.array(VolunteeringSchema).optional(),
   preferences: JobPreferencesSchema,
   followUpAnswers: z.array(FollowUpAnswerSchema),
 });

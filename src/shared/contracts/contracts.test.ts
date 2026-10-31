@@ -130,6 +130,49 @@ describe("contracts keep the Honest CV Promise", () => {
   });
 });
 
+describe("Profile: languages, projects and volunteering (#226)", () => {
+  const profile = ProfileSchema.parse(readJson("sara", "profile.json"));
+
+  it("stays valid without them, so profiles saved before them keep working", () => {
+    expect(profile).not.toHaveProperty("languages");
+    expect(ProfileSchema.parse(profile)).toEqual(profile);
+  });
+
+  it("keeps them when they are given", () => {
+    const withThem = {
+      ...profile,
+      languages: [{ name: "Urdu", level: "Native" }, { name: "French" }],
+      projects: [{ name: "Stock dashboard", organisation: "Open University", startDate: "2025-01", endDate: null, details: ["Built it in Excel."] }],
+      volunteering: [{ role: "Treasurer", organisation: "Leeds Food Bank", details: ["Kept the accounts."] }],
+    };
+    expect(ProfileSchema.parse(withThem)).toEqual(withThem);
+  });
+
+  it("rejects an empty name, role or organisation, and a date in the wrong shape", () => {
+    expect(ProfileSchema.safeParse({ ...profile, languages: [{ name: "" }] }).success).toBe(false);
+    expect(ProfileSchema.safeParse({ ...profile, volunteering: [{ role: "", organisation: "Leeds Food Bank", details: [] }] }).success).toBe(false);
+    expect(ProfileSchema.safeParse({ ...profile, projects: [{ name: "Dashboard", startDate: "January 2025", details: [] }] }).success).toBe(false);
+  });
+
+  it("takes a project link only over http or https", () => {
+    const project = { name: "Dashboard", details: [] };
+    expect(ProfileSchema.safeParse({ ...profile, projects: [{ ...project, url: "https://github.com/sara/dashboard" }] }).success).toBe(true);
+    for (const url of ["javascript:alert(1)", "data:text/html,hi", "ftp://example.com/file"]) {
+      expect(ProfileSchema.safeParse({ ...profile, projects: [{ ...project, url }] }).success, url).toBe(false);
+    }
+  });
+
+  it("keeps volunteering that names no organisation", () => {
+    const withRoleOnly = { ...profile, volunteering: [{ role: "Volunteer tutor", details: [] }] };
+    expect(ProfileSchema.parse(withRoleOnly)).toEqual(withRoleOnly);
+  });
+
+  it("travels with a saved tailored CV", () => {
+    const cv = { ...profile, languages: [{ name: "Urdu", level: "Native" }] };
+    expect(TailoredCvSchema.parse(tailoredCv({ cv })).cv.languages).toEqual([{ name: "Urdu", level: "Native" }]);
+  });
+});
+
 describe("Application", () => {
   it.each(["ready", "applied", "interview", "offer", "rejected", "no_response", "withdrawn", "accepted"])(
     "accepts the status %s",
