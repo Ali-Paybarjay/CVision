@@ -20,6 +20,33 @@ import {
 
 const sara = personas.sara.profile;
 
+/** Sara with the three sections the personas don't have (#227), one item filled in fully and one as sparse as a CV may be. */
+const saraWithMore: Profile = {
+  ...sara,
+  volunteering: [
+    {
+      role: "Volunteer maths tutor",
+      organisation: "Ancoats Reading Club",
+      location: "Manchester",
+      startDate: "2023-01",
+      endDate: null,
+      details: ["Tutor two Year 10 pupils every week"],
+    },
+    { role: "Charity shop assistant", details: ["Sorted donations on Saturdays"] },
+  ],
+  projects: [
+    {
+      name: "Late buses dashboard",
+      organisation: "University of Manchester",
+      startDate: "2025-01",
+      endDate: "2025-05",
+      details: ["Built a Tableau dashboard of late buses across Manchester"],
+      url: "https://example.com/sara/late-buses",
+    },
+  ],
+  languages: [{ name: "French", level: "B1" }, { name: "British Sign Language" }],
+};
+
 function apply(draft: ReviewDraft, ...actions: ReviewAction[]): ReviewDraft {
   return actions.reduce(reviewReducer, draft);
 }
@@ -173,6 +200,81 @@ describe("review draft", () => {
     expect(profileFromDraft(approve(draft), sara).skills).toEqual(["SQL", "Power BI"]);
   });
 
+  it("keeps volunteering, projects and languages through the review exactly as the profile has them (#227)", () => {
+    const draft = approve(draftFromProfile(saraWithMore));
+
+    expect(itemsWithProblems(draft)).toEqual([]);
+    expect(profileFromDraft(draft, saraWithMore)).toEqual(saraWithMore);
+  });
+
+  it("leaves out a section with nothing in it, so the profile looks like one saved before the section existed", () => {
+    const saved = (draft: ReviewDraft) => JSON.parse(JSON.stringify(profileFromDraft(approve(draft), sara)));
+    const removed = apply(draftFromProfile(saraWithMore), { type: "remove", key: "language-0" }, { type: "remove", key: "language-1" });
+
+    for (const section of ["languages", "projects", "volunteering"]) expect(saved(draftFromProfile(sara))).not.toHaveProperty(section);
+    expect(saved(removed)).not.toHaveProperty("languages");
+    expect(saved(removed).projects).toEqual(saraWithMore.projects);
+  });
+
+  it("asks only for a role, a project's name and a language's name, and lists the items to fix in page order", () => {
+    const draft = approve(
+      apply(
+        draftFromProfile(sara),
+        { type: "add", section: "languages", key: "language" },
+        { type: "add", section: "projects", key: "project" },
+        { type: "add", section: "certifications", key: "certificate" },
+        { type: "add", section: "volunteering", key: "role" },
+      ),
+    );
+
+    expect(itemsWithProblems(draft)).toEqual(["role", "project", "certificate", "language"]);
+    expect(draft.volunteering[0].errors).toEqual({ role: "Add your role, for example Volunteer tutor." });
+    expect(draft.projects[0].errors).toEqual({ name: "Add the project’s name." });
+    expect(draft.languages[0].errors).toEqual({ name: "Add the language, for example Polish." });
+  });
+
+  it("checks the dates of volunteering and projects as for a course, and saves a role the user still does with no end", () => {
+    let draft = approve(
+      apply(
+        draftFromProfile(sara),
+        { type: "add", section: "volunteering", key: "role" },
+        { type: "edit-volunteering", key: "role", change: { role: "Volunteer maths tutor", startDate: "2023-01", endDate: "2023-" } },
+        { type: "add", section: "projects", key: "project" },
+        { type: "edit-project", key: "project", change: { name: "Late buses dashboard", startDate: "2025-05", endDate: "2025-01" } },
+      ),
+    );
+    expect(draft.volunteering[0].errors).toEqual({ endDate: "Choose the month too." });
+    expect(draft.projects[0].errors).toEqual({ endDate: "The end month is before the start month." });
+
+    draft = approve(
+      apply(
+        draft,
+        { type: "edit-volunteering", key: "role", change: { current: true, endDate: "2023-" } },
+        { type: "edit-project", key: "project", change: { startDate: "", endDate: "" } },
+      ),
+    );
+    expect(itemsWithProblems(draft)).toEqual([]);
+    const profile = profileFromDraft(draft, sara);
+    expect(profile.volunteering).toEqual([{ role: "Volunteer maths tutor", startDate: "2023-01", endDate: null, details: [] }]);
+    expect(profile.projects).toEqual([{ name: "Late buses dashboard", details: [] }]);
+  });
+
+  // The project link may be shown as a link on the CV, so it is checked with the contract's own rule (z.httpUrl).
+  it("accepts a project link typed without https://, but only a web link the profile can keep", () => {
+    const withLink = (url: string) =>
+      approve(apply(draftFromProfile(saraWithMore), { type: "edit-project", key: "project-0", change: { url } }));
+
+    const bare = withLink("example.com/sara/late-buses");
+    expect(itemsWithProblems(bare)).toEqual([]);
+    expect(profileFromDraft(bare, saraWithMore).projects?.[0].url).toBe("https://example.com/sara/late-buses");
+
+    for (const url of ["javascript:alert(1)", "data:text/html,hi", "http://localhost:3000", "http://192.168.0.10/app"]) {
+      const draft = withLink(url);
+      expect(draft.projects[0].errors.url, url).toBe("Check the link, for example https://github.com/your-name/your-project.");
+      expect(approvalFor(draft, saraWithMore, false).ok, url).toBe(false);
+    }
+  });
+
   it("keeps the job search location in step with the contact location, unless the user set it apart", () => {
     const moved = apply(draftFromProfile(sara), { type: "edit-contact", change: { location: "Leeds" } });
     expect(profileFromDraft(approve(moved), sara).preferences.location).toBe("Leeds");
@@ -228,6 +330,25 @@ describe("a draft from a CV just read (#33)", () => {
     expect(draft.experience[0].value).toMatchObject({ endDate: "", current: true, endGuessed: false });
   });
 
+  it("gives volunteering, projects and languages back once the page is approved (#227)", () => {
+    const draft = approve(draftFromExtraction(extractionFromProfile(saraWithMore)));
+
+    expect(itemsWithProblems(draft)).toEqual([]);
+    expect(profileFromDraft(draft, saraWithMore)).toEqual(saraWithMore);
+  });
+
+  it("guesses the month of a year alone for volunteering and projects too, marked as a guess", () => {
+    const draft = draftFromExtraction(
+      read({
+        volunteering: [{ role: "Volunteer maths tutor", startDate: "2023", endDate: "", current: true, details: [] }],
+        projects: [{ name: "Late buses dashboard", startDate: "2025", endDate: "2025", current: false, details: [] }],
+      }),
+    );
+
+    expect(draft.volunteering[0].value).toMatchObject({ startDate: "2023-01", startGuessed: true, endDate: "", current: true });
+    expect(draft.projects[0].value).toMatchObject({ startDate: "2025-01", endDate: "2025-12", startGuessed: true, endGuessed: true });
+  });
+
   it("starts the job preferences from the CV's location, with a new id and the earlier answers", () => {
     const answers = sara.followUpAnswers;
     const base = newProfileBase(read(), { id: "new-id", followUpAnswers: answers });
@@ -249,7 +370,8 @@ describe("a profile typed in by hand, with no CV", () => {
     const draft = approve(emptyDraft());
 
     expect(draft).toMatchObject({ summary: { value: { text: "" } }, skills: { value: { list: [] } } });
-    expect([draft.experience, draft.education, draft.certifications]).toEqual([[], [], []]);
+    const lists = [draft.experience, draft.volunteering, draft.education, draft.projects, draft.certifications, draft.languages];
+    expect(lists).toEqual([[], [], [], [], [], []]);
     expect(itemsWithProblems(draft)).toEqual(["contact"]);
     expect(draft.contact.errors).toEqual({ fullName: "Add your full name." });
   });

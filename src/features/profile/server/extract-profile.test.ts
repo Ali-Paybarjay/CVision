@@ -54,6 +54,38 @@ describe("tidyExtraction (#33)", () => {
     expect(tidy.certifications).toEqual([{ name: "", issuer: "BCS", year: undefined }]);
   });
 
+  it("keeps a language only with its name, and its level only when the CV gives one (#227)", () => {
+    const tidy = tidyExtraction({
+      ...base,
+      languages: [{ name: " French ", level: " B1 " }, { name: "British Sign Language", level: " " }, { name: "", level: "Fluent" }],
+    });
+
+    expect(tidy.languages).toEqual([
+      { name: "French", level: "B1" },
+      { name: "British Sign Language", level: undefined },
+    ]);
+  });
+
+  it("keeps a project or a volunteering role the CV says anything about, for the user to complete, and drops empty ones", () => {
+    const noDates = { startDate: "", endDate: "", current: false };
+    const tidy = tidyExtraction({
+      ...base,
+      projects: [
+        { name: " Late buses dashboard ", startDate: "2025-01", endDate: "2025-05", current: true, details: ["Built it", "built it", " "], url: " " },
+        { name: " ", ...noDates, details: [" "] },
+      ],
+      volunteering: [
+        { role: "", organisation: "Ancoats Reading Club", ...noDates, details: [] },
+        { role: " ", organisation: " ", ...noDates, details: [] },
+      ],
+    });
+
+    expect(tidy.projects).toEqual([
+      { name: "Late buses dashboard", startDate: "2025-01", endDate: "", current: true, details: ["Built it"], url: undefined },
+    ]);
+    expect(tidy.volunteering).toEqual([{ role: "", organisation: "Ancoats Reading Club", ...noDates, details: [] }]);
+  });
+
   it("never needs a guess from the model: every sample profile fits the loose format", () => {
     for (const persona of Object.values(personas)) {
       expect(() => CvExtractionSchema.parse(extractionFromProfile(persona.profile))).not.toThrow();

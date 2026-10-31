@@ -148,6 +148,64 @@ describe("profile screens", () => {
     expect(words).toContain("Start again");
   });
 
+  it("lists volunteering, projects and languages read from a CV, each next to the section most like it (#227)", () => {
+    const profile = {
+      ...personas.sara.profile,
+      volunteering: [{ role: "Volunteer maths tutor", organisation: "Ancoats Reading Club", startDate: "2023-01", endDate: null, details: [] }],
+      projects: [{ name: "Late buses dashboard", details: [], url: "https://example.com/sara/late-buses" }],
+      languages: [{ name: "French", level: "B1" }],
+    };
+    const html = renderToStaticMarkup(
+      <ReviewStep
+        draft={draftFromExtraction(extractionFromProfile(profile))}
+        base={profile}
+        source="cv"
+        storage="account"
+        demo={null}
+        truncated={false}
+        focusHeading={false}
+        onSave={noop}
+        onCancel={noop}
+      />,
+    );
+    const words = text(html);
+    const headings = ["Work history", "Volunteering", "Education", "Projects", "Certificates", "Languages", "Skills"];
+    const at = headings.map((heading) => html.indexOf(`>${heading}</h3>`));
+
+    expect(at).not.toContain(-1);
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+    expect(words).toContain("Volunteer maths tutor at Ancoats Reading Club");
+    expect(words).toContain("I still do this");
+    expect(words).toContain("Late buses dashboard");
+    expect(html).toMatch(/<input[^>]*type="url"[^>]*value="https:\/\/example.com\/sara\/late-buses"/);
+    expect(words).toContain("Level (optional)");
+    expect(words).not.toMatch(/We didn’t find any (volunteering|projects|languages)/);
+  });
+
+  it("says when a CV has no volunteering, projects or languages, so the user can add them", () => {
+    const profile = personas.reza.profile;
+    const words = text(
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={draftFromExtraction(extractionFromProfile(profile))}
+          base={profile}
+          source="cv"
+          storage="account"
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      ),
+    );
+
+    expect(words).toContain("We didn’t find any volunteering in your CV.");
+    expect(words).toContain("We didn’t find any projects in your CV.");
+    expect(words).toContain("We didn’t find any languages in your CV.");
+    for (const label of ["Add a volunteering role", "Add a project", "Add a language"]) expect(words).toContain(label);
+  });
+
   it("asks for the changes to a saved profile to be approved once, or cancelled", () => {
     const profile = personas.emma.profile;
     const html = text(
@@ -253,6 +311,9 @@ describe("profile screens", () => {
     expect(words).toContain("No jobs yet. Part-time work, volunteering and placements count too.");
     expect(words).toContain("No qualifications yet. GCSEs, A levels, degrees and training courses all count.");
     expect(words).toContain("No certificates yet.");
+    expect(words).toContain("No volunteering yet.");
+    expect(words).toContain("No projects yet. Course, personal and open-source projects all count.");
+    expect(words).toContain("No languages yet.");
     expect(words).toContain("A few sentences about you and the work you want, in your own words.");
     expect(words).not.toMatch(/in your CV|your CV’s|your CV doesn’t|as on your CV/i);
     // A single page, so no steps of the upload.

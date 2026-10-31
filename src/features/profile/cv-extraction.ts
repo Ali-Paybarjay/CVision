@@ -38,6 +38,34 @@ const CvCertificateSchema = z.object({
   year: z.number().int().optional(),
 });
 
+const CvLanguageSchema = z.object({
+  name: z.string(),
+  /** Only when the CV gives one ("Native", "Fluent", "B2"). */
+  level: z.string().optional(),
+});
+
+const CvProjectSchema = z.object({
+  name: z.string(),
+  organisation: z.string().optional(),
+  startDate: CvDateSchema,
+  endDate: CvDateSchema,
+  /** True when the CV says the user is still working on it. */
+  current: z.boolean(),
+  details: z.array(z.string()),
+  url: z.string().optional(),
+});
+
+const CvVolunteeringSchema = z.object({
+  role: z.string(),
+  organisation: z.string().optional(),
+  location: z.string().optional(),
+  startDate: CvDateSchema,
+  endDate: CvDateSchema,
+  /** True when the CV says the user still does it. */
+  current: z.boolean(),
+  details: z.array(z.string()),
+});
+
 /** What the model reads from a CV (see prompts/profile-extract.md), and what the review step starts from. */
 export const CvExtractionSchema = z.object({
   fullName: z.string(),
@@ -52,6 +80,9 @@ export const CvExtractionSchema = z.object({
   experience: z.array(CvJobSchema),
   education: z.array(CvCourseSchema),
   certifications: z.array(CvCertificateSchema),
+  languages: z.array(CvLanguageSchema),
+  projects: z.array(CvProjectSchema),
+  volunteering: z.array(CvVolunteeringSchema),
 });
 export type CvExtraction = z.infer<typeof CvExtractionSchema>;
 
@@ -91,6 +122,33 @@ export function tidyExtraction(extraction: CvExtraction): CvExtraction {
     certifications: extraction.certifications
       .map((certificate) => ({ name: text(certificate.name), issuer: optional(certificate.issuer), year: certificate.year }))
       .filter((certificate) => certificate.name !== "" || certificate.issuer !== undefined),
+    // A level with no language is nothing to complete, so it goes.
+    languages: extraction.languages
+      .map((language) => ({ name: text(language.name), level: optional(language.level) }))
+      .filter((language) => language.name !== ""),
+    // A project or a role the CV says something about stays, for the user to complete; an empty one goes.
+    projects: extraction.projects
+      .map((project) => ({
+        name: text(project.name),
+        organisation: optional(project.organisation),
+        startDate: text(project.startDate),
+        endDate: project.current ? "" : text(project.endDate),
+        current: project.current,
+        details: uniqueLines(project.details),
+        url: optional(project.url),
+      }))
+      .filter((project) => project.name !== "" || project.organisation !== undefined || project.details.length > 0),
+    volunteering: extraction.volunteering
+      .map((role) => ({
+        role: text(role.role),
+        organisation: optional(role.organisation),
+        location: optional(role.location),
+        startDate: text(role.startDate),
+        endDate: role.current ? "" : text(role.endDate),
+        current: role.current,
+        details: uniqueLines(role.details),
+      }))
+      .filter((role) => role.role !== "" || role.organisation !== undefined || role.details.length > 0),
   };
 }
 
@@ -121,6 +179,25 @@ export function extractionFromProfile(profile: Profile): CvExtraction {
       grade: course.grade,
     })),
     certifications: profile.certifications.map((certificate) => ({ ...certificate })),
+    languages: (profile.languages ?? []).map((language) => ({ ...language })),
+    projects: (profile.projects ?? []).map((project) => ({
+      name: project.name,
+      organisation: project.organisation,
+      startDate: project.startDate ?? "",
+      endDate: project.endDate ?? "",
+      current: project.endDate === null,
+      details: project.details,
+      url: project.url,
+    })),
+    volunteering: (profile.volunteering ?? []).map((role) => ({
+      role: role.role,
+      organisation: role.organisation,
+      location: role.location,
+      startDate: role.startDate ?? "",
+      endDate: role.endDate ?? "",
+      current: role.endDate === null,
+      details: role.details,
+    })),
   };
 }
 
