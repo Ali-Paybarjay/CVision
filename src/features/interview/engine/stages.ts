@@ -465,6 +465,7 @@ export async function evaluateAnswer(
   if (!role) throw new InterviewStageError("The session has not been analysed yet.");
   const main = mainAnswer(session, questionId);
   if (main === null) throw new InterviewStageError(`${questionId} has no answer yet.`);
+  if (unansweredQuestionIds(session).includes(questionId)) throw new InterviewStageError(`${questionId} was not answered, so it gets a suggested answer instead.`);
   const asked = followUpQuestion(session, questionId) !== null;
   const followUp = followUpAnswer(session, questionId);
   if (asked && followUp === null) throw new InterviewStageError(`${questionId} is waiting for its follow-up answer.`);
@@ -533,6 +534,7 @@ export async function writeReport(
   const role = session.roleProfile;
   const candidate = session.candidateProfile;
   if (!role || !candidate) throw new InterviewStageError("The session has not been analysed yet.");
+  if (session.endedAt) throw new InterviewStageError("A practice ended early has no overall report.");
   const evaluations = session.evaluations ?? [];
   const missing = session.questions.filter((q) => !evaluations.some((e) => e.questionId === q.id));
   if (session.questions.length === 0 || missing.length) throw new InterviewStageError("Every question must be scored before the report.");

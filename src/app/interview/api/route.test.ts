@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { profileToCvText } from "@/features/interview/engine/text";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
-import { runMockSession } from "@/features/interview/test-support";
+import { endedSessionFor, runMockSession } from "@/features/interview/test-support";
 import type { AskModelOptions } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { POST } from "./route";
@@ -158,6 +158,39 @@ describe("the interview API in mock mode", () => {
     const response = await post({ step: "report", jobId: "sara-job-1", session: { ...full, report: undefined, summary: null } });
     expect(response.status).toBe(200);
     expect(deferred).toHaveLength(0);
+  });
+});
+
+describe("'End here' (#205)", () => {
+  it("records interview.session_ended_early once, with counts only", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const session = endedSessionFor(dataAnalystSara);
+    expect((await post({ step: "end", jobId: "sara-job-1", session })).status).toBe(200);
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked).toEqual([
+      { name: "interview.session_ended_early", properties: { sessionId: session.id, jobId: "sara-job-1", mode: "mock", questions: 6, answered: 0 }, actor: { userId: "user-1" } },
+    ]);
+
+    recordedSessionIds.push(session.id);
+    deferred.length = 0;
+    await post({ step: "end", jobId: "sara-job-1", session });
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked).toHaveLength(1);
+  });
+
+  it("records nothing for a signed-out visitor, and refuses a practice that cannot end", async () => {
+    expect((await post({ step: "end", jobId: "sara-job-1", session: endedSessionFor(dataAnalystSara) })).status).toBe(200);
+    expect(deferred).toHaveLength(0);
+    const full = await runMockSession(dataAnalystSara);
+    expect((await post({ step: "end", jobId: "sara-job-1", session: full })).status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("writes a suggested answer from the CV read on the server", async () => {
+    const response = await post({ step: "suggest", jobId: "sara-job-1", session: endedSessionFor(dataAnalystSara), questionId: "q1" });
+    expect(response.status).toBe(200);
+    const { suggestion } = await response.json();
+    expect(suggestion).toMatchObject({ questionId: "q1", kind: "evidence", fallback: false });
+    expect(profileReads.count).toBe(1);
   });
 });
 

@@ -4,10 +4,10 @@ import { after } from "next/server";
 import { z } from "zod";
 import { getAiMode, type Requester } from "@/shared/ai";
 import { getCurrentUser } from "@/features/account/current-user";
-import { applyReport } from "@/features/interview/engine/session";
-import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, writeReport } from "@/features/interview/engine/stages";
+import { applyReport, endEarly } from "@/features/interview/engine/session";
+import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, suggestAnswer, writeReport } from "@/features/interview/engine/stages";
 import { interviewInputsFor } from "@/features/interview/engine/text";
-import { trackSessionCompleted } from "@/features/interview/server/completion-event";
+import { trackSessionCompleted, trackSessionEndedEarly } from "@/features/interview/server/completion-event";
 import { getMyJob, getMyProfile } from "@/features/interview/server/my-data";
 import { saveInterviewSession } from "@/features/interview/server/session-store";
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
@@ -22,13 +22,15 @@ const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("follow-up"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("evaluate"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("report"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  z.object({ step: z.literal("end"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  z.object({ step: z.literal("suggest"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("save"), jobId: JobIdSchema, session: InterviewSessionSchema }),
 ]);
 
 export async function POST(request: Request): Promise<Response> {
   const user = await getCurrentUser();
   // Live requests spend the team's credit, so they need a signed-in user and count towards that user's daily limit.
-  if (getAiMode() === "live" && !user) return Response.json({ error: "Sign in to practise for this interview." }, { status: 401 });
+  if (getAiMode() === "live" && !user) return Response.json({ error: "Sign in for interview practice." }, { status: 401 });
   const requester: Requester | undefined = getAiMode() === "live" && user ? { userId: user.id } : undefined;
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
@@ -41,7 +43,7 @@ export async function POST(request: Request): Promise<Response> {
   // Only the user's own job: another user's job id finds nothing.
   const job = await getMyJob(body.jobId);
   if (!job) return Response.json({ error: "We could not find this job." }, { status: 404 });
-  // The job ad and CV are read only by the first three steps; later steps work from the session.
+  // The job ad and CV are read only by the first three steps and "suggest"; the other steps work from the session.
   const inputs = async () => {
     const profile = await getMyProfile({ jobId: body.jobId });
     if (!profile) throw new MissingProfileError();
@@ -67,6 +69,14 @@ export async function POST(request: Request): Promise<Response> {
         if (user) after(() => trackSessionCompleted(completed, result.report, user.id));
         return Response.json(result);
       }
+      case "end": {
+        // "End here" is applied in the browser; this step only records it, once per session (#205).
+        const ended = endEarly(body.session, new Date().toISOString());
+        if (user) after(() => trackSessionEndedEarly(ended, user.id));
+        return Response.json({ ended: true });
+      }
+      case "suggest":
+        return Response.json(await suggestAnswer(body.session, body.questionId, await inputs(), { requester }));
       case "save":
         if (!user) return Response.json({ saved: false, reason: "signed-out" });
         return Response.json(await saveInterviewSession(body.session));

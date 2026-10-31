@@ -75,23 +75,49 @@ describe("what the practice page for a job opens on (#206)", () => {
   it("shows this browser's practice, or the account's copy when it went further", async () => {
     const finished = await runMockSession(fixtures[0]);
     const earlier = { ...finished, turns: finished.turns?.slice(0, 4), evaluations: [], report: undefined };
-    const base = { saved: null, lastReport: null, practiseAgain: false };
+    const base = { saved: null, lastReport: null, practiseAgain: false, practising: false };
     expect(openingView({ ...base, inBrowser: { session: earlier } })).toBe("browser");
     expect(openingView({ ...base, inBrowser: { session: null }, saved: finished })).toBe("browser");
     expect(openingView({ ...base, inBrowser: { session: earlier }, saved: finished })).toBe("resume");
+    // A finished practice in this browser is the latest report, so it is shown as it is.
     expect(openingView({ ...base, inBrowser: { session: finished }, saved: earlier, lastReport: finished })).toBe("browser");
   });
 
-  it("with an empty browser, resumes an unfinished practice before showing the last report", async () => {
+  it("from a link to the job, shows the last report, even over an unfinished practice", async () => {
     const finished = await runMockSession(fixtures[0]);
     const unfinished = { ...finished, id: "another", startedAt: "2026-10-23T09:00:00.000Z", evaluations: [], report: undefined };
-    expect(openingView({ inBrowser: null, saved: unfinished, lastReport: finished, practiseAgain: false })).toBe("resume");
-    expect(openingView({ inBrowser: null, saved: finished, lastReport: finished, practiseAgain: false })).toBe("last-report");
-    expect(openingView({ inBrowser: null, saved: null, lastReport: null, practiseAgain: false })).toBe("intro");
+    const base = { lastReport: finished, practiseAgain: false, practising: false };
+    expect(openingView({ ...base, inBrowser: null, saved: finished })).toBe("last-report");
+    expect(openingView({ ...base, inBrowser: null, saved: unfinished })).toBe("last-report");
+    expect(openingView({ ...base, inBrowser: { session: unfinished }, saved: finished })).toBe("last-report");
+    // Left while the questions were still being written.
+    expect(openingView({ ...base, inBrowser: { session: null }, saved: finished })).toBe("last-report");
   });
 
-  it("after Practise again, goes to the intro instead of back to the same report", async () => {
+  it("with no report yet, resumes an unfinished practice", async () => {
     const finished = await runMockSession(fixtures[0]);
-    expect(openingView({ inBrowser: null, saved: finished, lastReport: finished, practiseAgain: true })).toBe("intro");
+    const unfinished = { ...finished, evaluations: [], report: undefined };
+    const base = { lastReport: null, practiseAgain: false, practising: false };
+    expect(openingView({ ...base, inBrowser: null, saved: unfinished })).toBe("resume");
+    expect(openingView({ ...base, inBrowser: null, saved: null })).toBe("intro");
+  });
+
+  it("once this tab chose the practice, stays on it, through a reload too", async () => {
+    const finished = await runMockSession(fixtures[0]);
+    const unfinished = { ...finished, id: "another", startedAt: "2026-10-23T09:00:00.000Z", evaluations: [], report: undefined };
+    const base = { lastReport: finished, practiseAgain: false, practising: true };
+    expect(openingView({ ...base, inBrowser: { session: unfinished }, saved: finished })).toBe("browser");
+    expect(openingView({ ...base, inBrowser: { session: null }, saved: finished })).toBe("browser");
+    expect(openingView({ ...base, inBrowser: null, saved: unfinished })).toBe("resume");
+  });
+
+  it("after New practice, goes to the intro instead of back to the same report or the unfinished practice", async () => {
+    const finished = await runMockSession(fixtures[0]);
+    const unfinished = { ...finished, id: "another", startedAt: "2026-10-23T09:00:00.000Z", evaluations: [], report: undefined };
+    const base = { inBrowser: null, lastReport: finished, practiseAgain: true, practising: false };
+    expect(openingView({ ...base, saved: finished })).toBe("intro");
+    expect(openingView({ ...base, saved: unfinished })).toBe("intro");
+    // Then "Start practice": the new practice in this browser.
+    expect(openingView({ ...base, inBrowser: { session: null }, saved: unfinished, practising: true })).toBe("browser");
   });
 });
