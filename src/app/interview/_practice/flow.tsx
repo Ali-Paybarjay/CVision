@@ -108,61 +108,6 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
   }
 }
 
-const startupStages = [
-  { key: "analyse", label: "Reading the role and your CV" },
-  { key: "generate", label: "Writing questions" },
-  { key: "review", label: "Checking the questions" },
-] as const;
-
-export function Progress({
-  store,
-  session,
-  jobs,
-  run,
-  startupMs,
-}: {
-  store: PracticeStore;
-  session: InterviewSession | null;
-  jobs: Readonly<Record<string, JobState>>;
-  run: string;
-  startupMs: number | null;
-}) {
-  const reached = !session ? 0 : !session.questions.length ? 1 : !session.reviewChangelog ? 2 : 3;
-  if (reached === 3) {
-    return startupMs === null ? null : <p className="text-sm text-text-muted">Questions ready in {(startupMs / 1000).toFixed(1)} seconds.</p>;
-  }
-  return (
-    <Card>
-      <h2 className="text-xl">Preparing your interview</h2>
-      <ol className="mt-3 space-y-2">
-        {startupStages.map((stage, index) => {
-          const job = jobs[`${run}:${stage.key}`];
-          return (
-            <li key={stage.key} className="flex flex-wrap items-center gap-2">
-              {index < reached ? (
-                <Status tone="accent">Done</Status>
-              ) : job?.status === "failed" ? (
-                <Status tone="error">Failed</Status>
-              ) : index === reached ? (
-                <Status tone="muted">Working…</Status>
-              ) : (
-                <Status tone="muted">Waiting</Status>
-              )}
-              <span>{stage.label}</span>
-              {job?.status === "failed" && (
-                <>
-                  <span className="w-full text-sm text-error">{job.message}</span>
-                  <Button onClick={() => store.retryJob(`${run}:${stage.key}`)}>Try again</Button>
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </Card>
-  );
-}
-
 export function InterviewFlow({
   store,
   session,
