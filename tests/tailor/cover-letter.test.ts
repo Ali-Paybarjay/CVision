@@ -30,6 +30,19 @@ describe("the mock cover letter", () => {
   });
 });
 
+describe("the letter's ending (the name appeared twice)", () => {
+  const letter = { greeting: "Dear Hiring Manager,", paragraphs: ["I am applying.", "Yours faithfully,", "Sara Ahmadi"], signOff: "Yours faithfully,\nSara Ahmadi" };
+
+  it("has one closing line and one name, whatever the model wrote", () => {
+    expect(coverLetterText(letter, "Sara Ahmadi")).toBe("Dear Hiring Manager,\n\nI am applying.\n\nYours sincerely,\n\nSara Ahmadi");
+  });
+
+  it("keeps a paragraph that only starts like a closing word", () => {
+    const text = coverLetterText({ ...letter, paragraphs: ["Regardless of sector, I plan my work carefully."] }, "Sara Ahmadi");
+    expect(text).toContain("Regardless of sector");
+  });
+});
+
 describe("inventedTerms", () => {
   it("finds a skill the user said they have not used", () => {
     const { input, gaps } = coverLetterCases[0];

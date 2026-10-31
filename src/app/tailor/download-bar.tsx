@@ -4,14 +4,16 @@ import { useState, useTransition } from "react";
 import { exportDocument } from "@/features/tailor/actions";
 import type { ExportDocument, ExportFormat } from "@/features/tailor/export";
 import type { TailoringChange } from "@/shared/contracts";
-import { Button, Card, Notice } from "@/shared/ui";
+import { Button, Notice } from "@/shared/ui";
 import type { LetterState } from "./cover-letter-panel";
 import { unreachableMessage } from "./messages";
 
-type ExportPanelProps = {
+type DownloadBarProps = {
   jobId: string;
   changes: TailoringChange[];
   letter: LetterState | null;
+  /** Opens the cover letter step, for a letter that is not approved yet. */
+  onGoToLetter: () => void;
 };
 
 function save(base64: string, mimeType: string, fileName: string) {
@@ -22,8 +24,8 @@ function save(base64: string, mimeType: string, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/** Download the tailored CV and the approved cover letter as PDF or Word: what the preview shows, without the highlight. */
-export function ExportPanel({ jobId, changes, letter }: ExportPanelProps) {
+/** The downloads: the tailored CV and the approved cover letter as PDF or Word, which match the preview without the highlight. */
+export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBarProps) {
   const [pending, startTransition] = useTransition();
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,51 +57,39 @@ export function ExportPanel({ jobId, changes, letter }: ExportPanelProps) {
     working === `${kind}-${format}` ? "Making your file…" : text;
 
   return (
-    <Card as="section" aria-labelledby="download-heading" className="flex flex-col gap-4">
-      <div>
-        <h2 id="download-heading" className="text-xl">
-          Download
-        </h2>
-        <p className="mt-1 text-sm text-text-muted">
-          The file matches the preview, without the highlight: one column and plain headings, so employers’ systems read it correctly.
-        </p>
+    <section aria-labelledby="download-heading" className="flex flex-col gap-3">
+      <h4 id="download-heading" className="font-semibold">
+        Download
+      </h4>
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+        <Button onClick={() => download("cv", "pdf")} disabled={pending} className="px-2 sm:px-5">
+          {label("cv", "pdf", "Download CV (PDF)")}
+        </Button>
+        <Button onClick={() => download("cv", "docx")} disabled={pending} className="px-2 sm:px-5">
+          {label("cv", "docx", "Download CV (Word)")}
+        </Button>
+        {approvedLetter ? (
+          <>
+            <Button onClick={() => download("cover-letter", "pdf")} disabled={pending} className="px-2 sm:px-5">
+              {label("cover-letter", "pdf", "Download letter (PDF)")}
+            </Button>
+            <Button onClick={() => download("cover-letter", "docx")} disabled={pending} className="px-2 sm:px-5">
+              {label("cover-letter", "docx", "Download letter (Word)")}
+            </Button>
+          </>
+        ) : (
+          <Button variant="quiet" onClick={onGoToLetter} className="col-span-2 underline sm:px-0">
+            Approve your cover letter to download it
+          </Button>
+        )}
       </div>
-
       {waiting > 0 && (
-        <Notice tone="info">
+        <p className="text-xs text-text-muted">
           {waiting} {waiting === 1 ? "change is" : "changes are"} still waiting for your decision and will not be in the file.
-        </Notice>
+        </p>
       )}
       {error && <Notice tone="error">{error}</Notice>}
       {warning && <Notice tone="warning">{warning}</Notice>}
-
-      <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold">Your CV</p>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={() => download("cv", "pdf")} disabled={pending}>
-            {label("cv", "pdf", "Download PDF")}
-          </Button>
-          <Button onClick={() => download("cv", "docx")} disabled={pending}>
-            {label("cv", "docx", "Download Word")}
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <p className="text-sm font-semibold">Your cover letter</p>
-        {approvedLetter ? (
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => download("cover-letter", "pdf")} disabled={pending}>
-              {label("cover-letter", "pdf", "Download PDF")}
-            </Button>
-            <Button onClick={() => download("cover-letter", "docx")} disabled={pending}>
-              {label("cover-letter", "docx", "Download Word")}
-            </Button>
-          </div>
-        ) : (
-          <p className="text-sm text-text-muted">Approve your cover letter above to download it.</p>
-        )}
-      </div>
-    </Card>
+    </section>
   );
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { proposeChanges, type GapAnswer, type Proposal } from "@/features/tailor";
+import { unsupportedReason } from "@/features/tailor/nothing-invented";
+import { proposeChanges, suggestFromCv, type GapAnswer, type Proposal } from "@/features/tailor";
 import { ProposedChangeSchema } from "@/features/tailor/types";
 import { personas } from "@/shared/sample-data";
 
@@ -48,5 +49,36 @@ describe("ProposedChangeSchema", () => {
     expect(Object.keys(ProposedChangeSchema.shape).sort()).toEqual(
       ["after", "before", "evidence", "evidenceSource", "gapId", "section"],
     );
+  });
+});
+
+describe("suggestFromCv offers the six main skills, never tools (#191)", () => {
+  const sara = personas.sara;
+  const line = "Cleaned and joined weekly sales data from 120 stores using SQL and Python";
+  const skill = (after: string, evidence = line) => ({ section: "skills" as const, before: null, after, evidence, evidenceSource: "cv" as const });
+
+  it("keeps a main skill a CV line shows, once, and drops tools and made-up lines", async () => {
+    const sample = { changes: [skill("Attention to detail"), skill("Attention to detail"), skill("SQL"), skill("Leadership", "Led a global team of 200")], nextSteps: [] };
+    const result = await suggestFromCv({ profile: sara.profile, job: sara.jobs[0], match: sara.match, sample });
+    expect(result.changes.map((change) => [change.section, change.before, change.after, change.status])).toEqual([["skills", null, "Attention to detail", "proposed"]]);
+  });
+
+  it("offers only as many as fit in six, counting the main skills the CV already lists", async () => {
+    const profile = { ...sara.profile, skills: ["Communication", "Leadership", "Teamwork", "Planning", "Creativity", "SQL"] };
+    const sample = { changes: [skill("Attention to detail"), skill("Problem solving")], nextSteps: [] };
+    const result = await suggestFromCv({ profile, job: sara.jobs[0], match: sara.match, sample });
+    expect(result.changes.map((change) => change.after)).toEqual(["Attention to detail"]);
+  });
+
+  it("does not find a tool inside another word: \"R\" is not in \"stores\"", () => {
+    const change = skill("R");
+    expect(unsupportedReason(change, { profile: sara.profile, gaps: [], answers: [] })).toBe("The new skill is not named in the evidence.");
+    expect(unsupportedReason(skill("SQL"), { profile: sara.profile, gaps: [], answers: [] })).toBeNull();
+  });
+
+  it("does not accept the skills list itself as proof of a main skill", async () => {
+    const profile = { ...sara.profile, skills: ["SQL", "Project communication"] };
+    const sample = { changes: [skill("Communication", "Project communication")], nextSteps: [] };
+    expect((await suggestFromCv({ profile, job: sara.jobs[0], match: sara.match, sample })).changes).toEqual([]);
   });
 });

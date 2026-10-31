@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/features/account/current-user";
@@ -12,8 +13,10 @@ import { findBrandProblems, type BrandProblem } from "./brand-check";
 import { coverLetterText, inventedTerms, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters } from "./export";
 import { defaultGapQuestion } from "./gap-questions";
-import { proposeChanges } from "./propose-changes";
-import { sampleForGap } from "./samples";
+import { enforceNothingInvented } from "./nothing-invented";
+import { proposeChanges, suggestFromCv } from "./propose-changes";
+import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
+import { letterHead } from "./letter-state";
 import { modelFailureMessage, tailorModelAccess } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
 import { buildTailoredCv, fitsCv } from "./tailored-cv";
@@ -29,27 +32,56 @@ const EarlierAnswerSchema = z.object({
 const AnswerGapSchema = z.object({
   jobId: z.string().min(1).max(100),
   gapId: z.string().min(1).max(100),
+  /** The optional one-line detail the user added; empty for a plain tap. */
   answer: z.string().max(2000),
   hasExperience: z.boolean(),
+  /** Which "yes" the user tapped: at work, or in study or on their own. */
+  where: z.enum(["work", "study"]).optional(),
+  /** The answer option the user tapped, or the words they wrote instead: what they say they have done. */
+  chosen: z.string().trim().min(1).max(300).optional(),
   /** The user's answers to the job's other gaps, so a "no" there still counts here (Nothing invented). */
   earlierAnswers: z.array(EarlierAnswerSchema).max(30).optional(),
 });
 export type AnswerGapInput = z.infer<typeof AnswerGapSchema>;
 
 export type AnswerGapResult =
-  | { ok: true; changes: TailoringChange[]; nextSteps: NextStep[]; removed: number }
+  | {
+      ok: true;
+      /** The user's answer as one sentence, the evidence any change quotes; kept for the cover letter. */
+      answer: string;
+      changes: TailoringChange[];
+      nextSteps: NextStep[];
+      /** One optional tip when a "yes" gave nothing to add; never a question the user must answer. */
+      hint: string | null;
+      removed: number;
+    }
   | { ok: false; message: string };
 
+/** The user's tap and optional detail as one sentence in their name, e.g. "Yes, I have done this at work: Power BI." */
+function answerSentence(requirement: string, where: "work" | "study", detail: string): string {
+  const base = `Yes, I have done this ${where === "work" ? "at work" : "in study or on my own"}: ${requirement.replace(/[.\s]+$/, "")}.`;
+  return detail ? `${base} ${detail}` : base;
+}
+
 /**
- * Turns the user's answer to one gap question into suggested changes. Every change starts as "proposed"
- * and has passed the Nothing invented check; a "no" answer never changes the CV and gets a next step instead.
+ * A requirement that is just the name of one tool or skill, e.g. "Power BI", so a plain "yes" can go on the CV as it is.
+ * Not "Asana or Jira", and not "3+ years of Python experience" or "First-class degree": a tap does not confirm those.
+ */
+function isOneSkill(requirement: string): boolean {
+  if (/\s+or\s+|,|\/|\band\b|\d|\b(years?|experience|experienced|strong|proficiency|proficient|knowledge|degree|ability|managing)\b/i.test(requirement)) return false;
+  return requirement.trim().split(/\s+/).length <= 5;
+}
+
+/**
+ * Turns the user's answer to one gap question into suggested changes. A tap is enough: "yes" to a single tool or
+ * skill always gives a suggestion, and the user is never asked for more. Every change starts as "proposed" and has
+ * passed the Nothing invented check; a "no" never changes the CV and gets a next step instead.
  */
 export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult> {
   const parsed = AnswerGapSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "We could not read your answer. Try again." };
   const { jobId, gapId, hasExperience } = parsed.data;
-  const answer = parsed.data.answer.trim();
-  if (hasExperience && answer === "") return { ok: false, message: "Write your answer first, or choose “I haven’t done this”." };
+  const detail = parsed.data.answer.trim();
 
   const access = await tailorModelAccess();
   if (!access.allowed) return { ok: false, message: access.message };
@@ -57,6 +89,12 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
   const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   const gap = match?.gaps.find((item) => item.id === gapId);
   if (!profile || !job || !match || !gap) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
+  const chosen = parsed.data.chosen;
+  const answer = !hasExperience
+    ? detail || "I haven't done this."
+    : chosen
+      ? [chosen, detail].filter(Boolean).join(". ")
+      : answerSentence(gap.requirement, parsed.data.where ?? "work", detail);
 
   // Only answers to this job's real gaps count; the current gap's answer is the one just sent.
   const earlier: GapAnswer[] = (parsed.data.earlierAnswers ?? []).flatMap((item) => {
@@ -71,14 +109,7 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
       profile,
       job,
       match: { ...match, gaps: [gap] },
-      answers: [
-        {
-          gapId,
-          question: defaultGapQuestion(gap).question,
-          answer: answer || "I haven't done this.",
-          hasExperience,
-        },
-      ],
+      answers: [{ gapId, question: defaultGapQuestion(gap).question, answer, hasExperience }],
       context: { gaps: match.gaps.filter((item) => item.id !== gapId), answers: earlier },
       sample: sampleForGap(jobId, gapId).proposal,
       requester: access.requester,
@@ -87,19 +118,60 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
     // A change whose `before` is not a line of this CV could never be placed, so it is not offered at all.
     const forGap = result.changes.filter((change) => change.gapId === gapId);
     const changes = forGap.filter((change) => fitsCv(profile, change));
-    const nextSteps = result.nextSteps.filter((step) => step.gapId === gapId);
-    if (changes.length === 0 && nextSteps.length === 0) {
+    const removed = result.removed.length + forGap.length - changes.length;
+    const nextSteps = hasExperience ? [] : result.nextSteps.filter((step) => step.gapId === gapId);
+    let hint: string | null = null;
+
+    if (hasExperience && changes.length === 0) {
+      // A plain "yes" to one tool or skill goes on the CV as that skill, quoting the user's own answer.
+      const skill = { gapId, section: "skills" as const, before: null, after: gap.requirement.trim(), evidence: answer, evidenceSource: "follow-up-answer" as const };
+      const { kept } = enforceNothingInvented(gap.kind === "missing" && isOneSkill(gap.requirement) ? [skill] : [], {
+        profile,
+        gaps: match.gaps,
+        answers: [...earlier, { gapId, question: "", answer, hasExperience }],
+      });
+      changes.push(...kept.map((item) => ({ ...item, id: randomUUID(), jobId: job.id, status: "proposed" as const })));
+      if (changes.length === 0) {
+        hint =
+          gap.kind === "unclear"
+            ? "Your CV already mentions this. To make that line stronger, add a detail such as a number or an example. This is optional."
+            : "Tell us which one you have used, and we will add it. This is optional.";
+      }
+    }
+    if (!hasExperience && nextSteps.length === 0) {
       nextSteps.push({
         gapId,
         kind: "learn",
-        suggestion: hasExperience
-          ? "We could not find a line we can back up with what you told us, so nothing is added. Add a specific example: where, what you did and what changed."
-          : "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
+        suggestion: "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
       });
     }
-    return { ok: true, changes, nextSteps, removed: result.removed.length + forGap.length - changes.length };
+    return { ok: true, answer, changes, nextSteps, hint, removed };
   } catch (error) {
     return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
+  }
+}
+
+export type SuggestCvResult = { ok: true; changes: TailoringChange[] } | { ok: false; message: string };
+
+/**
+ * Suggestions made from the CV alone, shown before any question: the user's own lines, rewritten for the job.
+ * Each one quotes the CV line it comes from and waits for the user's approval.
+ */
+export async function suggestCvChanges(jobId: string): Promise<SuggestCvResult> {
+  const parsed = z.string().min(1).max(100).safeParse(jobId);
+  if (!parsed.success) return { ok: false, message: "We could not read this job." };
+
+  const access = await tailorModelAccess();
+  if (!access.allowed) return { ok: false, message: access.message };
+
+  const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
+  if (!profile || !job || !match) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
+
+  try {
+    const result = await suggestFromCv({ profile, job, match, sample: sampleCvSuggestionsFor(job.id), requester: access.requester });
+    return { ok: true, changes: result.changes };
+  } catch (error) {
+    return { ok: false, message: modelFailureMessage(error, "suggest changes from the CV", "We could not suggest changes just now. Try again in a moment.") };
   }
 }
 
@@ -259,7 +331,7 @@ export async function exportDocument(request: ExportRequest): Promise<ExportResu
   if (document === "cover-letter" && !letter?.trim()) return { ok: false, message: "Approve your cover letter first, then download it." };
 
   const changes = parsed.data.changes.filter((change) => change.jobId === jobId);
-  const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes)) : letterBlocks(letter ?? "");
+  const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes)) : letterBlocks(letter ?? "", letterHead(profile, new Date()));
   const title = `${document === "cv" ? "CV" : "Cover letter"}: ${job.title}, ${job.company}`;
   const warning =
     format === "pdf" && pdfLosesLetters(blocks, { title, author: profile.fullName })
