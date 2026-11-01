@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getAiMode, type Requester } from "@/shared/ai";
 import { getCurrentUser } from "@/features/account/current-user";
 import { InterviewInputsSchema } from "@/features/interview/engine/schemas";
-import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, writeReport } from "@/features/interview/engine/stages";
+import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, suggestAnswer, writeReport } from "@/features/interview/engine/stages";
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
 import { isLabEnabled } from "../lab-access";
 
@@ -15,6 +15,9 @@ const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("follow-up"), session: InterviewSessionSchema, questionId: z.string().min(1) }),
   z.object({ step: z.literal("evaluate"), session: InterviewSessionSchema, questionId: z.string().min(1) }),
   z.object({ step: z.literal("report"), session: InterviewSessionSchema }),
+  // The lab records no events, so "End here" has nothing to do on the server.
+  z.object({ step: z.literal("end"), session: InterviewSessionSchema }),
+  z.object({ step: z.literal("suggest"), inputs: InterviewInputsSchema, session: InterviewSessionSchema, questionId: z.string().min(1) }),
 ]);
 
 export async function POST(request: Request): Promise<Response> {
@@ -47,6 +50,10 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json(await evaluateAnswer(body.session, body.questionId, { requester }));
       case "report":
         return Response.json(await writeReport(body.session, { requester }));
+      case "end":
+        return Response.json({ ended: true });
+      case "suggest":
+        return Response.json(await suggestAnswer(body.session, body.questionId, body.inputs, { requester }));
     }
   } catch (error) {
     return stepFailed("interview lab", body.step, error);

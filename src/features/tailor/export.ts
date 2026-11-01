@@ -1,22 +1,29 @@
 // The PDF and Word downloads of the tailored CV and the cover letter. Pure code: no browser, no network.
-// One column, plain headings and real text, so applicant tracking systems read the file as the user does.
+// The layout of docs/tailor-templates, with coloured headings and real text, so applicant tracking systems read the file as the user does.
 // The Fit highlight is for the preview only and never reaches the file.
-import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
-import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TabStopType, TextRun } from "docx";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { brand } from "@/shared/brand";
-import type { TailoredCv } from "./tailored-cv";
+import type { LetterHead } from "./letter-state";
+import { cvHeadings, otherLines, type CvLine, type TailoredCv } from "./tailored-cv";
 
 export type ExportFormat = "pdf" | "docx";
 export type ExportDocument = "cv" | "cover-letter";
 
-/** One block of the file, the same for PDF and Word. */
+/** One block of the file, the same for PDF and Word. `label` is printed in bold before the text. */
 export type Block =
-  | { kind: "name"; text: string }
-  | { kind: "contact"; text: string }
+  | { kind: "name"; text: string; /** Contact details, on the same line as the name when they fit. */ right?: string }
   | { kind: "heading"; text: string }
+  | { kind: "subheading"; text: string }
+  | { kind: "organisation"; text: string }
   | { kind: "role"; text: string }
   | { kind: "dates"; text: string }
-  | { kind: "bullet"; text: string }
+  | { kind: "skills"; text: string; right?: string }
+  | { kind: "bullet"; text: string; label?: string }
+  | { kind: "line"; text: string; label?: string }
+  | { kind: "letterName"; text: string }
+  | { kind: "letterContact"; text: string }
+  | { kind: "letterDate"; text: string }
   | { kind: "text"; text: string };
 
 export const mimeTypes: Record<ExportFormat, string> = {
@@ -24,35 +31,46 @@ export const mimeTypes: Record<ExportFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** The CV in reading order, with the same headings as the preview. */
+/** The CV in the template's order: skills in two columns, then work experience, education, and certificates and tools last. */
 export function cvBlocks(cv: TailoredCv): Block[] {
-  const list = (heading: string, lines: { text: string }[]): Block[] =>
-    lines.length === 0 ? [] : [{ kind: "heading", text: heading }, ...lines.map((line) => ({ kind: "bullet" as const, text: line.text }))];
+  const bullets = (lines: CvLine[]): Block[] => lines.map((line) => ({ kind: "bullet", text: line.text, label: line.label }));
+  const half = Math.ceil(cv.skills.length / 2);
+  const other = otherLines(cv);
 
   return [
-    { kind: "name", text: cv.fullName },
-    ...(cv.contact.length > 0 ? [{ kind: "contact" as const, text: cv.contact.join(" · ") }] : []),
-    ...(cv.summary ? [{ kind: "heading" as const, text: "Professional summary" }, { kind: "text" as const, text: cv.summary.text }] : []),
-    ...list("Skills", cv.skills),
-    ...(cv.experience.length > 0 ? [{ kind: "heading" as const, text: "Experience" }] : []),
+    { kind: "name", text: cv.fullName, right: cv.contact.join(" | ") || undefined },
+    ...(cv.summary ? [{ kind: "heading" as const, text: cvHeadings.summary }, { kind: "text" as const, text: cv.summary.text }] : []),
+    ...(cv.skills.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.skills }] : []),
+    ...cv.skills.slice(0, half).map((line, index): Block => ({ kind: "skills", text: line.text, right: cv.skills[half + index]?.text })),
+    ...(cv.experience.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.experience }] : []),
     ...cv.experience.flatMap((job): Block[] => [
-      { kind: "role", text: `${job.title}, ${job.company}` },
+      { kind: "organisation", text: job.company.toUpperCase() },
       ...(job.dates ? [{ kind: "dates" as const, text: job.dates }] : []),
-      ...job.lines.map((line) => ({ kind: "bullet" as const, text: line.text })),
+      { kind: "role", text: job.title },
+      ...bullets(job.lines),
     ]),
-    ...list("Education", cv.education),
-    ...list("Additional information", cv.certifications),
+    ...(cv.education.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.education }] : []),
+    ...cv.education.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
+    ...(other.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.other }] : []),
+    ...other.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
   ];
 }
 
-/** The approved cover letter, one block per paragraph; a line break inside a paragraph stays a line break. */
-export function letterBlocks(text: string): Block[] {
-  return text
+/** The approved cover letter under its letterhead, one block per paragraph; a line break inside a paragraph stays a line break. */
+export function letterBlocks(text: string, head?: LetterHead): Block[] {
+  const body = text
     .split(/\n\s*\n/)
     .flatMap((paragraph) => paragraph.split("\n"))
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line): Block => ({ kind: "text", text: line }));
+  if (!head) return body;
+  return [
+    { kind: "letterName", text: head.fullName },
+    ...head.contact.map((line): Block => ({ kind: "letterContact", text: line })),
+    { kind: "letterDate", text: head.date },
+    ...body,
+  ];
 }
 
 function slug(value: string): string {
@@ -80,17 +98,26 @@ export async function blocksToFile(blocks: Block[], format: ExportFormat, meta: 
   return format === "pdf" ? blocksToPdf(blocks, meta) : blocksToDocx(blocks, meta);
 }
 
+/** The brand's Teal for CV section headings (5.5:1 on white). Decoration only: the heading reads the same without it. */
+const teal = { hex: "167480", rgb: rgb(0x16 / 255, 0x74 / 255, 0x80 / 255) };
+
 // ---- PDF -----------------------------------------------------------------
 
 const page = { width: 595.28, height: 841.89, margin: 56 };
 
-const pdfStyle: Record<Block["kind"], { size: number; bold: boolean; before: number; indent: number }> = {
-  name: { size: 20, bold: true, before: 0, indent: 0 },
-  contact: { size: 10, bold: false, before: 4, indent: 0 },
+const pdfStyle: Record<Block["kind"], { size: number; bold: boolean; before: number; indent: number; align?: "center" | "right" }> = {
+  name: { size: 18, bold: true, before: 0, indent: 0 },
   heading: { size: 12, bold: true, before: 16, indent: 0 },
-  role: { size: 11, bold: true, before: 10, indent: 0 },
-  dates: { size: 10, bold: false, before: 1, indent: 0 },
+  subheading: { size: 10.5, bold: false, before: 8, indent: 0 },
+  organisation: { size: 10.5, bold: false, before: 10, indent: 0 },
+  dates: { size: 10.5, bold: false, before: 1, indent: 0 },
+  role: { size: 10.5, bold: true, before: 1, indent: 0 },
+  skills: { size: 10.5, bold: true, before: 3, indent: 12 },
   bullet: { size: 10.5, bold: false, before: 3, indent: 12 },
+  line: { size: 10.5, bold: false, before: 4, indent: 0 },
+  letterName: { size: 13, bold: true, before: 0, indent: 0, align: "center" },
+  letterContact: { size: 10.5, bold: false, before: 2, indent: 0, align: "center" },
+  letterDate: { size: 10.5, bold: false, before: 8, indent: 0, align: "right" },
   text: { size: 10.5, bold: false, before: 8, indent: 0 },
 };
 
@@ -118,7 +145,7 @@ export function pdfSafe(text: string): string {
 
 /** True when the PDF would show some letters of these blocks as "?" (Persian or Cyrillic, for example). */
 export function pdfLosesLetters(blocks: Block[], meta: Meta): boolean {
-  return [meta.author, ...blocks.map((block) => block.text)].some((text) => Array.from(text).some((char) => pdfChar(char) === null));
+  return [meta.author, ...blocks.flatMap((block) => [block.text, "right" in block ? (block.right ?? "") : "", "label" in block ? (block.label ?? "") : ""])].some((text) => Array.from(text).some((char) => pdfChar(char) === null));
 }
 
 function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
@@ -154,26 +181,66 @@ async function blocksToPdf(blocks: Block[], meta: Meta): Promise<Uint8Array> {
     const font = style.bold ? bold : regular;
     const leading = style.size * 1.35;
     const indent = style.indent;
-    const lines = wrap(pdfSafe(block.text), font, style.size, lineWidth - indent);
+    const label = "label" in block && block.label ? `${pdfSafe(block.label)} ` : "";
     y -= style.before;
+
+    if (block.kind === "name") {
+      const name = pdfSafe(block.text);
+      const contact = pdfSafe(block.right ?? "");
+      const contactWidth = regular.widthOfTextAtSize(contact, 9.5);
+      y -= style.size;
+      current.drawText(name, { x: page.margin, y, size: style.size, font });
+      if (contact && bold.widthOfTextAtSize(name, style.size) + contactWidth + 16 <= lineWidth) {
+        current.drawText(contact, { x: page.width - page.margin - contactWidth, y, size: 9.5, font: regular });
+      } else if (contact) {
+        for (const line of wrap(contact, regular, 9.5, lineWidth)) {
+          y -= 13;
+          current.drawText(line, { x: page.margin, y, size: 9.5, font: regular });
+        }
+      }
+      y -= 7;
+      current.drawLine({ start: { x: page.margin, y }, end: { x: page.width - page.margin, y }, thickness: 0.5 });
+      continue;
+    }
+
+    if (block.kind === "skills") {
+      if (y - leading < page.margin) {
+        current = pdf.addPage([page.width, page.height]);
+        y = page.height - page.margin;
+      }
+      y -= style.size;
+      [block.text, block.right].forEach((text, column) => {
+        if (!text) return;
+        const x = page.margin + (column * lineWidth) / 2;
+        current.drawText("•", { x: x + 2, y, size: style.size, font: regular });
+        current.drawText(pdfSafe(text), { x: x + indent, y, size: style.size, font });
+      });
+      y -= leading - style.size;
+      continue;
+    }
+
+    // Bold is wider, so a line with a label is measured in bold and never runs past the margin.
+    const lines = wrap(label + pdfSafe(block.text), label ? bold : font, style.size, lineWidth - indent);
 
     lines.forEach((line, index) => {
       // A heading never sits alone at the foot of a page.
-      const needed = block.kind === "heading" || block.kind === "role" ? leading * 3 : leading;
+      const needed = block.kind === "heading" || block.kind === "organisation" ? leading * 3 : leading;
       if (y - needed < page.margin) {
         current = pdf.addPage([page.width, page.height]);
         y = page.height - page.margin;
       }
       y -= style.size;
+      const width = font.widthOfTextAtSize(line, style.size);
+      const x = style.align === "center" ? (page.width - width) / 2 : style.align === "right" ? page.width - page.margin - width : page.margin + indent;
       if (block.kind === "bullet" && index === 0) current.drawText("•", { x: page.margin + 2, y, size: style.size, font: regular });
-      current.drawText(line, { x: page.margin + indent, y, size: style.size, font });
+      if (label && index === 0 && line.startsWith(label)) {
+        current.drawText(label, { x, y, size: style.size, font: bold });
+        current.drawText(line.slice(label.length), { x: x + bold.widthOfTextAtSize(label, style.size), y, size: style.size, font });
+      } else {
+        current.drawText(line, { x, y, size: style.size, font, color: block.kind === "heading" ? teal.rgb : undefined });
+      }
       y -= leading - style.size;
     });
-
-    if (block.kind === "heading") {
-      current.drawLine({ start: { x: page.margin, y: y + 1 }, end: { x: page.width - page.margin, y: y + 1 }, thickness: 0.5 });
-      y -= 2;
-    }
   }
 
   return pdf.save();
@@ -181,25 +248,55 @@ async function blocksToPdf(blocks: Block[], meta: Meta): Promise<Uint8Array> {
 
 // ---- Word ----------------------------------------------------------------
 
+/** The width between the margins of the A4 page below, in the unit Word uses for tab stops. */
+const docxLineWidth = 11906 - 1134 * 2;
+
+function labelled(block: { text: string; label?: string }): TextRun[] {
+  return [...(block.label ? [new TextRun({ text: `${block.label} `, bold: true })] : []), new TextRun(block.text)];
+}
+
 function blockToParagraph(block: Block): Paragraph {
   switch (block.kind) {
-    case "name":
-      return new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: block.text, bold: true, size: 40 })] });
-    case "contact":
-      return new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: block.text, size: 20 })] });
-    case "heading":
+    case "name": {
+      // About 100 small letters fit on the line, and a letter of the name is twice as wide.
+      const fits = block.text.length * 2 + (block.right?.length ?? 0) <= 96;
       return new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 280, after: 80 },
-        border: { bottom: { style: "single", size: 4, color: "auto", space: 1 } },
-        children: [new TextRun({ text: block.text, bold: true, size: 24 })],
+        heading: HeadingLevel.TITLE,
+        spacing: { after: 120 },
+        border: { bottom: { style: "single", size: 4, color: "auto", space: 4 } },
+        tabStops: [{ type: TabStopType.RIGHT, position: docxLineWidth }],
+        children: [
+          new TextRun({ text: block.text, bold: true, size: 36 }),
+          ...(block.right ? [new TextRun({ text: fits ? `\t${block.right}` : block.right, size: 19, break: fits ? undefined : 1 })] : []),
+        ],
       });
+    }
+    case "heading":
+      return new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 280, after: 80 }, children: [new TextRun({ text: block.text, bold: true, size: 24, color: teal.hex })] });
+    case "subheading":
+      return new Paragraph({ spacing: { before: 120, after: 40 }, children: [new TextRun({ text: block.text, italics: true })] });
+    case "organisation":
+      return new Paragraph({ spacing: { before: 160 }, children: [new TextRun(block.text)] });
     case "role":
-      return new Paragraph({ spacing: { before: 160 }, children: [new TextRun({ text: block.text, bold: true })] });
+      return new Paragraph({ children: [new TextRun({ text: block.text, bold: true })] });
     case "dates":
-      return new Paragraph({ children: [new TextRun({ text: block.text, size: 20 })] });
+      return new Paragraph({ children: [new TextRun(block.text)] });
+    case "skills":
+      return new Paragraph({
+        spacing: { after: 40 },
+        tabStops: [{ type: TabStopType.LEFT, position: docxLineWidth / 2 }],
+        children: [new TextRun({ text: `• ${block.text}${block.right ? `\t• ${block.right}` : ""}`, bold: true })],
+      });
     case "bullet":
-      return new Paragraph({ bullet: { level: 0 }, spacing: { after: 40 }, children: [new TextRun(block.text)] });
+      return new Paragraph({ bullet: { level: 0 }, spacing: { after: 40 }, children: labelled(block) });
+    case "line":
+      return new Paragraph({ spacing: { after: 60 }, children: labelled(block) });
+    case "letterName":
+      return new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: block.text, bold: true, size: 26 })] });
+    case "letterContact":
+      return new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun(block.text)] });
+    case "letterDate":
+      return new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { before: 160, after: 160 }, children: [new TextRun(block.text)] });
     case "text":
       return new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 160 }, children: [new TextRun(block.text)] });
   }

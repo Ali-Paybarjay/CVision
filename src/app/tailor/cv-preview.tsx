@@ -1,34 +1,43 @@
-import type { CvLine, TailoredCv } from "@/features/tailor/tailored-cv";
+import { cvHeadings, otherLines, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
 import { CvPaper, FitLine } from "@/shared/ui";
 
 function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
+  const content = (
+    <>
+      {line.label && <strong>{line.label} </strong>}
+      {line.text}
+    </>
+  );
   if (!line.tailored) {
     const Tag = as;
-    return <Tag>{line.text}</Tag>;
+    return <Tag>{content}</Tag>;
   }
   return (
     <FitLine as={as}>
-      {line.text}
+      {content}
       <span className="sr-only"> (tailored for this job)</span>
     </FitLine>
   );
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
-  return <h3 className="mt-6 border-b border-line pb-1 text-base font-semibold">{children}</h3>;
+  return <h3 className="mt-6 text-base font-bold text-accent">{children}</h3>;
 }
 
-/** The tailored CV as the download will look: one column, plain headings, approved lines on Fit. */
+/** The tailored CV in the layout of the template, as the download will look, with approved lines on Fit. */
 export function CvPreview({ cv }: { cv: TailoredCv }) {
+  const other = otherLines(cv);
   return (
     <CvPaper aria-label="Your tailored CV" className="text-sm leading-relaxed">
-      <h2 className="text-2xl font-bold">{cv.fullName}</h2>
-      {cv.contact.length > 0 && <p className="mt-1 text-text-muted">{cv.contact.join(" · ")}</p>}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-line pb-2">
+        <h2 className="text-2xl font-bold">{cv.fullName}</h2>
+        {cv.contact.length > 0 && <p className="text-xs">{cv.contact.join(" | ")}</p>}
+      </div>
 
       {cv.summary && (
         <>
-          <Heading>Professional summary</Heading>
-          <div className="mt-2">
+          <Heading>{cvHeadings.summary}</Heading>
+          <div className="mt-1">
             <Line line={cv.summary} />
           </div>
         </>
@@ -36,8 +45,8 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
 
       {cv.skills.length > 0 && (
         <>
-          <Heading>Skills</Heading>
-          <ul className="mt-2 flex flex-col gap-1">
+          <Heading>{cvHeadings.skills}</Heading>
+          <ul className="mt-1 grid list-disc grid-flow-col gap-x-6 gap-y-1 pl-5 font-semibold" style={{ gridTemplateRows: `repeat(${Math.ceil(cv.skills.length / 2)}, auto)` }}>
             {cv.skills.map((line, index) => (
               <Line key={index} line={line} as="li" />
             ))}
@@ -47,13 +56,12 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
 
       {cv.experience.length > 0 && (
         <>
-          <Heading>Experience</Heading>
+          <Heading>{cvHeadings.experience}</Heading>
           {cv.experience.map((job, index) => (
-            <div key={index} className="mt-3">
-              <p className="font-semibold">
-                {job.title}, {job.company}
-              </p>
-              {job.dates && <p className="text-text-muted">{job.dates}</p>}
+            <div key={index} className="mt-2">
+              <p className="uppercase">{job.company}</p>
+              {job.dates && <p>{job.dates}</p>}
+              <p className="font-semibold">{job.title}</p>
               <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
                 {job.lines.map((line, lineIndex) => (
                   <Line key={lineIndex} line={line} as="li" />
@@ -66,23 +74,23 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
 
       {cv.education.length > 0 && (
         <>
-          <Heading>Education</Heading>
-          <ul className="mt-2 flex flex-col gap-1">
+          <Heading>{cvHeadings.education}</Heading>
+          <div className="mt-1 flex flex-col gap-1">
             {cv.education.map((line, index) => (
-              <Line key={index} line={line} as="li" />
+              <Line key={index} line={line} />
             ))}
-          </ul>
+          </div>
         </>
       )}
 
-      {cv.certifications.length > 0 && (
+      {other.length > 0 && (
         <>
-          <Heading>Additional information</Heading>
-          <ul className="mt-2 flex flex-col gap-1">
-            {cv.certifications.map((line, index) => (
-              <Line key={index} line={line} as="li" />
+          <Heading>{cvHeadings.other}</Heading>
+          <div className="mt-1 flex flex-col gap-1">
+            {other.map((line, index) => (
+              <Line key={index} line={line} />
             ))}
-          </ul>
+          </div>
         </>
       )}
     </CvPaper>

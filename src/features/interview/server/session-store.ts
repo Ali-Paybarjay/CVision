@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { InterviewSessionSchema, type InterviewSession } from "../contracts";
+import { endedOverall, nextStep } from "../engine/session";
 
 // Practice sessions in the interview_sessions table. The client acts as the signed-in user, so row-level
 // security keeps every user to their own rows. Callers check the job is the user's own first (issue #28).
@@ -50,52 +51,90 @@ export async function loadLatestInterviewSession(jobId: string): Promise<Intervi
   return parsed.success ? parsed.data : null;
 }
 
-/** The signed-in user's latest finished practice for a job (one with a report), and when it was last saved. */
+/** The signed-in user's latest finished practice for a job, and when it was last saved. */
 export type LastReport = { session: InterviewSession; practisedAt: string };
 
-/** The latest session for a job that has a report, or null. A newer unfinished practice does not hide it (#206). */
+/** Nothing is left to do: the report is written, or after "End here" (#205) every question is scored or has a suggested answer. */
+const isFinished = (session: InterviewSession) => nextStep(session).step === "done";
+
+const newestFirst = (a: { practisedAt: string }, b: { practisedAt: string }) => Date.parse(b.practisedAt) - Date.parse(a.practisedAt);
+
+/**
+ * The latest finished session for a job (with a report, or ended with "End here"), or null. A newer unfinished
+ * practice does not hide it (#206), and nor does an ended one still writing its suggested answers.
+ */
 export async function loadLatestReport(jobId: string): Promise<LastReport | null> {
   if (!isStoredJobId(jobId)) return null;
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
 
-  const { data, error } = await supabase
-    .from("interview_sessions")
-    .select("data, updated_at")
-    .eq("job_id", jobId)
-    .not("data->report", "is", null)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return null;
-  const parsed = InterviewSessionSchema.safeParse(data.data);
-  return parsed.success && parsed.data.report ? { session: parsed.data, practisedAt: data.updated_at } : null;
+  // One query per kind of finished session; an ended one may not be finished yet, so a few of those.
+  const newest = (finishedBy: string, count: number) =>
+    supabase
+      .from("interview_sessions")
+      .select("data, updated_at")
+      .eq("job_id", jobId)
+      .not(finishedBy, "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(count);
+  const results = await Promise.all([newest("data->report", 1), newest("data->endedAt", 3)]);
+  if (results.some(({ data, error }) => error || !data)) return null;
+  const finished = results
+    .flatMap(({ data }) => data ?? [])
+    .flatMap((row) => {
+      const parsed = InterviewSessionSchema.safeParse(row.data);
+      return parsed.success && isFinished(parsed.data) ? [{ session: parsed.data, practisedAt: row.updated_at as string }] : [];
+    });
+  return finished.sort(newestFirst)[0] ?? null;
 }
 
-/** One job's latest finished practice: when, and its overall score out of 5. */
+/** One job's latest finished practice: when, and its overall score out of 5, or null after "End here" with no answer. */
+export type PracticeResult = { jobId: string; practisedAt: string; overall: number | null };
+
+/** The same for a practice with a score. */
 export type PracticeSummary = { jobId: string; practisedAt: string; overall: number };
 
-const SummaryRowSchema = z.object({ job_id: z.string(), updated_at: z.string(), overall: z.number().min(1).max(5) });
+const ReportRowSchema = z.object({ job_id: z.string(), updated_at: z.string(), overall: z.number().min(1).max(5) });
+const EndedRowSchema = z.object({ job_id: z.string(), updated_at: z.string(), data: InterviewSessionSchema });
 
 /**
- * The latest finished practice of each of the signed-in user's jobs, newest first. Reads only the job, the date and
- * the score, never the answers, so the job list (and the dashboard, #208) can show them cheaply.
+ * The latest finished practice of each of the signed-in user's jobs, newest first, for the job list. A report row
+ * gives only the job, the date and the score, never the answers. After "End here" the score is the average of the
+ * answered questions (endedOverall, as the report shows it), so those rows need the whole session.
  */
-export async function listPracticeSummaries(): Promise<PracticeSummary[]> {
+export async function listPracticeResults(): Promise<PracticeResult[]> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
 
-  const { data, error } = await supabase
-    .from("interview_sessions")
-    .select("job_id, updated_at, overall:data->report->overall")
-    .not("data->report", "is", null)
-    .order("updated_at", { ascending: false });
-  if (error || !data) return [];
-  const latest = new Map<string, PracticeSummary>();
-  for (const row of data) {
-    const parsed = SummaryRowSchema.safeParse(row);
-    if (!parsed.success || latest.has(parsed.data.job_id)) continue;
-    latest.set(parsed.data.job_id, { jobId: parsed.data.job_id, practisedAt: parsed.data.updated_at, overall: parsed.data.overall });
-  }
+  const [reported, ended] = await Promise.all([
+    supabase
+      .from("interview_sessions")
+      .select("job_id, updated_at, overall:data->report->overall")
+      .not("data->report", "is", null)
+      .order("updated_at", { ascending: false }),
+    supabase.from("interview_sessions").select("job_id, updated_at, data").not("data->endedAt", "is", null).order("updated_at", { ascending: false }),
+  ]);
+  if (reported.error || ended.error || !reported.data || !ended.data) return [];
+  const results: PracticeResult[] = [
+    ...reported.data.flatMap((row) => {
+      const parsed = ReportRowSchema.safeParse(row);
+      return parsed.success ? [{ jobId: parsed.data.job_id, practisedAt: parsed.data.updated_at, overall: parsed.data.overall }] : [];
+    }),
+    ...ended.data.flatMap((row) => {
+      const parsed = EndedRowSchema.safeParse(row);
+      if (!parsed.success || !isFinished(parsed.data.data)) return [];
+      return [{ jobId: parsed.data.job_id, practisedAt: parsed.data.updated_at, overall: endedOverall(parsed.data.data) }];
+    }),
+  ];
+  const latest = new Map<string, PracticeResult>();
+  for (const result of results.sort(newestFirst)) if (!latest.has(result.jobId)) latest.set(result.jobId, result);
   return [...latest.values()];
+}
+
+/**
+ * The same with a score, for the dashboard (#208). A job whose latest practice ended with no answer has no entry,
+ * rather than an older score than the practice the link opens.
+ */
+export async function listPracticeSummaries(): Promise<PracticeSummary[]> {
+  return (await listPracticeResults()).flatMap(({ overall, ...result }) => (overall === null ? [] : [{ ...result, overall }]));
 }

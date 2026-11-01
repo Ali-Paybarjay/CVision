@@ -20,13 +20,27 @@ export type CoverLetterInput = {
   /** Only approved changes are used; anything else is ignored. */
   changes: TailoringChange[];
   answers: GapAnswer[];
+  /** The requirements of gaps the user said no to, which the letter must not name, not even as what the employer wants. */
+  declined?: string[];
+  /** What the last draft named from `declined`, when this is a second attempt. */
+  namedInLastDraft?: string[];
   /** Whose daily limit the request counts against: { userId } for a signed-in user. */
   requester?: Requester;
 };
 
-/** The letter as plain text, the form the user edits and the export uses. */
+/** The closing line of every letter; only the code adds it and the name, so neither can appear twice. */
+export const letterSignOff = "Yours sincerely,";
+
+/** A paragraph that is really a closing line or the name, which a model sometimes adds to the body. */
+function isClosing(paragraph: string, fullName: string): boolean {
+  const text = paragraph.trim().toLowerCase();
+  return text === fullName.trim().toLowerCase() || /^(yours (faithfully|sincerely)|sincerely|kind regards|best regards|regards)\b[,.]?(\s|$)/.test(text);
+}
+
+/** The letter as plain text, the form the user edits and the export uses. It ends with one closing line and one name. */
 export function coverLetterText(letter: CoverLetter, fullName: string): string {
-  return [letter.greeting, ...letter.paragraphs, `${letter.signOff}\n${fullName}`].join("\n\n");
+  const body = letter.paragraphs.filter((paragraph) => !isClosing(paragraph, fullName));
+  return [letter.greeting, ...body, `${letterSignOff}\n\n${fullName}`].join("\n\n");
 }
 
 function asSentence(line: string): string {
@@ -44,13 +58,14 @@ function list(items: string[]): string {
  */
 export function sampleCoverLetter({ profile, job, changes }: CoverLetterInput): CoverLetter {
   // The tailored CV already swaps each line for its approved change, so no line appears twice.
-  const cv = buildTailoredCv(profile, changes);
+  const cv = buildTailoredCv(profile, changes, job);
   const recent = profile.experience[0];
   const recentLines = cv.experience[0]?.lines ?? [];
   const lines = [...recentLines.filter((line) => line.tailored), ...recentLines.filter((line) => !line.tailored)]
     .map((line) => line.text)
     .slice(0, 3);
-  const skills = [...cv.skills.filter((line) => line.tailored), ...cv.skills.filter((line) => !line.tailored)]
+  const allSkills = [...cv.skills, ...cv.technicalSkills];
+  const skills = [...allSkills.filter((line) => line.tailored), ...allSkills.filter((line) => !line.tailored)]
     .map((line) => line.text)
     .slice(0, 5);
 
@@ -61,7 +76,7 @@ export function sampleCoverLetter({ profile, job, changes }: CoverLetterInput): 
     "I would welcome the chance to talk about the role at an interview.",
   ].filter(Boolean);
 
-  return { greeting: "Dear Hiring Manager,", paragraphs, signOff: "Yours faithfully," };
+  return { greeting: "Dear Hiring Manager,", paragraphs, signOff: letterSignOff };
 }
 
 /**
@@ -82,10 +97,36 @@ export function inventedTerms(letter: string, gaps: Gap[], answers: GapAnswer[],
     .filter((term) => text.includes(term) && !cv.includes(term));
 }
 
+/** The requirements of the gaps the user said no to and that their CV does not show, for the letter to leave out. */
+export function declinedRequirements(gaps: Gap[], answers: GapAnswer[], profile: Profile): string[] {
+  return gaps
+    .filter((gap) => answers.some((answer) => answer.gapId === gap.id && !answer.hasExperience))
+    .filter((gap) => inventedTerms(gap.requirement, gaps, answers, profile).length > 0)
+    .map((gap) => gap.requirement);
+}
+
+/**
+ * The letter without any sentence that names one of these terms, for a model that keeps naming what the user said no to.
+ * The user reads and approves the letter, so a shorter honest letter is better than none. Empty paragraphs go too.
+ */
+export function withoutSentencesNaming(letter: CoverLetter, terms: string[]): CoverLetter {
+  const paragraphs = letter.paragraphs
+    .map((paragraph) =>
+      // A full stop ends a sentence only before a space, so "2.1%" stays whole.
+      paragraph
+        .split(/(?<=[.!?])\s+/)
+        .filter((sentence) => !terms.some((term) => normalise(sentence).includes(term)))
+        .join(" ")
+        .trim(),
+    )
+    .filter(Boolean);
+  return { ...letter, paragraphs };
+}
+
 export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLetter> {
   const { profile, job, changes, answers } = input;
   const prompt = await loadPrompt("tailor-cover-letter", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
+    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
     cv: JSON.stringify(
       {
         fullName: profile.fullName,
@@ -105,6 +146,7 @@ export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLe
       2,
     ),
     answers: JSON.stringify(answers, null, 2),
+    declined: JSON.stringify({ requirements: input.declined ?? [], namedInLastDraft: input.namedInLastDraft ?? [] }, null, 2),
   });
 
   return askModel({

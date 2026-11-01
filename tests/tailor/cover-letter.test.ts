@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { coverLetterText, findBrandProblems, inventedTerms, sampleCoverLetter, writeCoverLetter } from "@/features/tailor";
+import { coverLetterText, declinedRequirements, findBrandProblems, inventedTerms, sampleCoverLetter, writeCoverLetter } from "@/features/tailor";
 import { createCoverLetter } from "@/features/tailor/actions";
+import { personas } from "@/shared/sample-data";
 import { coverLetterCases, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
 
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser: async () => null }));
@@ -27,6 +28,19 @@ describe("the mock cover letter", () => {
     const unapproved = input.changes.map((change) => ({ ...change, status: "rejected" as const }));
     const text = coverLetterText(sampleCoverLetter({ ...input, changes: unapproved }), input.profile.fullName);
     for (const change of unapproved) expect(text).not.toContain(change.after);
+  });
+});
+
+describe("the letter's ending (the name appeared twice)", () => {
+  const letter = { greeting: "Dear Hiring Manager,", paragraphs: ["I am applying.", "Yours faithfully,", "Sara Ahmadi"], signOff: "Yours faithfully,\nSara Ahmadi" };
+
+  it("has one closing line and one name, whatever the model wrote", () => {
+    expect(coverLetterText(letter, "Sara Ahmadi")).toBe("Dear Hiring Manager,\n\nI am applying.\n\nYours sincerely,\n\nSara Ahmadi");
+  });
+
+  it("keeps a paragraph that only starts like a closing word", () => {
+    const text = coverLetterText({ ...letter, paragraphs: ["Regardless of sector, I plan my work carefully."] }, "Sara Ahmadi");
+    expect(text).toContain("Regardless of sector");
   });
 });
 
@@ -58,6 +72,37 @@ describe("inventedTerms", () => {
     const profile = { ...input.profile, preferences };
 
     expect(inventedTerms("I have built reports in Power BI.", gaps, input.answers, profile)).toEqual(["power bi"]);
+  });
+});
+
+describe("inventedTerms after a no to a requirement (#251)", () => {
+  const { profile, match } = personas.daniel;
+  const gaps = [
+    { ...match.gaps[0], id: "kpi", requirement: "KPI reporting to senior leadership" },
+    { ...match.gaps[0], id: "licence", requirement: "Full clean driving licence" },
+  ];
+  const answers = gaps.map((gap) => ({ gapId: gap.id, question: "", answer: "I haven't done this.", hasExperience: false }));
+
+  it.each([
+    "Your ad asks for KPI reporting to senior leadership across six garden centres.",
+    "The role needs a full clean driving licence and regular travel between stores.",
+    "I do not yet have KPI reporting to senior leadership on my record.",
+  ])("finds the requirement's own words in: %s", (letter) => {
+    expect(inventedTerms(letter, gaps, answers, profile)).not.toEqual([]);
+  });
+
+  // The word check cannot see the same claim in other words. The prompt rule and the live eval cover these.
+  it.each(["I have reported KPIs to senior leaders every week for five years.", "I hold a full UK driving licence with no points."])(
+    "does not find a claim in other words: %s",
+    (letter) => {
+      expect(inventedTerms(letter, gaps, answers, profile)).toEqual([]);
+    },
+  );
+
+  it("lists what the letter must leave out, but not what the CV shows", () => {
+    expect(declinedRequirements(gaps, answers, profile)).toEqual(gaps.map((gap) => gap.requirement));
+    const onCv = { ...profile, skills: [...profile.skills, "Full clean driving licence"] };
+    expect(declinedRequirements(gaps, answers, onCv)).toEqual(["KPI reporting to senior leadership"]);
   });
 });
 

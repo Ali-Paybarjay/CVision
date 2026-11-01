@@ -5,14 +5,15 @@ import { getAiMode } from "@/shared/ai";
 import { ButtonLink, Card, Notice, Page } from "@/shared/ui";
 import { getCurrentUser } from "@/features/account/current-user";
 import { withNext } from "@/features/account/safe-redirect";
+import { isCvTooThin, profileToCvText } from "@/features/interview/engine/text";
 import { fixtureForJob } from "@/features/interview/fixtures";
 import { getMyJob, getMyProfile, listMyJobs } from "@/features/interview/server/my-data";
 import {
   isStoredJobId,
-  listPracticeSummaries,
+  listPracticeResults,
   loadLatestInterviewSession,
   loadLatestReport,
-  type PracticeSummary,
+  type PracticeResult,
 } from "@/features/interview/server/session-store";
 import type { SampleAnswers } from "./_practice/flow";
 import { practisedOn } from "./_practice/ui";
@@ -25,7 +26,7 @@ export default function InterviewPage({ searchParams }: PageProps<"/interview">)
   return (
     <Page
       title="Interview practice"
-      description="Practise the interview for a job you have been invited to: six questions written for this job and your CV, then feedback on every answer."
+      description="Get ready for an interview you have been invited to: six questions written for this job and your profile, then feedback on every answer."
     >
       <Suspense fallback={<p className="text-text-muted">Loading your interview…</p>}>
         <InterviewView searchParams={searchParams} />
@@ -45,8 +46,8 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     const here = jobId ? `/interview?${new URLSearchParams({ job: jobId })}` : "/interview";
     return (
       <>
-        <Notice tone="info" title="Sign in to practise">
-          Practice uses AI on your CV and answers, so it needs an account.
+        <Notice tone="info" title="Sign in for interview practice">
+          Practice uses AI on your profile and answers, so it needs an account.
         </Notice>
         <ButtonLink href={withNext("/sign-in", here)} variant="primary" className="self-start">
           Sign in
@@ -65,19 +66,35 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
             Choose one of your jobs below.
           </Notice>
         )}
-        <JobList jobs={await listMyJobs()} practised={await listPracticeSummaries()} />
+        <JobList jobs={await listMyJobs()} practised={await listPracticeResults()} />
       </>
     );
   }
 
   if (!profile) {
     return (
-      <Notice tone="info" title="Add your CV first">
-        The questions are written for your CV, so interview practice needs your Profile.{" "}
+      <Notice tone="info" title="Build your profile first">
+        The questions are written for your profile, so upload your CV or fill in your details first.{" "}
         <ButtonLink href="/profile" variant="quiet">
           Go to Profile
         </ButtonLink>
       </Notice>
+    );
+  }
+
+  // A profile typed in by hand can hold little more than a name; the API refuses it too, before any AI request (#179).
+  if (isCvTooThin(profileToCvText(profile))) {
+    return (
+      <>
+        <JobHeading job={job} />
+        <Notice tone="info" title="Add more to your profile first">
+          The questions are written from your profile, and there isn’t enough in it yet. Add your experience, education or
+          skills, then come back.{" "}
+          <ButtonLink href="/profile" variant="quiet">
+            Go to Profile
+          </ButtonLink>
+        </Notice>
+      </>
     );
   }
 
@@ -125,11 +142,11 @@ function JobHeading({ job, mock = false }: { job: Job; mock?: boolean }) {
   );
 }
 
-function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeSummary[] }) {
+function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeResult[] }) {
   if (jobs.length === 0) {
     return (
       <Notice tone="info" title="No jobs yet">
-        Paste a job ad on the Jobs page, then come back to practise for it.
+        Paste a job ad on the Jobs page, then come back here for interview practice.
       </Notice>
     );
   }
@@ -149,12 +166,13 @@ function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeSummary[
                   </p>
                   {last && (
                     <p className="mt-1 text-sm">
-                      Practised <time dateTime={last.practisedAt}>{practisedOn(last.practisedAt)}</time> · {last.overall.toFixed(1)} / 5
+                      Last practice <time dateTime={last.practisedAt}>{practisedOn(last.practisedAt)}</time> ·{" "}
+                      {last.overall === null ? "Suggested answers from your profile" : `${last.overall.toFixed(1)} / 5`}
                     </p>
                   )}
                 </div>
                 <ButtonLink href={`/interview?job=${encodeURIComponent(job.id)}`} className="self-start sm:self-auto">
-                  {last ? "See your report" : "Practise for this job"}
+                  {last ? "See your report" : "Start practice"}
                 </ButtonLink>
               </Card>
             </li>

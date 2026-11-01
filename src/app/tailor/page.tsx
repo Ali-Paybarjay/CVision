@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { askGapQuestions, defaultGapQuestion } from "@/features/tailor/gap-questions";
-import { sampleForGap } from "@/features/tailor/samples";
+import { askGapQuestions, defaultGapQuestion, skillGaps } from "@/features/tailor/gap-questions";
 import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
 import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
 import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
@@ -17,10 +16,22 @@ export const metadata: Metadata = { title: "Tailor your CV" };
 // /tailor?job=<id>: the user's CV for one job, with a question per gap and every change approved by them.
 export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
   return (
-    <Page width="wide" title="Tailor your CV" description="Answer a few questions, then approve each change before it goes into your CV.">
-      <Suspense fallback={<p className="text-text-muted">Loading your CV…</p>}>
-        <TailorView searchParams={searchParams} />
-      </Suspense>
+    <Suspense
+      fallback={
+        <Frame>
+          <p className="text-text-muted">Loading your CV…</p>
+        </Frame>
+      }
+    >
+      <TailorView searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+function Frame({ children }: { children: React.ReactNode }) {
+  return (
+    <Page title="Tailor your CV" description="Answer a few questions about what the job asks for, approve each change, then download and apply.">
+      {children}
     </Page>
   );
 }
@@ -32,24 +43,32 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   const profile = await getMyProfile(jobId ? { jobId } : {});
   if (!profile) {
     return (
-      <Notice tone="info" title="Build your profile first">
-        Tailoring starts from the profile you approve. Upload your CV or fill in your details yourself.{" "}
-        <Link href="/profile" className="text-accent underline">Build your profile</Link>
-      </Notice>
+      <Frame>
+        <Notice tone="info" title="Build your profile first">
+          Tailoring starts from the profile you approve. Upload your CV or fill in your details yourself.{" "}
+          <Link href="/profile" className="text-accent underline">Build your profile</Link>
+        </Notice>
+      </Frame>
     );
   }
 
-  if (!jobId) return <JobPicker />;
+  if (!jobId) {
+    return (
+      <Frame>
+        <JobPicker />
+      </Frame>
+    );
+  }
 
   const [job, match, source] = await Promise.all([getMyJob(jobId), getMyMatch(jobId), getMyDataSource()]);
   if (!job) {
     return (
-      <>
+      <Frame>
         <Notice tone="error" title="We could not find this job">
           Choose one of your jobs below.
         </Notice>
         <JobPicker />
-      </>
+      </Frame>
     );
   }
 
@@ -63,7 +82,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
 
   if (!match) {
     return (
-      <>
+      <Frame>
         {header}
         <Notice tone="info" title="We have not compared your profile with this job yet">
           Check how your profile matches this job first, then come back to tailor your CV.
@@ -71,32 +90,28 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
         <div>
           <ButtonLink href="/jobs">Go to your jobs</ButtonLink>
         </div>
-      </>
+      </Frame>
     );
   }
 
   const [{ questions, notice }, savedChanges] = await Promise.all([questionsFor({ profile, job, match }), getMySavedChanges(job.id)]);
-  const showSamples = getAiMode() === "mock";
-  const prompts = questions.flatMap(({ gapId, question }) => {
+  const prompts = questions.flatMap(({ gapId, question, options }) => {
     const gap = match.gaps.find((item) => item.id === gapId);
-    if (!gap) return [];
-    const sampleAnswer = showSamples ? (sampleForGap(job.id, gap.id).answer?.answer ?? null) : null;
-    return [{ gap, question, sampleAnswer }];
+    return gap ? [{ gap, question, options }] : [];
   });
 
   return (
-    <>
-      {header}
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-12">
       {notice && <Notice tone="info">{notice}</Notice>}
       <TailorWorkspace
-        jobId={job.id}
+        job={job}
         jobUrl={webLink(job.url)}
-        company={job.company}
+        label={label}
         profile={profile}
         prompts={prompts}
         savedChanges={savedChanges}
       />
-    </>
+    </main>
   );
 }
 
@@ -105,7 +120,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
  * or when the model fails (the daily limit included), each gap gets its plain default question instead.
  */
 async function questionsFor(input: { profile: Profile; job: Job; match: MatchResult }): Promise<{ questions: GapQuestion[]; notice: string | null }> {
-  const fallback = input.match.gaps.map(defaultGapQuestion);
+  const fallback = skillGaps(input.match.gaps).map(defaultGapQuestion);
   const access = await tailorModelAccess();
   if (!access.allowed) return { questions: fallback, notice: access.message };
   try {

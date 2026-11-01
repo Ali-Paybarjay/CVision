@@ -1,58 +1,63 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { answerGap, decideChange } from "@/features/tailor/actions";
+import { useState } from "react";
+import { decideChange } from "@/features/tailor/actions";
+import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
 import { buildTailoredCv } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
-import type { Gap, Profile, TailoringChange, TailoringStatus } from "@/shared/contracts";
-import { Button, Card, CvPaper, Field, FitLine, Notice, Textarea } from "@/shared/ui";
-import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
+import type { Job, Profile, TailoringChange } from "@/shared/contracts";
+import { Button, Card, Notice } from "@/shared/ui";
 import { ApplyPanel } from "./apply-panel";
+import { ChangeCard } from "./change-card";
 import { CoverLetterPanel } from "./cover-letter-panel";
+import { CvOverview } from "./cv-overview";
 import { CvPreview } from "./cv-preview";
-import { ExportPanel } from "./export-panel";
+import { CvSuggestions } from "./cv-suggestions";
+import { DownloadBar } from "./download-bar";
+import { GapCard, type GapPrompt, type GapState } from "./gap-card";
 import { unreachableMessage } from "./messages";
+import { QuestionsStep } from "./questions-step";
+import { DocumentIcon, DownloadIcon, JobIcon, LetterIcon, QuestionIcon, StatusPill, StepTracker, TailorStep, type StepStatus } from "./tailor-step";
 
-export type GapPrompt = { gap: Gap; question: string; sampleAnswer: string | null };
+export type { GapPrompt };
 
+/** At most this many questions one by one; the rest wait under "More ways to strengthen your CV". */
+const mainQuestions = 5;
 
-type GapState =
-  | { phase: "open" }
-  | { phase: "working" }
-  | { phase: "answered"; nextSteps: NextStep[] }
-  | { phase: "error"; message: string };
+type Step = 1 | 2 | 3 | 4 | 5;
 
-const sectionNames: Record<TailoringChange["section"], string> = {
-  summary: "Professional summary",
-  skills: "Skills",
-  experience: "Experience",
-  education: "Education",
-  certifications: "Additional information",
-};
-
-/**
- * The Tailor workspace for one job: a question per gap, the suggested changes with Approve, Reject and Edit,
- * and the CV preview, which shows approved changes only.
- */
 type TailorWorkspaceProps = {
-  jobId: string;
+  job: Job;
   jobUrl: string | null;
-  company: string;
+  /** Says when the page shows sample data or mock answers. */
+  label: string;
   profile: Profile;
   prompts: GapPrompt[];
   /** The decisions the user saved on an earlier visit. */
   savedChanges?: TailoringChange[];
 };
 
-export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, savedChanges = [] }: TailorWorkspaceProps) {
+/** "Suggest again" brings back suggestions lost on an earlier visit; one the page already has is not shown twice. */
+function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]): TailoringChange[] {
+  return suggested.filter((change) => !current.some((other) => other.section === change.section && other.before === change.before && other.after === change.after));
+}
+
+/**
+ * The Tailor workspace for one job, as five steps with one open at a time: the job, a question for each thing
+ * the job asks for that the CV does not show, the suggested changes, the cover letter, then download and Apply. The CV
+ * preview in the review step shows approved changes only.
+ */
+export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [] }: TailorWorkspaceProps) {
   const [gapStates, setGapStates] = useState<Record<string, GapState>>(() =>
-    Object.fromEntries(savedChanges.flatMap((change) => (change.gapId ? [[change.gapId, { phase: "answered", nextSteps: [] }]] : []))),
+    Object.fromEntries(
+      savedChanges.flatMap((change) => (change.gapId ? [[change.gapId, { phase: "answered", nextSteps: [], hint: null }]] : [])),
+    ),
   );
   const [changes, setChanges] = useState<TailoringChange[]>(savedChanges);
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
   const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
-  const cv = buildTailoredCv(profile, changes);
+  const cv = buildTailoredCv(profile, changes, job);
   // Worked out on every render, so a letter approved before the CV changed is never used as approved.
   const approvedLetter = currentLetter(letter, letterBasis(changes, Object.values(answers)));
 
@@ -62,14 +67,33 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, save
     waiting: changes.filter((change) => change.status === "proposed").length,
   };
 
-  const onAnswered = (answer: GapAnswer, newChanges: TailoringChange[], nextSteps: NextStep[]) => {
+  // Essential gaps first, and only a few at once, so the page never opens with a wall of questions.
+  const ordered = [...prompts].sort((a, b) => Number(b.gap.importance === "essential") - Number(a.gap.importance === "essential"));
+  const questions = ordered.slice(0, mainQuestions);
+  const more = ordered.filter((prompt) => !questions.includes(prompt));
+
+  const [openStep, setOpenStep] = useState<Step | null>(() =>
+    questions.every((prompt) => gapStates[prompt.gap.id]?.phase === "answered") ? 3 : 2,
+  );
+  const [applied, setApplied] = useState(false);
+
+  /** Opens a step and brings its heading to the top, because closing the step above moves everything up. */
+  const goTo = (step: Step) => {
+    setOpenStep(step);
+    requestAnimationFrame(() => {
+      document.getElementById(`step-${step}`)?.scrollIntoView({ block: "start" });
+      document.getElementById(`step-${step}-toggle`)?.focus({ preventScroll: true });
+    });
+  };
+
+  const onAnswered = (answer: GapAnswer, newChanges: TailoringChange[], nextSteps: NextStep[], hint: string | null) => {
     const { gapId } = answer;
     // A new answer replaces the gap's earlier suggestions, in the saved decisions too, so an old approval
     // never stays on the CV after the user says something different.
     const replaced = changes.filter((change) => change.gapId === gapId && change.status !== "rejected");
     setAnswers((current) => ({ ...current, [gapId]: answer }));
     setChanges((current) => [...current.filter((change) => change.gapId !== gapId), ...newChanges]);
-    setGapStates((current) => ({ ...current, [gapId]: { phase: "answered", nextSteps } }));
+    setGapStates((current) => ({ ...current, [gapId]: { phase: "answered", nextSteps, hint } }));
     for (const change of replaced) {
       decideChange({ ...change, status: "rejected" }, { replaced: true }).catch(() => setSaveNote(unreachableMessage));
     }
@@ -85,230 +109,184 @@ export function TailorWorkspace({ jobId, jobUrl, company, profile, prompts, save
     }
   };
 
-  return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,32rem)]">
-      <div className="flex flex-col gap-8">
-        <p className="rounded-md border border-line bg-surface px-4 py-3 text-sm" aria-live="polite">
-          <span className="font-semibold">✓ Approved: {counts.approved}</span> · ✕ Rejected: {counts.rejected} · Waiting:{" "}
-          {counts.waiting}. Only approved changes go into your CV.
-        </p>
-        {saveNote && <Notice tone="info">{saveNote}</Notice>}
-
-        <section className="flex flex-col gap-4" aria-labelledby="questions-heading">
-          <h2 id="questions-heading" className="text-xl">
-            Questions about your experience
-          </h2>
-          {prompts.length === 0 && (
-            <Notice tone="success" title="Your CV already covers this job's requirements.">
-              There is nothing to ask. Check your CV on this page before you apply.
-            </Notice>
-          )}
-          {prompts.map((prompt) => (
-            <GapCard
-              key={prompt.gap.id}
-              jobId={jobId}
-              prompt={prompt}
-              state={gapStates[prompt.gap.id] ?? { phase: "open" }}
-              setState={(state) => setGapStates((current) => ({ ...current, [prompt.gap.id]: state }))}
-              onAnswered={onAnswered}
-              earlierAnswers={Object.values(answers).filter((item) => item.gapId !== prompt.gap.id)}
-              changes={changes.filter((change) => change.gapId === prompt.gap.id)}
-              onDecide={update}
-            />
-          ))}
-        </section>
-
-        <CoverLetterPanel jobId={jobId} changes={changes} answers={Object.values(answers)} letter={approvedLetter} setLetter={setLetter} />
-
-        <ExportPanel jobId={jobId} changes={changes} letter={approvedLetter} />
-
-        <ApplyPanel jobId={jobId} jobUrl={jobUrl} company={company} />
-      </div>
-
-      <aside className="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start" aria-labelledby="preview-heading">
-        <h2 id="preview-heading" className="text-xl">
-          Your CV for this job
-        </h2>
-        <p className="text-sm text-text-muted">Highlighted lines are the changes you approved.</p>
-        {cv.unplaced.length > 0 && (
-          <Notice tone="error" title="Some approved changes are not in your CV">
-            We could not find the line {cv.unplaced.length === 1 ? "this change replaces" : "these changes replace"}:{" "}
-            {cv.unplaced.map((change) => `“${change.after}”`).join(", ")}. Reject {cv.unplaced.length === 1 ? "it" : "them"}, then
-            answer the question again for a new suggestion.
-          </Notice>
-        )}
-        <CvPreview cv={cv} />
-      </aside>
-    </div>
+  const gapCard = (prompt: GapPrompt) => (
+    <GapCard
+      key={prompt.gap.id}
+      jobId={job.id}
+      prompt={prompt}
+      state={gapStates[prompt.gap.id] ?? { phase: "open" }}
+      setState={(state) => setGapStates((current) => ({ ...current, [prompt.gap.id]: state }))}
+      onAnswered={onAnswered}
+      earlierAnswers={Object.values(answers).filter((item) => item.gapId !== prompt.gap.id)}
+      changes={changes.filter((change) => change.gapId === prompt.gap.id)}
+      onDecide={update}
+    />
   );
-}
 
-type GapCardProps = {
-  jobId: string;
-  prompt: GapPrompt;
-  state: GapState;
-  setState: (state: GapState) => void;
-  onAnswered: (answer: GapAnswer, changes: TailoringChange[], nextSteps: NextStep[]) => void;
-  earlierAnswers: GapAnswer[];
-  changes: TailoringChange[];
-  onDecide: (change: TailoringChange) => Promise<void>;
-};
+  const fromCv = changes.filter((change) => !change.gapId);
+  const fromAnswers = changes.filter((change) => change.gapId);
 
-function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide }: GapCardProps) {
-  const [answer, setAnswer] = useState(prompt.sampleAnswer ?? "");
-  const [pending, startTransition] = useTransition();
-  const { gap } = prompt;
+  const answeredCount = questions.filter((prompt) => gapStates[prompt.gap.id]?.phase === "answered").length;
+  const statusOf = (step: Step, completed: boolean, started: boolean): StepStatus =>
+    completed ? "completed" : started || openStep === step ? "in-progress" : "not-started";
+  const decided = counts.approved + counts.rejected;
+  const hasLetter = Boolean(approvedLetter?.text);
 
-  const submit = (hasExperience: boolean) => {
-    setState({ phase: "working" });
-    startTransition(async () => {
-      try {
-        const earlier = earlierAnswers.map(({ gapId, answer: text, hasExperience: has }) => ({ gapId, answer: text, hasExperience: has }));
-        const result = await answerGap({ jobId, gapId: gap.id, answer, hasExperience, earlierAnswers: earlier });
-        const given: GapAnswer = { gapId: gap.id, question: prompt.question, answer: answer.trim(), hasExperience };
-        if (result.ok) onAnswered(given, result.changes, result.nextSteps);
-        else setState({ phase: "error", message: result.message });
-      } catch {
-        setState({ phase: "error", message: unreachableMessage });
-      }
-    });
+  const statuses: Record<Step, StepStatus> = {
+    1: "completed",
+    2: statusOf(2, answeredCount === questions.length, answeredCount > 0),
+    3: statusOf(3, decided > 0 && counts.waiting === 0, decided > 0),
+    4: statusOf(4, Boolean(approvedLetter?.approved), hasLetter),
+    5: statusOf(5, applied, false),
   };
 
+  const stepProps = (step: Step) => ({
+    id: `step-${step}`,
+    open: openStep === step,
+    onToggle: () => (openStep === step ? setOpenStep(null) : goTo(step)),
+  });
+
   return (
-    <Card as="article" className="flex flex-col gap-4">
-      <div>
-        <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
-          {gap.importance === "essential" ? "Essential" : "Desirable"} · {gap.requirement}
-        </p>
-        <p className="mt-2 font-semibold">{prompt.question}</p>
-      </div>
+    <>
+    <CvOverview
+      cv={cv}
+      tracker={
+        <StepTracker
+          steps={[
+            { label: "Job", status: statuses[1] },
+            { label: "Questions", status: statuses[2] },
+            { label: "Review", status: statuses[3] },
+            { label: "Letter", status: statuses[4] },
+            { label: "Download", status: statuses[5] },
+          ]}
+          current={openStep}
+          onSelect={(step) => goTo(step as Step)}
+        />
+      }
+      nextQuestion={questions.find((prompt) => gapStates[prompt.gap.id]?.phase !== "answered")?.question ?? null}
+      suggestion={changes.find((change) => change.status === "proposed") ?? null}
+      onAnswer={() => goTo(2)}
+      onReview={() => goTo(3)}
+    />
+    <Card className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+        <header className="flex flex-col gap-3 border-b border-line pb-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-xl">Tailor your CV</h1>
+            <StatusPill status={applied ? "completed" : "in-progress"} />
+          </div>
+          <h2 className="text-3xl leading-tight sm:text-4xl">{job.title}</h2>
+          <p className="text-text-muted">{job.company} · Job application</p>
+          {label && <p className="w-fit rounded-full border border-line px-2 py-0.5 text-xs text-text-muted">{label}</p>}
+        </header>
 
-      {state.phase !== "answered" && (
-        <>
-          <Field
-            label="Your answer"
-            hint={prompt.sampleAnswer ? "Sample answer for the sample CV. Change it if you like." : "In your own words: where, what you did and what changed."}
-            error={state.phase === "error" ? state.message : undefined}
+        {saveNote && <Notice tone="info">{saveNote}</Notice>}
+
+        <div className="flex flex-col divide-y divide-line">
+          <TailorStep {...stepProps(1)} title="1. Job details" summary="Job title and job description" status={statuses[1]} icon={<JobIcon />}>
+            <dl className="flex flex-col gap-3 text-sm">
+              <div>
+                <dt className="font-semibold">Job title</dt>
+                <dd className="text-text-muted">
+                  {job.title}, {job.company}
+                  {job.location && ` (${job.location})`}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold">Job description</dt>
+                <dd className="whitespace-pre-line text-text-muted">{job.description}</dd>
+              </div>
+            </dl>
+          </TailorStep>
+
+          <TailorStep
+            {...stepProps(2)}
+            title="2. Questions about your experience"
+            summary="What the job asks for that your CV does not show"
+            status={statuses[2]}
+            icon={<QuestionIcon />}
           >
-            {(props) => <Textarea {...props} value={answer} onChange={(event) => setAnswer(event.target.value)} maxLength={2000} />}
-          </Field>
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => submit(true)} disabled={pending}>
-              {pending ? "Writing a suggestion…" : "Suggest a change"}
-            </Button>
-            <Button variant="quiet" onClick={() => submit(false)} disabled={pending}>
-              I haven’t done this
-            </Button>
-          </div>
-          {changes.length > 0 && (
-            <>
-              <p className="text-sm text-text-muted">
-                Your earlier suggestions stay as they are until you send a new answer. You can still reject them.
-              </p>
-              {changes.map((change) => (
-                <ChangeCard key={change.id} change={change} onDecide={onDecide} />
-              ))}
-            </>
-          )}
-        </>
-      )}
+            <QuestionsStep questions={questions} more={more} gapStates={gapStates} gapCard={gapCard} onFinished={() => goTo(3)} />
+          </TailorStep>
 
-      {state.phase === "answered" && (
-        <>
-          {changes.map((change) => (
-            <ChangeCard key={change.id} change={change} onDecide={onDecide} />
-          ))}
-          {state.nextSteps.map((step, index) => (
-            <Notice key={index} tone="info" title="Not added to your CV">
-              {step.kind === "learn" ? "A way to build it: " : "Your closest real skill: "}
-              {step.suggestion}
-            </Notice>
-          ))}
-          <div>
-            <Button variant="quiet" onClick={() => setState({ phase: "open" })}>
-              Change my answer
-            </Button>
-          </div>
-        </>
-      )}
+          <TailorStep
+            {...stepProps(3)}
+            title="3. Review your tailored CV"
+            summary="Preview and approve changes"
+            status={statuses[3]}
+            icon={<DocumentIcon />}
+          >
+            <p className="rounded-md bg-canvas px-4 py-3 text-sm" aria-live="polite">
+              <span className="font-semibold">✓ Approved: {counts.approved}</span> · ✕ Rejected: {counts.rejected} · Waiting: {counts.waiting}. Only
+              approved changes go into your CV.
+            </p>
+            {fromAnswers.length > 0 && (
+              <section className="flex flex-col gap-4" aria-labelledby="from-answers-heading">
+                <h4 id="from-answers-heading" className="font-semibold">
+                  Suggestions from your answers
+                </h4>
+                {fromAnswers.map((change) => (
+                  <ChangeCard key={change.id} change={change} onDecide={update} />
+                ))}
+              </section>
+            )}
+            <CvSuggestions
+              jobId={job.id}
+              changes={fromCv}
+              loaded={fromCv.length > 0}
+              onSuggested={(suggested) => setChanges((current) => [...current, ...withoutRepeats(suggested, current)])}
+              onDecide={update}
+            />
+            <aside className="flex flex-col gap-3 border-t border-line pt-5" aria-labelledby="preview-heading">
+              <h4 id="preview-heading" className="font-semibold">
+                Your CV for this job
+              </h4>
+              <p className="text-sm text-text-muted">Highlighted lines are the changes you approved.</p>
+              {cv.unplaced.length > 0 && (
+                <Notice tone="error" title="Some approved changes are not in your CV">
+                  We could not find the line {cv.unplaced.length === 1 ? "this change replaces" : "these changes replace"}:{" "}
+                  {cv.unplaced.map((change) => `“${change.after}”`).join(", ")}. Reject {cv.unplaced.length === 1 ? "it" : "them"}, then
+                  answer the question again for a new suggestion.
+                </Notice>
+              )}
+              {cv.overLimit.length > 0 && (
+                <Notice tone="info" title="Your CV shows six skills, four tools and four certificates at most">
+                  {cv.overLimit.map((line) => `“${line}”`).join(", ")} did not fit. Reject another change to make room.
+                </Notice>
+              )}
+              <CvPreview cv={cv} />
+            </aside>
+            <div>
+              <Button onClick={() => goTo(4)}>Continue to cover letter</Button>
+            </div>
+          </TailorStep>
+
+          <TailorStep
+            {...stepProps(4)}
+            title="4. Cover letter"
+            summary="Generate and review"
+            status={statuses[4]}
+            icon={<LetterIcon />}
+          >
+            <CoverLetterPanel jobId={job.id} profile={profile} changes={changes} answers={Object.values(answers)} letter={approvedLetter} setLetter={setLetter} />
+            <div>
+              <Button variant="quiet" onClick={() => goTo(5)}>
+                Continue to download and apply
+              </Button>
+            </div>
+          </TailorStep>
+
+          <TailorStep
+            {...stepProps(5)}
+            title="5. Download and apply"
+            summary="Download PDF or Word and visit the employer's website"
+            status={statuses[5]}
+            icon={<DownloadIcon />}
+          >
+            <DownloadBar jobId={job.id} changes={changes} letter={approvedLetter} onGoToLetter={() => goTo(4)} />
+            <ApplyPanel jobId={job.id} jobUrl={jobUrl} onApplied={() => setApplied(true)} />
+          </TailorStep>
+        </div>
     </Card>
-  );
-}
-
-function ChangeCard({ change, onDecide }: { change: TailoringChange; onDecide: (change: TailoringChange) => Promise<void> }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(change.after);
-  const [pending, startTransition] = useTransition();
-
-  const decide = (status: TailoringStatus, after = change.after) =>
-    startTransition(async () => {
-      await onDecide({ ...change, status, after });
-      setEditing(false);
-    });
-
-  const statusText =
-    change.status === "approved" ? "✓ Approved" : change.status === "rejected" ? "✕ Rejected" : "Waiting for your decision";
-
-  return (
-    <div className="flex flex-col gap-3 rounded-md border border-line p-4">
-      <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">{sectionNames[change.section]}</p>
-
-      <CvPaper as="div" className="text-sm">
-        <p className="text-xs font-semibold text-text-muted">Before</p>
-        <p className="mt-1 text-text-muted line-through">{change.before ?? "New line"}</p>
-        <p className="mt-4 text-xs font-semibold text-text-muted">After</p>
-        <FitLine className="mt-1">{change.after}</FitLine>
-      </CvPaper>
-
-      <p className="text-sm text-text-muted">
-        <span className="font-semibold">From what you told us:</span> “{change.evidence}”
-      </p>
-
-      {editing ? (
-        <div className="flex flex-col gap-3">
-          <Field label="Edit the suggested line" hint="Keep it true: only what you have actually done.">
-            {(props) => <Textarea {...props} value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={600} />}
-          </Field>
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => decide("approved", draft.trim())} disabled={pending || draft.trim() === ""}>
-              Save and approve
-            </Button>
-            <Button variant="quiet" onClick={() => (setDraft(change.after), setEditing(false))}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            onClick={() => decide("approved")}
-            aria-pressed={change.status === "approved"}
-            disabled={pending}
-            className="aria-pressed:bg-accent aria-pressed:text-surface"
-          >
-            Approve
-          </Button>
-          <Button
-            onClick={() => decide("rejected")}
-            aria-pressed={change.status === "rejected"}
-            disabled={pending}
-            className="aria-pressed:bg-emphasis aria-pressed:text-on-emphasis"
-          >
-            Reject
-          </Button>
-          <Button variant="quiet" onClick={() => setEditing(true)} disabled={pending}>
-            Edit
-          </Button>
-          {change.status !== "proposed" && (
-            <Button variant="quiet" onClick={() => decide("proposed")} disabled={pending}>
-              Undo
-            </Button>
-          )}
-          <span className="text-sm text-text-muted" aria-live="polite">
-            {statusText}
-          </span>
-        </div>
-      )}
-    </div>
+    </>
   );
 }

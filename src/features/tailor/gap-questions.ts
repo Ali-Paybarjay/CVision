@@ -2,16 +2,47 @@ import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
-/** A plain question for one gap, used as the mock answer and as a fallback. */
+/**
+ * Conditions of the job, not skills or experience. No CV line can come from them, so they are never asked about.
+ * Only whole phrases: "Experience leading shift teams" or "Processing DBS checks" are real experience to ask about.
+ * Anything less clear-cut is left to prompts/tailor-gap-questions.md, because the model sees the whole ad.
+ */
+const notAboutSkills = new RegExp(
+  [
+    "driv(ing|er'?s?) licen[cs]e",
+    "full (uk )?licen[cs]e",
+    "own (car|vehicle|transport)",
+    "^right to work$",
+    "right to work in\\b",
+    "visa sponsorship",
+    "willing(ness)? to (travel|relocate)",
+    "^(enhanced |basic |standard )?(dbs|bpss)( checks?| clearance)?( required)?$",
+    "^(current |active |valid )?security clearance",
+    "^available (to work|for)\\b",
+    "^(weekend|night|evening)s?\\b.*\\b(work|cover|shifts?)\\b",
+    "notice period",
+    "^nationality\\b",
+    "^based in\\b",
+    "able to commute",
+  ].join("|"),
+  "i",
+);
+
+/** The gaps worth a question: what the job asks the person to know or have done. */
+export function skillGaps(gaps: Gap[]): Gap[] {
+  return gaps.filter((gap) => !notAboutSkills.test(gap.requirement));
+}
+
+/** A plain yes-or-no question for one gap, used as the mock answer and as a fallback. */
 export function defaultGapQuestion(gap: Gap): GapQuestion {
   const question =
     gap.kind === "missing"
-      ? `The job asks for “${gap.requirement}”. Have you done this at work, in study or on your own? If so, tell us what you did, in your own words.`
-      : `The job asks for “${gap.requirement}”. ${gap.detail} Tell us about one time you did this: what you did and what changed as a result.`;
+      ? `The job asks for “${gap.requirement}”. Have you done this?`
+      : `The job asks for “${gap.requirement}”, and your CV does not show it clearly. Have you done this?`;
   return { gapId: gap.id, question };
 }
 
-/** One question about the user's real experience for every gap in the match. */
+/** A question about the user's real experience for each gap worth asking about, with answers they can tap. */
 export async function askGapQuestions(input: {
   profile: Profile;
   job: Job;
@@ -20,23 +51,24 @@ export async function askGapQuestions(input: {
   requester?: Requester;
 }): Promise<GapQuestion[]> {
   const { profile, job, match, requester } = input;
-  if (match.gaps.length === 0) return [];
+  const gaps = skillGaps(match.gaps);
+  if (gaps.length === 0) return [];
 
   const prompt = await loadPrompt("tailor-gap-questions", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
-    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience }, null, 2),
-    gaps: JSON.stringify(match.gaps, null, 2),
+    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
+    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience, education: profile.education, certifications: profile.certifications }, null, 2),
+    gaps: JSON.stringify(gaps, null, 2),
   });
 
   const { questions } = await askModel({
     feature: "tailor-gap-questions",
     prompt,
     schema: GapQuestionListSchema,
-    sample: { questions: match.gaps.map(defaultGapQuestion) },
+    sample: { questions: gaps.map(defaultGapQuestion) },
     effort: "low",
     requester,
   });
 
-  // Exactly one question per gap, in the match's order, even if the model skips or repeats one.
-  return match.gaps.map((gap) => questions.find((item) => item.gapId === gap.id) ?? defaultGapQuestion(gap));
+  // In the match's order, at most one per gap. A gap the model left out is one the CV already covers or that gives no CV line.
+  return gaps.flatMap((gap) => questions.find((item) => item.gapId === gap.id) ?? []);
 }

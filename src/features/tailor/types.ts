@@ -6,6 +6,8 @@ import { IdSchema, TailoringChangeSchema, type TailoringChange } from "@/shared/
 export const GapQuestionSchema = z.object({
   gapId: IdSchema,
   question: z.string().min(1),
+  /** Up to three things the user may have done, in their voice, to tap as the answer. Without them the card asks yes or no. */
+  options: z.array(z.string().min(1).max(200)).max(3).optional(),
 });
 export type GapQuestion = z.infer<typeof GapQuestionSchema>;
 

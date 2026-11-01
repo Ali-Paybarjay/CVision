@@ -3,6 +3,7 @@
 // Pure code with no model call, so unit tests and the live evals share it.
 import { cleanModelText } from "@/shared/clean-text";
 import type { Gap, Profile } from "@/shared/contracts";
+import { isBigSix } from "./big-six";
 import type { GapAnswer, ProposedChange, RejectedChange } from "./types";
 
 export type EvidenceSources = {
@@ -59,6 +60,12 @@ function isQuotedFrom(evidence: string, lines: string[]): boolean {
   });
 }
 
+/** True when the skill appears as whole words, so "R" is not found in "stores" but "C++" is found in "C++ code". */
+function namedIn(skill: string, evidence: string): boolean {
+  const name = normalise(skill).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z0-9])${name}(?![a-z0-9])`).test(normalise(evidence));
+}
+
 /** Why a change breaks Nothing invented, or null when it is supported. */
 export function unsupportedReason(change: ProposedChange, sources: EvidenceSources): string | null {
   const lines = change.evidenceSource === "cv" ? cvLines(sources.profile) : answerLines(sources);
@@ -66,7 +73,12 @@ export function unsupportedReason(change: ProposedChange, sources: EvidenceSourc
     return `The evidence is not a quote from the user's ${change.evidenceSource === "cv" ? "CV" : "answers"}.`;
   }
 
-  if (change.section === "skills" && !normalise(change.evidence).includes(normalise(change.after))) {
+  // A main skill such as Communication is shown by a line, not named in it; a tool must be named.
+  if (change.section === "skills" && isBigSix(change.after)) {
+    if (sources.profile.skills.some((skill) => normalise(skill) === normalise(change.evidence))) {
+      return "A main skill needs a line that shows it, not an entry in the skills list.";
+    }
+  } else if (change.section === "skills" && !namedIn(change.after, change.evidence)) {
     return "The new skill is not named in the evidence.";
   }
 
