@@ -10,7 +10,7 @@ import { getAnonymousKey } from "@/shared/ai/anonymous-key";
 import { TailoringChangeSchema, type TailoringChange } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
-import { coverLetterText, declinedRequirements, inventedTerms, writeCoverLetter } from "./cover-letter";
+import { coverLetterText, declinedRequirements, inventedTerms, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters } from "./export";
 import { defaultGapQuestion } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
@@ -291,6 +291,15 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
       letter = await writeCoverLetter({ ...input, namedInLastDraft: named });
       text = coverLetterText(letter, profile.fullName);
       named = inventedTerms(text, gaps, answers, profile);
+    }
+    // Still there after two drafts: take those sentences out, so nothing the user said no to is used and they still get a letter.
+    if (named.length > 0) {
+      const trimmed = withoutSentencesNaming(letter, named);
+      if (trimmed.paragraphs.length > 0) {
+        letter = trimmed;
+        text = coverLetterText(letter, profile.fullName);
+        named = inventedTerms(text, gaps, answers, profile);
+      }
     }
     if (named.length > 0) {
       return { ok: false, message: `The draft kept mentioning “${named[0]}”, which you told us you have not done, so we did not use it. Try again, or change your answer to that question.` };

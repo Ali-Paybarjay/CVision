@@ -27,13 +27,25 @@ describe("a draft that names something the user said no to (#251)", () => {
     expect(writeCoverLetter.mock.calls[1][0]).toMatchObject({ declined: ["Power BI"], namedInLastDraft: ["power bi"] });
   });
 
-  it("stops after the second try and says which item was the problem", async () => {
+  it("says which item was the problem when nothing of the letter is left", async () => {
     writeCoverLetter.mockResolvedValue(letter("I have built reports in Power BI."));
     const result = await createCoverLetter(request);
 
     expect(writeCoverLetter).toHaveBeenCalledTimes(2);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.message).toContain("power bi");
+  });
+
+  it("takes the sentence out after the second try and keeps the rest of the letter", async () => {
+    writeCoverLetter.mockResolvedValue(letter("I cut stock loss from 2.1% to 1.3%. I have built reports in Power BI. I built Tableau dashboards."));
+    const result = await createCoverLetter(request);
+
+    expect(writeCoverLetter).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      expect(result.text).not.toContain("Power BI");
+      expect(result.text).toContain("I cut stock loss from 2.1% to 1.3%. I built Tableau dashboards.");
+    }
   });
 
   it("asks only once when the first draft is clean", async () => {
