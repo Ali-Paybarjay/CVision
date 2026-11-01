@@ -2,7 +2,14 @@
 // CVision is a working name: if it changes, change it here and in docs/brand.md.
 export const brand = {
   name: "CVision",
+  /** In the footer and the search description. The home page leads with `hero` instead (#178). */
   tagline: "Every application, made to fit.",
+  /** The home page's first words, chosen by team vote in #178: the pain first, then what CVision does about it. */
+  hero: {
+    headline: "Stop rewriting your CV for every job.",
+    subline:
+      "Paste a job ad. We tailor your CV to it and write your cover letter in minutes, from your own experience. You approve every change.",
+  },
   /** The team's shared address for data rights and feedback (#134). Never a teammate's own email. */
   contactEmail: "cvision.team.uk@gmail.com",
   oneLiner:

@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { brand } from "@/shared/brand";
 import HomePage from "./page";
 
@@ -62,5 +62,33 @@ describe("home page calls to action (#177)", () => {
       { cta: "get_started", placement: "hero" },
       { cta: "cv_check", placement: "hero" },
     ]);
+  });
+});
+
+describe("home page headline (#178)", () => {
+  // Rendered once the earlier tests have run, so the click records they count stay as they were.
+  let html = "";
+  let hero = "";
+  beforeAll(() => {
+    html = renderToStaticMarkup(<HomePage />);
+    hero = html.slice(0, html.indexOf("</section>"));
+  });
+  const words = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;/g, "'").replace(/\s+/g, " ");
+
+  it("leads with the team's chosen headline and subline, and keeps the tagline out of the hero", () => {
+    expect(html.match(/<h1[^>]*>([^<]*)<\/h1>/)?.[1]).toBe("Stop rewriting your CV for every job.");
+    expect(words(html)).toContain(brand.hero.subline);
+    expect(html).not.toContain(brand.tagline);
+  });
+
+  it("says each sentence of the hero once, above the fold", () => {
+    const sentences = [brand.hero.headline, ...brand.hero.subline.split(/(?<=\.)\s+/), brand.cta.primaryNote];
+    for (const sentence of sentences) expect(words(hero).split(sentence).length - 1, sentence).toBe(1);
+  });
+
+  it("uses no words the brand bans", () => {
+    for (const phrase of brand.bannedPhrases) {
+      expect(`${brand.hero.headline} ${brand.hero.subline}`.toLowerCase()).not.toContain(phrase.toLowerCase());
+    }
   });
 });
