@@ -112,6 +112,51 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file follows the templates"
   });
 });
 
+describe.each<ExportFormat>(["pdf", "docx"])("the layout of the %s file", (format) => {
+  const cv = buildTailoredCv(profile, []);
+  const meta = { title: "CV", author: profile.fullName };
+
+  it("shows the name, the latest role and the contact details first", async () => {
+    const text = await fileText(await blocksToFile(cvBlocks(cv), format, meta), format);
+    const order = [profile.fullName, profile.experience[0].title, profile.contact.email!, "PROFESSIONAL SUMMARY"].map((item) => text.indexOf(item));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("reads each line under its own role, so an applicant tracking system credits the right employer", async () => {
+    const text = await fileText(await blocksToFile(cvBlocks(cv), format, meta), format);
+    let from = text.indexOf("WORK EXPERIENCE");
+    for (const job of cv.experience) {
+      const parts = [job.title, job.company, ...job.lines.map((line) => line.text)];
+      for (const part of parts) {
+        const at = text.indexOf(part, from);
+        expect(at, part).toBeGreaterThanOrEqual(from);
+        from = at;
+      }
+    }
+  });
+});
+
+describe("the page footer of a CV", () => {
+  const lines = Array.from({ length: 80 }, (_, index) => ({ kind: "bullet" as const, text: `Line ${index} of a long CV` }));
+  const meta = { title: "CV", author: "Sara", footer: "Sara Ahmadi – CV" };
+
+  it("numbers every page of the PDF", async () => {
+    const { text, totalPages } = await extractText(await getDocumentProxy(await blocksToFile(lines, "pdf", meta)));
+    expect(totalPages).toBe(2);
+    expect(text[0]).toContain("Sara Ahmadi – CV");
+    expect(text[0]).toContain("1 / 2");
+    expect(text[1]).toContain("2 / 2");
+  });
+
+  it("is in the Word file, and neither file has one without being asked", async () => {
+    const zip = await JSZip.loadAsync(await blocksToFile(lines, "docx", meta));
+    expect(await zip.file("word/footer1.xml")!.async("string")).toContain("Sara Ahmadi – CV");
+    const { text } = await extractText(await getDocumentProxy(await blocksToFile(lines, "pdf", { title: "CV", author: "Sara" })));
+    expect(text[0]).not.toContain("1 / 2");
+  });
+});
+
 describe("pdfSafe", () => {
   it("keeps UK text and drops only what the standard font cannot draw", () => {
     expect(pdfSafe("£40,000 – “café” • naïve")).toBe("£40,000 – “café” • naïve");
