@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { feedbackFormUrl } from "@/shared/feedback";
 import { CheckIcon, Page } from "@/shared/ui";
 
 // The privacy notice (card #43). Every fact here was checked against the code, the live project and each
@@ -21,10 +22,14 @@ const contents = [
   { id: "how-long", title: "How long we keep it" },
   { id: "not-deleted-straight-away", title: "What isn’t deleted straight away" },
   { id: "cookies", title: "Cookies and browser storage" },
+  { id: "feedback", title: "Feedback" },
   { id: "your-rights", title: "Your rights" },
 ] as const;
 
 type SectionId = (typeof contents)[number]["id"];
+
+/** The Feedback section is only on the page once the form's link is set (src/shared/feedback.ts, #134). */
+const shownContents = contents.filter((section) => section.id !== "feedback" || feedbackFormUrl);
 
 const link = "font-semibold text-accent hover:underline";
 
@@ -294,7 +299,7 @@ export default function PrivacyPage() {
           On this page
         </h2>
         <ul className="mt-2 grid gap-x-8 sm:grid-cols-2">
-          {contents.map((section) => (
+          {shownContents.map((section) => (
             <li key={section.id}>
               <a href={`#${section.id}`} className={`inline-flex min-h-11 items-center ${link}`}>
                 {section.title}
@@ -428,6 +433,19 @@ export default function PrivacyPage() {
         <StorageList title="Browser storage" items={browserStorage} />
         <p>Usage and AI use records are kept on our servers, not on your device.</p>
       </Section>
+
+      {feedbackFormUrl && (
+        <Section id="feedback">
+          <p>
+            The Give feedback link at the bottom of every page opens a Google Form in a new tab. It isn’t linked to
+            your CVision account: we see only what you type into the form, and nothing from your profile or CV.
+          </p>
+          <p>
+            Your answers are kept in our team’s private Google Drive and read only by the CVision team. We delete them
+            by 30 November 2026. Google runs the form and stores the answers for us.
+          </p>
+        </Section>
+      )}
 
       <Section id="your-rights">
         <p>UK data protection law (UK GDPR) gives you these rights.</p>
