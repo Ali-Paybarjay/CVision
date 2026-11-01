@@ -19,8 +19,8 @@ export default function HomePage() {
     <main className="w-full">
       <section className="mx-auto grid max-w-6xl gap-12 px-4 py-12 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-center xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] xl:gap-16">
         <div>
-          <h1 className="text-4xl leading-[1.05] tracking-tight sm:text-6xl lg:text-5xl xl:text-6xl">{brand.tagline}</h1>
-          <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.oneLiner}</p>
+          <h1 className="text-4xl leading-[1.05] tracking-tight sm:text-6xl lg:text-5xl xl:text-6xl">{brand.hero.headline}</h1>
+          <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.hero.subline}</p>
           <div className="mt-8">
             <TrackedButtonLink
               href="/sign-up"
