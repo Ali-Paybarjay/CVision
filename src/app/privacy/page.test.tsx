@@ -131,7 +131,9 @@ describe("privacy page", () => {
     expect(withForm).toContain('id="feedback"');
     expect(words).toContain("isn’t linked to your CVision account");
     expect(words).toContain("We delete them by 30 November 2026");
-    expect(words).toContain("Google runs the form");
+    expect(words).toContain("kept in Google Forms and in our team’s private Google Drive");
+    expect(words).toContain("may store the answers outside the UK");
+    expect(words).toContain("Google (Forms and Drive)");
     feedback.feedbackFormUrl = null;
   });
 });

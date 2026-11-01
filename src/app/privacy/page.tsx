@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "29 October 2026";
+const lastUpdated = "1 November 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -170,6 +170,14 @@ const services: { name: string; body: React.ReactNode }[] = [
     ),
   },
 ];
+
+// Only once the Give feedback link is on the site (#134).
+if (feedbackFormUrl) {
+  services.push({
+    name: "Google (Forms and Drive)",
+    body: "Runs our Give feedback form and keeps the answers in our team’s private Drive, possibly outside the UK. It gets only what you type into the form, nothing from your CVision account.",
+  });
+}
 
 const howLong: { what: string; until: string }[] = [
   {
@@ -441,8 +449,9 @@ export default function PrivacyPage() {
             your CVision account: we see only what you type into the form, and nothing from your profile or CV.
           </p>
           <p>
-            Your answers are kept in our team’s private Google Drive and read only by the CVision team. We delete them
-            by 30 November 2026. Google runs the form and stores the answers for us.
+            Your answers are kept in Google Forms and in our team’s private Google Drive, and only the CVision team
+            reads them. Google runs the form for us and may store the answers outside the UK. We delete them by 30
+            November 2026.
           </p>
         </Section>
       )}
