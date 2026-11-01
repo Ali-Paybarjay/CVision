@@ -342,7 +342,8 @@ function JobStatus({ store, job, jobKey, failed, working }: { store: PracticeSto
 }
 
 /**
- * "End here" (#205): a quiet way out at any question, confirmed in place. Answered questions keep their feedback and
+ * "End here" (#205): a visible way out at any question (a Fit box with a secondary button, so Coral stays on "Submit
+ * answer"), confirmed in place. Answered questions keep their feedback and
  * every other question gets a suggested answer built from the CV. Hidden when ending would leave nothing unanswered,
  * so the last follow-up still leads to the full report.
  */
@@ -365,8 +366,9 @@ export function EndHere({ store, session }: { store: PracticeStore; session: Int
 
   if (!confirming) {
     return (
-      <div className="border-t border-line pt-3">
-        <Button variant="quiet" className="px-0" onClick={() => setConfirming(true)}>
+      <div className="space-y-2 rounded-md bg-fit p-3">
+        <p className="text-sm">Short on time? Stop now and get a suggested answer for every question you haven&apos;t answered.</p>
+        <Button className="bg-surface" onClick={() => setConfirming(true)}>
           End here and see suggested answers
         </Button>
       </div>
