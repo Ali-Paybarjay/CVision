@@ -24,7 +24,7 @@ export const sampleApplications: TrackedApplication[] = [
       jobId: interviewJob.id,
       date: "2026-10-20",
       status: "interview",
-      nextStep: "Practise the interview questions",
+      nextStep: "Prepare for the interview questions",
       nextStepDate: "2026-10-26",
     }),
     job: summary(interviewJob),
