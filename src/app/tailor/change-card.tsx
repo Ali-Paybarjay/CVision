@@ -7,7 +7,7 @@ import { Button, CvPaper, Field, FitLine, Textarea } from "@/shared/ui";
 const sectionNames: Record<TailoringChange["section"], string> = {
   summary: "Professional summary",
   skills: "Skills",
-  experience: "Professional skills demonstrated",
+  experience: "Work experience",
   education: "Education",
   certifications: "Certificates",
 };

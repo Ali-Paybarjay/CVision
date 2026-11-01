@@ -58,7 +58,7 @@ function list(items: string[]): string {
  */
 export function sampleCoverLetter({ profile, job, changes }: CoverLetterInput): CoverLetter {
   // The tailored CV already swaps each line for its approved change, so no line appears twice.
-  const cv = buildTailoredCv(profile, changes);
+  const cv = buildTailoredCv(profile, changes, job);
   const recent = profile.experience[0];
   const recentLines = cv.experience[0]?.lines ?? [];
   const lines = [...recentLines.filter((line) => line.tailored), ...recentLines.filter((line) => !line.tailored)]

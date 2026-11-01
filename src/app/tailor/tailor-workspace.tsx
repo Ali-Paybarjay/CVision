@@ -57,7 +57,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
   const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
-  const cv = buildTailoredCv(profile, changes);
+  const cv = buildTailoredCv(profile, changes, job);
   // Worked out on every render, so a letter approved before the CV changed is never used as approved.
   const approvedLetter = currentLetter(letter, letterBasis(changes, Object.values(answers)));
 
@@ -246,6 +246,11 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   We could not find the line {cv.unplaced.length === 1 ? "this change replaces" : "these changes replace"}:{" "}
                   {cv.unplaced.map((change) => `“${change.after}”`).join(", ")}. Reject {cv.unplaced.length === 1 ? "it" : "them"}, then
                   answer the question again for a new suggestion.
+                </Notice>
+              )}
+              {cv.overLimit.length > 0 && (
+                <Notice tone="info" title="Your CV shows six skills, four tools and four certificates at most">
+                  {cv.overLimit.map((line) => `“${line}”`).join(", ")} did not fit. Reject another change to make room.
                 </Notice>
               )}
               <CvPreview cv={cv} />

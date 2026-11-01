@@ -11,6 +11,7 @@ export const bigSixSkills = [
   "Coaching",
   "Collaboration",
   "Communication",
+  "Conflict resolution",
   "Creativity",
   "Critical thinking",
   "Customer service",
@@ -22,10 +23,17 @@ export const bigSixSkills = [
   "Negotiation",
   "Networking",
   "Organisation",
+  "People management",
   "Planning",
+  "Planning and scheduling",
   "Presentation",
   "Problem solving",
+  "Project management",
+  "Stakeholder communication",
   "Stakeholder management",
+  "Strategic thinking",
+  "Team leadership",
+  "Team management",
   "Teamwork",
   "Time management",
 ] as const;
@@ -41,7 +49,7 @@ export const actionVerbs = [
 ];
 
 function key(skill: string): string {
-  return skill.trim().toLowerCase().replace(/[-\s]+/g, " ").replace(/^team work$/, "teamwork");
+  return skill.trim().toLowerCase().replace(/[-\s]+/g, " ").replace(/^team work$/, "teamwork").replace(/^leader$/, "leadership");
 }
 
 /** True for a main skill such as "Communication"; false for a tool or anything else. */

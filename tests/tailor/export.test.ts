@@ -76,7 +76,7 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file (You approve everythin
   it("keeps every heading of the preview as real text, in order", async () => {
     const cv = buildTailoredCv(profile, []);
     const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
-    const headings = ["PROFESSIONAL SUMMARY", "EDUCATION", "PROFESSIONAL SKILLS DEMONSTRATED", "CERTIFICATES AND SKILLS"].map((heading) => text.indexOf(heading));
+    const headings = ["PROFESSIONAL SUMMARY", "WORK EXPERIENCE", "EDUCATION", "CERTIFICATES AND TOOLS"].map((heading) => text.indexOf(heading));
     expect(headings.every((index) => index >= 0)).toBe(true);
     expect([...headings].sort((a, b) => a - b)).toEqual(headings);
   });
@@ -108,7 +108,7 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file follows the templates"
     const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
     for (const name of ["Communication", "Leadership", "Teamwork"]) expect(text).toContain(name);
     expect(text).toContain(`Communication: ${line}`);
-    expect(text).toContain("Skills and tools:");
+    expect(text).toContain("Tools:");
   });
 });
 
