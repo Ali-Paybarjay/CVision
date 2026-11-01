@@ -93,6 +93,47 @@ describe("answerGap", () => {
     expect(result.hint).toBeNull();
   });
 
+  describe("a no in the user's own words counts as the No button (#245)", () => {
+    it.each(["No", "No, I have never used Power BI", "No, I don't have advanced Excel", "I don't have a CSCS card yet", "Not yet. I am still studying for a BSc in Computer Science"])(
+      "%s adds nothing and shows a next step",
+      async (typed) => {
+        const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, chosen: typed, typed: true });
+        expect(result).toMatchObject({ ok: true, hasExperience: false, answer: typed, changes: [], hint: null });
+        if (result.ok) expect(result.nextSteps.length).toBeGreaterThan(0);
+      },
+    );
+
+    it.each(["I used Power BI at work.", "No problem, I used Power BI for three years.", "I don't just use Tableau, Power BI too.", "No-code Power BI reports for the sales team."])(
+      "%s stays a yes, but its words are for the model to read and never become the skill by themselves",
+      async (typed) => {
+        const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, chosen: typed, typed: true });
+        expect(result).toMatchObject({ ok: true, hasExperience: true, nextSteps: [] });
+        if (result.ok) expect(result.changes.filter((change) => change.after === "Power BI")).toEqual([]);
+      },
+    );
+  });
+
+  describe("a tap on a ready answer (#245)", () => {
+    it.each(["Advanced Excel", "Fluent Welsh", "Expert SQL", "BSc in Computer Science", "Chartered accountant", "CSCS card"])(
+      "does not put %s on the CV: a tap does not confirm the level or the qualification",
+      async (requirement) => {
+        const { personas } = await import("@/shared/sample-data");
+        const original = personas.sara.match.gaps[1].requirement;
+        personas.sara.match.gaps[1].requirement = requirement;
+        const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, chosen: `I used ${requirement} at work.` });
+        personas.sara.match.gaps[1].requirement = original;
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.changes.filter((change) => change.after === requirement)).toEqual([]);
+      },
+    );
+
+    it("still puts one plain tool on the CV", async () => {
+      const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-3", answer: "", hasExperience: true, chosen: "I used Git at work." });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.changes.map((change) => change.after)).toEqual(["Git"]);
+    });
+  });
+
   it("refuses a gap that is not in the job's match", async () => {
     // With sample data an unknown job id falls back to Sara's first job, as in Shayan's my-data (#48).
     expect((await answerGap({ jobId: "unknown-job", gapId: "reza-gap-1", answer: "Yes", hasExperience: true })).ok).toBe(false);

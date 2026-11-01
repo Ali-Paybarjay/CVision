@@ -105,6 +105,24 @@ export function declinedRequirements(gaps: Gap[], answers: GapAnswer[], profile:
     .map((gap) => gap.requirement);
 }
 
+/**
+ * The letter without any sentence that names one of these terms, for a model that keeps naming what the user said no to.
+ * The user reads and approves the letter, so a shorter honest letter is better than none. Empty paragraphs go too.
+ */
+export function withoutSentencesNaming(letter: CoverLetter, terms: string[]): CoverLetter {
+  const paragraphs = letter.paragraphs
+    .map((paragraph) =>
+      // A full stop ends a sentence only before a space, so "2.1%" stays whole.
+      paragraph
+        .split(/(?<=[.!?])\s+/)
+        .filter((sentence) => !terms.some((term) => normalise(sentence).includes(term)))
+        .join(" ")
+        .trim(),
+    )
+    .filter(Boolean);
+  return { ...letter, paragraphs };
+}
+
 export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLetter> {
   const { profile, job, changes, answers } = input;
   const prompt = await loadPrompt("tailor-cover-letter", {

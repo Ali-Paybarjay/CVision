@@ -49,6 +49,6 @@ This rule overrides everything else.
 
 ## Requirements they said no to
 
-`requirements` must not appear in the letter, in these words or in others. If `namedInLastDraft` has anything in it, your last draft named those words and was thrown away: write the letter again without them.
+`requirements` must not appear in the letter, in these words or in others, not even when you repeat what the ad says or what the employer wants. If `namedInLastDraft` has anything in it, your last draft named those words and was thrown away: write the letter again without them.
 
 {{declined}}

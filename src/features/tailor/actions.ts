@@ -10,7 +10,7 @@ import { getAnonymousKey } from "@/shared/ai/anonymous-key";
 import { TailoringChangeSchema, type TailoringChange } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
-import { coverLetterText, declinedRequirements, inventedTerms, writeCoverLetter } from "./cover-letter";
+import { coverLetterText, declinedRequirements, inventedTerms, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters } from "./export";
 import { defaultGapQuestion } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
@@ -39,6 +39,8 @@ const AnswerGapSchema = z.object({
   where: z.enum(["work", "study"]).optional(),
   /** The answer option the user tapped, or the words they wrote instead: what they say they have done. */
   chosen: z.string().trim().min(1).max(300).optional(),
+  /** True when `chosen` is what the user wrote, not an option they tapped. */
+  typed: z.boolean().optional(),
   /** The user's answers to the job's other gaps, so a "no" there still counts here (Nothing invented). */
   earlierAnswers: z.array(EarlierAnswerSchema).max(30).optional(),
 });
@@ -49,6 +51,8 @@ export type AnswerGapResult =
       ok: true;
       /** The user's answer as one sentence, the evidence any change quotes; kept for the cover letter. */
       answer: string;
+      /** False when the user said no, by the button or in their own words; the page keeps this with the answer. */
+      hasExperience: boolean;
       changes: TailoringChange[];
       nextSteps: NextStep[];
       /** One optional tip when a "yes" gave nothing to add; never a question the user must answer. */
@@ -68,8 +72,24 @@ function answerSentence(requirement: string, where: "work" | "study", detail: st
  * Not "Asana or Jira", and not "3+ years of Python experience" or "First-class degree": a tap does not confirm those.
  */
 function isOneSkill(requirement: string): boolean {
-  if (/\s+or\s+|,|\/|\band\b|\d|\b(years?|experience|experienced|strong|proficiency|proficient|knowledge|degree|ability|managing)\b/i.test(requirement)) return false;
+  if (namesSeveral(requirement) || /\band\b|\d|\b(years?|experience|experienced|strong|proficiency|proficient|knowledge|degree|ability|managing)\b/i.test(requirement)) return false;
+  // A level or a qualification is a claim of its own: a tap on "I used Advanced Excel" does not confirm "Advanced".
+  if (/\b(advanced|expert|fluent|native|excellent|senior|bsc|msc|ba|ma|phd|bachelor'?s?|master'?s?|chartered|qualification|qualified|certificate|certified|card|licen[cs]e)\b/i.test(requirement)) return false;
   return requirement.trim().split(/\s+/).length <= 5;
+}
+
+function namesSeveral(requirement: string): boolean {
+  return /\s+or\s+|,|\//i.test(requirement);
+}
+
+/**
+ * True when the words the user wrote start by saying they have not done it, e.g. "No", "Not yet. I am still studying"
+ * or "I don't have a CSCS card yet". Not "No problem, I ran it" or "I don't just use Excel".
+ */
+function saysNo(text: string): boolean {
+  const answer = text.trim().toLowerCase().replace(/[’]/g, "'");
+  if (/^(no problem|no doubt|not only|not just|i (don't|do not) (just|only))\b/.test(answer)) return false;
+  return /^(no(?!-)|nope|nah|not yet|not really|none)\b|^never (used|done|had|worked|held)\b|^i (have not|haven't|havent|have never|haven't ever|do not|don't|dont|did not|didn't|didnt|never)\b/.test(answer);
 }
 
 /**
@@ -80,8 +100,12 @@ function isOneSkill(requirement: string): boolean {
 export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult> {
   const parsed = AnswerGapSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "We could not read your answer. Try again." };
-  const { jobId, gapId, hasExperience } = parsed.data;
+  const { jobId, gapId } = parsed.data;
   const detail = parsed.data.answer.trim();
+  const chosen = parsed.data.chosen;
+  const typed = parsed.data.typed === true && chosen !== undefined;
+  // A "no" in the user's own words counts as the No button does, so every guard against adding it applies.
+  const hasExperience = parsed.data.hasExperience && !(typed && saysNo(chosen));
 
   const access = await tailorModelAccess();
   if (!access.allowed) return { ok: false, message: access.message };
@@ -89,9 +113,8 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
   const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   const gap = match?.gaps.find((item) => item.id === gapId);
   if (!profile || !job || !match || !gap) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
-  const chosen = parsed.data.chosen;
   const answer = !hasExperience
-    ? detail || "I haven't done this."
+    ? (typed ? chosen : detail) || "I haven't done this."
     : chosen
       ? [chosen, detail].filter(Boolean).join(". ")
       : answerSentence(gap.requirement, parsed.data.where ?? "work", detail);
@@ -123,9 +146,10 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
     let hint: string | null = null;
 
     if (hasExperience && changes.length === 0) {
-      // A plain "yes" to one tool or skill goes on the CV as that skill, quoting the user's own answer.
+      // A plain "yes" to one tool or skill goes on the CV as that skill, quoting the user's own answer. Words the
+      // user wrote are for the model to read, because naming the skill is not the same as saying they have it.
       const skill = { gapId, section: "skills" as const, before: null, after: gap.requirement.trim(), evidence: answer, evidenceSource: "follow-up-answer" as const };
-      const { kept } = enforceNothingInvented(gap.kind === "missing" && isOneSkill(gap.requirement) ? [skill] : [], {
+      const { kept } = enforceNothingInvented(!typed && gap.kind === "missing" && isOneSkill(gap.requirement) ? [skill] : [], {
         profile,
         gaps: match.gaps,
         answers: [...earlier, { gapId, question: "", answer, hasExperience }],
@@ -135,7 +159,9 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
         hint =
           gap.kind === "unclear"
             ? "Your CV already mentions this. To make that line stronger, add a detail such as a number or an example. This is optional."
-            : "Tell us which one you have used, and we will add it. This is optional.";
+            : namesSeveral(gap.requirement) && !typed
+              ? "Tell us which one you have used, and we will add it. This is optional."
+              : "Add where you did this and what changed, and we will suggest a line for your CV. This is optional.";
       }
     }
     if (!hasExperience && nextSteps.length === 0) {
@@ -145,7 +171,7 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
         suggestion: "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
       });
     }
-    return { ok: true, answer, changes, nextSteps, hint, removed };
+    return { ok: true, answer, hasExperience, changes, nextSteps, hint, removed };
   } catch (error) {
     return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
   }
@@ -265,6 +291,15 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
       letter = await writeCoverLetter({ ...input, namedInLastDraft: named });
       text = coverLetterText(letter, profile.fullName);
       named = inventedTerms(text, gaps, answers, profile);
+    }
+    // Still there after two drafts: take those sentences out, so nothing the user said no to is used and they still get a letter.
+    if (named.length > 0) {
+      const trimmed = withoutSentencesNaming(letter, named);
+      if (trimmed.paragraphs.length > 0) {
+        letter = trimmed;
+        text = coverLetterText(letter, profile.fullName);
+        named = inventedTerms(text, gaps, answers, profile);
+      }
     }
     if (named.length > 0) {
       return { ok: false, message: `The draft kept mentioning “${named[0]}”, which you told us you have not done, so we did not use it. Try again, or change your answer to that question.` };
