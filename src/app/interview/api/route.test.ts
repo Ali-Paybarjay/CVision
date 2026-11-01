@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { profileToCvText } from "@/features/interview/engine/text";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
+import { practiceUnavailable } from "@/features/interview/server/step-api";
 import { endedSessionFor, readySessionFor, runMockSession } from "@/features/interview/test-support";
 import type { AskModelOptions } from "@/shared/ai";
 import type { Profile } from "@/shared/contracts";
@@ -171,7 +172,15 @@ describe("interview.startup_ready (#232)", () => {
 
   it("records how long the start took once the questions are checked, in seconds and counts only", async () => {
     currentUser.value = { id: "user-1", email: null };
-    const response = await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: 95_000, retries: 1 });
+    const response = await post({
+      step: "review",
+      jobId: "sara-job-1",
+      session: written,
+      waitedMs: 95_000,
+      analyseMs: 24_400,
+      generateMs: 61_600,
+      retries: 1,
+    });
     expect(response.status).toBe(200);
     expect(tracked).toHaveLength(0);
 
@@ -181,14 +190,27 @@ describe("interview.startup_ready (#232)", () => {
     expect(tracked[0].properties).toMatchObject({ sessionId: written.id, jobId: "sara-job-1", mode: "mock", retries: 1, resumed: false });
     // The browser's 95 seconds plus the check on the server, which is instant in mock mode.
     expect(tracked[0].properties.seconds).toBe(95);
-    expect(Object.keys(tracked[0].properties).sort()).toEqual(["jobId", "mode", "resumed", "retries", "reviewSeconds", "seconds", "sessionId"]);
+    // Each stage on its own, so its share of the bar can come from real starts (#266).
+    expect(tracked[0].properties).toMatchObject({ analyseSeconds: 24, generateSeconds: 62, reviewSeconds: 0 });
+    expect(Object.keys(tracked[0].properties).sort()).toEqual([
+      "analyseSeconds",
+      "generateSeconds",
+      "jobId",
+      "mode",
+      "resumed",
+      "retries",
+      "reviewSeconds",
+      "seconds",
+      "sessionId",
+    ]);
   });
 
   it("records no total for a start left and resumed later, nor anything for a signed-out visitor", async () => {
     currentUser.value = { id: "user-1", email: null };
     await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: 3_600_000 });
     await Promise.all(deferred.map((work) => work()));
-    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: true, retries: 0 });
+    // A browser that sent no stage times (an older tab) records none.
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: true, retries: 0, analyseSeconds: null, generateSeconds: null });
 
     currentUser.value = null;
     deferred.length = 0;
@@ -198,11 +220,11 @@ describe("interview.startup_ready (#232)", () => {
 
   it("never refuses the check over a bad count from the browser", async () => {
     currentUser.value = { id: "user-1", email: null };
-    const response = await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: "soon", retries: -1 });
+    const response = await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: "soon", generateMs: 1.5, retries: -1 });
     expect(response.status).toBe(200);
 
     await Promise.all(deferred.map((work) => work()));
-    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: false, retries: 0 });
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: false, retries: 0, generateSeconds: null });
   });
 });
 
@@ -275,7 +297,9 @@ describe("the interview API in live mode", () => {
     vi.stubEnv("AI_MODE", "live");
     currentUser.value = { id: "user-1", email: null };
     const response = await analyse("sara-job-2");
-    expect(response.status).toBe(422);
+    // Tests have no AI key, so askModel stops there: plain words for the user, never the setting's name (#266).
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: practiceUnavailable, final: true });
     expect(asked[0]?.requester).toEqual({ userId: "user-1" });
   });
 });

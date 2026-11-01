@@ -8,6 +8,9 @@ import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, 
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
 import { isLabEnabled } from "../lab-access";
 
+/** As on the main interview API: the browser's own limit for a start-up stage (180 seconds) always comes first (#266). */
+export const maxDuration = 300;
+
 const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("analyse"), inputs: InterviewInputsSchema, id: z.string().min(1), startedAt: z.iso.datetime() }),
   z.object({ step: z.literal("generate"), inputs: InterviewInputsSchema, session: InterviewSessionSchema }),
