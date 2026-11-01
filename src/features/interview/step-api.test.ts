@@ -32,7 +32,8 @@ describe("a step whose answer broke a rule twice (#220)", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const response = stepFailed("interview", "review", invalid, { plain: true });
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({ error: questionsNotWritten });
+    // It usually works on the second go, so the page sends a start-up stage once more by itself (#232).
+    expect(await response.json()).toEqual({ error: questionsNotWritten, retryable: true });
     expect(log).toHaveBeenCalledWith(expect.stringContaining("questions.4.followUps.0.text: Must be one question."));
   });
 
@@ -46,5 +47,28 @@ describe("a step whose answer broke a rule twice (#220)", () => {
   it("still shows the rule in the lab", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect((await stepFailed("interview lab", "review", invalid).json()).error).toBe(invalid.message);
+  });
+});
+
+describe("other failures (#232)", () => {
+  it("an unexpected one, such as the model's API being overloaded: plain words for the user, the step in the lab, and worth a second go", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const overloaded = new Error("529 Overloaded");
+
+    const user = stepFailed("interview", "generate", overloaded, { plain: true });
+    expect(user.status).toBe(500);
+    expect(await user.json()).toEqual({ error: questionsNotWritten, retryable: true });
+    expect(await stepFailed("interview", "suggest", overloaded, { plain: true }).json()).toEqual({
+      error: "We could not finish this step this time. Try again: it usually works on the second go.",
+      retryable: true,
+    });
+    expect(await stepFailed("interview lab", "generate", overloaded).json()).toEqual({ error: "The generate step failed. Try again.", retryable: true });
+  });
+
+  it("a daily limit or a refusal: the reason as it is, and not worth a second go", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const limit = new AskModelError("You have reached today's limit for interview practice.", "limit-reached");
+
+    expect(await stepFailed("interview", "generate", limit, { plain: true }).json()).toEqual({ error: limit.message });
   });
 });

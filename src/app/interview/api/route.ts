@@ -7,18 +7,21 @@ import { getCurrentUser } from "@/features/account/current-user";
 import { applyReport, endEarly } from "@/features/interview/engine/session";
 import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, suggestAnswer, writeReport } from "@/features/interview/engine/stages";
 import { interviewInputsFor, isCvTooThin } from "@/features/interview/engine/text";
-import { trackSessionCompleted, trackSessionEndedEarly } from "@/features/interview/server/completion-event";
+import { trackSessionCompleted, trackSessionEndedEarly, trackStartupReady } from "@/features/interview/server/completion-event";
 import { getMyJob, getMyProfile } from "@/features/interview/server/my-data";
 import { saveInterviewSession } from "@/features/interview/server/session-store";
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
 
 const JobIdSchema = z.string().min(1).max(100);
 const QuestionIdSchema = z.string().min(1);
+/** A count the browser sends for interview.startup_ready (#232): a bad one is dropped, never a reason to refuse the step. */
+const CountSchema = z.number().int().nonnegative().optional().catch(undefined);
 
 const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("analyse"), jobId: JobIdSchema, id: z.uuid(), startedAt: z.iso.datetime() }),
   z.object({ step: z.literal("generate"), jobId: JobIdSchema, session: InterviewSessionSchema }),
-  z.object({ step: z.literal("review"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  // How long this start has taken in the browser so far, and how many stages were sent again.
+  z.object({ step: z.literal("review"), jobId: JobIdSchema, session: InterviewSessionSchema, waitedMs: CountSchema, retries: CountSchema }),
   z.object({ step: z.literal("follow-up"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("evaluate"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("report"), jobId: JobIdSchema, session: InterviewSessionSchema }),
@@ -65,8 +68,16 @@ export async function POST(request: Request): Promise<Response> {
       }
       case "generate":
         return Response.json({ session: await generateStep(body.session, await inputs(), { requester }) });
-      case "review":
-        return Response.json({ session: await reviewStep(body.session, await inputs(), { requester }) });
+      case "review": {
+        const reviewStartedAt = Date.now();
+        const session = await reviewStep(body.session, await inputs(), { requester });
+        // The questions are ready: how long the whole start took (#232). Only signed-in practice is counted.
+        if (user) {
+          const timing = { waitedMs: body.waitedMs, retries: body.retries, reviewMs: Date.now() - reviewStartedAt };
+          after(() => trackStartupReady(session, timing, user.id));
+        }
+        return Response.json({ session });
+      }
       case "follow-up":
         return Response.json(await decideFollowUp(body.session, body.questionId, { requester }));
       case "evaluate":

@@ -7,7 +7,8 @@ import { answerGuide, defaultComposition } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
 import { nextStep, openingView } from "@/features/interview/engine/session";
 import type { LastReport } from "@/features/interview/server/session-store";
-import { drive, InterviewFlow, Progress, runOf, type SampleAnswers } from "./_practice/flow";
+import { drive, InterviewFlow, runOf, type SampleAnswers } from "./_practice/flow";
+import { preparationState, Progress, startupEstimate } from "./_practice/progress";
 import { FeedbackReport } from "./_practice/report";
 import { createPracticeStore, parseEnvelope, type PracticeStore } from "./_practice/store";
 import { Button, Card, Notice } from "@/shared/ui";
@@ -225,20 +226,24 @@ export function InterviewPractice({
   if (!envelope) return <Intro signedIn={signedIn} canSave={canSave} onStart={start} focusHeading={practiseAgain} />;
 
   const done = session !== null && nextStep(session).step === "done";
+  const run = runOf(envelope);
+  // While the questions are being prepared, Start again would throw away a start that is going fine and begin the
+  // wait again (#232). It comes back when a stage fails, next to Try again, and once question 1 is here.
+  const canStartAgain = !done && preparationState(session, jobs, run) !== "preparing";
   return (
     <div ref={practiceRef} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
-        {!done && <Button onClick={restart}>Start again</Button>}
+        {canStartAgain && <Button onClick={restart}>Start again</Button>}
       </div>
-      <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
+      <Progress store={store} session={session} jobs={jobs} run={run} />
       {session && done ? (
         <>
           <FeedbackReport session={session} />
           <PractiseAgain onPractiseAgain={restart} />
         </>
       ) : (
-        session && <InterviewFlow store={store} session={session} jobs={jobs} run={runOf(envelope)} samples={samples} />
+        session && <InterviewFlow store={store} session={session} jobs={jobs} run={run} samples={samples} />
       )}
     </div>
   );
@@ -301,7 +306,9 @@ function Intro({ signedIn, canSave, onStart, focusHeading }: { signedIn: boolean
         How it works
       </h2>
       <ul className="list-disc space-y-2 pl-5">
-        <li>{defaultComposition.technical} technical questions, written from this job ad and your CV.</li>
+        <li>
+          {defaultComposition.technical} technical questions, written from this job ad and your profile. Getting them ready takes {startupEstimate()}.
+        </li>
         <li>
           Type each answer: aim for {answerGuide.minWords} to {answerGuide.maxWords} words, about {answerGuide.suggestedMinutes} minutes. The
           interviewer may ask one follow-up.

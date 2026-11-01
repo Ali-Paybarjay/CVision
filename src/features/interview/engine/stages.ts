@@ -117,7 +117,8 @@ export const reviewRuleEvent = "interview.review_rule_broken";
 export const reviewRejectedEvent = "interview.review_rejected";
 
 /** What the user sees when the questions cannot be written, instead of the rule that failed (#220). */
-export const questionsNotWritten = "We could not finish writing your questions this time. Try again: it usually works on the second go.";
+// Often shown after the page has already sent the stage once more by itself (#232), so it does not promise that a second go works.
+export const questionsNotWritten = "We could not finish writing your questions this time. Try again in a moment.";
 
 /**
  * Records each rule a reply breaks (one that is kept, or for the review one that is sent back), by stage and rule

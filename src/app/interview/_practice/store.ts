@@ -3,6 +3,7 @@
 // answers scored in the background never overwrite each other. The lab and the main page each create their own.
 import { InterviewSessionSchema, type InterviewSession } from "@/features/interview/contracts";
 import { InterviewInputsSchema, type InterviewInputs } from "@/features/interview/engine/schemas";
+import { brand } from "@/shared/brand";
 
 export type PracticeEnvelope = {
   /** The lab's fixture or persona id, or the job id on the main page. */
@@ -14,9 +15,37 @@ export type PracticeEnvelope = {
   /** Milliseconds since the epoch when Start was pressed, and the start-up time once stages 1 to 3 finish. */
   startedAtMs: number;
   startupMs: number | null;
+  /** How many times a start-up stage was sent again, automatically or by Try again (#232), for interview.startup_ready. */
+  startupRetries?: number;
 };
 
-export type JobState = { status: "running" } | { status: "failed"; message: string };
+/**
+ * A request in flight or stopped. `since`: when its current try started in this tab. `retrying`: the first try did not
+ * finish and this is the second (#232).
+ */
+export type JobState = { status: "running"; since?: number; retrying?: boolean } | { status: "failed"; message: string };
+
+/** What the user reads when a request fails without a message of its own from the API: plain words, never a status code. */
+export const stepProblems = {
+  offline: `We could not reach ${brand.name}. Check your connection, then try again.`,
+  timeout: "This step took too long to answer.",
+  server: "Something went wrong on our side. Try again in a moment.",
+} as const;
+
+/**
+ * A step that failed. `retryable`: a second go a moment later may well work (no connection, a server error, or the API
+ * says so), unlike a daily limit, a missing Profile, a request the API refuses, or a step that ran out of time while
+ * the server is most likely still working on it.
+ */
+export class StepError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = "StepError";
+  }
+}
 
 const emptyJobs: Readonly<Record<string, JobState>> = {};
 
@@ -34,6 +63,7 @@ export function parseEnvelope(raw: string | null): PracticeEnvelope | null {
       session: data.session === null ? null : InterviewSessionSchema.parse(data.session),
       startedAtMs: Number(data.startedAtMs) || 0,
       startupMs: typeof data.startupMs === "number" ? data.startupMs : null,
+      ...(typeof data.startupRetries === "number" ? { startupRetries: data.startupRetries } : {}),
     };
   } catch {
     return null;
@@ -144,25 +174,46 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
     retryJob(key: string) {
       if (jobs[key]?.status === "failed") setJob(key, null);
     },
+    /** Marks the start of a running job's try in this tab, so the page can time it and say when it is a second try. */
+    noteAttempt(key: string, retrying = false) {
+      if (jobs[key]?.status === "running") setJob(key, { status: "running", since: Date.now(), retrying });
+    },
     clearJobs() {
       jobs = {};
       succeeded.clear();
       emit();
     },
     /**
-     * POSTs one engine step to the API and returns its JSON, or throws the API's error message. With `keepalive`,
-     * the request outlives the page when it fits the browser's 64 KB keepalive limit.
+     * POSTs one engine step to the API and returns its JSON, or throws a StepError with the API's message, or with
+     * plain words when the API gave none (stepProblems). With `keepalive`, the request outlives the page when it fits
+     * the browser's 64 KB keepalive limit. With `timeoutMs`, a request that has not answered by then is dropped.
      */
-    async callStep<T>(body: Record<string, unknown>, options: { keepalive?: boolean } = {}): Promise<T> {
+    async callStep<T>(body: Record<string, unknown>, options: { keepalive?: boolean; timeoutMs?: number } = {}): Promise<T> {
       const json = JSON.stringify(body);
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: json,
-        keepalive: options.keepalive && new Blob([json]).size < keepaliveLimitBytes,
-      });
+      const controller = options.timeoutMs ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : undefined;
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: json,
+          keepalive: options.keepalive && new Blob([json]).size < keepaliveLimitBytes,
+          signal: controller?.signal,
+        });
+      } catch {
+        // No answer at all: the step ran out of time and was dropped here, or the connection dropped.
+        if (controller?.signal.aborted) throw new StepError(stepProblems.timeout, false);
+        throw new StepError(stepProblems.offline, true);
+      } finally {
+        clearTimeout(timer);
+      }
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `The request failed (${response.status}).`);
+      if (!response.ok) {
+        // Without a message of its own, the server or the platform in front of it failed (a 504, a crash page).
+        const own = typeof data.error === "string";
+        throw new StepError(own ? data.error : stepProblems.server, data.retryable === true || (!own && response.status >= 500));
+      }
       return data as T;
     },
   };

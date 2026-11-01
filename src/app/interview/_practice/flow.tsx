@@ -4,7 +4,7 @@
 // questions are scored in the background. The saved session drives everything: whatever it needs next is
 // requested, so a reload resumes exactly where it stopped.
 import { useEffect, useRef, useState } from "react";
-import { answerGuide, limits } from "@/features/interview/config";
+import { answerGuide, limits, stallSeconds, startupRetryDelayMs } from "@/features/interview/config";
 import type { AnswerEvaluation, AnswerSuggestion, FollowUpDecision, InterviewReport, InterviewSession, StageUsage } from "@/features/interview/contracts";
 import {
   addAnswer,
@@ -26,9 +26,9 @@ import {
   type Provenance,
 } from "@/features/interview/engine/session";
 import { countWords } from "@/features/interview/engine/text";
-import type { JobState, PracticeEnvelope, PracticeStore } from "./store";
+import { StepError, type JobState, type PracticeEnvelope, type PracticeStore } from "./store";
 import { Button, Card, Notice } from "@/shared/ui";
-import { Status } from "./ui";
+import { firstQuestionId, Status } from "./ui";
 
 /** Sample answers by question id, for one-click answers in mock mode. */
 export type SampleAnswers = Record<string, { main: string; followUp: string | null }>;
@@ -48,6 +48,37 @@ export function runOf(envelope: PracticeEnvelope): string {
   return String(envelope.startedAtMs);
 }
 
+/** Counts one more go at a start-up stage of this run, for interview.startup_ready (#232). */
+function countStartupRetry(store: PracticeStore, run: string) {
+  store.updateEnvelope((current) => (runOf(current) === run ? { ...current, startupRetries: (current.startupRetries ?? 0) + 1 } : current));
+}
+
+/** Try again on a failed start-up stage: counted, then run again by the next drive. */
+export function retryStartupStage(store: PracticeStore, run: string, key: string) {
+  countStartupRetry(store, run);
+  store.retryJob(key);
+}
+
+/**
+ * A start-up stage's request (#232). After a fast failure worth a second go (no connection, a server error, an answer
+ * that broke a rule twice) it is sent once more after a short pause, while the page says "Trying again…". A second
+ * failure is the stage's, and so is a request dropped after `stallSeconds` (see config): the page shows it with Try
+ * again. Try again runs the stage afresh, with its own second go.
+ */
+async function withOneRetry<T>(store: PracticeStore, run: string, key: string, request: () => Promise<T>): Promise<T> {
+  store.noteAttempt(key);
+  try {
+    return await request();
+  } catch (error) {
+    if (!(error instanceof StepError) || !error.retryable) throw error;
+    countStartupRetry(store, run);
+    store.noteAttempt(key, true);
+    // A blip (a dropped connection, an overloaded server) often lasts a few seconds: an instant resend would meet it too.
+    await new Promise((resolve) => setTimeout(resolve, startupRetryDelayMs));
+    return request();
+  }
+}
+
 /**
  * Requests whatever the session needs next. Running or failed requests are not repeated (see runJob).
  * `context` goes into every request: the lab sends the job ad and CV, the main page only the job id.
@@ -56,17 +87,21 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
   const { session } = envelope;
   const run = runOf(envelope);
   const call = <T,>(body: Record<string, unknown>) => store.callStep<T>({ ...context, ...body });
+  /** The three start-up stages: timed out when they stop answering, and tried once more. `body` is read for each try. */
+  const callStartup = <T,>(key: string, body: () => Record<string, unknown>) =>
+    withOneRetry(store, run, key, () => store.callStep<T>({ ...context, ...body() }, { timeoutMs: stallSeconds * 1000 }));
   /** Applies a result only to the session it was requested for. */
   const updateSameSession = (sessionId: string, change: (session: InterviewSession) => InterviewSession) =>
     store.updateSession((current) => (current.id === sessionId ? change(current) : current));
 
   if (!session) {
-    store.runJob(`${run}:analyse`, async () => {
-      const result = await call<{ session: InterviewSession }>({
+    const key = `${run}:analyse`;
+    store.runJob(key, async () => {
+      const result = await callStartup<{ session: InterviewSession }>(key, () => ({
         step: "analyse",
         id: crypto.randomUUID(),
         startedAt: new Date(envelope.startedAtMs).toISOString(),
-      });
+      }));
       store.updateEnvelope((current) => (current.session || runOf(current) !== run ? current : { ...current, session: result.session }));
     });
     return;
@@ -75,8 +110,19 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
   const next = nextStep(session);
   if (next.step === "generate" || next.step === "review") {
     const step = next.step;
-    store.runJob(`${run}:${step}`, async () => {
-      const result = await call<{ session: InterviewSession }>({ step, session });
+    const key = `${run}:${step}`;
+    store.runJob(key, async () => {
+      // The review request also says how long this start has taken so far, for interview.startup_ready.
+      const result = await callStartup<{ session: InterviewSession }>(key, () =>
+        step === "review"
+          ? {
+              step,
+              session,
+              waitedMs: Math.max(0, Date.now() - envelope.startedAtMs),
+              retries: store.readEnvelope()?.startupRetries ?? 0,
+            }
+          : { step, session },
+      );
       store.updateEnvelope((envelope) => {
         if (!envelope.session || envelope.session.id !== session.id || nextStep(envelope.session).step !== step) return envelope;
         if (step === "generate") return { ...envelope, session: result.session };
@@ -138,61 +184,6 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
   }
 }
 
-const startupStages = [
-  { key: "analyse", label: "Reading the role and your CV" },
-  { key: "generate", label: "Writing questions" },
-  { key: "review", label: "Checking the questions" },
-] as const;
-
-export function Progress({
-  store,
-  session,
-  jobs,
-  run,
-  startupMs,
-}: {
-  store: PracticeStore;
-  session: InterviewSession | null;
-  jobs: Readonly<Record<string, JobState>>;
-  run: string;
-  startupMs: number | null;
-}) {
-  const reached = !session ? 0 : !session.questions.length ? 1 : !session.reviewChangelog ? 2 : 3;
-  if (reached === 3) {
-    return startupMs === null ? null : <p className="text-sm text-text-muted">Questions ready in {(startupMs / 1000).toFixed(1)} seconds.</p>;
-  }
-  return (
-    <Card>
-      <h2 className="text-xl">Preparing your interview</h2>
-      <ol className="mt-3 space-y-2">
-        {startupStages.map((stage, index) => {
-          const job = jobs[`${run}:${stage.key}`];
-          return (
-            <li key={stage.key} className="flex flex-wrap items-center gap-2">
-              {index < reached ? (
-                <Status tone="accent">Done</Status>
-              ) : job?.status === "failed" ? (
-                <Status tone="error">Failed</Status>
-              ) : index === reached ? (
-                <Status tone="muted">Working…</Status>
-              ) : (
-                <Status tone="muted">Waiting</Status>
-              )}
-              <span>{stage.label}</span>
-              {job?.status === "failed" && (
-                <>
-                  <span className="w-full text-sm text-error">{job.message}</span>
-                  <Button onClick={() => store.retryJob(`${run}:${stage.key}`)}>Try again</Button>
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </Card>
-  );
-}
-
 export function InterviewFlow({
   store,
   session,
@@ -225,7 +216,8 @@ export function InterviewFlow({
         const suggestJob = jobs[`${run}:suggest:${question.id}`];
         return (
           <Card key={question.id} className="space-y-3">
-            <p className="text-sm text-text-muted">
+            {/* Question 1's line takes focus when "Preparing your interview" gives way to it (#232). */}
+            <p id={index === 0 ? firstQuestionId : undefined} tabIndex={index === 0 ? -1 : undefined} className="text-sm text-text-muted">
               Question {index + 1} of {session.questions.length}
             </p>
             {turns.map((turn) =>
@@ -331,7 +323,7 @@ export function InterviewFlow({
 
 /** A background request still working, or failed with its message and Try again. */
 function JobStatus({ store, job, jobKey, failed, working }: { store: PracticeStore; job?: JobState; jobKey: string; failed: string; working: string }) {
-  if (job?.status !== "failed") return <Status tone="muted">{working}</Status>;
+  if (job?.status !== "failed") return <Status tone="working">{working}</Status>;
   return (
     <span className="flex flex-wrap items-center gap-2">
       <Status tone="error">{failed}</Status>
@@ -402,7 +394,7 @@ function DecisionStatus({ store, job, jobKey }: { store: PracticeStore; job?: Jo
       </div>
     );
   }
-  return <Status tone="muted">The interviewer is reading your answer…</Status>;
+  return <Status tone="working">The interviewer is reading your answer…</Status>;
 }
 
 function AnswerForm({
@@ -453,7 +445,7 @@ function AnswerForm({
       </label>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className={`text-sm ${tone}`} aria-live="polite">
-          {words} {words === 1 ? "word" : "words"} · aim for {answerGuide.minWords} to {answerGuide.maxWords}
+          {words} {words === 1 ? "word" : "words"} · aim for {answerGuide.minWords} to {answerGuide.maxWords} words
         </p>
         <div className="flex flex-wrap gap-2">
           {sample && (
