@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { profileToCvText } from "@/features/interview/engine/text";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
-import { endedSessionFor, runMockSession } from "@/features/interview/test-support";
+import { endedSessionFor, readySessionFor, runMockSession } from "@/features/interview/test-support";
 import type { AskModelOptions } from "@/shared/ai";
 import type { Profile } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
@@ -162,6 +162,47 @@ describe("the interview API in mock mode", () => {
     const response = await post({ step: "report", jobId: "sara-job-1", session: { ...full, report: undefined, summary: null } });
     expect(response.status).toBe(200);
     expect(deferred).toHaveLength(0);
+  });
+});
+
+describe("interview.startup_ready (#232)", () => {
+  // After stage 2: the questions are written and wait for the check.
+  const written = { ...readySessionFor(dataAnalystSara), reviewChangelog: undefined };
+
+  it("records how long the start took once the questions are checked, in seconds and counts only", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const response = await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: 95_000, retries: 1 });
+    expect(response.status).toBe(200);
+    expect(tracked).toHaveLength(0);
+
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked).toHaveLength(1);
+    expect(tracked[0].name).toBe("interview.startup_ready");
+    expect(tracked[0].properties).toMatchObject({ sessionId: written.id, jobId: "sara-job-1", mode: "mock", retries: 1, resumed: false });
+    // The browser's 95 seconds plus the check on the server, which is instant in mock mode.
+    expect(tracked[0].properties.seconds).toBe(95);
+    expect(Object.keys(tracked[0].properties).sort()).toEqual(["jobId", "mode", "resumed", "retries", "reviewSeconds", "seconds", "sessionId"]);
+  });
+
+  it("records no total for a start left and resumed later, nor anything for a signed-out visitor", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: 3_600_000 });
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: true, retries: 0 });
+
+    currentUser.value = null;
+    deferred.length = 0;
+    expect((await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: 95_000 })).status).toBe(200);
+    expect(deferred).toHaveLength(0);
+  });
+
+  it("never refuses the check over a bad count from the browser", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const response = await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: "soon", retries: -1 });
+    expect(response.status).toBe(200);
+
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: false, retries: 0 });
   });
 });
 

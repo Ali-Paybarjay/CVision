@@ -41,19 +41,24 @@ const plainMessages: Record<string, string> = {
 /**
  * The response for a step that threw. Logs the kind of failure, and for an invalid answer the rules it broke (their
  * messages name the field and the rule, never the CV, the job description or an answer). With `plain`, a step whose
- * answer broke a rule twice shows a plain message, not the rule (#220).
+ * answer broke a rule twice shows a plain message, not the rule (#220). `retryable: true` tells the page a second go
+ * may well work (#232): an answer that broke a rule twice, or an unexpected failure such as the model's API being
+ * overloaded. A daily limit, a refusal or a rule of the interview itself is not worth a second go.
  */
 export function stepFailed(source: string, step: string, error: unknown, { plain = false } = {}): Response {
   const reason = error instanceof AskModelError ? error.reason : undefined;
   const rules = reason === "invalid-answer" ? `: ${(error as Error).message}` : "";
   console.error(`${source}: ${step} failed (${error instanceof Error ? error.name : "unknown"}${reason ? `, ${reason}` : ""})${rules}`);
   if (plain && reason === "invalid-answer") {
-    return Response.json({ error: plainMessages[step] ?? `We could not finish this step this time. ${secondGo}` }, { status: 422 });
+    return Response.json({ error: plainMessages[step] ?? `We could not finish this step this time. ${secondGo}`, retryable: true }, { status: 422 });
   }
   const known =
     error instanceof AskModelError ||
     error instanceof MockFixtureMissingError ||
     error instanceof InterviewStageError ||
     error instanceof InterviewRuleError;
-  return Response.json({ error: known ? (error as Error).message : `The ${step} step failed. Try again.` }, { status: known ? 422 : 500 });
+  if (known) return Response.json({ error: (error as Error).message }, { status: 422 });
+  // Plain words on the user's page; the lab names the step.
+  const message = plain ? (plainMessages[step] ?? `We could not finish this step this time. ${secondGo}`) : `The ${step} step failed. Try again.`;
+  return Response.json({ error: message, retryable: true }, { status: 500 });
 }

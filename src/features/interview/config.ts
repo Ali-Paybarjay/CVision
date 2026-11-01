@@ -71,10 +71,28 @@ export const levelDescriptions: Record<LevelBand, string> = {
 export const answerGuide = { minWords: 150, maxWords: 300, suggestedMinutes: 4 };
 
 /**
- * The usual wait from "Start practice" to the first question, in seconds: 89.3 in the eval of 30 Oct 2026 (run
- * 41052056548). The intro and "Preparing your interview" (#232) say it. Lower it when #100 makes the start faster.
+ * The usual wait from "Start practice" to the first question, in seconds. The intro and "Preparing your interview"
+ * (#232) say it, and it sets each stage's share of the bar. The eval of 30 Oct 2026 measured 89.3 on the server (run
+ * 41052056548), but a pilot user waited 136.6 with network and cold starts (#243), so it says about 2 minutes for now.
+ * Once interview.startup_ready has a week of real starts, set it to their 80th percentile: then most people finish a
+ * little early, and "longer than usual" is true when it is said. Lower it when #100 makes the start faster.
  */
-export const startupSeconds = 90;
+export const startupSeconds = 120;
+
+/**
+ * When a start-up stage has stopped answering: after this many seconds its request is dropped and the stage fails with
+ * Try again (the steps already done are kept). A stage usually takes about 40 seconds, so this catches a connection
+ * that has died without cutting off a slow stage that would still succeed; Vercel stops a request at 300 seconds anyway.
+ * It is not sent again by itself: the server is most likely still working on it, and a second request would pay for
+ * the model twice and count twice towards the user's daily limit.
+ */
+export const stallSeconds = 180;
+
+/** A start-up stage that failed fast (no connection, a server error) is sent once more after this pause. */
+export const startupRetryDelayMs = 3000;
+
+/** "Taking a little longer than usual" once a stage has run this many seconds past its usual share of the wait. */
+export const overrunGraceSeconds = 10;
 
 export const limits = {
   /** Longest job ad, CV and single answer the lab API accepts, in characters, so one request cannot run up a large bill. */

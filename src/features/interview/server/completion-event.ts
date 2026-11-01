@@ -6,6 +6,10 @@ import { countWords } from "../engine/text";
 
 export const sessionCompletedEvent = "interview.session_completed";
 export const sessionEndedEarlyEvent = "interview.session_ended_early";
+export const startupReadyEvent = "interview.startup_ready";
+
+/** A start whose wait before the check is longer than this was left and resumed later: no total is recorded for it. */
+const resumedAfterMs = 15 * 60_000;
 
 /**
  * The details of interview.session_completed: counts, scores and timing only.
@@ -41,6 +45,24 @@ export function sessionEndedEarlyProperties(session: InterviewSession) {
 }
 
 /**
+ * The details of interview.startup_ready (#232): how long the user waited from "Start practice" to question 1, in
+ * seconds, so the wait the page promises comes from real starts. `waitedMs` is the browser's own count up to the check
+ * (stage 3), `reviewMs` the check itself on the server. Durations only, never text.
+ */
+export function startupReadyProperties(session: InterviewSession, timing: { waitedMs?: number; retries?: number; reviewMs: number }) {
+  const resumed = timing.waitedMs !== undefined && timing.waitedMs > resumedAfterMs;
+  return {
+    sessionId: session.id,
+    jobId: session.jobId,
+    mode: session.versions?.mode ?? "mock",
+    seconds: timing.waitedMs === undefined || resumed ? null : Math.round((timing.waitedMs + timing.reviewMs) / 1000),
+    reviewSeconds: Math.round(timing.reviewMs / 1000),
+    retries: timing.retries ?? 0,
+    resumed,
+  };
+}
+
+/**
  * Records an event once per session. A reload or a second tab can send the same step again, so a session that
  * already has the event is skipped. Two requests at the very same moment can still both record it; the funnel
  * (#44) counts distinct session ids.
@@ -64,4 +86,13 @@ export async function trackSessionCompleted(session: InterviewSession, report: I
 
 export async function trackSessionEndedEarly(session: InterviewSession, userId: string): Promise<void> {
   await trackOncePerSession(sessionEndedEarlyEvent, sessionEndedEarlyProperties(session), userId);
+}
+
+/** Once per session: a reload during the check sends it again. */
+export async function trackStartupReady(
+  session: InterviewSession,
+  timing: { waitedMs?: number; retries?: number; reviewMs: number },
+  userId: string,
+): Promise<void> {
+  await trackOncePerSession(startupReadyEvent, startupReadyProperties(session, timing), userId);
 }

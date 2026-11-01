@@ -62,7 +62,7 @@ export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSour
             <p className="text-sm text-text-muted">{source ? source.label : "Pasted job ad and CV"}</p>
             <Button onClick={restart}>Start again</Button>
           </div>
-          <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startedAtMs={envelope.startedAtMs} />
+          <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} />
           {session && nextStep(session).step === "done" ? (
             <FeedbackReport session={session} />
           ) : (
