@@ -56,12 +56,12 @@
 - [ ] هر صفحه حداکثر یک دکمهٔ مرجانی (Coral) دارد.
 - [ ] خروجی هوش مصنوعی انگلیسی بریتانیایی است (colour، organise، CV نه résumé) و هیچ کلمهٔ ممنوع برند ندارد (`bannedPhrases` در `src/shared/brand.ts`). متن‌های خود اپ را آزمون خودکار پایین چک می‌کند؛ اینجا فقط متنی را ببین که مدل نوشته.
 - [ ] در حال بارگذاری، صفحه خالی نمی‌ماند. هر پیام خطا می‌گوید چه شد و حالا چه کنی.
-- [ ] لینک Privacy در پاورقی کار می‌کند، و دکمهٔ Back مرورگر کاربر را جای درستی می‌برد.
+- [ ] لینک Privacy در پاورقی کار می‌کند، «Give feedback» فرم بازخورد را در تب تازه باز می‌کند، و دکمهٔ Back مرورگر کاربر را جای درستی می‌برد.
 - [ ] روی کامپیوتر با Tab به همهٔ دکمه‌ها و فیلدها می‌رسی و فوکوس دیده می‌شود.
 
 ### صفحهٔ اصلی و حساب
 
-- [ ] `/` تیتر «Every application, made to fit.» را نشان می‌دهد. «Get started free» به «Create your free account» می‌رسد.
+- [ ] `/` تیتر «Every application, made to fit.» را نشان می‌دهد. «Tailor my CV to a job» به «Create your free account» می‌رسد، و «Check my CV in 2 minutes» به «Free 2-minute CV check».
 - [ ] ثبت‌نام: با «Create account» مستقیم وارد حساب می‌شوی، چون تأیید ایمیل در Supabase خاموش است. اگر روشن شود، پیام «Check your email» می‌آید و با لینک ایمیل وارد می‌شوی.
 - [ ] خروج و ورود دوباره کار می‌کند، و ورود تو را به همان صفحه‌ای برمی‌گرداند که از آن آمده بودی.
 
@@ -96,24 +96,25 @@
 
 ### Apply و پیگیری (`/tailor` و `/dashboard`)
 
-- [ ] آگهی‌ای که در `/jobs` بدون «Link to the ad (optional)» چسبانده شده، در قدم Download به‌جای دکمهٔ Apply پیام «This job ad has no link» می‌گیرد. یک بار هم آگهی را با یک لینک (مثلاً `https://example.com/jobs/1`) بچسبان: دکمهٔ «Apply on …’s site» (با نام شرکت) همان لینک را در تب تازه باز می‌کند و «Added to your applications» می‌آید. اپ هرگز به‌جای کاربر درخواست نمی‌فرستد.
+- [ ] آگهی‌ای که در `/jobs` بدون «Link to the ad (optional)» چسبانده شده، در قدم Download به‌جای دکمهٔ Apply پیام «This job ad has no link» می‌گیرد. یک بار هم آگهی را با یک لینک (مثلاً `https://example.com/jobs/1`) بچسبان: دکمهٔ «Open the ad on …» نام سایتی را می‌گوید که لینک واقعاً باز می‌کند (اینجا example.com، نه نام شرکت؛ #240)، همان لینک را در تب تازه باز می‌کند و «Added to your applications» می‌آید. اپ هرگز به‌جای کاربر درخواست نمی‌فرستد و خودش هم می‌گوید: «We never apply for you.»
 - [ ] درخواست در «Your applications» در `/dashboard` آمده است، و لینک «Job ad» متن کامل آگهی را نشان می‌دهد.
 - [ ] «Add a next step» را بزن، «Status» را «Interview» کن، در «Next step» یک قدم بنویس، از «When» یک روز انتخاب کن و «Save» را بزن. «Saved» می‌آید و بعد از reload همه سر جایشان هستند.
-- [ ] حالا «Practise for this interview» دیده می‌شود و به تمرین مصاحبهٔ همین آگهی می‌رود.
+- [ ] حالا «Start interview practice» دیده می‌شود و به تمرین مصاحبهٔ همین آگهی می‌رود.
 
 ### تمرین مصاحبه (`/interview`)
 
-- [ ] «Start practice» را بزن و هر شش پرسش را با «Submit answer» جواب بده (بعضی یک پرسش تکمیلی هم دارند). گزارش بعد از آخرین جواب نوشته می‌شود.
+- [ ] «Start practice» را بزن. در حدود دو دقیقهٔ آماده‌سازی، کارت «Preparing your interview» حال هر مرحله را نشان می‌دهد و صفحه گیرکرده به نظر نمی‌رسد (#232). بعد هر شش پرسش را با «Submit answer» جواب بده (بعضی یک پرسش تکمیلی هم دارند). گزارش بعد از آخرین جواب نوشته می‌شود.
 - [ ] گزارش آخر برای هر جواب «What worked» و «Do this next time» دارد.
 - [ ] جلسه «Saved to your account» را نشان می‌دهد.
 - [ ] در `/dashboard` ردیف همین درخواست لینک «Interview report» با نمره دارد و به همین گزارش می‌رود.
 - [ ] هیچ پرسشی به سن، خانواده، دین، سلامت یا موضوع شخصی دیگر نمی‌پردازد.
+- [ ] **End here (#205):** زیر گزارش «New practice» و بعد «Start practice» را بزن، به یک پرسش جواب بده، «End here and see suggested answers» و بعد «End practice» را بزن. گزارش با «You ended the practice early.» می‌آید: فقط همان یک جواب نمره دارد و هر پرسش دیگر یک جواب پیشنهادی از روی پروفایل خودت.
 
 ### چک رزومهٔ رایگان (`/cv-check`)
 
 - [ ] بدون ورود به حساب، «Upload a file» را با `sara.docx` امتحان کن و «Check my CV» را بزن. امتیاز آمادگی و «How to fix it» در کمتر از دو دقیقه می‌آید.
 - [ ] یک بار هم متن رزومه را بچسبان. نتیجه همان‌قدر روشن است.
-- [ ] «Next: make it fit each job» به ثبت‌نام می‌رسد.
+- [ ] در کارت «Next: make it fit each job»، «Tailor my CV to a job» به ثبت‌نام می‌رسد.
 
 ### دادهٔ من (`/dashboard/your-data`): آخر از همه
 
