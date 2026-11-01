@@ -46,9 +46,15 @@
 - Interview practice
 - Dashboard and your data
 
+‏پرسش‌های ۶ تا ۸ هر کدام یک گزینهٔ Yes دارند.
+
+‏زیر پرسش ۷ این توضیح می‌آید، چون در لینک بی‌کد نه ایمیلی هست نه کدی و نمی‌توانیم با آن کاربر تماس بگیریم:
+
+> Only for people who joined with a pilot code. We can’t contact you otherwise.
+
 ‏زیر پرسش ۸ این توضیح می‌آید:
 
-> We will always ask you first, with the exact words, before quoting you anywhere.
+> We will always ask you first, with the exact words, before quoting you anywhere. Only for people who joined with a pilot code.
 
 ‏یادداشت: تیک ۸ فقط اجازهٔ تماس است. اجازهٔ خود نقل‌قول بعداً جدا گرفته می‌شود، طبق قاعدهٔ نقل‌قول در #126.
 
