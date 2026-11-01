@@ -144,7 +144,7 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
             </Notice>
           )}
 
-          {/* Secondary on purpose: Get started free, under the result, is the page's one Coral button. */}
+          {/* Secondary on purpose: the sign-up button under the result (brand.cta.primary) is the page’s one Coral button. */}
           <div>
             <Button type="submit" disabled={pending}>
               {pending ? "Checking your CV…" : "Check my CV"}
@@ -251,7 +251,7 @@ function CvCheckReport({
       <Card className="flex flex-col items-start gap-3">
         <h3 className="text-xl">Next: make it fit each job</h3>
         <p className="text-text-muted">
-          Upload your CV once, paste a job ad, and get a tailored CV and cover letter built only from what you’ve told us.
+          Build your profile once, paste a job ad, and get a tailored CV and cover letter built only from what you’ve told us.
         </p>
         <ButtonLink href="/sign-up" variant="primary">
           {brand.cta.primary}
