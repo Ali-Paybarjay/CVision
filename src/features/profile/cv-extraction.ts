@@ -152,11 +152,26 @@ export function tidyExtraction(extraction: CvExtraction): CvExtraction {
         details: uniqueLines(role.details),
       }))
       .filter((role) => role.role !== "" || role.organisation !== undefined || role.details.length > 0)
-      // A role the CV lists among its jobs stays a job (prompts/profile-extract.md), so a copy of it here goes.
-      .filter(
-        (role) => !extraction.experience.some((job) => sameText(job.title, role.role) && sameText(job.company, role.organisation ?? "")),
-      ),
+      // A role the CV lists among its jobs stays a job (prompts/profile-extract.md), so an exact copy of it here goes.
+      // Anything less exact stays for the user to check: a separate period at the same organisation is real.
+      .filter((role) => !extraction.experience.some((job) => isCopyOfJob(role, job))),
   };
+}
+
+/** A volunteering role that repeats a job: the same named role at the same named organisation, over the same dates. */
+function isCopyOfJob(
+  role: { role: string; organisation?: string; startDate: string; endDate: string; current: boolean },
+  job: CvExtraction["experience"][number],
+): boolean {
+  // Two roles with no organisation, such as two "Football coach" lines, may be different roles, so neither goes.
+  if (role.role === "" || role.organisation === undefined) return false;
+  return (
+    sameText(job.title, role.role) &&
+    sameText(job.company, role.organisation) &&
+    sameText(job.startDate, role.startDate) &&
+    job.current === role.current &&
+    sameText(job.current ? "" : job.endDate, role.endDate)
+  );
 }
 
 /** The same words, ignoring case and the spaces around them. */

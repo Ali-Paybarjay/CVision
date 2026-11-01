@@ -10,7 +10,7 @@ export type ProfileStorageKind = "account" | "browser";
  * Change the version whenever the wording changes, so each stored consent shows what was agreed to.
  */
 export const cvConsent = {
-  version: "2026-10-24",
+  version: "2026-11-01",
   label: "I agree that CVision reads my CV to build my profile.",
 } as const;
 
@@ -33,7 +33,7 @@ const privacyPoint = `Our ${privacyPage.name} says what we keep, where, for how 
 /** The points above the consent box, true to where this profile will be kept. */
 export function consentPoints(storage: ProfileStorageKind): string[] {
   return [
-    "We read your work history, education, skills and certificates. You check every item before anything is saved.",
+    "We read your work history, volunteering, education, projects, certificates, languages and skills. You check every item before anything is saved.",
     "To read your CV, we send its text to Claude, an AI model by Anthropic, through OpenRouter on Google Cloud or Amazon Web Services. None of them keeps it.",
     storage === "account"
       ? "When you approve your profile, we save it and your CV file to your CVision account. You can download or delete them at any time."

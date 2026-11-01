@@ -48,12 +48,13 @@ describe("handleExtractRequest", () => {
 
   it("reads nothing without the user's consent", async () => {
     const response = await handleExtractRequest(form({ cv: sampleCv("sara") }));
-    expect(response).toMatchObject({ ok: false, code: "consent" });
+    expect(response).toMatchObject({ ok: false, code: "consent", message: "Tick the box to agree, so we can read your CV." });
   });
 
-  it("does not accept consent to older wording", async () => {
-    const response = await handleExtractRequest(form({ cv: sampleCv("sara"), consent: "2020-01-01" }));
+  it("does not accept consent to older wording, and says to reload rather than to tick a box that is already ticked", async () => {
+    const response = await handleExtractRequest(form({ cv: sampleCv("sara"), consent: "2026-10-24" }));
     expect(response).toMatchObject({ ok: false, code: "consent" });
+    expect(!response.ok && response.message).toContain("Reload the page to read the new wording");
   });
 
   it("asks for a file when there is none", async () => {

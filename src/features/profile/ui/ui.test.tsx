@@ -308,7 +308,8 @@ describe("profile screens", () => {
 
     expect(words).toContain("Add your details");
     expect(words).toContain("Fill in each section that applies to you.");
-    expect(words).toContain("No jobs yet. Part-time work, volunteering and placements count too.");
+    // Volunteering has its own section now, so the Work history hint no longer sends it there (#253 review).
+    expect(words).toContain("No jobs yet. Part-time work and placements count too.");
     expect(words).toContain("No qualifications yet. GCSEs, A levels, degrees and training courses all count.");
     expect(words).toContain("No certificates yet.");
     expect(words).toContain("No volunteering yet.");

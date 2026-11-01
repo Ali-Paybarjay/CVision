@@ -89,18 +89,38 @@ describe("tidyExtraction (#33)", () => {
   });
 
   it("keeps a role the CV lists among its jobs as a job only, never in both lists", () => {
-    const job = { ...base.experience[0], title: "Volunteer maths tutor", company: "Ancoats Reading Club" };
+    const dates = { startDate: "2024-01", endDate: "", current: true };
+    const job = { ...base.experience[0], title: "Volunteer maths tutor", company: "Ancoats Reading Club", ...dates };
     const tidy = tidyExtraction({
       ...base,
       experience: [job],
       volunteering: [
-        { role: " volunteer maths tutor ", organisation: "ANCOATS READING CLUB", startDate: "", endDate: "", current: false, details: [] },
+        { role: " volunteer maths tutor ", organisation: "ANCOATS READING CLUB", ...dates, details: [] },
         { role: "Charity shop assistant", startDate: "", endDate: "", current: false, details: [] },
       ],
     });
 
     expect(tidy.experience.map((item) => item.title)).toEqual(["Volunteer maths tutor"]);
     expect(tidy.volunteering.map((role) => role.role)).toEqual(["Charity shop assistant"]);
+  });
+
+  it("keeps a separate period at the same organisation, and roles with no organisation, as volunteering (#253 review)", () => {
+    const tidy = tidyExtraction({
+      ...base,
+      experience: [
+        { ...base.experience[0], title: "Shop assistant", company: "Oxfam", startDate: "2023-03", endDate: "", current: true },
+        { ...base.experience[0], title: "Football coach", company: "", startDate: "2022-09", endDate: "", current: true },
+      ],
+      volunteering: [
+        { role: "Shop assistant", organisation: "Oxfam", startDate: "2021-01", endDate: "2022-06", current: false, details: ["Sorted donations every Saturday"] },
+        { role: "Football coach", startDate: "2022-09", endDate: "", current: true, details: [] },
+      ],
+    });
+
+    expect(tidy.volunteering).toEqual([
+      { role: "Shop assistant", organisation: "Oxfam", startDate: "2021-01", endDate: "2022-06", current: false, details: ["Sorted donations every Saturday"] },
+      { role: "Football coach", startDate: "2022-09", endDate: "", current: true, details: [] },
+    ]);
   });
 
   it("never needs a guess from the model: every sample profile fits the loose format", () => {

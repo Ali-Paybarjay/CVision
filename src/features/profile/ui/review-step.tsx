@@ -217,7 +217,7 @@ export function ReviewStep({
         empty={emptyNote(
           draft.experience,
           "We didn’t find any jobs in your CV.",
-          "No jobs yet. Part-time work, volunteering and placements count too.",
+          "No jobs yet. Part-time work and placements count too.",
         )}
         addLabel="Add a job"
         onAdd={() => addItem("experience")}
