@@ -61,6 +61,27 @@ describe("profileEvidenceLines", () => {
     expect(texts.some((text) => text.startsWith("MSc in Data Science"))).toBe(true);
     expect(texts).toContain(sara.followUpAnswers[0].answer);
   });
+
+  // #227: a spoken language used to be read into the skills; it must stay evidence now that it has its own section.
+  it("includes volunteering, projects and languages, and finds a language a job asks for", () => {
+    const profile: Profile = {
+      ...sara,
+      volunteering: [{ role: "Volunteer maths tutor", organisation: "Ancoats Reading Club", details: ["Tutor two Year 10 pupils every week"] }],
+      projects: [{ name: "Late buses dashboard", details: ["Built a Tableau dashboard of late buses across Manchester"] }],
+      languages: [{ name: "Welsh", level: "Fluent" }, { name: "British Sign Language" }],
+    };
+    const texts = profileEvidenceLines(profile).map((line) => line.text);
+    const job: Job = { ...saraJob, requirements: { essential: ["Fluent Welsh"], desirable: [] } };
+
+    for (const line of ["Volunteer maths tutor at Ancoats Reading Club", "Tutor two Year 10 pupils every week", "Late buses dashboard"]) {
+      expect(texts).toContain(line);
+    }
+    expect(texts).toContain("Welsh (Fluent)");
+    expect(texts).toContain("British Sign Language");
+    expect(assessByRules(profile, job).requirements[0]).toMatchObject({ status: "met", evidence: lineId(profile, "Welsh (Fluent)") });
+    // Profiles without these sections keep their line numbers.
+    expect(profileEvidenceLines(sara)).toEqual(profileEvidenceLines({ ...sara, volunteering: [], projects: [], languages: [] }));
+  });
 });
 
 describe("jobRequirements", () => {

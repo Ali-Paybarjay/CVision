@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { personas } from "@/shared/sample-data";
 import { extractDocxText } from "./docx";
-import { buildSampleCv, sampleCvFileName, samplePersonaNames } from "./sample-cvs";
+import { buildSampleCv, emmaWithMoreSections, moreSectionsCvFileName, sampleCvFileName, samplePersonaNames } from "./sample-cvs";
 
 // Checks that the Word CVs in sample-data/cvs match the personas.
 // After changing a persona, rebuild them with:
@@ -16,6 +16,7 @@ if (process.env.WRITE_SAMPLE_CVS === "1") {
   for (const name of samplePersonaNames) {
     writeFileSync(join(folder, sampleCvFileName(name)), buildSampleCv(name));
   }
+  writeFileSync(join(folder, moreSectionsCvFileName), buildSampleCv("emma", emmaWithMoreSections));
 }
 
 describe.each(samplePersonaNames)("sample-data/cvs/%s.docx", (name) => {
@@ -41,5 +42,37 @@ describe.each(samplePersonaNames)("sample-data/cvs/%s.docx", (name) => {
   it("is fictional: example.com email and a 07700 900 drama number", () => {
     expect(text).toMatch(/@example\.com/);
     expect(text).toMatch(/07700 900\d{3}/);
+  });
+});
+
+describe(`sample-data/cvs/${moreSectionsCvFileName}: Emma's CV with volunteering, projects and languages (#227)`, () => {
+  const text = extractDocxText(readFileSync(join(folder, moreSectionsCvFileName)));
+
+  it("is up to date with emmaWithMoreSections", () => {
+    expect(text).toBe(extractDocxText(buildSampleCv("emma", emmaWithMoreSections)));
+  });
+
+  it("holds each of them, with a level only where the profile has one and the link without https://", () => {
+    for (const heading of ["VOLUNTEERING", "PROJECTS", "LANGUAGES"]) expect(text).toContain(heading);
+    for (const role of emmaWithMoreSections.volunteering ?? []) {
+      expect(text).toContain(role.role);
+      for (const line of role.details) expect(text).toContain(line);
+    }
+    for (const project of emmaWithMoreSections.projects ?? []) {
+      expect(text).toContain(project.name);
+      for (const line of project.details) expect(text).toContain(line);
+    }
+    expect(text).toContain("example.com/emma-walsh/recipe-finder");
+    expect(text).not.toContain("https://example.com");
+    expect(text).toContain("English (Native), Spanish (B2), British Sign Language");
+  });
+
+  it("writes Present only for something still going, never for an end date the profile doesn't give", () => {
+    const startOnly = { ...emmaWithMoreSections, projects: [{ name: "Recipe finder", startDate: "2024-10", details: [] }] };
+    const startOnlyText = extractDocxText(buildSampleCv("emma", startOnly));
+
+    expect(startOnlyText).toContain("Oct 2024");
+    expect(startOnlyText).not.toContain("Oct 2024 – Present");
+    expect(startOnlyText).toContain("Sep 2022 – Present");
   });
 });

@@ -13,6 +13,15 @@ describe("consent", () => {
     expect([cvConsent.version, manualConsent.version].map((version) => isManualConsent({ version, givenAt }))).toEqual([false, true]);
   });
 
+  it.each(["account", "browser"] as const)("names every part of the CV we read, so the consent is specific (%s)", (storage) => {
+    const [read] = consentPoints(storage);
+
+    // Volunteering can show a religion or a health condition, and a language such as BSL a disability (#253 review).
+    for (const part of ["work history", "volunteering", "education", "projects", "certificates", "languages", "skills"]) {
+      expect(read).toContain(part);
+    }
+  });
+
   it("names every time a typed-in profile goes to the AI, and promises no more than the Privacy page", () => {
     const [, ai] = manualConsentPoints("account");
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProfileSchema, type JobPreferences, type Profile, type WorkExperience } from "@/shared/contracts";
+import { ProfileSchema, ProjectSchema, type JobPreferences, type Profile, type WorkExperience } from "@/shared/contracts";
 import { uniqueLines, type CvExtraction } from "./cv-extraction";
 import { fitsProfileLimit, profileTooLongMessage } from "./cv-limits";
 import { phoneProblem, tidyPhone } from "./phone";
@@ -42,6 +42,31 @@ export type EducationDraft = {
   grade: string;
 };
 export type CertificationDraft = { name: string; issuer: string; year: string };
+export type VolunteeringDraft = {
+  role: string;
+  organisation: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  current: boolean;
+  startGuessed: boolean;
+  endGuessed: boolean;
+  /** One per line. */
+  details: string;
+};
+export type ProjectDraft = {
+  name: string;
+  organisation: string;
+  startDate: string;
+  endDate: string;
+  current: boolean;
+  startGuessed: boolean;
+  endGuessed: boolean;
+  /** One per line. */
+  details: string;
+  url: string;
+};
+export type LanguageDraft = { name: string; level: string };
 
 /** Error messages by field name, written for the user. */
 export type FieldErrors = Record<string, string>;
@@ -53,19 +78,25 @@ export type ReviewDraft = {
   summary: ReviewEntry<SummaryDraft>;
   skills: ReviewEntry<SkillsDraft>;
   experience: ReviewEntry<ExperienceDraft>[];
+  volunteering: ReviewEntry<VolunteeringDraft>[];
   education: ReviewEntry<EducationDraft>[];
+  projects: ReviewEntry<ProjectDraft>[];
   certifications: ReviewEntry<CertificationDraft>[];
+  languages: ReviewEntry<LanguageDraft>[];
 };
 
-export type ListSection = "experience" | "education" | "certifications";
+export type ListSection = "experience" | "volunteering" | "education" | "projects" | "certifications" | "languages";
 
 export type ReviewAction =
   | { type: "edit-contact"; change: Partial<ContactDraft> }
   | { type: "edit-summary"; text: string }
   | { type: "edit-skills"; list: string[] }
   | { type: "edit-experience"; key: string; change: Partial<ExperienceDraft> }
+  | { type: "edit-volunteering"; key: string; change: Partial<VolunteeringDraft> }
   | { type: "edit-education"; key: string; change: Partial<EducationDraft> }
+  | { type: "edit-project"; key: string; change: Partial<ProjectDraft> }
   | { type: "edit-certification"; key: string; change: Partial<CertificationDraft> }
+  | { type: "edit-language"; key: string; change: Partial<LanguageDraft> }
   /** Checks every item before the page is approved, and shows each problem. */
   | { type: "check" }
   | { type: "remove"; key: string }
@@ -118,6 +149,36 @@ export function draftFromProfile(profile: Profile): ReviewDraft {
         year: certificate.year?.toString() ?? "",
       }),
     ),
+    // A profile saved before these sections existed has none of them (#226).
+    volunteering: (profile.volunteering ?? []).map((role, index) =>
+      entry(`volunteering-${index}`, {
+        role: role.role,
+        organisation: role.organisation ?? "",
+        location: role.location ?? "",
+        startDate: role.startDate ?? "",
+        endDate: role.endDate ?? "",
+        current: role.endDate === null,
+        startGuessed: false,
+        endGuessed: false,
+        details: role.details.join("\n"),
+      }),
+    ),
+    projects: (profile.projects ?? []).map((project, index) =>
+      entry(`project-${index}`, {
+        name: project.name,
+        organisation: project.organisation ?? "",
+        startDate: project.startDate ?? "",
+        endDate: project.endDate ?? "",
+        current: project.endDate === null,
+        startGuessed: false,
+        endGuessed: false,
+        details: project.details.join("\n"),
+        url: project.url ?? "",
+      }),
+    ),
+    languages: (profile.languages ?? []).map((language, index) =>
+      entry(`language-${index}`, { name: language.name, level: language.level ?? "" }),
+    ),
   };
 }
 
@@ -167,6 +228,27 @@ export function draftFromExtraction(extraction: CvExtraction): ReviewDraft {
         year: certificate.year?.toString() ?? "",
       }),
     ),
+    volunteering: extraction.volunteering.map((role, index) =>
+      entry(`volunteering-${index}`, {
+        role: role.role,
+        organisation: role.organisation ?? "",
+        location: role.location ?? "",
+        ...months(role.startDate, role.endDate, role.current),
+        details: role.details.join("\n"),
+      }),
+    ),
+    projects: extraction.projects.map((project, index) =>
+      entry(`project-${index}`, {
+        name: project.name,
+        organisation: project.organisation ?? "",
+        ...months(project.startDate, project.endDate, project.current),
+        details: project.details.join("\n"),
+        url: project.url ?? "",
+      }),
+    ),
+    languages: extraction.languages.map((language, index) =>
+      entry(`language-${index}`, { name: language.name, level: language.level ?? "" }),
+    ),
   };
 }
 
@@ -177,8 +259,11 @@ export function emptyDraft(): ReviewDraft {
     summary: entry("summary", { text: "" }),
     skills: entry("skills", { list: [] }),
     experience: [],
+    volunteering: [],
     education: [],
+    projects: [],
     certifications: [],
+    languages: [],
   };
 }
 
@@ -234,25 +319,43 @@ export function reviewReducer(draft: ReviewDraft, action: ReviewAction): ReviewD
       return { ...draft, skills: edited(draft.skills, { list: action.list }) };
     case "edit-experience":
       return { ...draft, experience: editInList(draft.experience, action.key, withoutGuess(action.change)) };
+    case "edit-volunteering":
+      return { ...draft, volunteering: editInList(draft.volunteering, action.key, withoutGuess(action.change)) };
     case "edit-education":
       return { ...draft, education: editInList(draft.education, action.key, withoutGuess(action.change)) };
+    case "edit-project":
+      return { ...draft, projects: editInList(draft.projects, action.key, withoutGuess(action.change)) };
     case "edit-certification":
       return { ...draft, certifications: editInList(draft.certifications, action.key, action.change) };
+    case "edit-language":
+      return { ...draft, languages: editInList(draft.languages, action.key, action.change) };
     case "check":
       return checkAll(draft);
     case "remove":
       return {
         ...draft,
         experience: draft.experience.filter((item) => item.key !== action.key),
+        volunteering: draft.volunteering.filter((item) => item.key !== action.key),
         education: draft.education.filter((item) => item.key !== action.key),
+        projects: draft.projects.filter((item) => item.key !== action.key),
         certifications: draft.certifications.filter((item) => item.key !== action.key),
+        languages: draft.languages.filter((item) => item.key !== action.key),
       };
     case "add":
       if (action.section === "experience") {
         return { ...draft, experience: [...draft.experience, entry(action.key, emptyExperience())] };
       }
+      if (action.section === "volunteering") {
+        return { ...draft, volunteering: [...draft.volunteering, entry(action.key, emptyVolunteering())] };
+      }
       if (action.section === "education") {
         return { ...draft, education: [...draft.education, entry(action.key, emptyEducation())] };
+      }
+      if (action.section === "projects") {
+        return { ...draft, projects: [...draft.projects, entry(action.key, emptyProject())] };
+      }
+      if (action.section === "languages") {
+        return { ...draft, languages: [...draft.languages, entry(action.key, { name: "", level: "" })] };
       }
       return { ...draft, certifications: [...draft.certifications, entry(action.key, { name: "", issuer: "", year: "" })] };
   }
@@ -264,8 +367,11 @@ export function itemsWithProblems(draft: ReviewDraft): string[] {
     draft.contact,
     draft.summary,
     ...draft.experience,
+    ...draft.volunteering,
     ...draft.education,
+    ...draft.projects,
     ...draft.certifications,
+    ...draft.languages,
     draft.skills,
   ]
     .filter((item) => Object.keys(item.errors).length > 0)
@@ -319,6 +425,27 @@ export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile
       issuer: optional(value.issuer),
       year: value.year.trim() ? Number(value.year) : undefined,
     })),
+    volunteering: unlessEmpty(
+      draft.volunteering.map(({ value }) => ({
+        role: value.role.trim(),
+        organisation: optional(value.organisation),
+        location: optional(value.location),
+        startDate: optional(value.startDate),
+        endDate: value.current ? null : optional(value.endDate),
+        details: splitLines(value.details),
+      })),
+    ),
+    projects: unlessEmpty(
+      draft.projects.map(({ value }) => ({
+        name: value.name.trim(),
+        organisation: optional(value.organisation),
+        startDate: optional(value.startDate),
+        endDate: value.current ? null : optional(value.endDate),
+        details: splitLines(value.details),
+        url: normaliseLink(value.url),
+      })),
+    ),
+    languages: unlessEmpty(draft.languages.map(({ value }) => ({ name: value.name.trim(), level: optional(value.level) }))),
     preferences: preferencesFollowContact ? { ...base.preferences, location: location ?? "" } : base.preferences,
   });
 }
@@ -400,17 +527,39 @@ export function validateExperience(value: ExperienceDraft): FieldErrors {
   return errors;
 }
 
-export function validateEducation(value: EducationDraft): FieldErrors {
+/** Dates that may be left empty (a course, volunteering, a project), so only a half-chosen date is a problem. */
+function optionalDateErrors(value: { startDate: string; endDate: string; current: boolean }): FieldErrors {
   const errors: FieldErrors = {};
-  if (!value.qualification.trim()) errors.qualification = "Add the qualification, for example BSc or A levels.";
-  if (!value.institution.trim()) errors.institution = "Add where you studied.";
-  // Both dates are optional here, so only a half-chosen date is a problem.
   const startError = dateError(value.startDate, undefined);
   if (startError) errors.startDate = startError;
   if (!value.current) {
     const endError = dateError(value.endDate, undefined);
     if (endError) errors.endDate = endError;
     else if (endsBeforeStart(value.startDate, value.endDate)) errors.endDate = "The end month is before the start month.";
+  }
+  return errors;
+}
+
+export function validateVolunteering(value: VolunteeringDraft): FieldErrors {
+  const errors = optionalDateErrors(value);
+  if (!value.role.trim()) errors.role = "Add your role, for example Volunteer tutor.";
+  return errors;
+}
+
+export function validateEducation(value: EducationDraft): FieldErrors {
+  const errors = optionalDateErrors(value);
+  if (!value.qualification.trim()) errors.qualification = "Add the qualification, for example BSc or A levels.";
+  if (!value.institution.trim()) errors.institution = "Add where you studied.";
+  return errors;
+}
+
+export function validateProject(value: ProjectDraft): FieldErrors {
+  const errors = optionalDateErrors(value);
+  if (!value.name.trim()) errors.name = "Add the project’s name.";
+  // The contract's own check, so a link that passes here can always be saved.
+  const link = normaliseLink(value.url);
+  if (link !== undefined && !ProjectSchema.shape.url.safeParse(link).success) {
+    errors.url = "Check the link, for example https://github.com/your-name/your-project.";
   }
   return errors;
 }
@@ -423,6 +572,10 @@ export function validateCertification(value: CertificationDraft): FieldErrors {
     errors.year = "Use a four-digit year, for example 2024.";
   }
   return errors;
+}
+
+export function validateLanguage(value: LanguageDraft): FieldErrors {
+  return value.name.trim() ? {} : { name: "Add the language, for example Polish." };
 }
 
 // --- Helpers ----------------------------------------------------------------------------------
@@ -453,19 +606,31 @@ function checkAll(draft: ReviewDraft): ReviewDraft {
     summary: draft.summary,
     skills: draft.skills,
     experience: draft.experience.map((item) => check(item, validateExperience)),
+    volunteering: draft.volunteering.map((item) => check(item, validateVolunteering)),
     education: draft.education.map((item) => check(item, validateEducation)),
+    projects: draft.projects.map((item) => check(item, validateProject)),
     certifications: draft.certifications.map((item) => check(item, validateCertification)),
+    languages: draft.languages.map((item) => check(item, validateLanguage)),
   };
 }
 
+/** A new item's dates: none chosen yet, so none guessed. */
+const noDates = { startDate: "", endDate: "", current: false, startGuessed: false, endGuessed: false };
+
 function emptyExperience(): ExperienceDraft {
-  const dates = { startDate: "", endDate: "", current: false, startGuessed: false, endGuessed: false };
-  return { title: "", company: "", location: "", ...dates, duties: "", achievements: "" };
+  return { title: "", company: "", location: "", ...noDates, duties: "", achievements: "" };
+}
+
+function emptyVolunteering(): VolunteeringDraft {
+  return { role: "", organisation: "", location: "", ...noDates, details: "" };
 }
 
 function emptyEducation(): EducationDraft {
-  const dates = { startDate: "", endDate: "", current: false, startGuessed: false, endGuessed: false };
-  return { qualification: "", subject: "", institution: "", ...dates, grade: "" };
+  return { qualification: "", subject: "", institution: "", ...noDates, grade: "" };
+}
+
+function emptyProject(): ProjectDraft {
+  return { name: "", organisation: "", ...noDates, details: "", url: "" };
 }
 
 /** A date the user has touched is no longer our guess. */
@@ -493,6 +658,11 @@ function sortMostRecentFirst(jobs: WorkExperience[]): WorkExperience[] {
 
 function optional(value: string): string | undefined {
   return value.trim() || undefined;
+}
+
+/** An empty list is left out, so a profile with none looks the same as one saved before the section existed (#226). */
+function unlessEmpty<T>(items: T[]): T[] | undefined {
+  return items.length > 0 ? items : undefined;
 }
 
 /** Adds https:// to a link typed without it, e.g. "linkedin.com/in/sara". */

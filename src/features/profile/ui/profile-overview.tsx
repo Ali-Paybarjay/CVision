@@ -88,6 +88,10 @@ export function ProfileOverview({
           <Fact label="Education" value={count(profile.education.length, "qualification")} />
           <Fact label="Certificates" value={count(profile.certifications.length, "certificate")} />
           <Fact label="Skills" value={count(profile.skills.length, "skill")} />
+          {/* #227: only when there is something, so a profile without them looks as before. */}
+          {profile.volunteering?.length ? <Fact label="Volunteering" value={count(profile.volunteering.length, "role")} /> : null}
+          {profile.projects?.length ? <Fact label="Projects" value={count(profile.projects.length, "project")} /> : null}
+          {profile.languages?.length ? <Fact label="Languages" value={count(profile.languages.length, "language")} /> : null}
         </dl>
         <Button className="mt-6" onClick={onEdit}>
           Check and edit your details

@@ -151,8 +151,8 @@ export function UploadStep({
             No CV to upload?
           </h3>
           <p className="mt-2 text-text-muted">
-            Fill in your details yourself instead: your work history, education, certificates and skills. Nothing is
-            saved until you approve it.
+            Fill in your details yourself instead: your work history, volunteering, education, projects, certificates,
+            languages and skills. Nothing is saved until you approve it.
           </p>
           <Button className="mt-4" onClick={onStartManual} disabled={pending}>
             Fill in my details

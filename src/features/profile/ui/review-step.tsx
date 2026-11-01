@@ -12,10 +12,13 @@ import {
   type EducationDraft,
   type ExperienceDraft,
   type FieldErrors,
+  type LanguageDraft,
   type ListSection,
   type ProfileBase,
+  type ProjectDraft,
   type ReviewAction,
   type ReviewDraft,
+  type VolunteeringDraft,
 } from "../review-draft";
 import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
 import { ConsentBox } from "./consent-box";
@@ -214,7 +217,7 @@ export function ReviewStep({
         empty={emptyNote(
           draft.experience,
           "We didn’t find any jobs in your CV.",
-          "No jobs yet. Part-time work, volunteering and placements count too.",
+          "No jobs yet. Part-time work and placements count too.",
         )}
         addLabel="Add a job"
         onAdd={() => addItem("experience")}
@@ -233,6 +236,32 @@ export function ReviewStep({
               errors={item.errors}
               fromCv={fromCv}
               onChange={(change) => act({ type: "edit-experience", key: item.key, change })}
+            />
+          </ItemCard>
+        ))}
+      </ReviewSection>
+
+      <ReviewSection
+        id="review-volunteering"
+        title="Volunteering"
+        empty={emptyNote(draft.volunteering, "We didn’t find any volunteering in your CV.", "No volunteering yet.")}
+        addLabel="Add a volunteering role"
+        onAdd={() => addItem("volunteering")}
+      >
+        {draft.volunteering.map((item) => (
+          <ItemCard
+            key={item.key}
+            registerCard={registerCard}
+            item={item}
+            title={volunteeringTitle(item.value)}
+            onRemove={() => removeItem(item.key, "volunteering")}
+            removeLabel="Remove this role"
+          >
+            <VolunteeringFields
+              value={item.value}
+              errors={item.errors}
+              fromCv={fromCv}
+              onChange={(change) => act({ type: "edit-volunteering", key: item.key, change })}
             />
           </ItemCard>
         ))}
@@ -268,6 +297,36 @@ export function ReviewStep({
       </ReviewSection>
 
       <ReviewSection
+        id="review-projects"
+        title="Projects"
+        empty={emptyNote(
+          draft.projects,
+          "We didn’t find any projects in your CV.",
+          "No projects yet. Course, personal and open-source projects all count.",
+        )}
+        addLabel="Add a project"
+        onAdd={() => addItem("projects")}
+      >
+        {draft.projects.map((item) => (
+          <ItemCard
+            key={item.key}
+            registerCard={registerCard}
+            item={item}
+            title={item.value.name.trim() || "New project"}
+            onRemove={() => removeItem(item.key, "projects")}
+            removeLabel="Remove this project"
+          >
+            <ProjectFields
+              value={item.value}
+              errors={item.errors}
+              fromCv={fromCv}
+              onChange={(change) => act({ type: "edit-project", key: item.key, change })}
+            />
+          </ItemCard>
+        ))}
+      </ReviewSection>
+
+      <ReviewSection
         id="review-certifications"
         title="Certificates"
         empty={emptyNote(draft.certifications, "We didn’t find any certificates in your CV.", "No certificates yet.")}
@@ -287,6 +346,31 @@ export function ReviewStep({
               value={item.value}
               errors={item.errors}
               onChange={(change) => act({ type: "edit-certification", key: item.key, change })}
+            />
+          </ItemCard>
+        ))}
+      </ReviewSection>
+
+      <ReviewSection
+        id="review-languages"
+        title="Languages"
+        empty={emptyNote(draft.languages, "We didn’t find any languages in your CV.", "No languages yet.")}
+        addLabel="Add a language"
+        onAdd={() => addItem("languages")}
+      >
+        {draft.languages.map((item) => (
+          <ItemCard
+            key={item.key}
+            registerCard={registerCard}
+            item={item}
+            title={item.value.name.trim() || "New language"}
+            onRemove={() => removeItem(item.key, "languages")}
+            removeLabel="Remove this language"
+          >
+            <LanguageFields
+              value={item.value}
+              errors={item.errors}
+              onChange={(change) => act({ type: "edit-language", key: item.key, change })}
             />
           </ItemCard>
         ))}
@@ -406,8 +490,8 @@ function ItemCard({ item, title, children, registerCard, onRemove, removeLabel }
 
 type FieldsProps<T> = { value: T; errors: FieldErrors; onChange: (change: Partial<T>) => void };
 
-/** `fromCv`: the job was read from a CV just uploaded, so the hints can point to the CV. */
-type ExperienceFieldsProps = FieldsProps<ExperienceDraft> & { fromCv: boolean };
+/** `fromCv`: the item was read from a CV just uploaded, so the hints can point to the CV. */
+type FromCvFieldsProps<T> = FieldsProps<T> & { fromCv: boolean };
 
 /** The user's own details, so each field names its purpose and the phone can fill it in (WCAG 1.3.5). */
 function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
@@ -468,7 +552,7 @@ function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
   );
 }
 
-function ExperienceFields({ value, errors, fromCv, onChange }: ExperienceFieldsProps) {
+function ExperienceFields({ value, errors, fromCv, onChange }: FromCvFieldsProps<ExperienceDraft>) {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -505,6 +589,42 @@ function ExperienceFields({ value, errors, fromCv, onChange }: ExperienceFieldsP
             onChange={(event) => onChange({ achievements: event.target.value })}
             className="min-h-28"
           />
+        )}
+      </Field>
+    </>
+  );
+}
+
+function VolunteeringFields({ value, errors, fromCv, onChange }: FromCvFieldsProps<VolunteeringDraft>) {
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Role" hint="For example Volunteer tutor" error={errors.role}>
+          {(props) => <Input {...props} value={value.role} onChange={(event) => onChange({ role: event.target.value })} />}
+        </Field>
+        <Field label="Organisation (optional)" hint="For example a charity, a club or a school" error={errors.organisation}>
+          {(props) => (
+            <Input {...props} value={value.organisation} onChange={(event) => onChange({ organisation: event.target.value })} />
+          )}
+        </Field>
+        <Field label="Location (optional)" error={errors.location}>
+          {(props) => <Input {...props} value={value.location} onChange={(event) => onChange({ location: event.target.value })} />}
+        </Field>
+      </div>
+      <MonthRange
+        start={value.startDate}
+        end={value.endDate}
+        current={value.current}
+        startGuessed={value.startGuessed}
+        endGuessed={value.endGuessed}
+        currentLabel="I still do this"
+        optional
+        errors={errors}
+        onChange={onChange}
+      />
+      <Field label="What you did" hint={fromCv ? "One per line, as on your CV." : "One per line."} error={errors.details}>
+        {(props) => (
+          <Textarea {...props} value={value.details} onChange={(event) => onChange({ details: event.target.value })} className="min-h-28" />
         )}
       </Field>
     </>
@@ -552,6 +672,50 @@ function EducationFields({ value, errors, onChange }: FieldsProps<EducationDraft
   );
 }
 
+function ProjectFields({ value, errors, fromCv, onChange }: FromCvFieldsProps<ProjectDraft>) {
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Project" error={errors.name}>
+          {(props) => <Input {...props} value={value.name} onChange={(event) => onChange({ name: event.target.value })} />}
+        </Field>
+        <Field label="Course or organisation (optional)" hint="Who it was for, if anyone" error={errors.organisation}>
+          {(props) => (
+            <Input {...props} value={value.organisation} onChange={(event) => onChange({ organisation: event.target.value })} />
+          )}
+        </Field>
+      </div>
+      <MonthRange
+        start={value.startDate}
+        end={value.endDate}
+        current={value.current}
+        startGuessed={value.startGuessed}
+        endGuessed={value.endGuessed}
+        currentLabel="I’m still working on this"
+        optional
+        errors={errors}
+        onChange={onChange}
+      />
+      <Field label="What you did" hint={fromCv ? "One per line, as on your CV." : "One per line."} error={errors.details}>
+        {(props) => (
+          <Textarea {...props} value={value.details} onChange={(event) => onChange({ details: event.target.value })} className="min-h-28" />
+        )}
+      </Field>
+      <Field label="Link (optional)" hint="For example its page on GitHub or in your portfolio" error={errors.url}>
+        {(props) => (
+          <Input
+            {...props}
+            type="url"
+            inputMode="url"
+            value={value.url}
+            onChange={(event) => onChange({ url: event.target.value })}
+          />
+        )}
+      </Field>
+    </>
+  );
+}
+
 function CertificationFields({ value, errors, onChange }: FieldsProps<CertificationDraft>) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -572,6 +736,19 @@ function CertificationFields({ value, errors, onChange }: FieldsProps<Certificat
             className="sm:max-w-32"
           />
         )}
+      </Field>
+    </div>
+  );
+}
+
+function LanguageFields({ value, errors, onChange }: FieldsProps<LanguageDraft>) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="Language" error={errors.name}>
+        {(props) => <Input {...props} value={value.name} onChange={(event) => onChange({ name: event.target.value })} />}
+      </Field>
+      <Field label="Level (optional)" hint="For example Native, Fluent or B2" error={errors.level}>
+        {(props) => <Input {...props} value={value.level} onChange={(event) => onChange({ level: event.target.value })} />}
       </Field>
     </div>
   );
@@ -709,4 +886,9 @@ function jobTitle(value: ExperienceDraft): string {
 
 function courseTitle(value: EducationDraft): string {
   return `${value.qualification.trim()} ${value.subject.trim()}`.trim() || "New qualification";
+}
+
+function volunteeringTitle(value: VolunteeringDraft): string {
+  const role = value.role.trim() || "New volunteering role";
+  return value.organisation.trim() ? `${role} at ${value.organisation.trim()}` : role;
 }
