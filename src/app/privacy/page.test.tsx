@@ -109,6 +109,9 @@ describe("privacy page", () => {
     expect(text).toContain("Delete my account");
     expect(text).toContain("To withdraw your consent.");
     expect(html).toContain('href="https://ico.org.uk/make-a-complaint/');
+    // A way to reach us for the rights the app has no button for (#134).
+    expect(html).toContain(`href="mailto:${brand.contactEmail}"`);
+    expect(text).toContain("We’ll reply within one month.");
   });
 
   it("never uses a banned phrase", () => {
@@ -134,6 +137,7 @@ describe("privacy page", () => {
     expect(words).toContain("kept in Google Forms and in our team’s private Google Drive");
     expect(words).toContain("may store the answers outside the UK");
     expect(words).toContain("Google (Forms and Drive)");
+    expect(words).toContain("To have your answers deleted sooner, email us at");
     feedback.feedbackFormUrl = null;
   });
 });

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { brand } from "@/shared/brand";
 import { feedbackFormUrl } from "@/shared/feedback";
 import { CheckIcon, Page } from "@/shared/ui";
 
@@ -451,7 +452,11 @@ export default function PrivacyPage() {
           <p>
             Your answers are kept in Google Forms and in our team’s private Google Drive, and only the CVision team
             reads them. Google runs the form for us and may store the answers outside the UK. We delete them by 30
-            November 2026.
+            November 2026. To have your answers deleted sooner, email us at{" "}
+            <a href={`mailto:${brand.contactEmail}`} className={link}>
+              {brand.contactEmail}
+            </a>
+            .
           </p>
         </Section>
       )}
@@ -496,6 +501,13 @@ export default function PrivacyPage() {
             on your behalf.
           </li>
         </ul>
+        <p>
+          To use any of these rights, or to ask about your data, email us at{" "}
+          <a href={`mailto:${brand.contactEmail}`} className={link}>
+            {brand.contactEmail}
+          </a>
+          . We’ll reply within one month.
+        </p>
         <p>
           If you’re unhappy with how your data is handled, you can{" "}
           <a
