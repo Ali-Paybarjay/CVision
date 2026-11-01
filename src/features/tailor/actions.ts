@@ -384,7 +384,7 @@ export async function exportDocument(request: ExportRequest): Promise<ExportResu
       : null;
 
   try {
-    const bytes = await blocksToFile(blocks, format, { title, author: profile.fullName });
+    const bytes = await blocksToFile(blocks, format, { title, author: profile.fullName, footer: document === "cv" ? `${profile.fullName} – CV` : undefined });
     after(async () => {
       const user = await getCurrentUser();
       const approvedChanges = changes.filter((change) => change.status === "approved").length;

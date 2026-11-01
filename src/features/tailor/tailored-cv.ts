@@ -26,6 +26,9 @@ export const cvHeadings = {
 
 export type TailoredCv = {
   fullName: string;
+  /** The title of the user's latest role, from their own CV, under the name. Empty when the CV has no role. */
+  headline: string;
+  /** The contact details in up to two lines: where the user lives, then how to reach them. */
   contact: string[];
   summary: CvLine | null;
   /** At most six main skills such as Communication, never tools: those the user approved, then those the CV lists, what the job asks for first. */
@@ -216,9 +219,8 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
 
   return {
     fullName: profile.fullName,
-    contact: [profile.contact.email, profile.contact.phone, profile.contact.location, profile.contact.linkedIn].filter(
-      (item): item is string => Boolean(item),
-    ),
+    headline: experience[0]?.title ?? "",
+    contact: [profile.contact.location, [profile.contact.email, profile.contact.phone, profile.contact.linkedIn].filter(Boolean).join(" | ")].filter((line): line is string => Boolean(line)),
     summary,
     skills,
     technicalSkills,
