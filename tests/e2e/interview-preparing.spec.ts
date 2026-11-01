@@ -17,6 +17,8 @@ test("Preparing your interview says how long it takes, then gives way to the fir
 
   await expect(page.getByText("Question 1 of 6")).toBeVisible({ timeout: 120_000 });
   await expect(preparing).toHaveCount(0);
+  // The card is gone, but a screen reader still hears that the questions are ready.
+  await expect(page.getByRole("status").filter({ hasText: "questions are ready" })).toHaveText("Your 6 questions are ready. Question 1 is below.");
   // How long the start took is for the lab only (#243).
   await expect(page.getByText(/Questions ready in/)).toHaveCount(0);
   await expect(page.getByText(/^0 words · aim for \d+ to \d+ words$/)).toBeVisible();

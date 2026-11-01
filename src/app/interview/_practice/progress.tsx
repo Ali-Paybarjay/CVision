@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { startupSeconds } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
+import { mainAnswer } from "@/features/interview/engine/session";
 import type { JobState, PracticeStore } from "./store";
 import { Button, Card } from "@/shared/ui";
 import { Status } from "./ui";
@@ -39,6 +40,25 @@ export function timeLeft(done: number, elapsedMs: number): string {
   return left > 10 ? `About ${Math.ceil(left / 10) * 10} seconds left` : "Almost ready";
 }
 
+/**
+ * What a screen reader hears; the bar and the countdown are for the eyes. A failed stage, then the end of each stage,
+ * and last that question 1 is here, but only while it is still unanswered, so a reload later in the practice or a
+ * finished one says nothing.
+ */
+export function startupMessage(session: InterviewSession | null, jobs: Readonly<Record<string, JobState>>, run: string): string {
+  for (const stage of startupStages) {
+    const job = jobs[`${run}:${stage.key}`];
+    if (job?.status === "failed") return `Failed: ${stage.label}. ${job.message}`;
+  }
+  const done = stagesDone(session);
+  if (!session || done === 0) return "";
+  if (done < startupStages.length) return `Done: ${startupStages[done - 1].label}.`;
+  const first = session.questions[0];
+  return !session.endedAt && mainAnswer(session, first.id) === null
+    ? `Your ${session.questions.length} questions are ready. Question 1 is below.`
+    : "";
+}
+
 /** The time now, once a second while `ticking`. */
 function useNow(ticking: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -64,14 +84,28 @@ export function Progress({
   /** When "Start practice" was pressed. */
   startedAtMs: number;
 }) {
-  const done = stagesDone(session);
-  const now = useNow(done < startupStages.length);
-  // The first question takes its place. How long the start took is for the lab only (#243).
-  if (done === startupStages.length) return null;
+  // The first question takes the card's place; how long the start took is for the lab only (#243). The status line
+  // stays in the same place outside the card, so "Your questions are ready" is still heard when the card goes.
+  return (
+    <>
+      {stagesDone(session) < startupStages.length && (
+        <PreparingCard store={store} session={session} jobs={jobs} run={run} startedAtMs={startedAtMs} />
+      )}
+      <p role="status" className="sr-only">
+        {startupMessage(session, jobs, run)}
+      </p>
+    </>
+  );
+}
 
-  const elapsedMs = Math.max(0, now - startedAtMs);
+function PreparingCard({ store, session, jobs, run, startedAtMs }: Parameters<typeof Progress>[0]) {
+  const done = stagesDone(session);
   const failed = startupStages.some((stage) => jobs[`${run}:${stage.key}`]?.status === "failed");
-  // Must-haves first; the role analysis lists 4 to 8.
+  // Nothing moves while a stage waits for Try again.
+  const now = useNow(!failed);
+  const elapsedMs = Math.max(0, now - startedAtMs);
+  // Must-haves first. The role analysis lists 4 to 8 and only 6 questions are asked, so this is what the role asks
+  // for, not what each question tests.
   const competencies = [...(session?.roleProfile?.competencies ?? [])].sort(
     (a, b) => Number(b.priority === "must-have") - Number(a.priority === "must-have"),
   );
@@ -114,13 +148,9 @@ export function Progress({
           );
         })}
       </ol>
-      {/* The bar and the countdown are for the eyes; a screen reader hears each stage as it finishes. */}
-      <p role="status" className="sr-only">
-        {done > 0 ? `Done: ${startupStages[done - 1].label}.` : ""}
-      </p>
       {competencies.length > 0 && (
         <div className="space-y-2">
-          <p className="font-semibold">This interview will test</p>
+          <h3>What this role asks for</h3>
           <ul className="flex flex-wrap gap-2">
             {competencies.map((competency) => (
               <li key={competency.id} className="rounded-full border border-line px-3 py-1 text-sm">
