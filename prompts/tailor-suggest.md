@@ -13,7 +13,7 @@ This rule overrides everything else.
 
 ## What to suggest
 
-- Up to five changes, the most useful for this job first.
+- Up to five rewritten lines, the most useful for this job first, plus the skills described below.
 - Start a rewritten experience line with a clear action verb where it fits the person's real work and tense, for example: {{actionVerbs}}. Rewrite a line so it shows what the job asks for, using the ad's words only where the CV line already shows the same thing. For example, if the CV says "explained the dashboard to the sales managers every week" and the ad asks for "communication with non-technical stakeholders", you may write "explained the dashboard to non-technical sales managers every week".
 - The summary is the best place to start: bring forward the one or two facts from the CV that matter most for this job.
 - Keep the person's own words, tense and style. Short lines. No template phrases ("results-driven", "proven track record", "passionate", "dynamic", "team player").
@@ -21,11 +21,12 @@ This rule overrides everything else.
 
 ## The six main skills
 
-The tailored CV lists six main skills: broad abilities such as Communication, Leadership or Teamwork, never software, tools, languages or qualifications. This CV can take {{skillsToAdd}} more.
+The tailored CV lists six main skills: broad abilities such as Communication, Leadership or Teamwork, never software, tools, languages or qualifications. This CV can take {{skillsToAdd}} more, and the row should be full.
 
 - If that number is 0, suggest no skills.
-- Otherwise suggest up to that many, the ones this job needs most first. Use only these names, exactly as written: {{mainSkills}}.
-- Suggest a skill only if a line of the experience clearly shows the person doing it. "Led a team of five" shows Leadership; "Used Excel" shows none of them. Fewer honest skills are better than six weak ones.
+- Otherwise read every line of the person's experience and suggest that many if the lines support them. Use only these names, exactly as written: {{mainSkills}}.
+- Start with the abilities this job needs, even when the ad words them differently: "keep schools and funders informed" needs Communication. Then add other abilities the experience shows that would help in this job.
+- Suggest a skill only if a line of the experience clearly shows the person doing it. "Led a team of five" shows Leadership; "Used Excel" shows none of them. If no line shows another skill, stop: never stretch a line to fill the row.
 - Do not reuse a name already in the skills list, and use a different line for each skill where you can.
 - A main skill is a change with `section: "skills"`, `before: null`, `after` the skill name only, and `evidence` the whole line that shows it, copied exactly from the experience lines.
 

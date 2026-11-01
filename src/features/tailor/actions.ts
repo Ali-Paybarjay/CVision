@@ -341,7 +341,7 @@ export async function exportDocument(request: ExportRequest): Promise<ExportResu
   if (document === "cover-letter" && !letter?.trim()) return { ok: false, message: "Approve your cover letter first, then download it." };
 
   const changes = parsed.data.changes.filter((change) => change.jobId === jobId);
-  const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes)) : letterBlocks(letter ?? "", letterHead(profile, new Date()));
+  const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes, job)) : letterBlocks(letter ?? "", letterHead(profile, new Date()));
   const title = `${document === "cv" ? "CV" : "Cover letter"}: ${job.title}, ${job.company}`;
   const warning =
     format === "pdf" && pdfLosesLetters(blocks, { title, author: profile.fullName })

@@ -63,11 +63,19 @@ describe("suggestFromCv offers the six main skills, never tools (#191)", () => {
     expect(result.changes.map((change) => [change.section, change.before, change.after, change.status])).toEqual([["skills", null, "Attention to detail", "proposed"]]);
   });
 
-  it("offers only as many as fit in six, counting the main skills the CV already lists", async () => {
+  it("offers only as many as fit in six, counting the listed main skills the ad asks for", async () => {
     const profile = { ...sara.profile, skills: ["Communication", "Leadership", "Teamwork", "Planning", "Creativity", "SQL"] };
     const sample = { changes: [skill("Attention to detail"), skill("Problem solving")], nextSteps: [] };
-    const result = await suggestFromCv({ profile, job: sara.jobs[0], match: sara.match, sample });
+    const job = { ...sara.jobs[0], requirements: { essential: ["Communication", "Leadership", "Teamwork", "Planning", "Creativity"], desirable: [] } };
+    const result = await suggestFromCv({ profile, job, match: sara.match, sample });
     expect(result.changes.map((change) => change.after)).toEqual(["Attention to detail"]);
+  });
+
+  it("does not let listed main skills this ad never asks for use up the six", async () => {
+    const profile = { ...sara.profile, skills: ["Negotiation", "Creativity", "Coaching", "Mentoring", "Networking", "Initiative"] };
+    const sample = { changes: [skill("Attention to detail"), skill("Problem solving")], nextSteps: [] };
+    const result = await suggestFromCv({ profile, job: sara.jobs[0], match: sara.match, sample });
+    expect(result.changes.map((change) => change.after)).toEqual(["Attention to detail", "Problem solving"]);
   });
 
   it("does not find a tool inside another word: \"R\" is not in \"stores\"", () => {

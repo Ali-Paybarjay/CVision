@@ -1,4 +1,4 @@
-import { cvHeadings, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
+import { cvHeadings, otherLines, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
 import { CvPaper, FitLine } from "@/shared/ui";
 
 function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
@@ -21,11 +21,12 @@ function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
-  return <h3 className="mt-6 text-base font-bold">{children}</h3>;
+  return <h3 className="mt-6 text-base font-bold text-accent">{children}</h3>;
 }
 
 /** The tailored CV in the layout of the template, as the download will look, with approved lines on Fit. */
 export function CvPreview({ cv }: { cv: TailoredCv }) {
+  const other = otherLines(cv);
   return (
     <CvPaper aria-label="Your tailored CV" className="text-sm leading-relaxed">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-line pb-2">
@@ -53,17 +54,6 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
         </>
       )}
 
-      {cv.education.length > 0 && (
-        <>
-          <Heading>{cvHeadings.education}</Heading>
-          <div className="mt-1 flex flex-col gap-1">
-            {cv.education.map((line, index) => (
-              <Line key={index} line={line} />
-            ))}
-          </div>
-        </>
-      )}
-
       {cv.experience.length > 0 && (
         <>
           <Heading>{cvHeadings.experience}</Heading>
@@ -82,24 +72,25 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
         </>
       )}
 
-      {cv.certifications.length + cv.technicalSkills.length > 0 && (
+      {cv.education.length > 0 && (
+        <>
+          <Heading>{cvHeadings.education}</Heading>
+          <div className="mt-1 flex flex-col gap-1">
+            {cv.education.map((line, index) => (
+              <Line key={index} line={line} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {other.length > 0 && (
         <>
           <Heading>{cvHeadings.other}</Heading>
-          {cv.certifications.length > 0 && (
-            <>
-              <p className="mt-1 italic">{cvHeadings.certificates}</p>
-              <ul className="flex list-disc flex-col gap-1 pl-5">
-                {cv.certifications.map((line, index) => (
-                  <Line key={index} line={line} as="li" />
-                ))}
-              </ul>
-            </>
-          )}
-          {cv.technicalSkills.length > 0 && (
-            <p className="mt-1">
-              <strong>{cvHeadings.technical}</strong> {cv.technicalSkills.map((line) => line.text).join(", ")}
-            </p>
-          )}
+          <div className="mt-1 flex flex-col gap-1">
+            {other.map((line, index) => (
+              <Line key={index} line={line} />
+            ))}
+          </div>
         </>
       )}
     </CvPaper>

@@ -1,11 +1,11 @@
 // The PDF and Word downloads of the tailored CV and the cover letter. Pure code: no browser, no network.
-// The layout of docs/tailor-templates, with plain headings and real text, so applicant tracking systems read the file as the user does.
+// The layout of docs/tailor-templates, with coloured headings and real text, so applicant tracking systems read the file as the user does.
 // The Fit highlight is for the preview only and never reaches the file.
 import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TabStopType, TextRun } from "docx";
-import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { brand } from "@/shared/brand";
 import type { LetterHead } from "./letter-state";
-import { cvHeadings, type CvLine, type TailoredCv } from "./tailored-cv";
+import { cvHeadings, otherLines, type CvLine, type TailoredCv } from "./tailored-cv";
 
 export type ExportFormat = "pdf" | "docx";
 export type ExportDocument = "cv" | "cover-letter";
@@ -31,18 +31,17 @@ export const mimeTypes: Record<ExportFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** The CV in the template's order: main skills in two columns, then education, experience, and certificates with other skills last. */
+/** The CV in the template's order: skills in two columns, then work experience, education, and certificates and tools last. */
 export function cvBlocks(cv: TailoredCv): Block[] {
   const bullets = (lines: CvLine[]): Block[] => lines.map((line) => ({ kind: "bullet", text: line.text, label: line.label }));
   const half = Math.ceil(cv.skills.length / 2);
+  const other = otherLines(cv);
 
   return [
     { kind: "name", text: cv.fullName, right: cv.contact.join(" | ") || undefined },
     ...(cv.summary ? [{ kind: "heading" as const, text: cvHeadings.summary }, { kind: "text" as const, text: cv.summary.text }] : []),
     ...(cv.skills.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.skills }] : []),
     ...cv.skills.slice(0, half).map((line, index): Block => ({ kind: "skills", text: line.text, right: cv.skills[half + index]?.text })),
-    ...(cv.education.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.education }] : []),
-    ...cv.education.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
     ...(cv.experience.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.experience }] : []),
     ...cv.experience.flatMap((job): Block[] => [
       { kind: "organisation", text: job.company.toUpperCase() },
@@ -50,12 +49,10 @@ export function cvBlocks(cv: TailoredCv): Block[] {
       { kind: "role", text: job.title },
       ...bullets(job.lines),
     ]),
-    ...(cv.certifications.length + cv.technicalSkills.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.other }] : []),
-    ...(cv.certifications.length > 0 ? [{ kind: "subheading" as const, text: cvHeadings.certificates }] : []),
-    ...bullets(cv.certifications),
-    ...(cv.technicalSkills.length > 0
-      ? [{ kind: "line" as const, label: cvHeadings.technical, text: cv.technicalSkills.map((line) => line.text).join(", ") }]
-      : []),
+    ...(cv.education.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.education }] : []),
+    ...cv.education.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
+    ...(other.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.other }] : []),
+    ...other.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
   ];
 }
 
@@ -100,6 +97,9 @@ type Meta = { title: string; author: string };
 export async function blocksToFile(blocks: Block[], format: ExportFormat, meta: Meta): Promise<Uint8Array> {
   return format === "pdf" ? blocksToPdf(blocks, meta) : blocksToDocx(blocks, meta);
 }
+
+/** The brand's Teal for CV section headings (5.5:1 on white). Decoration only: the heading reads the same without it. */
+const teal = { hex: "167480", rgb: rgb(0x16 / 255, 0x74 / 255, 0x80 / 255) };
 
 // ---- PDF -----------------------------------------------------------------
 
@@ -237,7 +237,7 @@ async function blocksToPdf(blocks: Block[], meta: Meta): Promise<Uint8Array> {
         current.drawText(label, { x, y, size: style.size, font: bold });
         current.drawText(line.slice(label.length), { x: x + bold.widthOfTextAtSize(label, style.size), y, size: style.size, font });
       } else {
-        current.drawText(line, { x, y, size: style.size, font });
+        current.drawText(line, { x, y, size: style.size, font, color: block.kind === "heading" ? teal.rgb : undefined });
       }
       y -= leading - style.size;
     });
@@ -272,7 +272,7 @@ function blockToParagraph(block: Block): Paragraph {
       });
     }
     case "heading":
-      return new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 280, after: 80 }, children: [new TextRun({ text: block.text, bold: true, size: 24 })] });
+      return new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 280, after: 80 }, children: [new TextRun({ text: block.text, bold: true, size: 24, color: teal.hex })] });
     case "subheading":
       return new Paragraph({ spacing: { before: 120, after: 40 }, children: [new TextRun({ text: block.text, italics: true })] });
     case "organisation":

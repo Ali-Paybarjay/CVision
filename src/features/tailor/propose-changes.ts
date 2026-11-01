@@ -3,7 +3,7 @@ import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { actionVerbs, bigSixSkills, bigSixTarget, isBigSix } from "./big-six";
 import { enforceNothingInvented } from "./nothing-invented";
-import { fitsCv, sectionLines } from "./tailored-cv";
+import { fitsCv, sectionLines, listedSkillsTheAdAsksFor } from "./tailored-cv";
 import { ProposalSchema, type GapAnswer, type Proposal, type TailoringProposal } from "./types";
 
 export type ProposeInput = {
@@ -68,8 +68,8 @@ export type SuggestInput = {
  * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap counted as not confirmed, so nothing the job asks for can slip in before the user says yes.
  */
 export async function suggestFromCv({ profile, job, match, sample, requester }: SuggestInput): Promise<TailoringProposal> {
-  // Skills the CV lists itself that are already main skills count towards the six; its tools do not.
-  const room = Math.max(0, bigSixTarget - profile.skills.filter(isBigSix).length);
+  // Main skills the CV lists and this ad asks for count towards the six. Its tools, and listed skills this ad does not need, do not.
+  const room = Math.max(0, bigSixTarget - listedSkillsTheAdAsksFor(profile, job).length);
   const prompt = await loadPrompt("tailor-suggest", {
     job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
     strengths: JSON.stringify(match.strengths, null, 2),
