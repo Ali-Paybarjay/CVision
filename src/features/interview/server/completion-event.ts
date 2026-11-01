@@ -1,9 +1,11 @@
 import { track } from "@/shared/analytics/track";
 import { getSupabaseAdmin } from "@/shared/supabase/admin";
 import type { InterviewReport, InterviewSession } from "../contracts";
+import { reportQuestionIds } from "../engine/session";
 import { countWords } from "../engine/text";
 
 export const sessionCompletedEvent = "interview.session_completed";
+export const sessionEndedEarlyEvent = "interview.session_ended_early";
 
 /**
  * The details of interview.session_completed: counts, scores and timing only.
@@ -27,20 +29,39 @@ export function sessionCompletedProperties(session: InterviewSession, report: In
   };
 }
 
+/** The details of interview.session_ended_early (#205): counts only, never text. */
+export function sessionEndedEarlyProperties(session: InterviewSession) {
+  return {
+    sessionId: session.id,
+    jobId: session.jobId,
+    mode: session.versions?.mode ?? "mock",
+    questions: session.questions.length,
+    answered: reportQuestionIds(session).length,
+  };
+}
+
 /**
- * Records interview.session_completed once per session. A reload or a second tab can ask for the same report
- * again, so a session that already has the event is skipped. Two requests at the very same moment can still both
- * record it; the funnel (#44) counts distinct session ids.
+ * Records an event once per session. A reload or a second tab can send the same step again, so a session that
+ * already has the event is skipped. Two requests at the very same moment can still both record it; the funnel
+ * (#44) counts distinct session ids.
  */
-export async function trackSessionCompleted(session: InterviewSession, report: InterviewReport, userId: string): Promise<void> {
+async function trackOncePerSession(name: string, properties: { sessionId: string }, userId: string): Promise<void> {
   const admin = getSupabaseAdmin();
   if (admin) {
     const { count, error } = await admin
       .from("events")
       .select("id", { count: "exact", head: true })
-      .eq("name", sessionCompletedEvent)
-      .eq("properties->>sessionId", session.id);
+      .eq("name", name)
+      .eq("properties->>sessionId", properties.sessionId);
     if (!error && count) return;
   }
-  await track(sessionCompletedEvent, sessionCompletedProperties(session, report), { userId });
+  await track(name, properties, { userId });
+}
+
+export async function trackSessionCompleted(session: InterviewSession, report: InterviewReport, userId: string): Promise<void> {
+  await trackOncePerSession(sessionCompletedEvent, sessionCompletedProperties(session, report), userId);
+}
+
+export async function trackSessionEndedEarly(session: InterviewSession, userId: string): Promise<void> {
+  await trackOncePerSession(sessionEndedEarlyEvent, sessionEndedEarlyProperties(session), userId);
 }

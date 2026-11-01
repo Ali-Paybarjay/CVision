@@ -55,6 +55,8 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
   let storageFailed = false;
   const listeners = new Set<() => void>();
   let jobs: Readonly<Record<string, JobState>> = {};
+  // Jobs run with `once` that have succeeded in this tab.
+  const succeeded = new Set<string>();
 
   function emit() {
     for (const listener of listeners) listener();
@@ -125,13 +127,17 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
     /**
      * Runs one request unless it is already running or has failed (a failed job waits for retryJob). Tabs share
      * the session, so a tab that finds another tab already running the same request waits for it instead; the
-     * result arrives through storage, and if the other tab failed, this tab's next drive runs it.
+     * result arrives through storage, and if the other tab failed, this tab's next drive runs it. A job whose
+     * success leaves no mark on the session runs with `once`, so the next drive does not send it again.
      */
-    runJob(key: string, work: () => Promise<void>) {
-      if (jobs[key]) return;
+    runJob(key: string, work: () => Promise<void>, options: { once?: boolean } = {}) {
+      if (jobs[key] || succeeded.has(key)) return;
       setJob(key, { status: "running" });
       withTabLock(`${storageKey}:${key}`, work).then(
-        () => setJob(key, null),
+        () => {
+          if (options.once) succeeded.add(key);
+          setJob(key, null);
+        },
         (error: unknown) => setJob(key, { status: "failed", message: error instanceof Error ? error.message : "Something went wrong." }),
       );
     },
@@ -140,6 +146,7 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
     },
     clearJobs() {
       jobs = {};
+      succeeded.clear();
       emit();
     },
     /**

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { limits } from "@/features/interview/config";
 import { fixtures } from "@/features/interview/fixtures";
-import { inputsFor, runMockSession } from "@/features/interview/test-support";
+import { endedSessionFor, inputsFor, runMockSession } from "@/features/interview/test-support";
 import type { AskModelOptions } from "@/shared/ai";
 import { isLabEnabled } from "../lab-access";
 import { POST } from "./route";
@@ -56,6 +56,14 @@ describe("the lab API in mock mode", () => {
     const response = await post({ step: "report", session: { ...session, turns } });
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/too long/);
+  });
+
+  it("ends a practice and writes a suggested answer from the CV it is sent (#205)", async () => {
+    const session = endedSessionFor(fixture);
+    expect(await (await post({ step: "end", session })).json()).toEqual({ ended: true });
+    const response = await post({ step: "suggest", inputs: inputsFor(fixture), session, questionId: "q1" });
+    expect(response.status).toBe(200);
+    expect((await response.json()).suggestion.questionId).toBe("q1");
   });
 });
 
