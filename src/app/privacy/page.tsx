@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { brand } from "@/shared/brand";
+import { feedbackFormUrl } from "@/shared/feedback";
 import { CheckIcon, Page } from "@/shared/ui";
 
 // The privacy notice (card #43). Every fact here was checked against the code, the live project and each
@@ -11,7 +13,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "29 October 2026";
+const lastUpdated = "1 November 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -21,10 +23,14 @@ const contents = [
   { id: "how-long", title: "How long we keep it" },
   { id: "not-deleted-straight-away", title: "What isn’t deleted straight away" },
   { id: "cookies", title: "Cookies and browser storage" },
+  { id: "feedback", title: "Feedback" },
   { id: "your-rights", title: "Your rights" },
 ] as const;
 
 type SectionId = (typeof contents)[number]["id"];
+
+/** The Feedback section is only on the page once the form's link is set (src/shared/feedback.ts, #134). */
+const shownContents = contents.filter((section) => section.id !== "feedback" || feedbackFormUrl);
 
 const link = "font-semibold text-accent hover:underline";
 
@@ -166,6 +172,14 @@ const services: { name: string; body: React.ReactNode }[] = [
   },
 ];
 
+// Only once the Give feedback link is on the site (#134).
+if (feedbackFormUrl) {
+  services.push({
+    name: "Google (Forms and Drive)",
+    body: "Runs our Give feedback form and keeps the answers in our team’s private Drive, possibly outside the UK. It gets only what you type into the form, nothing from your CVision account.",
+  });
+}
+
 const howLong: { what: string; until: string }[] = [
   {
     what: "Your account and everything saved with it, your profile and any CV file included",
@@ -294,7 +308,7 @@ export default function PrivacyPage() {
           On this page
         </h2>
         <ul className="mt-2 grid gap-x-8 sm:grid-cols-2">
-          {contents.map((section) => (
+          {shownContents.map((section) => (
             <li key={section.id}>
               <a href={`#${section.id}`} className={`inline-flex min-h-11 items-center ${link}`}>
                 {section.title}
@@ -429,6 +443,24 @@ export default function PrivacyPage() {
         <p>Usage and AI use records are kept on our servers, not on your device.</p>
       </Section>
 
+      {feedbackFormUrl && (
+        <Section id="feedback">
+          <p>
+            The Give feedback link at the bottom of every page opens a Google Form in a new tab. It isn’t linked to
+            your CVision account: we see only what you type into the form, and nothing from your profile or CV.
+          </p>
+          <p>
+            Your answers are kept in Google Forms and in our team’s private Google Drive, and only the CVision team
+            reads them. Google runs the form for us and may store the answers outside the UK. We delete them by 30
+            November 2026. To have your answers deleted sooner, email us at{" "}
+            <a href={`mailto:${brand.contactEmail}`} className={link}>
+              {brand.contactEmail}
+            </a>
+            .
+          </p>
+        </Section>
+      )}
+
       <Section id="your-rights">
         <p>UK data protection law (UK GDPR) gives you these rights.</p>
         <ul className="flex list-disc flex-col gap-2 pl-5">
@@ -469,6 +501,13 @@ export default function PrivacyPage() {
             on your behalf.
           </li>
         </ul>
+        <p>
+          To use any of these rights, or to ask about your data, email us at{" "}
+          <a href={`mailto:${brand.contactEmail}`} className={link}>
+            {brand.contactEmail}
+          </a>
+          . We’ll reply within one month.
+        </p>
         <p>
           If you’re unhappy with how your data is handled, you can{" "}
           <a

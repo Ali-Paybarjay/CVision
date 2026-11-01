@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { feedbackFormUrl } from "@/shared/feedback";
 import { footerItems } from "@/shared/navigation";
 import { cn } from "./cn";
 
@@ -9,6 +10,8 @@ import { cn } from "./cn";
 function isCurrent(pathname: string | null, href: string) {
   return pathname !== null && (pathname === href || pathname.startsWith(`${href}/`));
 }
+
+const linkClass = "inline-flex min-h-11 items-center text-sm font-semibold text-accent underline-offset-4 hover:underline";
 
 function FooterLinks({ pathname }: { pathname: string | null }) {
   return (
@@ -20,16 +23,21 @@ function FooterLinks({ pathname }: { pathname: string | null }) {
             <Link
               href={item.href}
               aria-current={current ? "page" : undefined}
-              className={cn(
-                "inline-flex min-h-11 items-center text-sm font-semibold text-accent underline-offset-4 hover:underline",
-                current && "underline",
-              )}
+              className={cn(linkClass, current && "underline")}
             >
               {item.label}
             </Link>
           </li>
         );
       })}
+      {feedbackFormUrl && (
+        <li>
+          {/* Another site, so a plain link in a new tab: the user keeps their place in CVision (#134). */}
+          <a href={feedbackFormUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+            Give feedback<span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </li>
+      )}
     </ul>
   );
 }

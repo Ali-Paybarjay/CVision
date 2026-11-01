@@ -3,6 +3,8 @@
 export const brand = {
   name: "CVision",
   tagline: "Every application, made to fit.",
+  /** The team's shared address for data rights and feedback (#134). Never a teammate's own email. */
+  contactEmail: "cvision.team.uk@gmail.com",
   oneLiner:
     "We help anyone applying for a job in the UK turn any job ad into a tailored CV and cover letter in minutes, so they can get interviews.",
   /** The plan: three steps, one outcome. */
