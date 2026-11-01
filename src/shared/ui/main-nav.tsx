@@ -54,23 +54,28 @@ function NavLinks({
 
 /** Before the pathname and session are known (prerendering), the same links without the current-page mark. */
 export function MainNavFallback() {
-  return <NavLinks pathname={null} className="hidden items-center gap-5 md:flex" />;
+  return <NavLinks pathname={null} className="hidden items-center gap-5 lg:flex" />;
 }
 
 /**
  * The top menu. Signed-out visitors also get Sign in and the main call to action,
  * as a secondary button so the page's own Coral button stays the only one.
+ * The call to action keeps its one name everywhere, so the menu makes room for it instead (#177): for signed-out
+ * visitors the page links move into the Menu below 1024px, and the button is compact and stays on one line on a
+ * 360px phone. Signed-in visitors have no call to action here, so they keep the page links from 768px.
  */
 export function MainNav({ signedIn }: { signedIn: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const showSignIn = !signedIn && !isCurrent(pathname, "/sign-in");
   const showGetStarted = !signedIn && !isCurrent(pathname, "/sign-up");
+  // Whole class names, so Tailwind finds them: page links inline from md when signed in, from lg when signed out.
+  const wide = signedIn ? { links: "md:flex", narrowOnly: "md:hidden" } : { links: "lg:flex", narrowOnly: "lg:hidden" };
 
   return (
     <>
-      <NavLinks pathname={pathname} className="hidden items-center gap-5 md:flex" />
-      <div className="ml-auto flex items-center gap-3">
+      <NavLinks pathname={pathname} className={cn("hidden items-center gap-5", wide.links)} />
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {showSignIn && (
           <Link href="/sign-in" className="hidden py-2 text-sm font-semibold text-accent hover:underline sm:block">
             Sign in
@@ -79,6 +84,7 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
         {showGetStarted && (
           <ButtonLink
             href="/sign-up"
+            size="compact"
             onClick={() => {
               if (pathname === "/") trackHomeCtaClick({ cta: "get_started", placement: "header" }).catch(() => {});
             }}
@@ -88,7 +94,10 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
         )}
         <button
           type="button"
-          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-2 text-sm font-semibold md:hidden"
+          className={cn(
+            "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-2 text-sm font-semibold",
+            wide.narrowOnly,
+          )}
           aria-expanded={open}
           aria-controls="mobile-menu"
           onClick={() => setOpen((value) => !value)}
@@ -98,7 +107,10 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
         </button>
       </div>
       {open && (
-        <div id="mobile-menu" className="absolute inset-x-0 top-full border-b border-line bg-surface px-4 pb-3 md:hidden">
+        <div
+          id="mobile-menu"
+          className={cn("absolute inset-x-0 top-full border-b border-line bg-surface px-4 pb-3", wide.narrowOnly)}
+        >
           <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} className="flex flex-col">
             {showSignIn && (
               <li className="sm:hidden">

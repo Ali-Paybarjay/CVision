@@ -103,9 +103,9 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          A short record when you do certain things, such as pressing Get started free, changing an application’s
-          status or finishing an interview practice (with its scores, how many questions you answered and how long it
-          took). These records never include your CV, your answers, the job ad or your contact details.
+          A short record when you do certain things, such as pressing the Tailor my CV to a job button, changing an
+          application’s status or finishing an interview practice (with its scores, how many questions you answered
+          and how long it took). These records never include your CV, your answers, the job ad or your contact details.
         </p>
         <p>We use them to see how CVision is used and to make it better.</p>
       </>
