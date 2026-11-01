@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { answerGuide, defaultComposition } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
-import { nextStep, openingView } from "@/features/interview/engine/session";
+import { mainAnswer, nextStep, openingView } from "@/features/interview/engine/session";
 import type { LastReport } from "@/features/interview/server/session-store";
 import { drive, InterviewFlow, runOf, type SampleAnswers } from "./_practice/flow";
 import { preparationState, Progress, startupEstimate } from "./_practice/progress";
@@ -234,7 +234,7 @@ export function InterviewPractice({
     <div ref={practiceRef} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
-        {canStartAgain && <Button onClick={restart}>Start again</Button>}
+        {canStartAgain && <StartAgain answers={answersGiven(session)} onRestart={restart} />}
       </div>
       <Progress store={store} session={session} jobs={jobs} run={run} />
       {session && done ? (
@@ -279,6 +279,58 @@ export function LastPractice({
       </p>
       <FeedbackReport session={report.session} />
       <PractiseAgain onPractiseAgain={onPractiseAgain} />
+    </div>
+  );
+}
+
+/** The questions the candidate has sent an answer to in this practice. */
+export function answersGiven(session: InterviewSession | null): number {
+  return session ? session.questions.filter((q) => mainAnswer(session, q.id) !== null).length : 0;
+}
+
+/**
+ * "Start again" during a practice (#263). Before any answer it starts again at once: there is nothing to lose. Once
+ * an answer is sent, it asks in place first, as "End here" does, so one tap on a phone cannot throw the answers away.
+ */
+function StartAgain({ answers, onRestart }: { answers: number; onRestart: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const toggled = useRef(false);
+  // Focus goes to the question when it opens, and back to the button after "Keep going".
+  useEffect(() => {
+    if (!toggled.current) return;
+    box.current?.querySelector<HTMLElement>(confirming ? "[data-confirm-heading]" : "button")?.focus();
+  }, [confirming]);
+  const toggle = (on: boolean) => {
+    toggled.current = true;
+    setConfirming(on);
+  };
+
+  return (
+    // Full width when asking, so the question sits on its own line under the save status.
+    <div ref={box} className={confirming ? "w-full" : undefined}>
+      {confirming ? (
+        <ConfirmStartAgain answers={answers} onConfirm={onRestart} onCancel={() => toggle(false)} />
+      ) : (
+        <Button onClick={answers > 0 ? () => toggle(true) : onRestart}>Start again</Button>
+      )}
+    </div>
+  );
+}
+
+export function ConfirmStartAgain({ answers, onConfirm, onCancel }: { answers: number; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="space-y-2 rounded-md border border-line bg-canvas p-3">
+      <p data-confirm-heading tabIndex={-1} className="font-semibold">
+        Start again with new questions?
+      </p>
+      <p className="text-sm">
+        {answers === 1 ? "You'll lose your answer and its feedback." : `You'll lose your ${answers} answers and their feedback.`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={onConfirm}>Start again</Button>
+        <Button onClick={onCancel}>Keep going</Button>
+      </div>
     </div>
   );
 }

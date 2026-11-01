@@ -79,7 +79,9 @@ describe("the lab API in live mode", () => {
     vi.stubEnv("AI_MODE", "live");
     currentUser.value = { id: "user-1", email: null };
     const response = await analyse();
-    expect(response.status).toBe(422);
+    // Tests have no AI key, so askModel stops there; the lab, for the team, shows its message as it is (#266).
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toBe("No API key in tests.");
     expect(asked[0]?.requester).toEqual({ userId: "user-1" });
   });
 });

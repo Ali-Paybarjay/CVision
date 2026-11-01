@@ -5,10 +5,10 @@
 // rest runs; and it says plainly when a stage is slow, is being tried again, or needs Try again (the steps already
 // done are kept). Start again stays out of the way meanwhile (practice.tsx), so nobody throws away a start that is fine.
 import { useEffect, useRef, useState } from "react";
-import { defaultComposition, levelDescriptions, overrunGraceSeconds, startupSeconds } from "@/features/interview/config";
+import { defaultComposition, levelDescriptions, overrunGraceSeconds, stallSeconds, startupSeconds } from "@/features/interview/config";
 import type { Competency, InterviewSession, LevelBand } from "@/features/interview/contracts";
 import { mainAnswer } from "@/features/interview/engine/session";
-import { technicalV1 } from "@/features/interview/rubrics";
+import { behaviouralV1, technicalV1, type Rubric } from "@/features/interview/rubrics";
 import { retryStartupStage } from "./flow";
 import type { JobState, PracticeStore } from "./store";
 import { Button, Card } from "@/shared/ui";
@@ -16,19 +16,29 @@ import { firstQuestionId, Status } from "./ui";
 
 const questionCount = defaultComposition.technical + defaultComposition.behavioural;
 
+/**
+ * The three stages, each with its usual share of the wait (#266). Reading the role is one short request; writing the
+ * questions and checking them take most of the time, so equal thirds said "Taking a little longer than usual" on
+ * ordinary starts. The shares add up to 1. Once interview.startup_ready has a week of real starts (analyseSeconds,
+ * generateSeconds, reviewSeconds), set them from those, as `startupSeconds` is.
+ */
 export const startupStages = [
-  { key: "analyse", label: "Reading the role and your profile" },
-  { key: "generate", label: `Writing ${questionCount} questions for this job` },
+  { key: "analyse", label: "Reading the role and your profile", share: 0.2 },
+  { key: "generate", label: `Writing ${questionCount} questions for this job`, share: 0.4 },
   // What the review stage checks, so a third step makes sense to the person waiting for it.
-  { key: "review", label: "Checking each question is clear, fair and at the right level" },
+  { key: "review", label: "Checking each question is clear, fair and at the right level", share: 0.4 },
 ] as const;
 
-/** Each stage's usual share of the wait. */
-const stageBudgetMs = (startupSeconds * 1000) / startupStages.length;
+/** A stage's usual share of the wait, in milliseconds. */
+const budgetMs = (stage: number) => startupSeconds * 1000 * startupStages[stage].share;
 
-/** The level the role is pitched at, in words, from its description ("Junior: …" is "junior level"): never the L1 to L5 code. */
+/** The shares of the stages before `stage`, as a fraction of the whole wait. */
+const sharesBefore = (stage: number) => startupStages.slice(0, stage).reduce((sum, { share }) => sum + share, 0);
+
+/** The level the role is pitched at, in words, from its description ("Junior: …" is "a junior level"): never the L1 to L5 code. */
 function levelName(level: LevelBand): string {
-  return `${levelDescriptions[level].split(":")[0].toLowerCase()} level`;
+  const name = levelDescriptions[level].split(":")[0].toLowerCase();
+  return `${/^[aeiou]/.test(name) ? "an" : "a"} ${name} level`;
 }
 
 /** "a, b and c", the UK way. */
@@ -62,7 +72,12 @@ export function startupEstimate(): string {
  */
 export function startupFraction(done: number, stageElapsedMs: number): number {
   if (done >= startupStages.length) return 1;
-  return (done + Math.min(Math.max(stageElapsedMs, 0) / stageBudgetMs, 0.9)) / startupStages.length;
+  return sharesBefore(done) + Math.min(Math.max(stageElapsedMs, 0) / budgetMs(done), 0.9) * startupStages[done].share;
+}
+
+/** The working stage has run past twice its usual share: "Taking longer than usual", and the card says what happens next. */
+export function isVeryLate(done: number, stageElapsedMs: number): boolean {
+  return done < startupStages.length && stageElapsedMs > 2 * budgetMs(done) + overrunGraceSeconds * 1000;
 }
 
 /**
@@ -72,12 +87,38 @@ export function startupFraction(done: number, stageElapsedMs: number): number {
  */
 export function timeLeft(done: number, stageElapsedMs: number): string {
   const elapsed = Math.max(stageElapsedMs, 0);
-  const grace = overrunGraceSeconds * 1000;
-  if (elapsed > 2 * stageBudgetMs + grace) return "Taking longer than usual";
-  if (elapsed > stageBudgetMs + grace) return "Taking a little longer than usual";
-  const left = Math.round(((startupStages.length - done) * stageBudgetMs - Math.min(elapsed, stageBudgetMs)) / 1000);
+  const budget = budgetMs(done);
+  if (isVeryLate(done, elapsed)) return "Taking longer than usual";
+  if (elapsed > budget + overrunGraceSeconds * 1000) return "Taking a little longer than usual";
+  // What is left of this stage's share, and the shares of the stages after it.
+  const after = startupSeconds * 1000 * (1 - sharesBefore(done + 1));
+  const left = Math.round((budget - Math.min(elapsed, budget) + after) / 1000);
   if (left > 90) return `About ${Math.round(left / 60)} minutes left`;
   return left > 10 ? `About ${Math.ceil(left / 10) * 10} seconds left` : "Almost ready";
+}
+
+/**
+ * Said once a stage is very late (#266). Start again stays hidden even then: it would throw away the stages already
+ * done and pay for the slow one twice, while this stage is stopped within `stallSeconds` anyway, with Try again.
+ */
+export const veryLateMessage = `This step is slower than usual. If it hasn't finished ${Math.round(stallSeconds / 60)} minutes after it started, we'll stop it and you can try again.`;
+
+const rubricsByCategory = { technical: technicalV1, behavioural: behaviouralV1 } as const;
+
+/** A criterion as it reads mid-sentence: "Relevance to the job" is "relevance to the job", "STAR structure" stays. */
+const midSentence = (label: string) => label.replace(/^[A-Z](?=[a-z])/, (letter) => letter.toLowerCase());
+
+/**
+ * What answers are scored on, from the mix of questions asked (#266): one rubric's criteria, or each category's once
+ * behavioural (STAR) questions are asked too.
+ */
+export function scoringLine(composition: Record<keyof typeof rubricsByCategory, number> = defaultComposition): string {
+  const asked = (Object.keys(rubricsByCategory) as (keyof typeof rubricsByCategory)[]).filter((category) => composition[category] > 0);
+  const criteria = (rubric: Rubric) => listOf(rubric.dimensions.map((dimension) => midSentence(dimension.label)));
+  if (asked.length === 1) return `Each answer is scored on ${criteria(rubricsByCategory[asked[0]])}.`;
+  // "Technical answers are scored on …; behavioural answers on …."
+  const parts = asked.map((category, index) => `${category} answers${index === 0 ? " are scored" : ""} on ${criteria(rubricsByCategory[category])}`);
+  return `${parts.join("; ").replace(/^./, (letter) => letter.toUpperCase())}.`;
 }
 
 /**
@@ -189,6 +230,7 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
   if (became.done !== done) setBecame({ done, at: now });
   const since = job?.status === "running" && job.since ? job.since : became.at;
   const stageElapsedMs = Math.max(0, now - since);
+  const veryLate = !failed && isVeryLate(done, stageElapsedMs);
 
   // The bar never goes back, even when a stage starts a second try.
   const fraction = startupFraction(done, stageElapsedMs);
@@ -237,28 +279,33 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
               <div className="col-start-2 space-y-2">
                 <p className="text-sm text-error">{failure.message}</p>
                 {done > 0 && <p className="text-sm text-text-muted">The steps already done are kept.</p>}
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    retryStartupStage(store, run, `${run}:${stage.key}`);
-                    // The button goes with the failure: focus returns to the card's heading.
-                    heading.current?.focus();
-                  }}
-                >
-                  Try again
-                </Button>
+                {/* At a daily limit, Try again would only fail the same way (#266). */}
+                {!failure.final && (
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      retryStartupStage(store, run, `${run}:${stage.key}`);
+                      // The button goes with the failure: focus returns to the card's heading.
+                      heading.current?.focus();
+                    }}
+                  >
+                    Try again
+                  </Button>
+                )}
               </div>
             )}
           </li>
         ))}
       </ol>
+      {/* Here from the card's start, so a screen reader hears the line once when a stage becomes very late (#266). */}
+      <p role="status" className={veryLate ? "text-sm" : "sr-only"}>
+        {veryLate ? veryLateMessage : ""}
+      </p>
       <p className="text-sm text-text-muted">Keep this page open. You can use another tab while you wait.</p>
       {/* Below the line, something to use the wait for: the scoring from the start, what the role asks for after stage 1. */}
       <div className="space-y-4 border-t border-line pt-4">
         {session && <WhileYouWait session={session} />}
-        <p className="text-sm text-text-muted">
-          Each answer is scored on {listOf(technicalV1.dimensions.map((dimension) => dimension.label.toLowerCase()))}.
-        </p>
+        <p className="text-sm text-text-muted">{scoringLine()}</p>
       </div>
     </Card>
   );
@@ -299,7 +346,7 @@ function WhileYouWait({ session }: { session: InterviewSession }) {
               </li>
             ))}
           </ul>
-          <p className="text-sm text-text-muted">While you wait, recall the numbers behind these lines and what you did yourself.</p>
+          <p className="text-sm text-text-muted">While you wait, think of the numbers behind these lines and your own part in each.</p>
         </section>
       )}
     </>
@@ -308,10 +355,12 @@ function WhileYouWait({ session }: { session: InterviewSession }) {
 
 function SkillRow({ label, skills }: { label: string; skills: Competency[] }) {
   if (skills.length === 0) return null;
+  // The line beside the list says what it is. The list has no name of its own, so a screen reader says "Must-have"
+  // once (#266): a name, even one taken from the line (aria-labelledby), is read again with the list.
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <p className="w-full text-sm text-text-muted sm:w-28 sm:shrink-0">{label}</p>
-      <ul aria-label={label} className="flex min-w-0 flex-1 flex-wrap gap-2">
+      <ul className="flex min-w-0 flex-1 flex-wrap gap-2">
         {skills.map((skill) => (
           <li key={skill.id} className="rounded-full border border-line px-3 py-1 text-sm [overflow-wrap:anywhere]">
             {skill.name}

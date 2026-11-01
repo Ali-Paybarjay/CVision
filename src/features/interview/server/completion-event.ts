@@ -44,18 +44,27 @@ export function sessionEndedEarlyProperties(session: InterviewSession) {
   };
 }
 
+/** How long the start took, as the review step's request reports it (#232, #266). */
+export type StartupTiming = { waitedMs?: number; analyseMs?: number; generateMs?: number; retries?: number; reviewMs: number };
+
+/** Milliseconds as whole seconds, or null when the browser did not send them. */
+const secondsOrNull = (ms: number | undefined) => (ms === undefined ? null : Math.round(ms / 1000));
+
 /**
  * The details of interview.startup_ready (#232): how long the user waited from "Start practice" to question 1, in
  * seconds, so the wait the page promises comes from real starts. `waitedMs` is the browser's own count up to the check
- * (stage 3), `reviewMs` the check itself on the server. Durations only, never text.
+ * (stage 3), `reviewMs` the check itself on the server. `analyseMs` and `generateMs` are stages 1 and 2 in the browser,
+ * their last go only (#266), so each stage's share of the bar can come from real starts too. Durations only, never text.
  */
-export function startupReadyProperties(session: InterviewSession, timing: { waitedMs?: number; retries?: number; reviewMs: number }) {
+export function startupReadyProperties(session: InterviewSession, timing: StartupTiming) {
   const resumed = timing.waitedMs !== undefined && timing.waitedMs > resumedAfterMs;
   return {
     sessionId: session.id,
     jobId: session.jobId,
     mode: session.versions?.mode ?? "mock",
     seconds: timing.waitedMs === undefined || resumed ? null : Math.round((timing.waitedMs + timing.reviewMs) / 1000),
+    analyseSeconds: secondsOrNull(timing.analyseMs),
+    generateSeconds: secondsOrNull(timing.generateMs),
     reviewSeconds: Math.round(timing.reviewMs / 1000),
     retries: timing.retries ?? 0,
     resumed,
@@ -89,10 +98,6 @@ export async function trackSessionEndedEarly(session: InterviewSession, userId: 
 }
 
 /** Once per session: a reload during the check sends it again. */
-export async function trackStartupReady(
-  session: InterviewSession,
-  timing: { waitedMs?: number; retries?: number; reviewMs: number },
-  userId: string,
-): Promise<void> {
+export async function trackStartupReady(session: InterviewSession, timing: StartupTiming, userId: string): Promise<void> {
   await trackOncePerSession(startupReadyEvent, startupReadyProperties(session, timing), userId);
 }
