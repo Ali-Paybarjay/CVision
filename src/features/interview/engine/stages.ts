@@ -48,8 +48,10 @@ import {
   analyseOutputSchema,
   evaluateOutputSchema,
   generateOutputSchema,
+  mergeReviewReply,
   reportOutputSchema,
-  reviewOutputSchema,
+  reviewReplyFromSet,
+  reviewReplySchema,
   suggestOutputSchema,
   FollowUpOutputSchema,
   type AnalyseOutput,
@@ -57,7 +59,7 @@ import {
   type FollowUpOutput,
   type GenerateOutput,
   type ReportOutput,
-  type ReviewOutput,
+  type ReviewReply,
   type SuggestOutput,
   type InterviewInputs,
 } from "./schemas";
@@ -304,25 +306,30 @@ export async function generateStep(session: InterviewSession, inputs: InterviewI
   return applyQuestions(session, { blueprint: output.blueprint, questions }, usage, provenance);
 }
 
-/** Stage 3: a separate call reviews the whole set and rewrites what fails the checklist. */
+/**
+ * Stage 3: a separate call reviews the whole set and rewrites what fails the checklist. It sends back only the
+ * questions it rewrote (#100); the code puts them in place and checks the whole set.
+ */
 export async function reviewStep(session: InterviewSession, inputs: InterviewInputs, run: StageRun = {}): Promise<InterviewSession> {
   const context = questionSetContext(session, inputs);
   if (!session.blueprint || session.questions.length === 0) throw new InterviewStageError("There are no questions to review yet.");
+  const before = { blueprint: session.blueprint, questions: technicalQuestions(session).map(toDraft) };
+  const fixture = sampleFixture(session.jobId);
   // The rules of each answer sent back to the model, recorded whether the retry passes or the step fails.
   const rejected: string[] = [];
-  const { output, usage, provenance } = await callStage<ReviewOutput>({
+  const { output: reply, usage, provenance } = await callStage<ReviewReply>({
     stage: "review",
     values: {
       ...levelPlanValues(context),
-      blueprint: data(session.blueprint),
-      questions: data(technicalQuestions(session).map(toDraft)),
+      blueprint: data(before.blueprint),
+      questions: data(before.questions),
     },
-    schema: reviewOutputSchema(context, (problems) => rejected.push(...problems.map(retryRuleName))),
-    sample: sampleFixture(session.jobId).review,
+    schema: reviewReplySchema(context, before, (problems) => rejected.push(...problems.map(retryRuleName))),
+    sample: reviewReplyFromSet(fixture.review, fixture.generate),
     voice: false,
     run,
   }).finally(() => recordRules(reviewRejectedEvent, "review", rejected, run.requester));
-  const before = { blueprint: session.blueprint, questions: technicalQuestions(session).map(toDraft) };
+  const output = mergeReviewReply(reply, before);
   const repair = repairReviewedSet(output, before, context);
   await recordRules(reviewRuleEvent, "review", repair.broken, run.requester);
   if (!repair.set) throw new InterviewStageError(questionsNotWritten);

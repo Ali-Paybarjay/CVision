@@ -2,14 +2,24 @@
 // `npm run eval` and ANTHROPIC_API_KEY or OPENROUTER_API_KEY set. Never part of CI. Prints numbers and ids only,
 // never CV, job or answer text.
 //
-// For each fixture it reports: start-up time (stages 1 to 3), the spread of each scoring dimension when every
+// For each fixture it reports: start-up time (stages 1 to 3, and each stage on its own), how many questions the
+// review rewrote, the spread of each scoring dimension when every
 // sample answer is scored three times (target: 1 point or less), and estimated tokens and cost per session.
 // Set INTERVIEW_EVAL_REVIEW_MODEL=claude-sonnet-5-5 to run stage 3 on Sonnet and compare it with Haiku.
 import { describe, expect, it } from "vitest";
 import { getAiProvider } from "@/shared/ai";
 import type { TechnicalScores } from "./contracts";
 import { addAnswer, applyAnalysis, applyFollowUpDecision, applyQuestions, askQuestion, createSession } from "./engine/session";
-import { decideFollowUp, evaluateAnswer, runStartup, toTechnicalQuestion, writeReport, type StageOverrides } from "./engine/stages";
+import {
+  analyseStep,
+  decideFollowUp,
+  evaluateAnswer,
+  generateStep,
+  reviewStep,
+  toTechnicalQuestion,
+  writeReport,
+  type StageOverrides,
+} from "./engine/stages";
 import { usageTotals } from "./engine/usage";
 import { fixtures } from "./fixtures";
 import { inputsFor, questionSetContextFor } from "./test-support";
@@ -23,9 +33,19 @@ describe.skipIf(!getAiProvider())("technical interview engine, live", () => {
     "$id",
     async (fixture) => {
       const inputs = inputsFor(fixture);
+      // The three start-up stages one by one, as the page calls them, so each stage's share of the wait shows.
+      const seconds = (from: number) => Math.round((Date.now() - from) / 100) / 10;
       const started = Date.now();
-      const startup = await runStartup(inputs, { id: `eval-${fixture.id}-startup`, startedAt: at(), overrides });
+      const analysed = await analyseStep(inputs, { id: `eval-${fixture.id}-startup`, startedAt: at(), overrides });
+      const analyseSeconds = seconds(started);
+      const generatedAt = Date.now();
+      const generated = await generateStep(analysed, inputs, { overrides });
+      const generateSeconds = seconds(generatedAt);
+      const reviewedAt = Date.now();
+      const startup = await reviewStep(generated, inputs, { overrides });
+      const reviewSeconds = seconds(reviewedAt);
       const startupSeconds = (Date.now() - started) / 1000;
+      const reviewRewrote = startup.questions.filter((q, i) => JSON.stringify(q) !== JSON.stringify(generated.questions[i])).length;
 
       // Score each sample answer against its own fixture question, so the spread measures the scorer, not a mismatch.
       const context = questionSetContextFor(fixture);
@@ -80,6 +100,9 @@ describe.skipIf(!getAiProvider())("technical interview engine, live", () => {
             reviewModel: overrides.review?.model ?? "default",
             startupSeconds,
             startupOverSixtySeconds: startupSeconds > 60,
+            stageSeconds: { analyse: analyseSeconds, generate: generateSeconds, review: reviewSeconds },
+            reviewRewrote,
+            stageOutputTokens: Object.fromEntries((startup.usage ?? []).map((u) => [u.stage, u.outputTokens])),
             spreadByQuestion: spreads,
             worstSpread,
             followUpsAsked: (session.followUpDecisions ?? []).filter((d) => d.askFollowUp).length,
