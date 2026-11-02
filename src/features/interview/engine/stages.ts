@@ -341,19 +341,6 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
   return applyQuestions(session, { blueprint: kept.blueprint, questions, changelog }, usage, provenance);
 }
 
-/** Stages 1 to 3 back to back, for the eval. The page calls them one by one to show progress. */
-export async function runStartup(
-  inputs: InterviewInputs,
-  options: { id: string; startedAt: string; onProgress?: (stage: "analyse" | "generate" | "review") => void } & StageRun,
-): Promise<InterviewSession> {
-  options.onProgress?.("analyse");
-  let session = await analyseStep(inputs, options);
-  options.onProgress?.("generate");
-  session = await generateStep(session, inputs, options);
-  options.onProgress?.("review");
-  return reviewStep(session, inputs, options);
-}
-
 function findQuestion(session: InterviewSession, questionId: string): TechnicalInterviewQuestion {
   const question = technicalQuestions(session).find((q) => q.id === questionId);
   if (!question) throw new InterviewStageError(`Unknown question ${questionId}.`);

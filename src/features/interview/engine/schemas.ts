@@ -121,8 +121,9 @@ export function reviewOutputSchema(context: QuestionSetContext, onRejected?: (pr
 
 /**
  * What the review model sends back (interview-review 2.0.0, #100): the blueprint, only the questions it rewrote, and
- * the changelog. Copying out the questions it kept, every rubric and follow-up included, was about a third of the wait
- * before question 1. The code puts the rewrites in place (mergeReviewReply) and checks the whole set as before.
+ * the changelog. It used to copy out the questions it kept too, every rubric and follow-up included: about 3K output
+ * tokens of the wait before question 1 for nothing. The code puts the rewrites in place (mergeReviewReply) and checks
+ * the whole set as before.
  */
 export const ReviewReplySchema = z.object({
   blueprint: DraftBlueprintSchema,
