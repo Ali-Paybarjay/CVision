@@ -1,0 +1,84 @@
+<!doctype html>
+<!-- CVision design reference, direction A (Paper Desk). Not app code: build it with the shared UI kit and the role tokens, as docs/design/paper-desk/README.md explains. Sample data is fictional. -->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Interview practice: Paper Desk</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#167480}a:hover{color:#0F2A47}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; background: #F2F5F9; color: #0F2A47; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased;">
+
+  <header style="background: #FFFFFF; border-bottom: 1px solid #D5DDE6;">
+    <div style="max-width: 1360px; margin: 0 auto; box-sizing: border-box; padding: 0 clamp(16px, 3vw, 32px); min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 40px;">
+      <a href="#" style="font-weight: 700; font-size: 22px; letter-spacing: -0.03em; color: #0F2A47; text-decoration: none;">CVision<span style="color: #FF7A5C;">.</span></a>
+      <nav aria-label="App" style="flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 0 4px; font-size: 14px; font-weight: 500;">
+        <a href="#" style="color: #5B6B7F; text-decoration: none; padding: 21px 12px;">Dashboard</a>
+        <a href="#" style="color: #5B6B7F; text-decoration: none; padding: 21px 12px;">Profile</a>
+        <a href="#" style="color: #5B6B7F; text-decoration: none; padding: 21px 12px;">Jobs</a>
+        <a href="#" style="color: #5B6B7F; text-decoration: none; padding: 21px 12px;">Tailor</a>
+        <a href="#" style="color: #5B6B7F; text-decoration: none; padding: 21px 12px;">CV check</a>
+        <a href="#" aria-current="page" style="color: #0F2A47; text-decoration: none; padding: 21px 12px 18px; font-weight: 700; border-bottom: 3px solid #0F2A47;">Interview</a>
+      </nav>
+      <a href="#" aria-label="Your account, Sara Khan" style="width: 40px; height: 40px; border-radius: 50%; background: #0F2A47; color: #FFFFFF; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; text-decoration: none;">SK</a>
+    </div>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; box-sizing: border-box; padding: 28px clamp(16px, 3vw, 32px) 64px;">
+    <nav aria-label="Breadcrumb" style="font-size: 14px; color: #5B6B7F;"><a href="#">Jobs</a><span aria-hidden="true" style="margin: 0 8px;">/</span><a href="#">Junior Data Analyst</a><span aria-hidden="true" style="margin: 0 8px;">/</span><span>Interview practice</span></nav>
+    <h1 style="margin: 12px 0 0; font-size: clamp(26px, 2.6vw, 36px); line-height: 1.1; letter-spacing: -0.03em; font-weight: 700;">Interview practice: Junior Data Analyst</h1>
+    <p style="margin: 8px 0 0; max-width: 70ch; font-size: 15px; line-height: 1.55; color: #5B6B7F;">Six questions written from this job ad and your CV. Answer as you would out loud. Each answer is scored when you finish it, and you get one report at the end.</p>
+
+    <div style="margin-top: 28px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px;">
+
+      <section aria-labelledby="question-text" style="flex: 2 1 560px; min-width: 0; box-sizing: border-box; background: #FFFFFF; border: 1px solid #D5DDE6; border-radius: 4px; padding: clamp(24px, 4vw, 56px); box-shadow: 0 30px 60px -36px rgba(15, 42, 71, 0.3);">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px; padding-bottom: 18px; border-bottom: 1px solid #D5DDE6;">
+          <p style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #5B6B7F;">Question 3 of 6 · Scenario</p>
+          <p style="margin: 0; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 6px; background: #E3F2F3; color: #167480; font-size: 13px; font-weight: 700;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="4"></circle></svg>Tests: explaining findings to non-analysts</p>
+        </div>
+        <p id="question-text" style="margin: 28px 0 0; font-size: clamp(22px, 2.2vw, 30px); line-height: 1.3; letter-spacing: -0.02em; font-weight: 600; max-width: 36ch;">A ward manager tells you your bed occupancy dashboard is wrong because it shows 85 per cent occupancy when their ward has felt full all week. How would you handle the conversation?</p>
+
+        <label for="answer" style="display: block; margin-top: 36px; font-size: 14px; font-weight: 700;">Your answer</label>
+        <textarea id="answer" rows="9" style="margin-top: 8px; box-sizing: border-box; width: 100%; resize: vertical; border: 1.5px solid #5B6B7F; border-radius: 10px; padding: 18px; font: inherit; font-size: 16px; line-height: 1.6; color: #0F2A47; background: #FFFFFF;">I would start by asking the ward manager what they are seeing: how many beds were taken and at what time of day. Then I would check how the dashboard counts occupancy. If it uses the midnight bed count, a ward can look 85 per cent full in the data but be completely full in the afternoon, when admissions and discharges overlap.</textarea>
+        <div style="margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px;">
+          <p aria-live="polite" style="margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #9A5B00;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>64 words · aim for 150 to 300</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <button type="button" style="min-height: 50px; padding: 0 24px; border-radius: 10px; border: 0; background: #FF7A5C; color: #0F2A47; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer;">Submit answer</button>
+          </div>
+        </div>
+        <p style="margin: 28px 0 0; padding-top: 18px; border-top: 1px solid #D5DDE6; font-size: 13.5px; line-height: 1.55; color: #5B6B7F;">About four minutes per answer. If something is missing, the interviewer may ask one follow-up. Your progress is saved on this device.</p>
+      </section>
+
+      <aside style="flex: 1 1 300px; max-width: 400px; display: flex; flex-direction: column; gap: 20px;">
+        <section aria-labelledby="progress-title" style="background: #FFFFFF; border: 1px solid #D5DDE6; border-radius: 14px; padding: 22px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+            <h2 id="progress-title" style="margin: 0; font-size: 16px; font-weight: 700;">Your interview</h2>
+            <p style="margin: 0; font-size: 13px; color: #5B6B7F;">2 of 6 answered</p>
+          </div>
+          <ol style="margin: 16px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; font-size: 14px; line-height: 1.4;">
+            <li style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #D5DDE6;"><span style="flex: none; width: 24px; height: 24px; border-radius: 50%; background: #167480; color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><div><p style="margin: 0;">The stock report you automated</p><p style="margin: 2px 0 0; font-size: 12.5px; color: #167480; font-weight: 600;">Scored</p></div></li>
+            <li style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #D5DDE6;"><span style="flex: none; width: 24px; height: 24px; border-radius: 50%; background: #167480; color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><div><p style="margin: 0;">A join that inflates admissions</p><p style="margin: 2px 0 0; font-size: 12.5px; color: #5B6B7F;">Scoring in the background…</p></div></li>
+            <li aria-current="step" style="display: flex; gap: 12px; padding: 10px 12px; margin: 4px -12px; border-radius: 8px; background: #E3F2F3;"><span style="flex: none; width: 24px; height: 24px; border-radius: 50%; background: #0F2A47; color: #FFFFFF; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">3</span><div><p style="margin: 0; font-weight: 700;">A manager says your dashboard is wrong</p><p style="margin: 2px 0 0; font-size: 12.5px; color: #167480; font-weight: 600;">Answering now</p></div></li>
+            <li style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #D5DDE6; color: #5B6B7F;"><span style="flex: none; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #D5DDE6; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">4</span><p style="margin: 2px 0 0;">One dashboard or two</p></li>
+            <li style="display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #D5DDE6; color: #5B6B7F;"><span style="flex: none; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #D5DDE6; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">5</span><p style="margin: 2px 0 0;">Has attendance really improved?</p></li>
+            <li style="display: flex; gap: 12px; padding: 10px 0; color: #5B6B7F;"><span style="flex: none; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #D5DDE6; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">6</span><p style="margin: 2px 0 0;">Pseudonymised patient data</p></li>
+          </ol>
+        </section>
+
+        <section aria-labelledby="why-title" style="background: #FFFFFF; border: 1px solid #D5DDE6; border-radius: 14px; padding: 22px;">
+          <h2 id="why-title" style="margin: 0; font-size: 16px; font-weight: 700;">Why this question</h2>
+          <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.55; color: #5B6B7F;">The ad puts clear communication on a par with technical skill. It checks the line you added to your CV:</p>
+          <p style="margin: 12px 0 0; font-size: 13.5px; line-height: 1.55; background: #E3F2F3; border-left: 3px solid #167480; padding: 10px 12px; border-radius: 0 4px 4px 0;">…walked the regional managers through them every Monday and wrote a one-page plain-English summary…</p>
+        </section>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>
