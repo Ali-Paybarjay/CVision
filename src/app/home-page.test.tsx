@@ -84,6 +84,8 @@ describe("home page headline (#178)", () => {
   it("says each sentence of the hero once, above the fold", () => {
     const sentences = [brand.hero.headline, ...brand.hero.subline.split(/(?<=\.)\s+/), brand.cta.primaryNote];
     for (const sentence of sentences) expect(words(hero).split(sentence).length - 1, sentence).toBe(1);
+    // "Paste a job ad" opens the subline, so the line under the button doesn't say it again (Marzieh, #268).
+    expect(words(hero).toLowerCase().split("paste a job ad").length - 1).toBe(1);
   });
 
   it("uses no words the brand bans", () => {

@@ -39,7 +39,7 @@ export const brand = {
   cta: {
     primary: "Tailor my CV to a job",
     /** Under the primary button: works for people with a CV and for those who fill in their details instead. */
-    primaryNote: "Free account. Add your CV or your details, then paste a job ad.",
+    primaryNote: "Free account. Start with your CV or your details.",
     /** The feature's name, e.g. the CV check page's title. */
     cvCheck: "Free 2-minute CV check",
     /** The button that leads to the CV check. */
