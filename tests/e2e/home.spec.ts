@@ -3,12 +3,17 @@ import { expect, type Locator, test } from "@playwright/test";
 // The home page's calls to action (#177): one action has one name, and the header's "Tailor my CV to a job"
 // stays on one line next to the logo and the menu button on a phone, in light and dark.
 
-/** How many lines of text an element's label takes up. */
+/** How many lines of text an element's label takes up. Only its text counts: an icon beside it, like the logo's, is not a line. */
 function lineCount(locator: Locator) {
   return locator.evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+    const tops = new Set<number>();
+    const texts = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = texts.nextNode(); node; node = texts.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) if (rect.width > 0) tops.add(Math.round(rect.top));
+    }
+    return tops.size;
   });
 }
 
