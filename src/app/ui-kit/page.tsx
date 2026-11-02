@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { personas } from "@/shared/sample-data";
-import { Button, Card, CvPaper, Field, FitLine, Input, Notice, Page, Textarea, Wordmark } from "@/shared/ui";
+import { Button, Card, CvPaper, Field, FitLine, Input, Notice, Page, Textarea, WaitNote, Wordmark } from "@/shared/ui";
 
 export const metadata: Metadata = { title: "UI kit" };
 
@@ -58,6 +58,18 @@ export default function UiKitPage() {
           </div>
         </Card>
       </div>
+
+      <Card>
+        <h2 className="text-xl">Waiting for a slow request</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          Under the button while a request runs: say what is happening and how long it can take. Pass nothing when it
+          is done; the empty live region stays, so a screen reader reads the sentence when it appears.
+        </p>
+        <div className="mt-4">
+          <Button disabled>Checking your CV…</Button>
+          <WaitNote className="mt-3">Checking your CV. This can take up to a minute. Keep this page open.</WaitNote>
+        </div>
+      </Card>
 
       <section>
         <h2 className="text-xl">CV preview</h2>
