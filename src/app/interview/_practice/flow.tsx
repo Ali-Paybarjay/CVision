@@ -3,7 +3,7 @@
 // The interview itself, shared by the main page and the lab: answer one question at a time while finished
 // questions are scored in the background. The saved session drives everything: whatever it needs next is
 // requested, so a reload resumes exactly where it stopped.
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { answerGuide, fastFailureSeconds, limits, stallSeconds, startupRetryDelayMs } from "@/features/interview/config";
 import type { AnswerEvaluation, AnswerSuggestion, FollowUpDecision, InterviewReport, InterviewSession, StageUsage } from "@/features/interview/contracts";
 import {
@@ -25,7 +25,7 @@ import {
   unansweredQuestionIds,
   type Provenance,
 } from "@/features/interview/engine/session";
-import { countWords } from "@/features/interview/engine/text";
+import { countWords, quotedCvSentence } from "@/features/interview/engine/text";
 import { StepError, type JobState, type PracticeEnvelope, type PracticeStore } from "./store";
 import { Button, Card, Notice } from "@/shared/ui";
 import { firstQuestionId, Status } from "./ui";
@@ -200,6 +200,7 @@ export function InterviewFlow({
   session,
   jobs,
   run,
+  cv,
   samples,
   onDraftChange,
 }: {
@@ -207,6 +208,8 @@ export function InterviewFlow({
   session: InterviewSession;
   jobs: Readonly<Record<string, JobState>>;
   run: string;
+  /** The CV text the questions were written from, to show the sentence a question quotes (#252). */
+  cv: string;
   /** Mock mode only. */
   samples?: SampleAnswers;
   /** Told whether the answer box holds text not yet submitted, so "Start again" can ask first (#269). */
@@ -228,6 +231,7 @@ export function InterviewFlow({
         const finished = isQuestionFinished(session, question.id);
         const evaluateJob = jobs[`${run}:evaluate:${question.id}`];
         const suggestJob = jobs[`${run}:suggest:${question.id}`];
+        const cvSentence = quotedCvSentence(question.rationale?.cvQuote, cv, question.text);
         return (
           <Card key={question.id} className="space-y-3">
             {/* Question 1's line takes focus when "Preparing your interview" gives way to it (#232). */}
@@ -236,10 +240,18 @@ export function InterviewFlow({
             </p>
             {turns.map((turn) =>
               turn.speaker === "interviewer" ? (
-                <p key={turn.id} className={turn.kind === "follow-up" ? "border-l-2 border-accent pl-3 font-semibold" : "font-semibold"}>
-                  {turn.kind === "follow-up" && <span className="block text-xs font-normal text-text-muted">Follow-up</span>}
-                  {turn.text}
-                </p>
+                <Fragment key={turn.id}>
+                  <p className={turn.kind === "follow-up" ? "border-l-2 border-accent pl-3 font-semibold" : "font-semibold"}>
+                    {turn.kind === "follow-up" && <span className="block text-xs font-normal text-text-muted">Follow-up</span>}
+                    {turn.text}
+                  </p>
+                  {/* What the CV says, so the candidate need not leave the practice to check it (#252). */}
+                  {turn.kind === "main" && cvSentence && (
+                    <p className="border-l-2 border-line pl-3 text-sm text-text-muted [overflow-wrap:anywhere]">
+                      From your profile: <q className="italic">{cvSentence}</q>
+                    </p>
+                  )}
+                </Fragment>
               ) : (
                 // A follow-up skipped by "End here" is an empty answer: nothing to show.
                 turn.text && (

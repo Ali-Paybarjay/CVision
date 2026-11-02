@@ -82,8 +82,10 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     );
   }
 
+  // The same CV text the questions are written from.
+  const cv = profileToCvText(profile);
   // A profile typed in by hand can hold little more than a name; the API refuses it too, before any AI request (#179).
-  if (isCvTooThin(profileToCvText(profile))) {
+  if (isCvTooThin(cv)) {
     return (
       <>
         <JobHeading job={job} />
@@ -127,6 +129,7 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
         canSave={isStoredJobId(job.id)}
         saved={saved}
         lastReport={lastReport}
+        cv={cv}
         samples={samples}
       />
     </>

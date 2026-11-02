@@ -2,6 +2,7 @@
 
 // Interview practice for one job. The session lives in this browser (so a reload resumes it) and, for a
 // signed-in user on a saved job, in their account too: every change is saved, in order, a moment after it happens.
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { answerGuide, defaultComposition } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
@@ -79,6 +80,7 @@ export function InterviewPractice({
   canSave,
   saved,
   lastReport,
+  cv,
   samples,
 }: {
   jobId: string;
@@ -89,6 +91,8 @@ export function InterviewPractice({
   saved: InterviewSession | null;
   /** The account's latest finished practice, shown first when this browser has nothing for this job (#206). */
   lastReport: LastReport | null;
+  /** The profile as CV text, as the questions are written from it (#252). */
+  cv: string;
   /** Mock mode only. */
   samples?: SampleAnswers;
 }) {
@@ -245,7 +249,9 @@ export function InterviewPractice({
           <PractiseAgain onPractiseAgain={restart} />
         </>
       ) : (
-        session && <InterviewFlow store={store} session={session} jobs={jobs} run={run} samples={samples} onDraftChange={setHasDraft} />
+        session && (
+          <InterviewFlow store={store} session={session} jobs={jobs} run={run} cv={cv} samples={samples} onDraftChange={setHasDraft} />
+        )
       )}
     </div>
   );
@@ -361,7 +367,7 @@ function PractiseAgain({ onPractiseAgain }: { onPractiseAgain: () => void }) {
   );
 }
 
-function Intro({ signedIn, canSave, onStart, focusHeading }: { signedIn: boolean; canSave: boolean; onStart: () => void; focusHeading: boolean }) {
+export function Intro({ signedIn, canSave, onStart, focusHeading }: { signedIn: boolean; canSave: boolean; onStart: () => void; focusHeading: boolean }) {
   // After "New practice" or "Start again", the button that was pressed is gone: focus (and the view) moves here.
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -383,6 +389,15 @@ function Intro({ signedIn, canSave, onStart, focusHeading }: { signedIn: boolean
         </li>
         <li>At the end, for every answer: what worked, what cost you marks and one thing to do next time.</li>
       </ul>
+      {/* A sample job brings its own sample profile, so there is no profile of theirs to point to. */}
+      {canSave && (
+        <p>
+          The interviewer reads your profile as it is now, not a CV you tailored for a job.{" "}
+          <Link href="/profile" target="_blank" className="font-semibold text-accent hover:underline">
+            See your profile (opens in a new tab)
+          </Link>
+        </p>
+      )}
       <p className="text-sm text-text-muted">
         {!signedIn
           ? "Sign in to keep this practice in your account. Until then it stays in this browser."

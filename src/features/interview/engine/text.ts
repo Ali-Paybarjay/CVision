@@ -161,6 +161,18 @@ export function cvEvidenceLines(cv: string): CvLine[] {
 }
 
 /**
+ * The CV sentence a question is written from, shown under the question (#252): the whole sentence that holds the
+ * question's cvQuote, or the quote itself when it runs across sentences. Null when there is nothing to show: no quote,
+ * a quote the CV no longer holds (the profile was edited after the questions were written), or a sentence the question
+ * already says word for word.
+ */
+export function quotedCvSentence(cvQuote: string | undefined, cv: string, question: string): string | null {
+  if (!cvQuote || !isVerbatim(cvQuote, cv)) return null;
+  const sentence = cvEvidenceLines(cv).find((line) => isVerbatim(cvQuote, line.text))?.text ?? stripQuoteEdges(cvQuote);
+  return isVerbatim(sentence, question) ? null : sentence;
+}
+
+/**
  * Stage 1 quotes 3 to 6 claims from the CV word for word (checks.ts). With fewer lines than this it almost always fails
  * after a paid request, and the questions would have little to work from.
  */
