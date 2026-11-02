@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
-import { Button, ButtonLink, Card, cn, Field, Notice, Textarea } from "@/shared/ui";
+import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
 import type { CvCheckResponse } from "../server/check-request";
 
 type Source = "file" | "text";
 type Errors = { file?: string; text?: string; form?: string; limit?: string };
 type Checked = { result: CvCheckResult; truncated: boolean };
+
+/** Shown under the button while the CV is checked. The check route stops at a minute (`maxDuration`). */
+const checkingCvNote = "Checking your CV. This can take up to a minute. Keep this page open.";
 
 /** The free CV check: upload or paste, check, then the result and the one invitation to sign up. */
 export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
@@ -144,15 +147,14 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
             </Notice>
           )}
 
-          {/* Secondary on purpose: Get started free, under the result, is the page's one Coral button. */}
+          {/* Secondary on purpose: "Tailor my CV to a job" (brand.cta.primary), under the result, is the page's one Coral button. */}
           <div>
             <Button type="submit" disabled={pending}>
               {pending ? "Checking your CV…" : "Check my CV"}
             </Button>
+            {/* On screen, not only for screen readers, so the wait doesn't look like nothing is happening (issue #235). */}
+            <WaitNote className="mt-3">{pending && checkingCvNote}</WaitNote>
           </div>
-          <p aria-live="polite" className="sr-only">
-            {pending ? "Checking your CV. This can take up to a minute." : ""}
-          </p>
         </form>
       </Card>
     </>
