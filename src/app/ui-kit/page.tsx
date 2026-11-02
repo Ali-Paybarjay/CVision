@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { personas } from "@/shared/sample-data";
-import { Button, Card, CvPaper, Field, FitLine, Input, Notice, Page, Textarea, WaitNote, Wordmark } from "@/shared/ui";
+import { BrandMark, Button, Card, CvPaper, Field, FitLine, Input, Notice, Page, Textarea, WaitNote, Wordmark } from "@/shared/ui";
 
 export const metadata: Metadata = { title: "UI kit" };
 
@@ -26,10 +26,27 @@ export default function UiKitPage() {
         </div>
       </Card>
 
+      <Card>
+        <h2 className="text-xl">Logo</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          The Tick V icon beside the wordmark. Use the icon alone only where the name does not fit, such as a browser tab.
+        </p>
+        <div className="mt-4 flex flex-wrap items-end gap-6">
+          <p className="flex items-center gap-2 text-xl">
+            <BrandMark className="size-7" />
+            <Wordmark />
+          </p>
+          <BrandMark className="size-16" />
+          <BrandMark className="size-8" />
+          <BrandMark className="size-4" />
+        </div>
+      </Card>
+
       <section className="rounded-lg bg-emphasis p-5 sm:p-6">
         <h2 className="text-xl text-on-emphasis">Emphasis section</h2>
         <p className="mt-1 text-sm text-on-emphasis">Ink with white text in light mode, Raised with Chalk in dark mode.</p>
-        <p className="mt-4 text-2xl">
+        <p className="mt-4 flex items-center gap-2 text-2xl">
+          <BrandMark tone="on-emphasis" className="size-8" />
           <Wordmark tone="on-emphasis" />
         </p>
       </section>

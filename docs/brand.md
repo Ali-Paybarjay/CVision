@@ -6,9 +6,9 @@ Brand foundation, visual identity and voice
 > **Every application, made to fit.**
 > AI job-application app for the UK. Paste a job ad. Get a CV matched to it.
 
-Version 2.2 · 27 October 2026
+Version 2.3 · 2 November 2026
 
-**New in version 2.2:** step 1 of the plan becomes “Build your profile.”, so people with no CV to upload can fill in their details. Version 2.1 renamed the product CVision. Version 2 made a light palette the primary palette, with a dark palette as its counterpart for dark mode; both replace the version 1 palette.
+**New in version 2.3:** the logo gains an icon, Tick V: a C and a tick that reads as V, on a Teal tile. Version 2.2 made step 1 of the plan “Build your profile.”, so people with no CV to upload can fill in their details. Version 2.1 renamed the product CVision. Version 2 made a light palette the primary palette, with a dark palette as its counterpart for dark mode; both replace the version 1 palette.
 
 ---
 
@@ -67,7 +67,20 @@ Sending CVs into the void → Applying with confidence
 ## 02 Visual identity
 
 ### Logo
-*Wordmark only.*
+*An icon beside the wordmark.*
+
+The logo is the Tick V icon on the left of the wordmark. The icon is a C and a tick that reads as V: CV, with every change approved by you. Use the icon on its own only where the name doesn’t fit: the browser tab, the phone home screen, a profile picture.
+
+**The icon**
+
+| Version | Use |
+|---|---|
+| Primary, on light | White C and tick on a Teal `#167480` tile |
+| On dark sections | Ink C and tick on a White tile (Raised on Chalk in dark mode) |
+| In dark mode | Night `#0B1724` C and tick on a Lagoon `#42B9C3` tile |
+| One colour (fallback) | Ink on light, White on dark, with no tile |
+
+**The wordmark**
 
 | Version | Use |
 |---|---|
@@ -76,7 +89,21 @@ Sending CVs into the void → Applying with confidence
 | In dark mode | Chalk `#E2EAF3` on Night `#0B1724`, with a Coral full stop |
 | One colour (fallback) | Ink on light, White on dark, where colour isn’t available |
 
-The name is set in Inter Bold with a Coral full stop. No symbol and no monogram.
+The name is set in Inter Bold with a Coral full stop.
+
+**Together**
+
+- The icon is about 1.4 times the wordmark’s font size, with a gap of a quarter of its width.
+- Keep clear space of a quarter of the icon’s width around the logo.
+- The icon works down to 16 px (a browser tab). Below 24 px, use the icon without the wordmark.
+- On a phone the top menu shows the wordmark alone, because the main button needs the room; the icon joins it from 640 px.
+
+Don’t:
+- Put Coral on the Teal tile (2.4:1). The Coral full stop belongs to the wordmark.
+- Recolour, stretch or rotate the icon, or add shadows or outlines.
+- Use the icon in place of the name in running text.
+
+The files: `src/app/icon.svg` (browser tabs, light and dark), `src/app/favicon.ico`, `src/app/apple-icon.png` (phone home screens) and `BrandMark` in `src/shared/ui`.
 
 ### Two palettes, one set of roles
 *Light is primary; dark mirrors it.*
@@ -97,6 +124,7 @@ Every colour has a job. The light palette is the default for the app, the site a
 | Warning | `#9A5B00` on `#FFF3D6` | Amber `#F4B860` on `#3B2A0F` |
 | Error | Error `#B42318` | Rose `#FF8597` |
 | The CV preview | Paper with Ink text | Paper with Ink text (unchanged, so it matches the download) |
+| The icon’s tile | Teal, with a White C and tick | Lagoon, with a Night C and tick |
 
 ### CVision Light (primary palette)
 *Light base. Navy and teal, with one warm accent. Every text pair meets WCAG AA (4.5:1).*
@@ -265,6 +293,8 @@ Name colours by role in code, so one set of components works in both modes. The 
   --color-error: #B42318;
   --color-cv-paper: #FFFFFF;    /* CV preview, both modes */
   --color-cv-ink: #0F2A47;
+  --color-mark: #167480;        /* Teal: the icon's tile */
+  --color-on-mark: #FFFFFF;     /* the icon's C and tick */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -285,6 +315,8 @@ Name colours by role in code, so one set of components works in both modes. The 
     --color-warning: #F4B860;   /* Amber */
     --color-warning-bg: #3B2A0F;
     --color-error: #FF8597;     /* Rose */
+    --color-mark: #42B9C3;      /* Lagoon */
+    --color-on-mark: #0B1724;   /* Night */
   }
 }
 /* Repeat the dark block under :root[data-theme="dark"] for a manual switch. */
@@ -369,9 +401,10 @@ Always write it as CVision: capital C and V, with no space or hyphen. The wordma
 
 ## Changelog
 
+- **2.3 · 2 Nov 2026:** The logo gains an icon, Tick V, chosen from five concepts: a C and a tick that reads as V, on a Teal tile (Lagoon in dark mode). New colour role and tokens for the icon’s tile. The wordmark is unchanged.
 - **2.2 · 27 Oct 2026:** Step 1 of the plan becomes “Build your profile.”, so people with no CV to upload can fill in their details (card #179). Nothing else changes.
 - **2.1 · 20 Oct 2026:** Product renamed from Candid to CVision. The wordmark, palette names, captions and the name section are updated; nothing else changes.
 - **2.0 · 20 Oct 2026:** New light palette as the primary palette (from the light palette draft) and a new dark palette for dark mode, with a role map, contrast tables, rules and colour tokens for the app. The logo now has a dark-mode version. The version 1 palette is retired. Foundation, voice, calls to action and promises are unchanged.
 - **1.0 · 19 Oct 2026:** First version: brand foundation, visual identity, verbal identity and brand applications.
 
-*CVision | Brand Guide 2026 · Version 2.2*
+*CVision | Brand Guide 2026 · Version 2.3*
