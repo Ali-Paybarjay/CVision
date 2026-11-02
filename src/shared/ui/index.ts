@@ -11,4 +11,5 @@ export { Page } from "./page";
 export { SiteFooter } from "./site-footer";
 export { SiteHeader } from "./site-header";
 export { TrackedButtonLink } from "./tracked-button-link";
+export { WaitNote } from "./wait-note";
 export { Wordmark } from "./wordmark";
