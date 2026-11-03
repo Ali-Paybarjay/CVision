@@ -1,9 +1,10 @@
 // The last practice (#206): the report is read first, and "New practice" sits below it. Where the profile shows (#252):
-// a link to it before Start, and the CV sentence a question is written from under the question.
+// a link to it before Start, and the profile sentence behind each question in "Why this question" (design A, #275).
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InterviewSession } from "@/features/interview/contracts";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
+import { askQuestion } from "@/features/interview/engine/session";
 import { inputsFor, runMockSession } from "@/features/interview/test-support";
 import { InterviewFlow } from "./_practice/flow";
 import { createPracticeStore } from "./_practice/store";
@@ -98,44 +99,85 @@ describe("the profile before Start", () => {
   });
 });
 
-describe("the CV sentence under a question", () => {
+describe("the question page in design A", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
   const cv = inputsFor(dataAnalystSara).cv;
-  const fromCv = "Cleaned and joined weekly sales data from 120 stores using SQL and Python";
+  const at = "2026-11-03T10:00:00.000Z";
 
-  /** Question 2 written from a CV line its text does not repeat; question 1 already says its CV line word for word. */
-  async function practised(): Promise<InterviewSession> {
-    const session = await runMockSession(dataAnalystSara);
-    return {
-      ...session,
-      questions: session.questions.map((q) => (q.id === "q2" && q.rationale ? { ...q, rationale: { ...q.rationale, cvQuote: "joined weekly sales data" } } : q)),
+  /** The practice part way through: question 1 answered and scored, question 2 asked and waiting for its answer. */
+  async function atQuestion(n: 1 | 2, change: (q: InterviewSession["questions"][number]) => InterviewSession["questions"][number] = (q) => q) {
+    const finished = await runMockSession(dataAnalystSara);
+    const kept = n === 2 ? [finished.questions[0].id] : [];
+    const partial: InterviewSession = {
+      ...finished,
+      questions: finished.questions.map(change),
+      turns: (finished.turns ?? []).filter((t) => kept.includes(t.questionId)),
+      followUpDecisions: (finished.followUpDecisions ?? []).filter((d) => kept.includes(d.questionId)),
+      evaluations: (finished.evaluations ?? []).filter((e) => kept.includes(e.questionId)),
+      report: undefined,
     };
+    return askQuestion(partial, finished.questions[n - 1].id, at, `turn-${n}`);
   }
 
-  function render(session: InterviewSession, cvText: string) {
+  function render(session: InterviewSession, cvText = cv) {
     vi.stubGlobal("window", new EventTarget());
     const store = createPracticeStore("interview-practice:test", "/interview/api");
     return renderToStaticMarkup(<InterviewFlow store={store} session={session} jobs={{}} run="1" cv={cvText} />);
   }
 
-  it("shows the whole CV sentence under the question it was written from, before the answer", async () => {
-    const session = await practised();
-    const html = render(session, cv);
-    const q2 = session.questions.find((q) => q.id === "q2")!;
-    const line = html.indexOf(`From your profile: <q class="italic">${fromCv}</q>`);
-
-    expect(line).toBeGreaterThan(html.indexOf("Question 2 of 6"));
-    expect(line).toBeGreaterThan(html.indexOf(q2.text.slice(0, 40)));
-    expect(line).toBeLessThan(html.indexOf("Question 3 of 6"));
-    // Under the main question only, once, and not under question 1, which already says its line.
-    expect(html.match(/From your profile:/g)).toHaveLength(1);
+  it("shows one question on its sheet, with its type and the skill it tests", async () => {
+    const session = await atQuestion(2);
+    const html = render(session);
+    const [q1, q2] = session.questions;
+    expect(html).toContain("Question 2 of 6 · Core concept");
+    expect(html).toContain("Tests: SQL");
+    expect(html).toContain(q2.text);
+    // Answered questions leave the sheet: their status stays in the list.
+    expect(html).not.toContain(q1.text);
+    expect(html).toContain("Your answer</span>");
+    expect(html).toContain(">Submit answer</button>");
+    expect(html).toContain("About 4 minutes per answer.");
   });
 
-  it("shows nothing once the profile no longer holds the sentence", async () => {
-    const html = render(await practised(), cv.replace("joined weekly sales data", "merged weekly sales data"));
+  it("lists the six questions by skill, each with where it is", async () => {
+    const html = render(await atQuestion(2));
+    expect(html).toContain("Your interview");
+    expect(html).toContain("1 of 6 answered");
+    expect(html).toMatch(/<li aria-current="step"[^>]*>.*Question 2: <\/span>SQL<\/p><p[^>]*>Answering now<\/p>/);
+    expect(html.match(/>Scored</g)).toHaveLength(1);
+    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
+    // "End here" sits under the list while a question is open.
+    expect(html.indexOf("End here and see suggested answers")).toBeGreaterThan(html.indexOf("Your interview"));
+  });
+
+  it("says why: the job ad's words and the whole profile sentence behind the skill", async () => {
+    const html = render(await atQuestion(2));
+    const why = html.slice(html.indexOf("Why this question"));
+    expect(why).toContain("From the job ad:</p><q");
+    expect(why).toContain("Strong SQL");
+    expect(why).toContain(`From your profile:</p><q class="mt-1 block rounded-r-sm border-l-[3px] border-fit-bar bg-fit px-3 py-2 [overflow-wrap:anywhere]">Cleaned and joined weekly sales data from 120 stores using SQL and Python</q>`);
+    // The model's own reason is for the interviewer and can give the answer away.
+    expect(html).not.toContain("Join fan-out");
+  });
+
+  it("prefers the line the question is written from (#252), and leaves it out when the question already says it", async () => {
+    const written = await atQuestion(2, (q) => (q.id === "q2" && q.rationale ? { ...q, rationale: { ...q.rationale, cvQuote: "Built Tableau dashboards" } } : q));
+    expect(render(written)).toContain(">Built Tableau dashboards for the regional sales team</q>");
+    // Question 1 quotes its line word for word.
+    expect(render(await atQuestion(1))).not.toContain("From your profile:");
+  });
+
+  it("shows nothing from the profile once it no longer holds the line", async () => {
+    const html = render(await atQuestion(2), cv.replace("joined weekly sales data", "merged weekly sales data"));
     expect(html).not.toContain("From your profile:");
+    expect(html).not.toContain("doesn&#x27;t show this yet");
+  });
+
+  it("says plainly when the profile doesn't show the skill yet", async () => {
+    const html = render(await atQuestion(2, (q) => (q.id === "q2" ? { ...q, competencyId: "c5" } : q)));
+    expect(html).toContain("Your profile doesn&#x27;t show this yet, so answer from any experience you have, including study or projects.");
   });
 });

@@ -227,9 +227,20 @@ export function InterviewPractice({
         : behindReport === "browser" && envelope
           ? (envelope.session?.startedAt ?? new Date(envelope.startedAtMs).toISOString())
           : null;
-    return <LastPractice report={lastReport} unfinishedSince={unfinishedSince} onContinue={continuePractice} onPractiseAgain={restart} />;
+    // The page is wide for the question sheet; reading views keep a readable measure.
+    return (
+      <div className="max-w-3xl">
+        <LastPractice report={lastReport} unfinishedSince={unfinishedSince} onContinue={continuePractice} onPractiseAgain={restart} />
+      </div>
+    );
   }
-  if (!envelope) return <Intro signedIn={signedIn} canSave={canSave} onStart={start} focusHeading={practiseAgain} />;
+  if (!envelope) {
+    return (
+      <div className="max-w-3xl">
+        <Intro signedIn={signedIn} canSave={canSave} onStart={start} focusHeading={practiseAgain} />
+      </div>
+    );
+  }
 
   const done = session !== null && nextStep(session).step === "done";
   const run = runOf(envelope);
@@ -244,10 +255,10 @@ export function InterviewPractice({
       </div>
       <Progress store={store} session={session} jobs={jobs} run={run} />
       {session && done ? (
-        <>
+        <div className="flex max-w-3xl flex-col gap-4">
           <FeedbackReport session={session} />
           <PractiseAgain onPractiseAgain={restart} />
-        </>
+        </div>
       ) : (
         session && (
           <InterviewFlow store={store} session={session} jobs={jobs} run={run} cv={cv} samples={samples} onDraftChange={setHasDraft} />

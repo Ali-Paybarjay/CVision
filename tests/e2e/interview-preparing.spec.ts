@@ -59,7 +59,14 @@ test("says how long it takes, shows each stage and what it found, and keeps Star
   await expect(preparing).toHaveCount(0);
   // Question 1's line takes focus, not the answer box, which would open the keyboard on a phone.
   await expect(firstQuestion).toBeFocused();
-  // Question 1 already says its CV sentence word for word, so the sentence is not repeated under it (#252).
+  // Design A (#275): the question on its sheet, the six questions in "Your interview", and "Why this question".
+  await expect(page.getByText("Tests: Analysis in Python or R")).toBeVisible();
+  const list = page.getByRole("region", { name: "Your interview" });
+  await expect(list.getByText("0 of 6 answered")).toBeVisible();
+  await expect(list.locator('[aria-current="step"]')).toContainText("Answering now");
+  const why = page.getByRole("region", { name: "Why this question" });
+  await expect(why.getByText("From the job ad:")).toBeVisible();
+  // Question 1 already says its CV sentence word for word, so the sentence is not repeated beside it (#252).
   await expect(page.getByText("From your profile:")).toHaveCount(0);
   // The card is gone, but a screen reader still hears that the questions are ready.
   await expect(page.getByRole("status").filter({ hasText: "questions are ready" })).toHaveText("Your 6 questions are ready. Question 1 is below.");

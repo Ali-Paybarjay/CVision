@@ -15,6 +15,8 @@ test("after a practice, New practice sits below the report and leads to How it w
 
   for (let n = 1; n <= 6; n++) {
     await expect(page.getByText(`Question ${n} of 6`)).toBeVisible({ timeout: 120_000 });
+    // Design A (#275): "Your interview" counts the questions answered so far.
+    await expect(page.getByRole("region", { name: "Your interview" }).getByText(`${n - 1} of 6 answered`)).toBeVisible();
     await page.getByRole("button", { name: "Use sample answer" }).click();
     await page.getByRole("button", { name: "Submit answer" }).click();
     // The sample answer may get a follow-up: answer that too.

@@ -95,3 +95,24 @@ describe("placeholders in a sample answer", () => {
     ]);
   });
 });
+
+describe("readiness in design A (#275)", () => {
+  /** The chip beside the overall score. */
+  const chip = (html: string, label: string) => html.match(new RegExp(`<span class="[^"]*">(?:<svg(?:(?!</svg>).)*</svg>)${label}</span>`))?.[0] ?? "";
+
+  it("shows 'Not yet ready' in Amber, as red is kept for things that went wrong", async () => {
+    const finished = await runMockSession(fixture);
+    const html = renderToStaticMarkup(<FeedbackReport session={{ ...finished, report: { ...finished.report!, readiness: "not-yet-ready" } }} />);
+    const notYet = chip(html, "Not yet ready");
+    expect(notYet).toContain("bg-warning-bg text-warning");
+    expect(notYet).not.toContain("error");
+  });
+
+  it("gives 'Nearly ready' a Teal edge and 'Ready' Fit with a tick", async () => {
+    const finished = await runMockSession(fixture);
+    const nearly = renderToStaticMarkup(<FeedbackReport session={{ ...finished, report: { ...finished.report!, readiness: "nearly-ready" } }} />);
+    expect(chip(nearly, "Nearly ready")).toContain("bg-surface text-accent border border-accent");
+    const ready = renderToStaticMarkup(<FeedbackReport session={{ ...finished, report: { ...finished.report!, readiness: "ready" } }} />);
+    expect(chip(ready, "Ready")).toContain("bg-fit text-accent");
+  });
+});
