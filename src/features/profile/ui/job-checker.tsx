@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Profile } from "@/shared/contracts";
-import { ButtonLink, Button, Card, Field, Input, Notice, Textarea } from "@/shared/ui";
+import { ButtonLink, Button, Card, Field, Input, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { checkJobAction, type CheckJobResult } from "../job-actions";
 import { checkAdText, MAX_AD_CHARACTERS, parseAdUrl } from "../job-extraction";
 import { useStoredProfile } from "../profile-store";
@@ -19,6 +19,9 @@ type View = { name: "form"; input: AdInput | null } | { name: "report"; result: 
 
 /** Where Back goes from this page when the page before it isn't on this site: the profile, the step before. */
 const PAGE_BACK = "/profile";
+
+/** The check can take up to two minutes (the page's maxDuration), so after a minute the wait says so. */
+const SLOW_AFTER_MS = 60_000;
 
 /**
  * Where the profile to compare with comes from: the signed-in user's account (read on the server), this browser
@@ -113,6 +116,7 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
   const focusField = (name: "ad" | "url") => formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`)?.focus();
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
+  const [slow, setSlow] = useState(false);
 
   useEffect(() => {
     if (focusAd) formRef.current?.querySelector<HTMLElement>('[name="ad"]')?.focus();
@@ -132,6 +136,7 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
     }
 
     setPending(true);
+    const slowNote = window.setTimeout(() => setSlow(true), SLOW_AFTER_MS);
     try {
       let result: CheckJobResult;
       try {
@@ -148,6 +153,8 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
       else if (result.code === "sign-in") setErrors({ signIn: true });
       else setErrors({ form: result.message });
     } finally {
+      window.clearTimeout(slowNote);
+      setSlow(false);
       setPending(false);
     }
   }
@@ -220,9 +227,12 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
               {pending ? "Checking your fit…" : "Check my fit"}
             </Button>
           </div>
-          <p aria-live="polite" className="sr-only">
-            {pending ? "Reading the ad and checking your fit. This can take up to a minute." : ""}
-          </p>
+          <WaitNote className="mt-3">
+            {pending &&
+              (slow
+                ? "Still checking your fit. A long ad can take up to 2 minutes. Keep this page open."
+                : "Reading the ad and checking your fit. This can take up to a minute. Keep this page open.")}
+          </WaitNote>
         </form>
       </Card>
     </section>

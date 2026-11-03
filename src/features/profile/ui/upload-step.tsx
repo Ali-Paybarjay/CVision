@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { withNext } from "@/features/account/safe-redirect";
-import { Button, Card, Field, Notice } from "@/shared/ui";
+import { Button, Card, Field, Notice, WaitNote } from "@/shared/ui";
 import { consentPoints, cvConsent, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
@@ -12,6 +12,9 @@ import { useFocusHeading } from "./focus-heading";
 import { Steps } from "./steps";
 
 export type ExtractSuccess = Extract<ExtractResponse, { ok: true }>;
+
+/** The read can take up to two minutes (the route's maxDuration), so after a minute the wait says so. */
+const SLOW_AFTER_MS = 60_000;
 
 type UploadStepProps = {
   /** True when a saved profile exists: uploading replaces it. */
@@ -45,6 +48,7 @@ export function UploadStep({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
+  const [slow, setSlow] = useState(false);
 
   useFocusHeading(headingRef, focusHeading);
 
@@ -65,6 +69,7 @@ export function UploadStep({
     if (found.file || found.consent) return;
 
     setPending(true);
+    const slowNote = window.setTimeout(() => setSlow(true), SLOW_AFTER_MS);
     try {
       const result = await uploadCv(form);
       if (result.ok) {
@@ -75,6 +80,8 @@ export function UploadStep({
       else if (result.code === "sign-in") setErrors({ signIn: true });
       else setErrors({ form: result.message });
     } finally {
+      window.clearTimeout(slowNote);
+      setSlow(false);
       setPending(false);
     }
   }
@@ -139,9 +146,12 @@ export function UploadStep({
               </Button>
             )}
           </div>
-          <p aria-live="polite" className="sr-only">
-            {pending ? "Reading your CV. This can take up to a minute." : ""}
-          </p>
+          <WaitNote className="mt-3">
+            {pending &&
+              (slow
+                ? "Still reading your CV. A long one can take up to 2 minutes. Keep this page open."
+                : "Reading your CV. This can take up to a minute. Keep this page open.")}
+          </WaitNote>
         </form>
       </Card>
 

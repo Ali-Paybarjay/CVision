@@ -133,6 +133,13 @@ describe("JobForm", () => {
     expect(text(html)).not.toContain("Demo mode");
   });
 
+  it("keeps an empty live region under the button, where the wait shows on screen (issue #235)", () => {
+    const html = renderToStaticMarkup(<JobForm profile={personas.reza.profile} demoMode={false} focusAd={false} onChecked={noop} />);
+
+    expect(html).toMatch(/<\/button><\/div><div aria-live="polite"><\/div><\/form>/);
+    expect(html).not.toContain("sr-only");
+  });
+
   it("warns in demo mode, and says when the sample profile will be used", () => {
     const html = text(renderToStaticMarkup(<JobForm profile={null} demoMode focusAd={false} onChecked={noop} />));
 
