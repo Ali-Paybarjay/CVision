@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// "Start again" during a practice, on a phone with mock AI (#263). Before any answer it starts again at once: there
-// is nothing to lose. Once an answer is sent it asks in place first; "Keep going" keeps the answer, and only the
+// "Start again" during a practice, on a phone with mock AI (#263). With nothing to lose it starts again at once. Once
+// an answer is sent, or one is being written, it asks in place first; "Keep going" keeps the work, and only the
 // "Start again" inside the question goes back to How it works.
 // The first open of the page on the dev server compiles it, hence the long waits.
 test.setTimeout(300_000);
@@ -11,7 +11,17 @@ test("Start again asks before an answer is lost", async ({ page }) => {
   await page.getByRole("button", { name: "Start practice" }).click();
   await expect(page.getByText("Question 1 of 6")).toBeVisible({ timeout: 120_000 });
 
-  // Nothing answered yet: no question.
+  // An answer being written but not submitted is asked about too (#269 review), and "Keep going" keeps the text.
+  const answerBox = page.getByRole("textbox", { name: "Your answer" });
+  await answerBox.fill("I led the move of our weekly sales report from Excel to Power BI.");
+  await page.getByRole("button", { name: "Start again" }).click();
+  await expect(page.getByText("Start again with new questions?")).toBeFocused();
+  await expect(page.getByText("Anything you haven't submitted will be lost.")).toBeVisible();
+  await page.getByRole("button", { name: "Keep going" }).click();
+  await expect(answerBox).toHaveValue("I led the move of our weekly sales report from Excel to Power BI.");
+
+  // Nothing answered and the box empty: no question.
+  await answerBox.fill("");
   await page.getByRole("button", { name: "Start again" }).click();
   await expect(page.getByRole("heading", { name: "How it works" })).toBeFocused();
 

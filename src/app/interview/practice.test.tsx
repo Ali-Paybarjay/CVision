@@ -61,5 +61,17 @@ describe("Start again during a practice (#263)", () => {
 
     const three = renderToStaticMarkup(<ConfirmStartAgain answers={3} onConfirm={noop} onCancel={noop} />);
     expect(three).toContain("You&#x27;ll lose your 3 answers and their feedback.");
+    expect(three).not.toContain("submitted");
+  });
+
+  it("says an answer still being written is lost too (#269 review)", () => {
+    const draftOnly = renderToStaticMarkup(<ConfirmStartAgain answers={0} hasDraft onConfirm={noop} onCancel={noop} />);
+    expect(draftOnly).toContain("Anything you haven&#x27;t submitted will be lost.");
+    expect(draftOnly).not.toContain("You&#x27;ll lose your");
+
+    const both = renderToStaticMarkup(<ConfirmStartAgain answers={2} hasDraft onConfirm={noop} onCancel={noop} />);
+    expect(both).toContain(
+      "You&#x27;ll lose your 2 answers and their feedback. Anything you haven&#x27;t submitted will be lost too.",
+    );
   });
 });

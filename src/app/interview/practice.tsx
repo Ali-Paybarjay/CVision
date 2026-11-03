@@ -137,6 +137,8 @@ export function InterviewPractice({
     practiceRef.current?.querySelector("textarea")?.focus();
   }, [view, envelope]);
 
+  // True while the answer box holds text not yet submitted, so "Start again" asks before throwing it away.
+  const [hasDraft, setHasDraft] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // Failed saves of the current session; a new value of `retry` runs the effect again.
   const failures = useRef({ json: "", count: 0 });
@@ -234,7 +236,7 @@ export function InterviewPractice({
     <div ref={practiceRef} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
-        {canStartAgain && <StartAgain answers={answersGiven(session)} onRestart={restart} />}
+        {canStartAgain && <StartAgain answers={answersGiven(session)} hasDraft={hasDraft} onRestart={restart} />}
       </div>
       <Progress store={store} session={session} jobs={jobs} run={run} />
       {session && done ? (
@@ -243,7 +245,7 @@ export function InterviewPractice({
           <PractiseAgain onPractiseAgain={restart} />
         </>
       ) : (
-        session && <InterviewFlow store={store} session={session} jobs={jobs} run={run} samples={samples} />
+        session && <InterviewFlow store={store} session={session} jobs={jobs} run={run} samples={samples} onDraftChange={setHasDraft} />
       )}
     </div>
   );
@@ -289,10 +291,11 @@ export function answersGiven(session: InterviewSession | null): number {
 }
 
 /**
- * "Start again" during a practice (#263). Before any answer it starts again at once: there is nothing to lose. Once
- * an answer is sent, it asks in place first, as "End here" does, so one tap on a phone cannot throw the answers away.
+ * "Start again" during a practice (#263). With nothing to lose it starts again at once. Once an answer is sent, or
+ * the answer box holds text not yet submitted, it asks in place first, as "End here" does, so one tap on a phone
+ * cannot throw the work away.
  */
-function StartAgain({ answers, onRestart }: { answers: number; onRestart: () => void }) {
+function StartAgain({ answers, hasDraft, onRestart }: { answers: number; hasDraft: boolean; onRestart: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const toggled = useRef(false);
@@ -310,23 +313,36 @@ function StartAgain({ answers, onRestart }: { answers: number; onRestart: () => 
     // Full width when asking, so the question sits on its own line under the save status.
     <div ref={box} className={confirming ? "w-full" : undefined}>
       {confirming ? (
-        <ConfirmStartAgain answers={answers} onConfirm={onRestart} onCancel={() => toggle(false)} />
+        <ConfirmStartAgain answers={answers} hasDraft={hasDraft} onConfirm={onRestart} onCancel={() => toggle(false)} />
       ) : (
-        <Button onClick={answers > 0 ? () => toggle(true) : onRestart}>Start again</Button>
+        <Button onClick={answers > 0 || hasDraft ? () => toggle(true) : onRestart}>Start again</Button>
       )}
     </div>
   );
 }
 
-export function ConfirmStartAgain({ answers, onConfirm, onCancel }: { answers: number; onConfirm: () => void; onCancel: () => void }) {
+export function ConfirmStartAgain({
+  answers,
+  hasDraft = false,
+  onConfirm,
+  onCancel,
+}: {
+  answers: number;
+  /** The answer box holds text not yet submitted: say that goes too, as "End here" does. */
+  hasDraft?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const lost = [
+    answers === 1 ? "You'll lose your answer and its feedback." : answers > 1 ? `You'll lose your ${answers} answers and their feedback.` : null,
+    hasDraft ? (answers > 0 ? "Anything you haven't submitted will be lost too." : "Anything you haven't submitted will be lost.") : null,
+  ].filter(Boolean);
   return (
     <div className="space-y-2 rounded-md border border-line bg-canvas p-3">
       <p data-confirm-heading tabIndex={-1} className="font-semibold">
         Start again with new questions?
       </p>
-      <p className="text-sm">
-        {answers === 1 ? "You'll lose your answer and its feedback." : `You'll lose your ${answers} answers and their feedback.`}
-      </p>
+      {lost.length > 0 && <p className="text-sm">{lost.join(" ")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button onClick={onConfirm}>Start again</Button>
         <Button onClick={onCancel}>Keep going</Button>

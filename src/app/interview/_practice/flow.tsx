@@ -201,6 +201,7 @@ export function InterviewFlow({
   jobs,
   run,
   samples,
+  onDraftChange,
 }: {
   store: PracticeStore;
   session: InterviewSession;
@@ -208,6 +209,8 @@ export function InterviewFlow({
   run: string;
   /** Mock mode only. */
   samples?: SampleAnswers;
+  /** Told whether the answer box holds text not yet submitted, so "Start again" can ask first (#269). */
+  onDraftChange?: (hasDraft: boolean) => void;
 }) {
   const step = nextStep(session);
   const asked = session.questions.filter((q) => turnsFor(session, q.id).length > 0);
@@ -279,6 +282,7 @@ export function InterviewFlow({
                   questionId={question.id}
                   kind={step.kind}
                   sample={step.kind === "main" ? samples?.[question.id]?.main : samples?.[question.id]?.followUp}
+                  onDraftChange={onDraftChange}
                 />
                 <EndHere key={`${question.id}-${step.kind}-end`} store={store} session={session} />
               </>
@@ -413,14 +417,22 @@ function AnswerForm({
   questionId,
   kind,
   sample,
+  onDraftChange,
 }: {
   store: PracticeStore;
   questionId: string;
   kind: "main" | "follow-up";
   sample?: string | null;
+  onDraftChange?: (hasDraft: boolean) => void;
 }) {
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  const hasDraft = text.trim() !== "";
+  useEffect(() => {
+    onDraftChange?.(hasDraft);
+  }, [hasDraft, onDraftChange]);
+  // Once the box is gone (the answer was submitted, or the practice ended), there is no draft left.
+  useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   const startedAt = useRef<string | null>(null);
   const words = countWords(text);
   const markStart = () => {
