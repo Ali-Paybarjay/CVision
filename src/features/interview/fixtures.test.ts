@@ -7,8 +7,11 @@ import {
   evaluateOutputSchema,
   FollowUpOutputSchema,
   generateOutputSchema,
+  mergeReviewReply,
   reportOutputSchema,
   reviewOutputSchema,
+  reviewReplyFromSet,
+  reviewReplySchema,
   suggestOutputSchema,
 } from "./engine/schemas";
 import { questionOverall } from "./engine/scoring";
@@ -51,6 +54,13 @@ describe.each(fixtures)("fixture $id passes runtime validation at every stage", 
       const after = fixture.review.questions.find((q) => q.id === change.questionId);
       expect(before).not.toEqual(after);
     }
+  });
+
+  it("stage 3, as the model sends it: only the rewritten questions, which rebuild the reviewed set (#100)", () => {
+    const reply = reviewReplyFromSet(fixture.review, fixture.generate);
+    expect(issues(reviewReplySchema(context, fixture.generate).safeParse(reply))).toEqual([]);
+    expect(reply.rewritten.length).toBeLessThan(fixture.review.questions.length);
+    expect(mergeReviewReply(reply, fixture.generate)).toEqual(fixture.review);
   });
 
   it("has a sample answer for every question", () => {

@@ -20,6 +20,7 @@ import {
   questionSetProblems,
   reportProblems,
   suggestionProblems,
+  type DraftQuestion,
   type EvaluationContext,
   type Problem,
   type QuestionSetContext,
@@ -97,6 +98,7 @@ export function generateOutputSchema(context: QuestionSetContext) {
   return withProblems(GenerateOutputSchema, (value) => questionSetProblems(value, context, "generate"));
 }
 
+/** The whole reviewed set: what the review stage produces once its reply is merged, and what the fixtures hold. */
 export const ReviewOutputSchema = GenerateOutputSchema.extend({
   changelog: z.array(ReviewChangeSchema),
 });
@@ -115,6 +117,71 @@ export function reviewOutputSchema(context: QuestionSetContext, onRejected?: (pr
     },
     onRejected,
   );
+}
+
+/**
+ * What the review model sends back (interview-review 2.0.0, #100): the blueprint, only the questions it rewrote, and
+ * the changelog. It used to copy out the questions it kept too, every rubric and follow-up included: about 3K output
+ * tokens of the wait before question 1 for nothing. The code puts the rewrites in place (mergeReviewReply) and checks
+ * the whole set as before.
+ */
+export const ReviewReplySchema = z.object({
+  blueprint: DraftBlueprintSchema,
+  rewritten: z.array(DraftQuestionSchema),
+  changelog: z.array(ReviewChangeSchema),
+});
+export type ReviewReply = z.infer<typeof ReviewReplySchema>;
+
+/** The draft set with each rewritten question in place of the one with the same id, in the draft's order. */
+export function mergeReviewReply(reply: ReviewReply, draft: { questions: DraftQuestion[] }): ReviewOutput {
+  const rewritten = new Map(reply.rewritten.map((q) => [q.id, q]));
+  return { blueprint: reply.blueprint, questions: draft.questions.map((q) => rewritten.get(q.id) ?? q), changelog: reply.changelog };
+}
+
+/** The reply that turns `draft` into `reviewed`, for mock mode: the fixtures hold whole reviewed sets. */
+export function reviewReplyFromSet(reviewed: ReviewOutput, draft: { questions: DraftQuestion[] }): ReviewReply {
+  const before = new Map(draft.questions.map((q) => [q.id, JSON.stringify(q)]));
+  return {
+    blueprint: reviewed.blueprint,
+    rewritten: reviewed.questions.filter((q) => before.get(q.id) !== JSON.stringify(q)),
+    changelog: reviewed.changelog,
+  };
+}
+
+/**
+ * The review reply, checked as the whole set it makes with `draft`. A problem in a rewritten question points at it in
+ * `rewritten`; one in a question the review left out says which question to rewrite, so askModel's retry can fix it.
+ */
+export function reviewReplySchema(context: QuestionSetContext, draft: { questions: DraftQuestion[] }, onRejected?: (problems: Problem[]) => void) {
+  return withProblems(ReviewReplySchema, (reply) => reviewReplyProblems(reply, draft, context), onRejected);
+}
+
+function reviewReplyProblems(reply: ReviewReply, draft: { questions: DraftQuestion[] }, context: QuestionSetContext): Problem[] {
+  const problems: Problem[] = [];
+  const draftIds = new Set(draft.questions.map((q) => q.id));
+  const position = new Map<string, number>();
+  reply.rewritten.forEach((question, j) => {
+    if (!draftIds.has(question.id)) problems.push({ path: ["rewritten", j, "id"], message: "Must be the id of a question in the set." });
+    else if (position.has(question.id)) problems.push({ path: ["rewritten", j, "id"], message: "Give each rewritten question once." });
+    else position.set(question.id, j);
+  });
+  reply.changelog.forEach((change, i) => {
+    if (!position.has(change.questionId)) {
+      problems.push({ path: ["changelog", i, "questionId"], message: "Must be the id of a question in rewritten: add the rewritten question." });
+    }
+  });
+  if (problems.length > 0) return problems;
+
+  const merged = mergeReviewReply(reply, draft);
+  return questionSetProblems(merged, context, "review").map((problem) => {
+    const [field, i, ...rest] = problem.path;
+    if (field !== "questions" || typeof i !== "number") return problem;
+    const id = merged.questions[i].id;
+    const j = position.get(id);
+    if (j !== undefined) return { ...problem, path: ["rewritten", j, ...rest] };
+    const where = rest.length > 0 ? ` (${rest.join(".")})` : "";
+    return { ...problem, path: ["rewritten"], message: `Question ${id}${where} is not in rewritten but breaks a rule: ${problem.message} Rewrite it in full and add it to rewritten.` };
+  });
 }
 
 /** Deliberately loose: the code checks the follow-up text itself and falls back to the planned text. */
