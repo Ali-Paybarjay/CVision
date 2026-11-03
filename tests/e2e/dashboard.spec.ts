@@ -38,9 +38,11 @@ test("closing applications with no news closes only the ticked ones (#69)", asyn
   await close.click();
 
   // The focus goes to what happened, not back to the top of the page.
-  const message = page.getByRole("status").filter({ hasText: "Closed 1 application as No response." });
+  const message = page.getByText("Closed 1 application as No response.");
   await expect(message).toBeFocused();
   await expect(message).toHaveText("Closed 1 application as No response. It is now under Closed, below your open applications.");
+  // The focus reads it out, so it is not also in a status line to be read a second time (#184).
+  await expect(page.getByRole("status").filter({ hasText: "Closed 1 application" })).toHaveCount(0);
 
   // The ticked row is closed today and sits under Closed.
   const closed = page.getByRole("list", { name: /^Closed \(\d+\)$/ });
