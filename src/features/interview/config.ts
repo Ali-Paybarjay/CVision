@@ -82,7 +82,8 @@ export const startupSeconds = 120;
 /**
  * When a start-up stage has stopped answering: after this many seconds its request is dropped and the stage fails with
  * Try again (the steps already done are kept). A stage usually takes about 40 seconds, so this catches a connection
- * that has died without cutting off a slow stage that would still succeed; Vercel stops a request at 300 seconds anyway.
+ * that has died without cutting off a slow stage that would still succeed. The interview API lets Vercel run a request
+ * for 300 seconds (its maxDuration), so this limit is always the first to stop one, never a 504 from Vercel.
  * It is not sent again by itself: the server is most likely still working on it, and a second request would pay for
  * the model twice and count twice towards the user's daily limit.
  */
@@ -90,6 +91,13 @@ export const stallSeconds = 180;
 
 /** A start-up stage that failed fast (no connection, a server error) is sent once more after this pause. */
 export const startupRetryDelayMs = 3000;
+
+/**
+ * Only a failure this quick is sent once more by itself (#266). A slower one may have been dropped by the browser or
+ * the phone (iOS can cut a request off about 60 seconds after the user switched apps) while the server still works on
+ * it: a second request would pay for the model twice. A slow failure waits for Try again instead.
+ */
+export const fastFailureSeconds = 15;
 
 /** "Taking a little longer than usual" once a stage has run this many seconds past its usual share of the wait. */
 export const overrunGraceSeconds = 10;

@@ -1,7 +1,7 @@
 // callStep (#232): the API's own words when it has them, plain words when it has none (never a status code), a time
 // limit for the start-up stages, and which failures are worth a second go.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createPracticeStore, StepError, stepProblems } from "./store";
+import { createPracticeStore, parseEnvelope, StepError, stepProblems } from "./store";
 
 const callStep = (options?: { timeoutMs?: number }) =>
   createPracticeStore("interview-practice:test", "/interview/api").callStep({ step: "generate" }, options);
@@ -27,7 +27,11 @@ describe("callStep", () => {
 
   it("offers no second go when the API refuses, as at a daily limit or with no Profile", async () => {
     vi.stubGlobal("fetch", async () => Response.json({ error: "You have reached today's limit." }, { status: 422 }));
-    await expect(callStep()).rejects.toMatchObject({ message: "You have reached today's limit.", retryable: false });
+    await expect(callStep()).rejects.toMatchObject({ message: "You have reached today's limit.", retryable: false, final: false });
+
+    // The API's word that Try again now would only fail the same way (#266) wins over anything else it says.
+    vi.stubGlobal("fetch", async () => Response.json({ error: "You have reached today's limit.", final: true, retryable: true }, { status: 429 }));
+    await expect(callStep()).rejects.toMatchObject({ retryable: false, final: true });
 
     vi.stubGlobal("fetch", async () => Response.json({ error: "We could not find your Profile." }, { status: 404 }));
     await expect(callStep()).rejects.toMatchObject({ retryable: false });
@@ -74,5 +78,16 @@ describe("callStep", () => {
     await callStep({ timeoutMs: 1000 });
     expect(signals[0]).toBeUndefined();
     expect(signals[1]).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe("a saved practice", () => {
+  it("keeps the stage times that are counts, and drops the rest (#266)", () => {
+    const saved = (stageMs: unknown) =>
+      parseEnvelope(JSON.stringify({ sourceId: "job-1", inputs: null, session: null, startedAtMs: 1, startupMs: null, stageMs }));
+
+    expect(saved({ analyse: 24_000, generate: 51_000 })?.stageMs).toEqual({ analyse: 24_000, generate: 51_000 });
+    expect(saved({ analyse: "soon", generate: -1, review: 3 })?.stageMs).toEqual({});
+    expect(saved(undefined)).not.toHaveProperty("stageMs");
   });
 });

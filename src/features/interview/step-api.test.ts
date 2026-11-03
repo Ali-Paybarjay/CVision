@@ -4,7 +4,7 @@ import { AskModelError } from "@/shared/ai";
 import { limits } from "./config";
 import { fixtures } from "./fixtures";
 import { questionsNotWritten } from "./engine/stages";
-import { badRequest, RequestSessionSchema, stepFailed } from "./server/step-api";
+import { badRequest, practiceUnavailable, RequestSessionSchema, stepDeclined, stepFailed } from "./server/step-api";
 import { runMockSession } from "./test-support";
 
 describe("a session sent by the browser", () => {
@@ -65,10 +65,59 @@ describe("other failures (#232)", () => {
     expect(await stepFailed("interview lab", "generate", overloaded).json()).toEqual({ error: "The generate step failed. Try again.", retryable: true });
   });
 
-  it("a daily limit or a refusal: the reason as it is, and not worth a second go", async () => {
+  it("a daily limit: the reason as it is, with no Try again, since it would only fail the same way (#266)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const limit = new AskModelError("You have reached today's limit for interview practice.", "limit-reached");
 
-    expect(await stepFailed("interview", "generate", limit, { plain: true }).json()).toEqual({ error: limit.message });
+    const response = stepFailed("interview", "generate", limit, { plain: true });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: limit.message, final: true });
+  });
+
+  it("a refusal: plain words for the user, not the model's feature name, and no second go by itself (#266)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const refused = new AskModelError("The model declined the interview-analyse request.", "refused");
+
+    const user = await stepFailed("interview", "analyse", refused, { plain: true }).json();
+    expect(user).toEqual({ error: stepDeclined });
+    expect(user.error).not.toContain("interview-analyse");
+    expect((await stepFailed("interview lab", "analyse", refused).json()).error).toBe(refused.message);
+  });
+});
+
+/** An error as the AI service's SDK throws it: a class of its own with the HTTP status. */
+function serviceError(status: number): Error {
+  return Object.assign(new Error(`${status} {"error":{"message":"…"}}`), { name: "APIError", status });
+}
+
+describe("the AI service's own answers (#266)", () => {
+  it("worth a second go only when the service is busy or failing, or the connection dropped", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const status of [500, 502, 503, 529, 429, 408]) {
+      expect(await stepFailed("interview", "generate", serviceError(status), { plain: true }).json()).toEqual({ error: questionsNotWritten, retryable: true });
+    }
+    const dropped = Object.assign(new Error("Connection error."), { name: "APIConnectionError" });
+    expect(await stepFailed("interview", "generate", dropped, { plain: true }).json()).toMatchObject({ retryable: true });
+  });
+
+  it("turned away (out of credit, a bad key, a bad request): plain words, no second go and no Try again", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const status of [400, 401, 402, 403]) {
+      const response = stepFailed("interview", "generate", serviceError(status), { plain: true });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: practiceUnavailable, final: true });
+    }
+    // The log says which, for whoever looks into it; the lab says it too.
+    expect(log).toHaveBeenCalledWith("interview: generate failed (APIError, HTTP 402)");
+    expect((await stepFailed("interview lab", "generate", serviceError(402)).json()).error).toBe(
+      "The generate step failed: the AI service answered 402.",
+    );
+  });
+
+  it("no AI key on the server: plain words for the user, never the setting's name", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const noKey = new AskModelError("AI_MODE is live but neither ANTHROPIC_API_KEY nor OPENROUTER_API_KEY is set.", "no-api-key");
+
+    expect(await stepFailed("interview", "analyse", noKey, { plain: true }).json()).toEqual({ error: practiceUnavailable, final: true });
   });
 });

@@ -17,13 +17,16 @@ export type PracticeEnvelope = {
   startupMs: number | null;
   /** How many times a start-up stage was sent again, automatically or by Try again (#232), for interview.startup_ready. */
   startupRetries?: number;
+  /** How long stages 1 and 2 took in this browser, their last go only (#266), for interview.startup_ready. */
+  stageMs?: { analyse?: number; generate?: number };
 };
 
 /**
- * A request in flight or stopped. `since`: when its current try started in this tab. `retrying`: the first try did not
- * finish and this is the second (#232).
+ * A request in flight or stopped. `since`: when its current try started in this tab. `retrying`: an earlier try did not
+ * finish, and this is a second go, by itself or after Try again (#232, #266). `final`: Try again now would only fail the
+ * same way, as at a daily limit, so the page offers none (#266).
  */
-export type JobState = { status: "running"; since?: number; retrying?: boolean } | { status: "failed"; message: string };
+export type JobState = { status: "running"; since?: number; retrying?: boolean } | { status: "failed"; message: string; final?: boolean };
 
 /** What the user reads when a request fails without a message of its own from the API: plain words, never a status code. */
 export const stepProblems = {
@@ -35,12 +38,14 @@ export const stepProblems = {
 /**
  * A step that failed. `retryable`: a second go a moment later may well work (no connection, a server error, or the API
  * says so), unlike a daily limit, a missing Profile, a request the API refuses, or a step that ran out of time while
- * the server is most likely still working on it.
+ * the server is most likely still working on it. `final`: the API says Try again now would only fail the same way
+ * (#266), as at a daily limit or when the AI service turns requests away.
  */
 export class StepError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
+    readonly final = false,
   ) {
     super(message);
     this.name = "StepError";
@@ -64,10 +69,19 @@ export function parseEnvelope(raw: string | null): PracticeEnvelope | null {
       startedAtMs: Number(data.startedAtMs) || 0,
       startupMs: typeof data.startupMs === "number" ? data.startupMs : null,
       ...(typeof data.startupRetries === "number" ? { startupRetries: data.startupRetries } : {}),
+      ...(data.stageMs && typeof data.stageMs === "object" ? { stageMs: stageTimes(data.stageMs) } : {}),
     };
   } catch {
     return null;
   }
+}
+
+/** Only the stage times that are counts: a saved envelope from another version of the page drops the rest. */
+function stageTimes(saved: Record<string, unknown>): NonNullable<PracticeEnvelope["stageMs"]> {
+  const count = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined);
+  const analyse = count(saved.analyse);
+  const generate = count(saved.generate);
+  return { ...(analyse !== undefined && { analyse }), ...(generate !== undefined && { generate }) };
 }
 
 /** Runs `work` only in the tab that holds the lock; any other tab waits until it is released and runs nothing. */
@@ -87,6 +101,8 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
   let jobs: Readonly<Record<string, JobState>> = {};
   // Jobs run with `once` that have succeeded in this tab.
   const succeeded = new Set<string>();
+  // How many tries each job has started in this tab (noteAttempt), so a second go says so however it began.
+  const attempts = new Map<string, number>();
 
   function emit() {
     for (const listener of listeners) listener();
@@ -168,19 +184,31 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
           if (options.once) succeeded.add(key);
           setJob(key, null);
         },
-        (error: unknown) => setJob(key, { status: "failed", message: error instanceof Error ? error.message : "Something went wrong." }),
+        (error: unknown) =>
+          setJob(key, {
+            status: "failed",
+            message: error instanceof Error ? error.message : "Something went wrong.",
+            ...(error instanceof StepError && error.final && { final: true }),
+          }),
       );
     },
     retryJob(key: string) {
       if (jobs[key]?.status === "failed") setJob(key, null);
     },
-    /** Marks the start of a running job's try in this tab, so the page can time it and say when it is a second try. */
-    noteAttempt(key: string, retrying = false) {
-      if (jobs[key]?.status === "running") setJob(key, { status: "running", since: Date.now(), retrying });
+    /**
+     * Marks the start of a running job's try in this tab, so the page can time it and say when it is a second go: the
+     * one sent by itself after a quick failure, or the one Try again started (#266).
+     */
+    noteAttempt(key: string) {
+      if (jobs[key]?.status !== "running") return;
+      const tries = (attempts.get(key) ?? 0) + 1;
+      attempts.set(key, tries);
+      setJob(key, { status: "running", since: Date.now(), retrying: tries > 1 });
     },
     clearJobs() {
       jobs = {};
       succeeded.clear();
+      attempts.clear();
       emit();
     },
     /**
@@ -212,7 +240,8 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
       if (!response.ok) {
         // Without a message of its own, the server or the platform in front of it failed (a 504, a crash page).
         const own = typeof data.error === "string";
-        throw new StepError(own ? data.error : stepProblems.server, data.retryable === true || (!own && response.status >= 500));
+        const final = own && data.final === true;
+        throw new StepError(own ? data.error : stepProblems.server, !final && (data.retryable === true || (!own && response.status >= 500)), final);
       }
       return data as T;
     },

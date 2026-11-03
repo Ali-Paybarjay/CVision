@@ -12,6 +12,13 @@ import { getMyJob, getMyProfile } from "@/features/interview/server/my-data";
 import { saveInterviewSession } from "@/features/interview/server/session-store";
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
 
+/**
+ * A start-up stage can take well over a minute. Vercel may run it for 300 seconds, so the browser's own limit
+ * (`stallSeconds`, 180) always stops a slow stage first: a 504 from Vercel would count as worth a second go, and the
+ * second go would pay for the model again (#266).
+ */
+export const maxDuration = 300;
+
 const JobIdSchema = z.string().min(1).max(100);
 const QuestionIdSchema = z.string().min(1);
 /** A count the browser sends for interview.startup_ready (#232): a bad one is dropped, never a reason to refuse the step. */
@@ -20,8 +27,17 @@ const CountSchema = z.number().int().nonnegative().optional().catch(undefined);
 const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("analyse"), jobId: JobIdSchema, id: z.uuid(), startedAt: z.iso.datetime() }),
   z.object({ step: z.literal("generate"), jobId: JobIdSchema, session: InterviewSessionSchema }),
-  // How long this start has taken in the browser so far, and how many stages were sent again.
-  z.object({ step: z.literal("review"), jobId: JobIdSchema, session: InterviewSessionSchema, waitedMs: CountSchema, retries: CountSchema }),
+  // How long this start has taken in the browser so far, how long stages 1 and 2 took there (#266), and how many
+  // stages were sent again.
+  z.object({
+    step: z.literal("review"),
+    jobId: JobIdSchema,
+    session: InterviewSessionSchema,
+    waitedMs: CountSchema,
+    analyseMs: CountSchema,
+    generateMs: CountSchema,
+    retries: CountSchema,
+  }),
   z.object({ step: z.literal("follow-up"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("evaluate"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("report"), jobId: JobIdSchema, session: InterviewSessionSchema }),
@@ -71,9 +87,16 @@ export async function POST(request: Request): Promise<Response> {
       case "review": {
         const reviewStartedAt = Date.now();
         const session = await reviewStep(body.session, await inputs(), { requester });
-        // The questions are ready: how long the whole start took (#232). Only signed-in practice is counted.
+        // The questions are ready: how long the whole start took (#232), and each stage (#266). Only signed-in practice
+        // is counted.
         if (user) {
-          const timing = { waitedMs: body.waitedMs, retries: body.retries, reviewMs: Date.now() - reviewStartedAt };
+          const timing = {
+            waitedMs: body.waitedMs,
+            analyseMs: body.analyseMs,
+            generateMs: body.generateMs,
+            retries: body.retries,
+            reviewMs: Date.now() - reviewStartedAt,
+          };
           after(() => trackStartupReady(session, timing, user.id));
         }
         return Response.json({ session });

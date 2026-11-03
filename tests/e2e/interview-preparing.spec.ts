@@ -42,7 +42,7 @@ test("says how long it takes, shows each stage and what it found, and keeps Star
   await release("analyse");
   // The dev server compiles the API on its first request.
   await expect(page.getByRole("heading", { name: "What this role asks for" })).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByText("Pitched at junior level. The ad says: “We are looking for a Junior Data Analyst”")).toBeVisible();
+  await expect(page.getByText("Pitched at a junior level. The ad says: “We are looking for a Junior Data Analyst”")).toBeVisible();
   await expect(page.getByRole("heading", { name: "From your profile, the interviewer may ask about" })).toBeVisible();
   await expect(page.getByText("“Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes”")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Done:" })).toHaveText("Done: Reading the role and your profile.");

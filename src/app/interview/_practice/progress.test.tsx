@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
 import { endedSessionFor, readySessionFor, runMockSession } from "@/features/interview/test-support";
-import { preparationState, Progress, startupEstimate, startupFraction, timeLeft } from "./progress";
+import { preparationState, Progress, scoringLine, startupEstimate, startupFraction, timeLeft, veryLateMessage } from "./progress";
 import { stepProblems, type JobState, type PracticeStore } from "./store";
 
 const startedAtMs = Date.parse("2026-10-30T21:00:00Z");
@@ -22,8 +22,8 @@ function running(stage: string, sinceSeconds: number, retrying = false): Record<
   return { [`${run}:${stage}`]: { status: "running", since: startedAtMs + sinceSeconds * 1000, retrying } };
 }
 
-function failed(stage: string, message: string): Record<string, JobState> {
-  return { [`${run}:${stage}`]: { status: "failed", message } };
+function failed(stage: string, message: string, final = false): Record<string, JobState> {
+  return { [`${run}:${stage}`]: { status: "failed", message, ...(final && { final }) } };
 }
 
 /** The card `seconds` after Start. */
@@ -44,12 +44,13 @@ afterEach(() => {
 describe("the bar", () => {
   it("fills by the working stage's own clock, never past that stage, and is full only when the questions are ready", () => {
     expect(startupFraction(0, 0)).toBe(0);
-    // Each stage has a third of the usual 2 minutes.
-    expect(startupFraction(0, 20_000)).toBeCloseTo(1 / 6);
+    // Reading the role has a fifth of the usual 2 minutes (24 seconds); writing and checking two fifths each (#266).
+    expect(startupFraction(0, 12_000)).toBeCloseTo(0.1);
     // A stage that finishes early moves it on at once.
-    expect(startupFraction(1, 0)).toBeCloseTo(1 / 3);
+    expect(startupFraction(1, 0)).toBeCloseTo(0.2);
+    expect(startupFraction(1, 24_000)).toBeCloseTo(0.4);
     // Late: it waits just short of the stage's end.
-    expect(startupFraction(2, 200_000)).toBeCloseTo(2.9 / 3);
+    expect(startupFraction(2, 200_000)).toBeCloseTo(0.6 + 0.9 * 0.4);
     expect(startupFraction(3, 0)).toBe(1);
   });
 });
@@ -58,22 +59,42 @@ describe("the time left", () => {
   it("starts at the usual 2 minutes, counts down in tens of seconds, then says it is almost ready", () => {
     expect(startupEstimate()).toBe("about 2 minutes");
     expect(timeLeft(0, 0)).toBe("About 2 minutes left");
-    expect(timeLeft(0, 30_000)).toBe("About 90 seconds left");
-    expect(timeLeft(1, 0)).toBe("About 80 seconds left");
-    expect(timeLeft(2, 25_000)).toBe("About 20 seconds left");
-    expect(timeLeft(2, 31_000)).toBe("Almost ready");
+    expect(timeLeft(1, 10_000)).toBe("About 90 seconds left");
+    expect(timeLeft(1, 40_000)).toBe("About 60 seconds left");
+    expect(timeLeft(2, 25_000)).toBe("About 30 seconds left");
+    expect(timeLeft(2, 40_000)).toBe("Almost ready");
   });
 
   it("says a slow stage is slow as soon as it runs past its usual share, rather than standing still on a number", () => {
-    // A slow first stage used to show "About 70 seconds left" from about 27 to 120 seconds.
-    expect(timeLeft(0, 45_000)).toBe("About 80 seconds left");
-    expect(timeLeft(0, 51_000)).toBe("Taking a little longer than usual");
-    // A slow last stage used to sit on "Almost ready" for 40 seconds.
-    expect(timeLeft(2, 50_000)).toBe("Almost ready");
-    expect(timeLeft(2, 51_000)).toBe("Taking a little longer than usual");
+    // Reading the role usually takes 24 seconds, so it is slow 10 seconds after that.
+    expect(timeLeft(0, 34_000)).toBe("About 2 minutes left");
+    expect(timeLeft(0, 35_000)).toBe("Taking a little longer than usual");
+    // A slow last stage would otherwise sit on "Almost ready".
+    expect(timeLeft(2, 58_000)).toBe("Almost ready");
+    expect(timeLeft(2, 59_000)).toBe("Taking a little longer than usual");
     // Past twice its share, "a little" would no longer be true.
-    expect(timeLeft(1, 90_000)).toBe("Taking a little longer than usual");
-    expect(timeLeft(1, 91_000)).toBe("Taking longer than usual");
+    expect(timeLeft(1, 106_000)).toBe("Taking a little longer than usual");
+    expect(timeLeft(1, 107_000)).toBe("Taking longer than usual");
+  });
+
+  it("does not call an ordinary start slow: writing the questions has two fifths of the wait, not a third (#266)", () => {
+    // 55 seconds of writing or checking used to say "Taking a little longer than usual".
+    expect(timeLeft(1, 55_000)).toBe("About 50 seconds left");
+    expect(timeLeft(2, 55_000)).toBe("Almost ready");
+  });
+});
+
+describe("what answers are scored on (#266)", () => {
+  it("names one rubric's criteria while only technical questions are asked, and each category's once STAR questions are too", () => {
+    expect(scoringLine({ technical: 6, behavioural: 0 })).toBe(
+      "Each answer is scored on technical accuracy, depth of reasoning, applied evidence and clarity.",
+    );
+    expect(scoringLine({ technical: 4, behavioural: 2 })).toBe(
+      "Technical answers are scored on technical accuracy, depth of reasoning, applied evidence and clarity; behavioural answers on relevance to the job, STAR structure, evidence and examples and clarity.",
+    );
+    expect(scoringLine({ technical: 0, behavioural: 6 })).toBe(
+      "Each answer is scored on relevance to the job, STAR structure, evidence and examples and clarity.",
+    );
   });
 });
 
@@ -102,6 +123,8 @@ describe("Preparing your interview", () => {
     // The bar's empty track can be seen.
     expect(html).toContain("rounded-full border border-line bg-canvas");
     expect(html).toContain("Each answer is scored on technical accuracy, depth of reasoning, applied evidence and clarity.");
+    // Nothing is late yet: the line that would say so is there for a screen reader, empty.
+    expect(html).not.toContain(veryLateMessage);
     expect(html).toContain("Keep this page open. You can use another tab while you wait.");
     expect(html).not.toContain("What this role asks for");
   });
@@ -113,7 +136,7 @@ describe("Preparing your interview", () => {
 
     expect(html).toContain("Done</span><span>Reading the role and your profile");
     expect(html).toContain('role="status" class="sr-only">Done: Reading the role and your profile.</p>');
-    expect(html).toContain("About 70 seconds left");
+    expect(html).toContain("About 90 seconds left");
     // Only 6 questions are asked, so the card does not promise that each of these is tested.
     expect(html).toContain("<h3>What this role asks for</h3>");
     expect(html).not.toContain("will test");
@@ -123,11 +146,14 @@ describe("Preparing your interview", () => {
     expect(html.indexOf(`>${mustHave.name}<`)).toBeLessThan(html.indexOf("Also asked for"));
     expect(html.indexOf("Also asked for")).toBeLessThan(html.indexOf(`>${niceToHave.name}<`));
     // The level in words, never the L2 code, and the ad's own words, which the first stage checks.
-    expect(html).toContain("Pitched at junior level. The ad says: “We are looking for a Junior Data Analyst”");
+    expect(html).toContain("Pitched at a junior level. The ad says: “We are looking for a Junior Data Analyst”");
     expect(html).not.toContain(">L2<");
     expect(html).toContain("<h3>From your profile, the interviewer may ask about</h3>");
     for (const claim of analysed.candidateProfile!.claimsToProbe) expect(html).toContain(`“${claim.quote}”`);
-    expect(html).toContain("While you wait, recall the numbers behind these lines and what you did yourself.");
+    expect(html).toContain("While you wait, think of the numbers behind these lines and your own part in each.");
+    // The line beside each list names it, and the list has no name of its own to read again (#266).
+    expect(html).toMatch(/<p class="[^"]*">Must-have<\/p><ul class=/);
+    expect(html).not.toContain("aria-label=");
     // Never the gaps: a model's judgement, and discouraging just before the practice.
     expect(html).not.toContain(analysed.candidateProfile!.gaps[0].note);
   });
@@ -146,12 +172,22 @@ describe("Preparing your interview", () => {
     // A day later, with the second stage's request not yet started in this tab.
     const html = render(analysed, 86_400, { [`${run}:generate`]: { status: "running" } });
 
-    expect(html).toContain("About 80 seconds left");
+    expect(html).toContain("About 2 minutes left");
     expect(html).not.toContain("longer than usual");
   });
 
   it("says plainly when a stage is slow", () => {
-    expect(render(analysed, 95, running("generate", 40))).toContain("Taking a little longer than usual");
+    expect(render(analysed, 100, running("generate", 40))).toContain("Taking a little longer than usual");
+  });
+
+  it("when a stage is very late, says what happens next, on the card and once out loud, and keeps the way out it has (#266)", () => {
+    const html = render(analysed, 150, running("generate", 40));
+
+    expect(html).toContain("Taking longer than usual");
+    expect(veryLateMessage).toBe(
+      "This step is slower than usual. If it hasn't finished 3 minutes after it started, we'll stop it and you can try again.",
+    );
+    expect(html).toContain(`<p role="status" class="text-sm">${veryLateMessage.replace("'", "&#x27;").replace("'", "&#x27;")}</p>`);
   });
 
   it("says when a stage is being tried again, on the stage and out loud, with the time left counted again", () => {
@@ -159,7 +195,7 @@ describe("Preparing your interview", () => {
 
     expect(html).toMatch(/Trying again…<\/span><span class="font-semibold">Writing 6 questions for this job/);
     expect(html).toContain("That step did not finish, so we are running it once more.");
-    expect(html).toContain("About 70 seconds left");
+    expect(html).toContain("About 90 seconds left");
     expect(html).toContain('role="status" class="sr-only">Trying again: Writing 6 questions for this job.</p>');
   });
 
@@ -174,6 +210,14 @@ describe("Preparing your interview", () => {
     expect(html).not.toContain("minutes left");
     // A screen reader hears the error too, not only the end of each stage.
     expect(html).toContain(`role="status" class="sr-only">Failed: Writing 6 questions for this job. ${stepProblems.server}</p>`);
+  });
+
+  it("offers no Try again when it would only fail the same way, as at the daily limit (#266)", () => {
+    const limit = "You have reached today's limit. Try again tomorrow.";
+    const html = render(analysed, 200, failed("generate", limit, true));
+
+    expect(html).toContain("today&#x27;s limit");
+    expect(html).not.toMatch(/<button[^>]*>Try again<\/button>/);
   });
 
   it("when the first stage fails, does not talk of steps already done", () => {
