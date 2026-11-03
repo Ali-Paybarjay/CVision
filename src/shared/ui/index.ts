@@ -1,4 +1,5 @@
 // The shared UI kit. See it all at /ui-kit, in light and dark mode.
+export { BrandMark } from "./brand-mark";
 export { Button, ButtonLink } from "./button";
 export { Card } from "./card";
 export { cn } from "./cn";
