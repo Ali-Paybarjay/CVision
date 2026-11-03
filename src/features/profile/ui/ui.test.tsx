@@ -88,7 +88,7 @@ describe("profile screens", () => {
       <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} />,
     );
 
-    expect(html).toMatch(/<\/div><div aria-live="polite"><\/div><\/form>/);
+    expect(html).toMatch(/<\/button><\/div><div aria-live="polite"><\/div><\/div><\/form>/);
     expect(html).not.toContain('class="sr-only"');
   });
 

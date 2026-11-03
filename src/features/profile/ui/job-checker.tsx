@@ -226,13 +226,13 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
             <Button type="submit" variant="primary" disabled={pending} className="w-full sm:w-auto">
               {pending ? "Checking your fit…" : "Check my fit"}
             </Button>
+            <WaitNote className="mt-3">
+              {pending &&
+                (slow
+                  ? "Still checking your fit. A long ad can take up to 2 minutes. Keep this page open."
+                  : "Reading the ad and checking your fit. This can take up to a minute. Keep this page open.")}
+            </WaitNote>
           </div>
-          <WaitNote className="mt-3">
-            {pending &&
-              (slow
-                ? "Still checking your fit. A long ad can take up to 2 minutes. Keep this page open."
-                : "Reading the ad and checking your fit. This can take up to a minute. Keep this page open.")}
-          </WaitNote>
         </form>
       </Card>
     </section>

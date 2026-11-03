@@ -136,22 +136,25 @@ export function UploadStep({
           )}
           {errors.signIn && <SignInNotice />}
 
-          <div className="flex flex-wrap items-center gap-4">
-            <Button type="submit" variant="primary" disabled={pending}>
-              {pending ? "Reading your CV…" : "Read my CV"}
-            </Button>
-            {onCancel && (
-              <Button variant="quiet" onClick={onCancel} disabled={pending}>
-                Keep my current profile
+          {/* The wait sits with the buttons, so the form's gap doesn't leave space under them while nothing runs. */}
+          <div>
+            <div className="flex flex-wrap items-center gap-4">
+              <Button type="submit" variant="primary" disabled={pending}>
+                {pending ? "Reading your CV…" : "Read my CV"}
               </Button>
-            )}
+              {onCancel && (
+                <Button variant="quiet" onClick={onCancel} disabled={pending}>
+                  Keep my current profile
+                </Button>
+              )}
+            </div>
+            <WaitNote className="mt-3">
+              {pending &&
+                (slow
+                  ? "Still reading your CV. A long one can take up to 2 minutes. Keep this page open."
+                  : "Reading your CV. This can take up to a minute. Keep this page open.")}
+            </WaitNote>
           </div>
-          <WaitNote className="mt-3">
-            {pending &&
-              (slow
-                ? "Still reading your CV. A long one can take up to 2 minutes. Keep this page open."
-                : "Reading your CV. This can take up to a minute. Keep this page open.")}
-          </WaitNote>
         </form>
       </Card>
 

@@ -136,7 +136,7 @@ describe("JobForm", () => {
   it("keeps an empty live region under the button, where the wait shows on screen (issue #235)", () => {
     const html = renderToStaticMarkup(<JobForm profile={personas.reza.profile} demoMode={false} focusAd={false} onChecked={noop} />);
 
-    expect(html).toMatch(/<\/button><\/div><div aria-live="polite"><\/div><\/form>/);
+    expect(html).toMatch(/<\/button><div aria-live="polite"><\/div><\/div><\/form>/);
     expect(html).not.toContain("sr-only");
   });
 
