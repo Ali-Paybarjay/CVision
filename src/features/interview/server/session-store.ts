@@ -33,6 +33,24 @@ export async function saveInterviewSession(session: InterviewSession): Promise<S
   return { saved: true };
 }
 
+/**
+ * Deletes one practice the signed-in user threw away with "Start again" (#281), so a reload or another device cannot
+ * resume it. Never one with a report: that is the job's last report, kept for the dashboard. False when it could not
+ * run: a sample job, no database, or an error.
+ */
+export async function discardInterviewSession(jobId: string, sessionId: string): Promise<boolean> {
+  if (!isStoredJobId(jobId)) return false;
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return false;
+
+  const { error } = await supabase.from("interview_sessions").delete().eq("id", sessionId).eq("job_id", jobId).is("data->report", null);
+  if (error) {
+    console.error(`interview: could not discard a session (${error.code})`);
+    return false;
+  }
+  return true;
+}
+
 /** The signed-in user's most recently updated session for a job, or null. */
 export async function loadLatestInterviewSession(jobId: string): Promise<InterviewSession | null> {
   if (!isStoredJobId(jobId)) return null;

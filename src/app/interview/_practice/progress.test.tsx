@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
 import { endedSessionFor, readySessionFor, runMockSession } from "@/features/interview/test-support";
-import { preparationState, Progress, scoringLine, startupEstimate, startupFraction, timeLeft, veryLateMessage } from "./progress";
+import { keptLine, preparationState, Progress, scoringLine, startupEstimate, startupFraction, timeLeft, veryLateMessage } from "./progress";
 import { stepProblems, type JobState, type PracticeStore } from "./store";
 
 const startedAtMs = Date.parse("2026-10-30T21:00:00Z");
@@ -184,10 +184,15 @@ describe("Preparing your interview", () => {
     const html = render(analysed, 150, running("generate", 40));
 
     expect(html).toContain("Taking longer than usual");
-    expect(veryLateMessage).toBe(
-      "This step is slower than usual. If it hasn't finished 3 minutes after it started, we'll stop it and you can try again.",
-    );
-    expect(html).toContain(`<p role="status" class="text-sm">${veryLateMessage.replace("'", "&#x27;").replace("'", "&#x27;")}</p>`);
+    expect(html).toContain(`<p role="status" class="text-sm">${veryLateMessage(1).replaceAll("'", "&#x27;")}</p>`);
+  });
+
+  it("counts the time before a very late stage is stopped from now, which the user can see, not from the stage's start (#281)", () => {
+    // Stopped at 180 s; the line comes at twice the stage's share plus 10 s: 58 s into stage 1, 106 s into stages 2 and 3.
+    expect(veryLateMessage(0)).toBe("This step is slower than usual. If it isn't done in about 2 minutes, we'll stop it so you can try again.");
+    for (const stage of [1, 2]) {
+      expect(veryLateMessage(stage)).toBe("This step is slower than usual. If it isn't done in about a minute, we'll stop it so you can try again.");
+    }
   });
 
   it("says when a stage is being tried again, on the stage and out loud, with the time left counted again", () => {
@@ -218,6 +223,16 @@ describe("Preparing your interview", () => {
 
     expect(html).toContain("today&#x27;s limit");
     expect(html).not.toMatch(/<button[^>]*>Try again<\/button>/);
+    // With no Try again, it says when to come back instead, not to keep the page open (#281).
+    expect(html).toContain("The steps already done are kept. Open this page again later to carry on.");
+    expect(html).not.toContain("Keep this page open");
+  });
+
+  it("with no Try again, says what is kept and when to come back (#281)", () => {
+    expect(keptLine(0, false)).toBe("");
+    expect(keptLine(2, false)).toBe("The steps already done are kept.");
+    expect(keptLine(0, true)).toBe("Open this page again later to try again.");
+    expect(keptLine(1, true)).toBe("The steps already done are kept. Open this page again later to carry on.");
   });
 
   it("when the first stage fails, does not talk of steps already done", () => {

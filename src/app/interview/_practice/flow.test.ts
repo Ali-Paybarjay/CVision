@@ -62,12 +62,32 @@ describe("the start-up stages (#232)", () => {
     const review = sent.find((s) => s.step === "review")!;
     expect(review.retries).toBe(1);
     expect(review.waitedMs).toBeGreaterThanOrEqual(5000);
-    // Stage 2 was timed here, its second go included (#266); stage 1 ran before this tab, so it has no time.
+    // Stage 2 was timed here (#266); stage 1 ran before this tab, so it has no time.
     expect(review.generateMs).toBeGreaterThanOrEqual(0);
     expect(review.analyseMs).toBeUndefined();
     expect(store.readEnvelope()!.stageMs).toEqual({ generate: review.generateMs });
     // The questions are ready and question 1 is asked.
     expect(nextStep(store.readEnvelope()!.session!)).toMatchObject({ step: "answer", kind: "main" });
+  });
+
+  it("time a stage by the go that worked, without the failed first go or the pause before the second (#281)", async () => {
+    const sent: { step: string; generateMs?: number }[] = [];
+    let generateCalls = 0;
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      sent.push({ step: body.step, generateMs: body.generateMs });
+      if (body.step === "generate" && ++generateCalls === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return new Response("<html>502 Bad Gateway</html>", { status: 502 });
+      }
+      if (body.step === "generate") return Response.json({ session: written });
+      return Response.json({ session: ready });
+    });
+
+    drivenStore(analysed);
+    await vi.waitFor(() => expect(sent.map((s) => s.step)).toContain("review"), { timeout: 5000 });
+    expect(generateCalls).toBe(2);
+    expect(sent.find((s) => s.step === "review")!.generateMs).toBeLessThan(300);
   });
 
   it("fail a stage at once, in the API's words, when a second go would not help, and with no Try again at a daily limit", async () => {

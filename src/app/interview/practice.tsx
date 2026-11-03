@@ -8,7 +8,8 @@ import type { InterviewSession } from "@/features/interview/contracts";
 import { mainAnswer, nextStep, openingView } from "@/features/interview/engine/session";
 import type { LastReport } from "@/features/interview/server/session-store";
 import { drive, InterviewFlow, runOf, type SampleAnswers } from "./_practice/flow";
-import { preparationState, Progress, startupEstimate } from "./_practice/progress";
+import { ConfirmInPlace } from "./_practice/confirm";
+import { preparationState, Progress, startupEstimate, startupFailure } from "./_practice/progress";
 import { FeedbackReport } from "./_practice/report";
 import { createPracticeStore, parseEnvelope, type PracticeStore } from "./_practice/store";
 import { Button, Card, Notice } from "@/shared/ui";
@@ -208,6 +209,16 @@ export function InterviewPractice({
     setSaveState("idle");
     setPractiseAgain(true);
   };
+  // "Start again" during a practice (#281): the account's copy of the practice thrown away goes too, so a reload or
+  // another device cannot resume it. It waits behind any save still on its way, which would otherwise bring it back.
+  const startAgain = () => {
+    const sessionId = session?.id;
+    if (autoSave && sessionId) {
+      saveQueue = saveQueue.then(() => store.callStep({ step: "discard", jobId, sessionId }, { keepalive: true })).catch(() => undefined);
+      accountCopy.current = null;
+    }
+    restart();
+  };
   const continuePractice = () => {
     // The account's copy goes into this browser first, so the intro never shows in between.
     if (behindReport === "resume" && saved) resumeFromAccount(store, jobId, saved);
@@ -230,13 +241,14 @@ export function InterviewPractice({
   const done = session !== null && nextStep(session).step === "done";
   const run = runOf(envelope);
   // While the questions are being prepared, Start again would throw away a start that is going fine and begin the
-  // wait again (#232). It comes back when a stage fails, next to Try again, and once question 1 is here.
-  const canStartAgain = !done && preparationState(session, jobs, run) !== "preparing";
+  // wait again (#232). It comes back when a stage fails, next to Try again, and once question 1 is here. Not after a
+  // failure Try again cannot fix, as at a daily limit (#281): it would throw away the stages done and fail the same way.
+  const canStartAgain = !done && preparationState(session, jobs, run) !== "preparing" && !startupFailure(jobs, run)?.final;
   return (
     <div ref={practiceRef} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
-        {canStartAgain && <StartAgain answers={answersGiven(session)} hasDraft={hasDraft} onRestart={restart} />}
+        {canStartAgain && <StartAgain answers={answersGiven(session)} hasDraft={hasDraft} onRestart={startAgain} />}
       </div>
       <Progress store={store} session={session} jobs={jobs} run={run} />
       {session && done ? (
@@ -297,25 +309,26 @@ export function answersGiven(session: InterviewSession | null): number {
  */
 function StartAgain({ answers, hasDraft, onRestart }: { answers: number; hasDraft: boolean; onRestart: () => void }) {
   const [confirming, setConfirming] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  const toggled = useRef(false);
-  // Focus goes to the question when it opens, and back to the button after "Keep going".
+  // The question takes focus as it opens (ConfirmInPlace); after "Keep going" or Escape, focus goes back to the button.
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancelled = useRef(false);
   useEffect(() => {
-    if (!toggled.current) return;
-    box.current?.querySelector<HTMLElement>(confirming ? "[data-confirm-heading]" : "button")?.focus();
+    if (!confirming && cancelled.current) trigger.current?.focus();
   }, [confirming]);
-  const toggle = (on: boolean) => {
-    toggled.current = true;
-    setConfirming(on);
+  const cancel = () => {
+    cancelled.current = true;
+    setConfirming(false);
   };
 
   return (
     // Full width when asking, so the question sits on its own line under the save status.
-    <div ref={box} className={confirming ? "w-full" : undefined}>
+    <div className={confirming ? "w-full" : undefined}>
       {confirming ? (
-        <ConfirmStartAgain answers={answers} hasDraft={hasDraft} onConfirm={onRestart} onCancel={() => toggle(false)} />
+        <ConfirmStartAgain answers={answers} hasDraft={hasDraft} onConfirm={onRestart} onCancel={cancel} />
       ) : (
-        <Button onClick={answers > 0 || hasDraft ? () => toggle(true) : onRestart}>Start again</Button>
+        <Button ref={trigger} onClick={answers > 0 || hasDraft ? () => setConfirming(true) : onRestart}>
+          Start again
+        </Button>
       )}
     </div>
   );
@@ -337,17 +350,12 @@ export function ConfirmStartAgain({
     answers === 1 ? "You'll lose your answer and its feedback." : answers > 1 ? `You'll lose your ${answers} answers and their feedback.` : null,
     hasDraft ? (answers > 0 ? "Anything you haven't submitted will be lost too." : "Anything you haven't submitted will be lost.") : null,
   ].filter(Boolean);
+  // The button names what it does (#281): a screen reader's list of buttons reads it without the question.
   return (
-    <div className="space-y-2 rounded-md border border-line bg-canvas p-3">
-      <p data-confirm-heading tabIndex={-1} className="font-semibold">
-        Start again with new questions?
-      </p>
-      {lost.length > 0 && <p className="text-sm">{lost.join(" ")}</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={onConfirm}>Start again</Button>
-        <Button onClick={onCancel}>Keep going</Button>
-      </div>
-    </div>
+    <ConfirmInPlace question="Start again?" detail={lost.length > 0 ? lost.join(" ") : undefined} onCancel={onCancel}>
+      <Button onClick={onConfirm}>Start again with new questions</Button>
+      <Button onClick={onCancel}>Keep going</Button>
+    </ConfirmInPlace>
   );
 }
 

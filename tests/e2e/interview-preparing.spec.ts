@@ -102,3 +102,24 @@ test("a stage that does not finish is tried once more, then says so plainly, kee
   await expect(page.getByText("Question 1 of 6")).toBeVisible({ timeout: 120_000 });
   expect(generateCalls).toBe(3);
 });
+
+test("a stage Try again cannot fix, as at the daily limit, says when to come back and offers neither Try again nor Start again (#281)", async ({ page }) => {
+  let generateCalls = 0;
+  await page.route("**/interview/api", async (route) => {
+    if (route.request().postDataJSON()?.step !== "generate") return route.continue();
+    generateCalls += 1;
+    return route.fulfill({ status: 429, json: { error: "You have reached today's limit. Try again tomorrow.", final: true } });
+  });
+
+  await page.goto("/interview?job=sara-job-1");
+  await page.getByRole("button", { name: "Start practice" }).click({ timeout: 120_000 });
+
+  await expect(page.getByText("You have reached today's limit. Try again tomorrow.", { exact: true })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByText("The steps already done are kept. Open this page again later to carry on.")).toBeVisible();
+  await expect(page.getByText("Keep this page open", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  // Start again would throw away the first stage and fail the same way.
+  await expect(page.getByRole("button", { name: "Start again" })).toHaveCount(0);
+  // Not sent again by itself either.
+  expect(generateCalls).toBe(1);
+});
