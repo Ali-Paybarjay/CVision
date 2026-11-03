@@ -37,8 +37,16 @@ test("ending at the first question gives a suggested answer for every question a
   await expect(page.getByText("Question 1 of 6")).toBeVisible({ timeout: 120_000 });
 
   await expect(page.getByText("Short on time? Stop now and get a suggested answer", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "End here and see suggested answers" }).click();
-  await expect(page.getByText("Each of the 6 questions gets a suggested answer built from your profile.")).toBeVisible();
+  const endHere = page.getByRole("button", { name: "End here and see suggested answers" });
+  await endHere.click();
+  // The question is a group that takes focus, so a screen reader hears what happens with it; Escape goes back (#281).
+  const question = page.getByRole("group", { name: "End the practice here?" });
+  await expect(question).toBeFocused();
+  await expect(question).toHaveAccessibleDescription(/^Each of the 6 questions gets a suggested answer built from your profile\./);
+  await page.keyboard.press("Escape");
+  await expect(question).toHaveCount(0);
+  await expect(endHere).toBeFocused();
+  await endHere.click();
   await page.getByRole("button", { name: "End practice" }).click();
 
   await expect(page.getByText("there is no score", { exact: false })).toBeVisible({ timeout: 120_000 });

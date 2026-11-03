@@ -54,7 +54,8 @@ const secondsOrNull = (ms: number | undefined) => (ms === undefined ? null : Mat
  * The details of interview.startup_ready (#232): how long the user waited from "Start practice" to question 1, in
  * seconds, so the wait the page promises comes from real starts. `waitedMs` is the browser's own count up to the check
  * (stage 3), `reviewMs` the check itself on the server. `analyseMs` and `generateMs` are stages 1 and 2 in the browser,
- * their last go only (#266), so each stage's share of the bar can come from real starts too. Durations only, never text.
+ * the go that worked only (#266, #281), so each stage's share of the bar can come from real starts too. Durations only,
+ * never text.
  */
 export function startupReadyProperties(session: InterviewSession, timing: StartupTiming) {
   const resumed = timing.waitedMs !== undefined && timing.waitedMs > resumedAfterMs;

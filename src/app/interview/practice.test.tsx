@@ -54,14 +54,22 @@ describe("Start again during a practice (#263)", () => {
 
   it("asks in place, says what is lost and offers a way back", () => {
     const one = renderToStaticMarkup(<ConfirmStartAgain answers={1} onConfirm={noop} onCancel={noop} />);
-    expect(one).toContain('tabindex="-1"');
-    expect(one).toContain("Start again with new questions?");
+    expect(one).toContain("Start again?");
     expect(one).toContain("You&#x27;ll lose your answer and its feedback.");
-    expect(one.indexOf(">Start again</button>")).toBeLessThan(one.indexOf(">Keep going</button>"));
+    // The button says what it does on its own, as a screen reader's list of buttons reads it (#281).
+    expect(one.indexOf(">Start again with new questions</button>")).toBeLessThan(one.indexOf(">Keep going</button>"));
 
     const three = renderToStaticMarkup(<ConfirmStartAgain answers={3} onConfirm={noop} onCancel={noop} />);
     expect(three).toContain("You&#x27;ll lose your 3 answers and their feedback.");
     expect(three).not.toContain("submitted");
+  });
+
+  it("is a group named by its question and described by what is lost, which takes focus, so both are heard (#281)", () => {
+    const html = renderToStaticMarkup(<ConfirmStartAgain answers={2} onConfirm={noop} onCancel={noop} />);
+    expect(html).toMatch(/^<div role="group" tabindex="-1" aria-labelledby="[^"]+" aria-describedby="[^"]+"/);
+    const named = (attribute: string) => html.match(new RegExp(`id="${html.match(new RegExp(`${attribute}="([^"]+)"`))![1]}"[^>]*>([^<]*)<`))?.[1];
+    expect(named("aria-labelledby")).toBe("Start again?");
+    expect(named("aria-describedby")).toBe("You&#x27;ll lose your 2 answers and their feedback.");
   });
 
   it("says an answer still being written is lost too (#269 review)", () => {

@@ -41,8 +41,24 @@ const plainMessages: Record<string, string> = {
 /** The AI service turned the request away, or no key is set: Try again now would only fail the same way. */
 export const practiceUnavailable = "Interview practice is not available right now. Please try again later.";
 
-/** The model declined the step: said plainly, never with the model's feature name. */
+/**
+ * The AI service said the request is too long (#281): later would fail the same way, so the user is told what to change.
+ * The job ad and profile are read again on each go, so Try again works once one of them is shorter.
+ */
+export const inputTooLong = "The job ad and your profile are too long for us to read together. Shorten one of them, then try again.";
+
+/** The model declined a start-up step: said plainly, never with the model's feature name. No answers yet, so another job is a way out. */
 export const stepDeclined = "We could not finish this step. Try again; if it happens again, try another job.";
+
+/** The model declined a step once answers are given (#281): "try another job" would mean leaving them, so it is not said. */
+export const answerStepDeclined = "We could not finish this step. Try again; your answers are kept.";
+
+/** The steps before question 1, which have no answers to lose. */
+const startupSteps: ReadonlySet<string> = new Set(["analyse", "generate", "review"]);
+
+/** The AI service's "too long" (#281): 413, or a 400 that says the prompt does not fit. */
+const isTooLong = (status: number, message: string) =>
+  status === 413 || (status === 400 && /too long|too large|context (?:length|window)|too many tokens/i.test(message));
 
 /**
  * The HTTP status the AI service answered with, when it answered at all. The SDK's API errors carry one and reach
@@ -64,8 +80,10 @@ const isBusy = (status: number) => status >= 500 || status === 429 || status ===
  * `retryable: true` tells the page a second go may well work (#232): an answer that broke a rule twice, a dropped
  * connection, or the AI service busy or failing (5xx, 429). `final: true` tells it that Try again now would only fail
  * the same way (#266): a daily limit, or the AI service turning the request away (400, 401, 402 out of credit, 403), so
- * the page offers no Try again. A refusal or a rule of the interview itself is neither: no second go by itself, but the
- * user may try again.
+ * the page offers no Try again. A refusal, a rule of the interview itself, or a request too long for the AI service (413,
+ * or a 400 that says so, #281) is neither: no second go by itself, but the user may try again, after shortening the job
+ * ad or profile for the last. In the lab, an answer that broke a rule twice gets no second go by itself (#281): the lab shows
+ * the rules it broke, and a second go would send two more paid requests.
  */
 export function stepFailed(source: string, step: string, error: unknown, { plain = false } = {}): Response {
   const reason = error instanceof AskModelError ? error.reason : undefined;
@@ -79,16 +97,18 @@ export function stepFailed(source: string, step: string, error: unknown, { plain
 
   switch (reason) {
     case "invalid-answer":
-      return Response.json({ error: plain ? notThisTime : message, retryable: true }, { status: 422 });
+      return Response.json({ error: plain ? notThisTime : message, retryable: plain }, { status: 422 });
     case "limit-reached":
       return Response.json({ error: message, final: true }, { status: 429 });
     case "no-api-key":
       return Response.json({ error: plain ? practiceUnavailable : message, final: true }, { status: 503 });
     case "refused":
-      return Response.json({ error: plain ? stepDeclined : message }, { status: 422 });
+      return Response.json({ error: plain ? (startupSteps.has(step) ? stepDeclined : answerStepDeclined) : message }, { status: 422 });
   }
   if (status !== undefined && !isBusy(status)) {
-    return Response.json({ error: plain ? practiceUnavailable : `The ${step} step failed: the AI service answered ${status}.`, final: true }, { status: 503 });
+    const answered = `The ${step} step failed: the AI service answered ${status}.`;
+    if (isTooLong(status, message)) return Response.json({ error: plain ? inputTooLong : answered }, { status: 422 });
+    return Response.json({ error: plain ? practiceUnavailable : answered, final: true }, { status: 503 });
   }
   const known = error instanceof MockFixtureMissingError || error instanceof InterviewStageError || error instanceof InterviewRuleError;
   if (known) return Response.json({ error: message }, { status: 422 });

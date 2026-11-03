@@ -4,7 +4,7 @@ import { AskModelError } from "@/shared/ai";
 import { limits } from "./config";
 import { fixtures } from "./fixtures";
 import { questionsNotWritten } from "./engine/stages";
-import { badRequest, practiceUnavailable, RequestSessionSchema, stepDeclined, stepFailed } from "./server/step-api";
+import { answerStepDeclined, badRequest, inputTooLong, practiceUnavailable, RequestSessionSchema, stepDeclined, stepFailed } from "./server/step-api";
 import { runMockSession } from "./test-support";
 
 describe("a session sent by the browser", () => {
@@ -44,9 +44,9 @@ describe("a step whose answer broke a rule twice (#220)", () => {
     expect((await stepFailed("interview", "report", invalid, { plain: true }).json()).error).toMatch(/^We could not write your report/);
   });
 
-  it("still shows the rule in the lab", async () => {
+  it("still shows the rule in the lab, with no second go by itself, which would pay for two more requests (#281)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    expect((await stepFailed("interview lab", "review", invalid).json()).error).toBe(invalid.message);
+    expect(await stepFailed("interview lab", "review", invalid).json()).toEqual({ error: invalid.message, retryable: false });
   });
 });
 
@@ -83,6 +83,18 @@ describe("other failures (#232)", () => {
     expect(user.error).not.toContain("interview-analyse");
     expect((await stepFailed("interview lab", "analyse", refused).json()).error).toBe(refused.message);
   });
+
+  it("a refusal once answers are given: no 'try another job', which would mean leaving them (#281)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const refused = new AskModelError("The model declined the interview-evaluate request.", "refused");
+    for (const step of ["generate", "review"]) {
+      expect((await stepFailed("interview", step, refused, { plain: true }).json()).error).toBe(stepDeclined);
+    }
+    for (const step of ["follow-up", "evaluate", "suggest", "report"]) {
+      expect(await stepFailed("interview", step, refused, { plain: true }).json()).toEqual({ error: answerStepDeclined });
+    }
+    expect(answerStepDeclined).not.toContain("another job");
+  });
 });
 
 /** An error as the AI service's SDK throws it: a class of its own with the HTTP status. */
@@ -112,6 +124,18 @@ describe("the AI service's own answers (#266)", () => {
     expect((await stepFailed("interview lab", "generate", serviceError(402)).json()).error).toBe(
       "The generate step failed: the AI service answered 402.",
     );
+  });
+
+  it("too long for the AI service: says what to change, not 'try again later', and keeps Try again for after (#281)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const promptTooLong = Object.assign(serviceError(400), { message: '400 {"error":{"message":"prompt is too long: 212000 tokens > 200000 maximum"}}' });
+    for (const error of [promptTooLong, serviceError(413)]) {
+      const response = stepFailed("interview", "analyse", error, { plain: true });
+      expect(response.status).toBe(422);
+      // Not final: the job ad and profile are read again on each go, so Try again works once one is shorter.
+      expect(await response.json()).toEqual({ error: inputTooLong });
+    }
+    expect(inputTooLong).not.toMatch(/later/i);
   });
 
   it("no AI key on the server: plain words for the user, never the setting's name", async () => {
