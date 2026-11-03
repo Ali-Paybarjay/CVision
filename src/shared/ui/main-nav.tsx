@@ -95,7 +95,8 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
         <button
           type="button"
           className={cn(
-            "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-2 text-sm font-semibold",
+            // Under the pointer it shows it can be clicked, as the other header controls do (#277).
+            "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-2 text-sm font-semibold transition-colors hover:bg-canvas hover:text-accent",
             wide.narrowOnly,
           )}
           aria-expanded={open}
