@@ -16,7 +16,8 @@ type DownloadBarProps = {
   onGoToLetter: () => void;
 };
 
-function save(base64: string, mimeType: string, fileName: string) {
+/** Hands the file to the browser as a download. Shared with the saved copy's downloads (#207). */
+export function saveFile(base64: string, mimeType: string, fileName: string) {
   const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
   const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
   const link = Object.assign(document.createElement("a"), { href: url, download: fileName });
@@ -42,7 +43,7 @@ export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBa
       try {
         const result = await exportDocument({ jobId, document: kind, format, changes, letter: approvedLetter });
         if (result.ok) {
-          save(result.base64, result.mimeType, result.fileName);
+          saveFile(result.base64, result.mimeType, result.fileName);
           setWarning(result.warning);
           setSaveFailed(Boolean(result.saveFailed));
         } else {
