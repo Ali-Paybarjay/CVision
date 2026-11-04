@@ -309,11 +309,12 @@ describe("the suggestion to close applications with no news", () => {
     expect(html).not.toContain("at any time");
   });
 
-  it("keeps the message after closing on the page and able to take the focus", () => {
+  it("keeps an empty status line for the message after closing on the page", () => {
     const html = render([row("1", "applied", "2026-08-26", "Sixty days")]);
 
-    // The button can go with the suggestion once every row is closed, so the focus moves to this message instead.
-    expect(html).toMatch(/<p role="status" tabindex="-1" class="sr-only"><\/p><ul /);
+    // Empty until something closes, so screen readers announce the message when it fills. When the user is still at
+    // the suggestion, the message takes the focus in a line of its own instead, so it is read once (#184; e2e).
+    expect(html).toMatch(/<p role="status" class="sr-only"><\/p><ul /);
   });
 
   it("is not shown when no row has gone 60 days without news", () => {

@@ -427,10 +427,15 @@ type CloseWithoutNewsProps = {
  */
 function CloseWithoutNews({ items, today, sample, onClosed }: CloseWithoutNewsProps) {
   const [ticked, setTicked] = useState<string[]>([]);
-  const [result, close, pending] = useActionState<CloseWithoutNewsResult | null, string[]>(async (_previous, ids) => {
+  const sectionRef = useRef<HTMLElement>(null);
+  const [result, close, pending] = useActionState<CloseResult | null, string[]>(async (_previous, ids) => {
     const outcome: CloseWithoutNewsResult = sample ? { ok: true, closed: closeChosen(items, ids, today) } : await closeWithoutNews(ids);
     if (outcome.ok) onClosed(outcome.closed);
-    return outcome;
+    // The focus moves to the message only if the user is still at the suggestion (#184); if they went elsewhere
+    // while it closed, it stays there and the status line reads the message out instead.
+    const active = document.activeElement;
+    const focus = !active || active === document.body || (sectionRef.current?.contains(active) ?? false);
+    return { ...outcome, focus };
   }, null);
 
   // Only rows still suggested count: one closed or moved on in its own row drops out of the choice.
@@ -440,13 +445,13 @@ function CloseWithoutNews({ items, today, sample, onClosed }: CloseWithoutNewsPr
   // message, which stays on the page. After an error it stays on the button.
   const messageRef = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
-    if (result?.ok) messageRef.current?.focus();
+    if (result?.ok && result.focus) messageRef.current?.focus();
   }, [result]);
 
   return (
     <>
       {items.length > 0 && (
-        <section aria-labelledby="no-news-title" className="rounded-lg border border-line bg-surface p-5 sm:p-6">
+        <section ref={sectionRef} aria-labelledby="no-news-title" className="rounded-lg border border-line bg-surface p-5 sm:p-6">
           <h3 id="no-news-title" className="text-lg leading-snug">
             No news for {noNewsDays} days or more
           </h3>
@@ -507,26 +512,42 @@ function CloseWithoutNews({ items, today, sample, onClosed }: CloseWithoutNewsPr
   );
 }
 
-/** What closing did. Stays on the page when the suggestion has gone, so it is still read out. Icon and words. */
-function CloseMessage({ result, ref }: { result: CloseWithoutNewsResult | null; ref: React.Ref<HTMLParagraphElement> }) {
+/** What closing did, and whether the focus moves to the message (the user was still at the suggestion). */
+type CloseResult = CloseWithoutNewsResult & { focus: boolean };
+
+/**
+ * What closing did. Stays on the page when the suggestion has gone, so it is still read out. Icon and words.
+ * A message that takes the focus is read out because of the focus, so it is not also put in the status line, which
+ * some screen readers would read a second time (#184, as the Save message does since #154).
+ */
+function CloseMessage({ result, ref }: { result: CloseResult | null; ref: React.Ref<HTMLParagraphElement> }) {
   const count = result?.ok ? result.closed.length : null;
+  const focused = result?.ok === true && result.focus;
+  const shown = "flex items-start gap-1.5 text-sm font-semibold text-accent";
+  const message =
+    count === null ? null : count > 0 ? (
+      <>
+        <CheckIcon className="mt-px size-4 shrink-0" />
+        Closed {count} {count === 1 ? "application" : "applications"} as No response. {count === 1 ? "It is" : "They are"} now
+        under Closed, below your open applications.
+      </>
+    ) : (
+      <>
+        <InfoIcon className="mt-px size-4 shrink-0" />
+        Nothing was closed: these applications changed since the page loaded. Refresh the page to see where they stand.
+      </>
+    );
   return (
     <>
-      <p ref={ref} role="status" tabIndex={-1} className={count === null ? "sr-only" : "flex items-start gap-1.5 text-sm font-semibold text-accent"}>
-        {count !== null && count > 0 && (
-          <>
-            <CheckIcon className="mt-px size-4 shrink-0" />
-            Closed {count} {count === 1 ? "application" : "applications"} as No response. {count === 1 ? "It is" : "They are"} now
-            under Closed, below your open applications.
-          </>
-        )}
-        {count === 0 && (
-          <>
-            <InfoIcon className="mt-px size-4 shrink-0" />
-            Nothing was closed: these applications changed since the page loaded. Refresh the page to see where they stand.
-          </>
-        )}
+      {/* Always on the page, empty while there is nothing to say, so screen readers announce it when it fills. */}
+      <p role="status" className={message && !focused ? shown : "sr-only"}>
+        {!focused && message}
       </p>
+      {focused && (
+        <p ref={ref} tabIndex={-1} className={shown}>
+          {message}
+        </p>
+      )}
       {result && !result.ok && (
         <p role="alert" className="flex items-start gap-1.5 text-sm text-error">
           <ErrorIcon className="mt-px size-4 shrink-0" />
