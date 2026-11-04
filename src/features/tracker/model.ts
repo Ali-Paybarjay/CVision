@@ -10,12 +10,24 @@ export type JobSummary = Pick<Job, "title" | "company" | "deadline">;
  * One row on the dashboard: the application and the job it is for (null when the job cannot be read). `hasAd` is
  * true when the job's full ad can be opened on its own page (jobAdPath): a saved job that matches the whole contract, or one of Sara's sample jobs.
  * `report` is the overall score, out of 5, of the latest finished interview practice for the job, when there is one.
+ * `hasSavedCv` is true when the CV and cover letter the user downloaded or sent with Apply are saved for the job (#207).
  */
-export type TrackedApplication = { application: Application; job: JobSummary | null; hasAd?: boolean; report?: { overall: number } };
+export type TrackedApplication = {
+  application: Application;
+  job: JobSummary | null;
+  hasAd?: boolean;
+  report?: { overall: number };
+  hasSavedCv?: boolean;
+};
 
 /** The interview page, which opens the job's latest practice report when it has one. */
 export function interviewPath(jobId: string): string {
   return `/interview?job=${encodeURIComponent(jobId)}`;
+}
+
+/** Nazanin's read-only page of the CV and cover letter saved for a job when they were downloaded or sent (#207). */
+export function savedCvPath(jobId: string): string {
+  return `/tailor/saved?job=${encodeURIComponent(jobId)}`;
 }
 
 /** An interview score as the report itself shows it: one decimal place, so 4 reads 4.0. */

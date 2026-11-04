@@ -16,13 +16,13 @@ vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("@/features/interview/server/session-store", () => ({ listPracticeSummaries }));
 
 type Row = Record<string, unknown>;
-type Tables = { jobs: Row[]; applications: Row[] };
+type Tables = { jobs: Row[]; applications: Row[]; tailored_cvs?: Row[] };
 
 /** Just enough of the Supabase client for loadTracker, acting as one user, like row-level security. */
 function fakeSupabase(tables: Tables, userId: string, options: { failJobs?: boolean } = {}) {
   return {
     from(table: keyof Tables) {
-      let rows = tables[table].filter((row) => row.user_id === userId);
+      let rows = (tables[table] ?? []).filter((row) => row.user_id === userId);
       const query = {
         select: () => query,
         order: (column: string, { ascending }: { ascending: boolean }) => {
@@ -167,6 +167,20 @@ describe("loadTracker", () => {
     expect(tracker.kind === "account" && tracker.items.map((item) => [item.application.id, item.report])).toEqual([
       ["app-2", undefined],
       ["app-1", { overall: 3.4 }],
+    ]);
+  });
+
+  it("marks each job with a saved CV and cover letter, for its link, and only this user's (#208)", async () => {
+    tables.tailored_cvs = [
+      { id: "cv-1", job_id: "job-2", user_id: userId },
+      { id: "cv-2", job_id: "job-1", user_id: "someone-else" },
+    ];
+
+    const tracker = await loadTracker(today);
+
+    expect(tracker.kind === "account" && tracker.items.map((item) => [item.application.id, item.hasSavedCv])).toEqual([
+      ["app-2", true],
+      ["app-1", undefined],
     ]);
   });
 

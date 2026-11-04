@@ -229,6 +229,13 @@ describe("the link to a job's ad", () => {
 // The report link needs a finished practice, which only an account has (listPracticeSummaries), so it is tested
 // here rather than in tests/e2e, where Sara's sample rows have no report.
 describe("the link to a job's interview report", () => {
+  it("links to the saved CV and cover letter only for a job that has one, naming the job for screen readers (#208)", () => {
+    const html = render([{ ...row("1", "applied", "2026-10-20", "Data Analyst"), hasSavedCv: true }]);
+    expect(html).toMatch(/<a href="\/tailor\/saved\?job=job-1"[^>]*>CV and cover letter<span class="sr-only"> you saved for Data Analyst at /);
+    expect(render([row("1", "applied", "2026-10-20", "Data Analyst")])).not.toContain("CV and cover letter");
+    expect(render([{ ...row("1", "applied", "2026-10-20", "Data Analyst"), job: null, hasSavedCv: true }])).not.toContain("CV and cover letter");
+  });
+
   const reported = (status: Application["status"], overall: number): TrackedApplication => ({
     ...row("1", status, "2026-10-20", "Data Analyst"),
     hasAd: true,
