@@ -81,7 +81,7 @@ function Frame({ job, mock = false, wide = false, children }: { job?: Job; mock?
         </div>
       ) : (
         <p className="mt-3 max-w-[65ch] text-lg text-text-muted">
-          Get ready for an interview you have been invited to: six questions written for this job and your profile, then feedback on every answer.
+          Get ready for a job interview, even before you are invited: six questions written for the job and your profile, then feedback on every answer.
         </p>
       )}
       <div className={cn("mt-8 flex flex-col gap-6", !wide && "max-w-3xl")}>{children}</div>
