@@ -19,6 +19,7 @@ import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
 import { letterHead } from "./letter-state";
 import { modelFailureMessage, tailorModelAccess } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
+import { saveTailoredCv } from "./server/tailored-cvs";
 import { buildTailoredCv, fitsCv } from "./tailored-cv";
 import type { GapAnswer, NextStep } from "./types";
 
@@ -322,17 +323,20 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
   }
 }
 
-export type ApplyResult = { recorded: boolean; message: string };
+/** `saved` says the CV and cover letter being sent were kept, so the page can link to them (#207). */
+export type ApplyResult = { recorded: boolean; message: string; saved?: boolean };
 
 /**
  * Called when the user presses Apply, as the employer's page opens in a new tab: adds the job to their
  * tracker with Ali's recordApplication and records tailor.apply_clicked. The app never applies itself.
+ * It also saves the CV and the approved cover letter being sent (#207), so the user can see them again later.
  */
-export async function recordApply(jobId: string): Promise<ApplyResult> {
+export async function recordApply(jobId: string, coverLetter: string | null = null): Promise<ApplyResult> {
   const parsed = z.string().min(1).max(100).safeParse(jobId);
   if (!parsed.success) return { recorded: false, message: "We could not read this job." };
+  const letter = z.string().max(10000).nullable().catch(null).parse(coverLetter);
 
-  const result = await recordApplication(parsed.data);
+  const [result, saved] = await Promise.all([recordApplication(parsed.data), saveTailoredCv(parsed.data, letter)]);
   after(async () => {
     const user = await getCurrentUser();
     await track(
@@ -343,8 +347,8 @@ export async function recordApply(jobId: string): Promise<ApplyResult> {
   });
 
   return result.ok
-    ? { recorded: true, message: "Added to your applications, so you can follow it up from your dashboard." }
-    : { recorded: false, message: result.message };
+    ? { recorded: true, message: "Added to your applications, so you can follow it up from your dashboard.", saved }
+    : { recorded: false, message: result.message, saved };
 }
 
 const ExportRequestSchema = z.object({
@@ -385,6 +389,8 @@ export async function exportDocument(request: ExportRequest): Promise<ExportResu
 
   try {
     const bytes = await blocksToFile(blocks, format, { title, author: profile.fullName, footer: document === "cv" ? `${profile.fullName} – CV` : undefined });
+    // Keeps what the user is sending, with the approved letter if there is one (#207). A failure never stops the download.
+    await saveTailoredCv(jobId, letter);
     after(async () => {
       const user = await getCurrentUser();
       const approvedChanges = changes.filter((change) => change.status === "approved").length;

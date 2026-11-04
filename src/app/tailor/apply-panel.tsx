@@ -15,11 +15,27 @@ export function linkSite(url: string): string | null {
   }
 }
 
+/** The CV and cover letter saved for this job, as the user sent them (#207). */
+export function savedPath(jobId: string): string {
+  return `/tailor/saved?job=${encodeURIComponent(jobId)}`;
+}
+
 /**
  * Apply opens the job ad at the link the user gave, in a new tab, and adds the job to the user's tracker.
  * The app never sends an application on the user's behalf.
  */
-export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl: string | null; onApplied: () => void }) {
+export function ApplyPanel({
+  jobId,
+  jobUrl,
+  coverLetter = null,
+  onApplied,
+}: {
+  jobId: string;
+  jobUrl: string | null;
+  /** The approved cover letter, saved with the CV when the user presses Apply (#207). */
+  coverLetter?: string | null;
+  onApplied: () => void;
+}) {
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [, startTransition] = useTransition();
   // A double click must not record the application twice; the link itself still opens every time.
@@ -31,7 +47,7 @@ export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl
     recording.current = true;
     startTransition(async () => {
       try {
-        const recorded = await recordApply(jobId);
+        const recorded = await recordApply(jobId, coverLetter);
         setResult(recorded);
         if (recorded.recorded) onApplied();
       } catch {
@@ -73,6 +89,14 @@ export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl
           <Link href="/dashboard" className="underline underline-offset-4">
             Go to your dashboard
           </Link>
+          {result.saved && (
+            <>
+              {" · "}
+              <Link href={savedPath(jobId)} className="underline underline-offset-4">
+                See the CV and cover letter you sent
+              </Link>
+            </>
+          )}
         </Notice>
       )}
     </section>
