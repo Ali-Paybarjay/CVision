@@ -101,6 +101,9 @@
   --color-on-mark: var(--color-on-mark);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Plan A's paper shadow under the CV (CvPaper shadow), in the CV's own Ink, so no hex value (#276). */
+  --shadow-paper: 0 30px 60px -36px color-mix(in srgb, var(--color-cv-ink) 30%, transparent);
 }
 
 @layer base {
