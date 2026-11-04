@@ -5,8 +5,6 @@ import { askGapQuestions, defaultGapQuestion, skillGaps } from "@/features/tailo
 import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
 import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
 import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
-import { getMyTailoredCv } from "@/features/tailor/server/tailored-cvs";
-import { letterBasis } from "@/features/tailor/letter-state";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
@@ -96,13 +94,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
     );
   }
 
-  const [{ questions, notice }, savedChanges, sent] = await Promise.all([
-    questionsFor({ profile, job, match }),
-    getMySavedChanges(job.id),
-    getMyTailoredCv(job.id),
-  ]);
-  // The letter sent last time comes back only if the approved changes are still the ones it was sent with (#207).
-  const savedLetter = sent?.coverLetter && letterBasis(sent.changes, []) === letterBasis(savedChanges, []) ? sent.coverLetter : null;
+  const [{ questions, notice }, savedChanges] = await Promise.all([questionsFor({ profile, job, match }), getMySavedChanges(job.id)]);
   const prompts = questions.flatMap(({ gapId, question, options }) => {
     const gap = match.gaps.find((item) => item.id === gapId);
     return gap ? [{ gap, question, options }] : [];
@@ -118,7 +110,6 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
         profile={profile}
         prompts={prompts}
         savedChanges={savedChanges}
-        savedLetter={savedLetter}
       />
     </main>
   );

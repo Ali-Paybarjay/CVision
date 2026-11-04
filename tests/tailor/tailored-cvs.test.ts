@@ -45,7 +45,7 @@ beforeEach(() => {
 
 describe("saving what the user sends (#207)", () => {
   it("saves the approved changes from the database, applied to the Profile, with the letter", async () => {
-    expect(await saveTailoredCv(jobId, "Dear hiring manager,")).toBe(true);
+    expect(await saveTailoredCv(jobId, "Dear hiring manager,")).toBe("saved");
     const [row, options] = db.upsert.mock.calls[0];
     expect(options).toEqual({ onConflict: "job_id,user_id" });
     expect(row.job_id).toBe(jobId);
@@ -65,16 +65,16 @@ describe("saving what the user sends (#207)", () => {
   });
 
   it("saves nothing for a sample job or a signed-out visitor", async () => {
-    expect(await saveTailoredCv("sara-job-1", null)).toBe(false);
+    expect(await saveTailoredCv("sara-job-1", null)).toBe("skipped");
     user.current = null;
-    expect(await saveTailoredCv(jobId, null)).toBe(false);
+    expect(await saveTailoredCv(jobId, null)).toBe("skipped");
     expect(db.upsert).not.toHaveBeenCalled();
   });
 
   it("reports a failed save without throwing, so the download still goes ahead", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     db.error = { code: "42501" };
-    expect(await saveTailoredCv(jobId, null)).toBe(false);
+    expect(await saveTailoredCv(jobId, null)).toBe("failed");
   });
 });
 
@@ -98,6 +98,6 @@ describe("a save that breaks", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { getMyProfile } = await import("@/features/tailor/server/my-data");
     vi.mocked(getMyProfile).mockRejectedValueOnce(new Error("down"));
-    await expect(saveTailoredCv(jobId, null)).resolves.toBe(false);
+    await expect(saveTailoredCv(jobId, null)).resolves.toBe("failed");
   });
 });

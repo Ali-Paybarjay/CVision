@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { recordApply, type ApplyResult } from "@/features/tailor/actions";
 import { ButtonLink, Notice } from "@/shared/ui";
-import { unreachableMessage } from "./messages";
+import { saveFailedMessage, unreachableMessage } from "./messages";
 
 /** The site a link really opens, e.g. "linkedin.com". The link is the one the user gave, often a job board, so it is never called the employer's. */
 export function linkSite(url: string): string | null {
@@ -13,11 +13,6 @@ export function linkSite(url: string): string | null {
   } catch {
     return null;
   }
-}
-
-/** The CV and cover letter saved for this job, as the user sent them (#207). */
-export function savedPath(jobId: string): string {
-  return `/tailor/saved?job=${encodeURIComponent(jobId)}`;
 }
 
 /**
@@ -89,16 +84,9 @@ export function ApplyPanel({
           <Link href="/dashboard" className="underline underline-offset-4">
             Go to your dashboard
           </Link>
-          {result.saved && (
-            <>
-              {" · "}
-              <Link href={savedPath(jobId)} className="underline underline-offset-4">
-                See the CV and cover letter you sent
-              </Link>
-            </>
-          )}
         </Notice>
       )}
+      {result?.saveFailed && <p className="text-sm text-text-muted">{saveFailedMessage}</p>}
     </section>
   );
 }

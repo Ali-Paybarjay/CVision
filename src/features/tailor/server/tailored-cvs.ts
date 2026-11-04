@@ -16,31 +16,34 @@ async function clientFor(jobId: string) {
   return supabase;
 }
 
+/** "skipped" for a sample job, a visitor or no Supabase: nothing to save, and nothing to tell the user. */
+export type SaveOutcome = "saved" | "skipped" | "failed";
+
 /**
  * Saves the CV and cover letter the user is sending for one job, when they download a file or press Apply (#207).
  * The changes come from tailoring_changes, not from the browser, and only approved ones are kept. One row per job:
- * the latest download or Apply replaces the one before. Returns whether it was saved; a failure never stops the
- * download or the Apply.
+ * the latest download or Apply replaces the one before. It never throws, so a failure never stops the download or
+ * the Apply.
  */
-export async function saveTailoredCv(jobId: string, coverLetter: string | null): Promise<boolean> {
+export async function saveTailoredCv(jobId: string, coverLetter: string | null): Promise<SaveOutcome> {
   try {
     return await save(jobId, coverLetter);
   } catch {
     console.error("tailor: could not save the tailored CV (unexpected)");
-    return false;
+    return "failed";
   }
 }
 
-async function save(jobId: string, coverLetter: string | null): Promise<boolean> {
+async function save(jobId: string, coverLetter: string | null): Promise<SaveOutcome> {
   const supabase = await clientFor(jobId);
-  if (!supabase) return false;
+  if (!supabase) return "skipped";
 
   const [profile, changes, existing] = await Promise.all([
     getMyProfile({ jobId }),
     getMySavedChanges(jobId),
     supabase.from("tailored_cvs").select("data").eq("job_id", jobId).maybeSingle(),
   ]);
-  if (!profile) return false;
+  if (!profile) return "failed";
 
   const approved = changes.filter((change) => change.status === "approved");
   const previous = TailoredCvSchema.safeParse(existing.data?.data);
@@ -57,9 +60,9 @@ async function save(jobId: string, coverLetter: string | null): Promise<boolean>
   if (error) {
     // The code only: never the CV or letter text.
     console.error(`tailor: could not save the tailored CV (${error.code ?? "unknown"})`);
-    return false;
+    return "failed";
   }
-  return true;
+  return "saved";
 }
 
 /** The CV and cover letter last saved for one job, or null if there is none (or for sample jobs and visitors). */

@@ -6,7 +6,7 @@ import type { ExportDocument, ExportFormat } from "@/features/tailor/export";
 import type { TailoringChange } from "@/shared/contracts";
 import { Button, Notice } from "@/shared/ui";
 import type { LetterState } from "./cover-letter-panel";
-import { unreachableMessage } from "./messages";
+import { saveFailedMessage, unreachableMessage } from "./messages";
 
 type DownloadBarProps = {
   jobId: string;
@@ -30,6 +30,7 @@ export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBa
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const waiting = changes.filter((change) => change.status === "proposed").length;
   const approvedLetter = letter?.approved ? letter.text : null;
 
@@ -43,6 +44,7 @@ export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBa
         if (result.ok) {
           save(result.base64, result.mimeType, result.fileName);
           setWarning(result.warning);
+          setSaveFailed(Boolean(result.saveFailed));
         } else {
           setError(result.message);
         }
@@ -90,6 +92,7 @@ export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBa
       )}
       {error && <Notice tone="error">{error}</Notice>}
       {warning && <Notice tone="warning">{warning}</Notice>}
+      {saveFailed && <p className="text-sm text-text-muted">{saveFailedMessage}</p>}
     </section>
   );
 }

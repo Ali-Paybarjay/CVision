@@ -35,8 +35,6 @@ type TailorWorkspaceProps = {
   prompts: GapPrompt[];
   /** The decisions the user saved on an earlier visit. */
   savedChanges?: TailoringChange[];
-  /** The approved cover letter saved with the last download or Apply, when the CV has not changed since (#207). */
-  savedLetter?: string | null;
 };
 
 /** "Suggest again" brings back suggestions lost on an earlier visit; one the page already has is not shown twice. */
@@ -49,7 +47,7 @@ function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]
  * the job asks for that the CV does not show, the suggested changes, the cover letter, then download and Apply. The CV
  * preview in the review step shows approved changes only.
  */
-export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [], savedLetter = null }: TailorWorkspaceProps) {
+export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [] }: TailorWorkspaceProps) {
   const [gapStates, setGapStates] = useState<Record<string, GapState>>(() =>
     Object.fromEntries(
       savedChanges.flatMap((change) => (change.gapId ? [[change.gapId, { phase: "answered", nextSteps: [], hint: null }]] : [])),
@@ -57,10 +55,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   );
   const [changes, setChanges] = useState<TailoringChange[]>(savedChanges);
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
-  // A letter the user already sent comes back approved after a reload, against the same approved changes.
-  const [letter, setLetter] = useState<LetterState | null>(() =>
-    savedLetter ? { text: savedLetter, approved: true, basis: letterBasis(savedChanges, []) } : null,
-  );
+  const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const cv = buildTailoredCv(profile, changes, job);
   // Worked out on every render, so a letter approved before the CV changed is never used as approved.

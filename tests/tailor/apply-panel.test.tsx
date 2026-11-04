@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { ApplyPanel, linkSite, savedPath } from "@/app/tailor/apply-panel";
+import { ApplyPanel, linkSite } from "@/app/tailor/apply-panel";
 
 vi.mock("@/features/tailor/actions", () => ({ recordApply: vi.fn() }));
 
@@ -26,11 +26,5 @@ describe("the Apply button names the site it really opens (#240)", () => {
   it("still says the app never applies, and shows the no-link notice without a link", () => {
     expect(panel("https://www.reed.co.uk/jobs/1")).toContain("We never apply for you.");
     expect(panel(null)).toContain("This job ad has no link");
-  });
-});
-
-describe("after Apply, the page links to what was sent (#207)", () => {
-  it("points at this job's saved CV and cover letter, with the id encoded", () => {
-    expect(savedPath("job 1/2")).toBe("/tailor/saved?job=job%201%2F2");
   });
 });
