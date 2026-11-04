@@ -45,15 +45,24 @@ export function ConsentBox({ legend, points, label, error, input }: ConsentBoxPr
   );
 }
 
-/** Shows the Privacy page's name in a consent point as a link to that page. */
+/**
+ * Shows the Privacy page's name in a consent point as a link. It opens in a new tab, so the form keeps the file and the
+ * ticked box; the words say so on the page, because the form itself is what the user would lose by leaving it.
+ */
 function linkPrivacyPage(point: string): React.ReactNode {
   const at = point.indexOf(privacyPage.name);
   if (at === -1) return point;
   return (
     <>
       {point.slice(0, at)}
-      <Link href={privacyPage.href} className="font-semibold text-accent hover:underline">
+      <Link
+        href={privacyPage.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-semibold text-accent hover:underline"
+      >
         {privacyPage.name}
+        <span className="font-normal"> (opens in a new tab)</span>
       </Link>
       {point.slice(at + privacyPage.name.length)}
     </>

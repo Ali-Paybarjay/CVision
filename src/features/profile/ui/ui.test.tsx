@@ -18,8 +18,20 @@ import { SignInNotice, UploadStep } from "./upload-step";
 // Clicking through the flow is covered by the reducer tests and by trying it in a browser.
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
-    <a href={href} className={className}>
+  default: ({
+    href,
+    children,
+    className,
+    target,
+    rel,
+  }: {
+    href: string;
+    children: React.ReactNode;
+    className?: string;
+    target?: string;
+    rel?: string;
+  }) => (
+    <a href={href} className={className} target={target} rel={rel}>
       {children}
     </a>
   ),
@@ -29,7 +41,16 @@ vi.mock("../actions", () => ({ deleteMyProfileAction: vi.fn() }));
 
 const noop = () => {};
 const names = Object.keys(personas) as PersonaName[];
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+// The Privacy link opens in a new tab, and says so on the page (issue #235). privacyLink checks that; text drops the words,
+// so a consent point compares as the sentence it is.
+const privacyLink = /<a href="\/privacy" class="[^"]*" target="_blank" rel="noopener noreferrer">Privacy page<span class="font-normal"> \(opens in a new tab\)<\/span><\/a>/;
+const text = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/ \(opens in a new tab\)/g, "")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ");
 
 function stored(name: PersonaName): StoredProfile {
   return {
@@ -55,11 +76,20 @@ describe("profile screens", () => {
     expect(text(html)).toContain("we save it and your CV file to your CVision account");
     expect(text(html)).toContain("through OpenRouter on Google Cloud or Amazon Web Services");
     expect(text(html)).not.toContain("don’t keep");
-    expect(html).toMatch(/<a href="\/privacy"[^>]*>Privacy page<\/a>/);
+    expect(html).toMatch(privacyLink);
     expect(html).toMatch(new RegExp(`<input type="checkbox"[^>]*name="consent" value="${cvConsent.version}"`));
     expect(html).not.toMatch(/name="consent"[^>]*checked/);
     expect(html).toContain('accept=".pdf,.docx');
     expect(text(html)).not.toContain("Demo mode");
+  });
+
+  it("keeps an empty live region under the button, where the wait shows on screen (issue #235)", () => {
+    const html = renderToStaticMarkup(
+      <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} />,
+    );
+
+    expect(html).toMatch(/<\/button><\/div><div aria-live="polite"><\/div><\/div><\/form>/);
+    expect(html).not.toContain('class="sr-only"');
   });
 
   it("warns before an upload in demo mode that the CV won’t become the profile", () => {
@@ -284,7 +314,7 @@ describe("profile screens", () => {
       for (const point of manualConsentPoints(storage)) expect(words).toContain(point);
       expect(words).toContain(manualConsent.label);
       expect(words).not.toContain(cvConsent.label);
-      expect(html).toMatch(/<a href="\/privacy"[^>]*>Privacy page<\/a>/);
+      expect(html).toMatch(privacyLink);
       expect(html).toMatch(/<input type="checkbox" id="review-consent"/);
       expect(html).not.toMatch(/id="review-consent"[^>]*checked/);
       expect(words.indexOf(manualConsent.label)).toBeLessThan(words.indexOf("Approve and save"));
