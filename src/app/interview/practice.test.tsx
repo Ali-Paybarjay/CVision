@@ -184,6 +184,23 @@ describe("the question page in design A", () => {
     expect(html).not.toContain("doesn&#x27;t show this yet");
   });
 
+  it("shows nothing while the questions are prepared, not an empty list or draft questions (#282 review)", async () => {
+    const finished = await runMockSession(dataAnalystSara);
+    const bare = { ...finished, turns: [], followUpDecisions: [], evaluations: [], report: undefined };
+    // After stage 1 (no questions yet), and after stage 2 (draft questions, not reviewed).
+    expect(render({ ...bare, questions: [], reviewChangelog: undefined })).toBe("");
+    expect(render({ ...bare, reviewChangelog: undefined })).toBe("");
+  });
+
+  it("tells a screen reader what came, and reads the question with its label (#282 review)", async () => {
+    const html = render(await atQuestion(2));
+    expect(html).toContain('<p role="status" class="sr-only">Next question ready</p>');
+    expect(html).toMatch(/<h2 id="sheet-q2" tabindex="-1" aria-describedby="sheet-text-q2"/);
+    expect(html).toMatch(/<p id="sheet-text-q2"[^>]*>/);
+    // Question 1's label is focused as "Preparing your interview" ends and says it itself.
+    expect(render(await atQuestion(1))).toContain('<p role="status" class="sr-only"></p>');
+  });
+
   it("says plainly when the profile doesn't show the skill yet", async () => {
     const html = render(await atQuestion(2, (q) => (q.id === "q2" ? { ...q, competencyId: "c5" } : q)));
     expect(html).toContain("Your profile doesn&#x27;t show this yet, so answer from any experience you have, including study or projects.");

@@ -59,6 +59,8 @@ export function QuestionSheet({
   // After Submit, the button pressed is gone. Focus moves to the label of what comes next (a follow-up or the next
   // question), not to the answer box, which would open the keyboard on a phone. The first question is focused by
   // "Preparing your interview" instead (progress.tsx), and a reload leaves focus alone.
+  // The label is keyed by `step`, so each step gets a new one: when the old label had focus (it was focused after
+  // Submit), its focus is lost with it and the new label takes it, so a screen reader reads it again (#282).
   const label = useRef<HTMLHeadingElement>(null);
   const step = `${question.id}:${answering}`;
   const shown = useRef(step);
@@ -69,15 +71,24 @@ export function QuestionSheet({
   }, [step]);
 
   const labelId = isFirst ? firstQuestionId : `sheet-${question.id}`;
+  const textId = `sheet-text-${question.id}`;
+  // Said by a screen reader whenever it changes, wherever focus is (#282). Not the label's words, which the label
+  // itself says as it takes focus.
+  const announcement =
+    answering === null ? "The interviewer is reading your answer…" : answering === "follow-up" ? "Follow-up question ready" : isFirst ? "" : "Next question ready";
 
   return (
     <section
       aria-labelledby={labelId}
       className="rounded-sm border border-line bg-surface p-5 shadow-[0_30px_60px_-36px_rgba(15,42,71,0.3)] sm:p-8 lg:p-12"
     >
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line pb-4">
-        {/* Question 1's label takes focus when "Preparing your interview" gives way to it (#232). */}
-        <h2 ref={label} id={labelId} tabIndex={-1} className={sectionLabelClass}>
+        {/* Question 1's label takes focus when "Preparing your interview" gives way to it (#232). Focused, it reads
+            the question too. */}
+        <h2 key={step} ref={label} id={labelId} tabIndex={-1} aria-describedby={textId} className={sectionLabelClass}>
           {questionLabel(session, question)}
         </h2>
         {skill && (
@@ -96,11 +107,15 @@ export function QuestionSheet({
           <p className="mt-6 text-text-muted [overflow-wrap:anywhere]">{question.text}</p>
           {answer && <GivenAnswer text={answer} />}
           <p className={cn(sectionLabelClass, "mt-7 text-accent")}>Follow-up</p>
-          <p className={questionText}>{followUp}</p>
+          <p id={textId} className={questionText}>
+            {followUp}
+          </p>
         </>
       ) : (
         <>
-          <p className={cn(questionText, "mt-6")}>{question.text}</p>
+          <p id={textId} className={cn(questionText, "mt-6")}>
+            {question.text}
+          </p>
           {answer && <GivenAnswer text={answer} />}
         </>
       )}
