@@ -60,7 +60,11 @@ Sending CVs into the void → Applying with confidence
 *Used everywhere: site, bios, signatures, pitch.*
 
 - **One-liner:** We help anyone applying for a job in the UK turn any job ad into a tailored CV and cover letter in minutes, so they can get interviews.
-- **Tagline:** Every application, made to fit.
+- **Tagline:** Every application, made to fit. *(In the footer and the search description.)*
+- **Home page headline:** Stop rewriting your CV for every job.
+- **Home page subline:** Paste a job ad. We tailor your CV to it and write your cover letter in minutes, from your own experience. You approve every change.
+
+*The home page leads with the user's pain, then what CVision does about it (team vote, #178, 31 October 2026). The tagline stays the brand's line everywhere else.*
 
 ---
 
@@ -375,7 +379,7 @@ In Tailwind, point each colour at its variable (for example `canvas: 'var(--colo
 ### Calls to action
 *One direct button, repeated on every page.*
 
-- **Direct:** “Tailor my CV to a job”, with the small line “Free account. Add your CV or your details, then paste a job ad.” One action has one name: the header, the home page, the dashboard and the end of the CV check all use it.
+- **Direct:** “Tailor my CV to a job”, with the small line “Free account. Start with your CV or your details.” One action has one name: the header, the home page, the dashboard and the end of the CV check all use it.
 - **Transitional:** “Check my CV in 2 minutes”, with the small line “No sign-up. Nothing is saved.” It answers “Is your CV ready for UK employers?” The feature itself is the free 2-minute CV check.
 - **Free:** stays out of the button labels and goes in the small line under them. The app is free in the first stage; the wording can be revisited when pricing is added.
 

@@ -66,7 +66,7 @@ test("each hero button says what you get, with Free only in the small line under
   const main = page.getByRole("main");
 
   const tailor = main.getByRole("link", { name: "Tailor my CV to a job" });
-  await expect(tailor).toHaveAccessibleDescription("Free account. Add your CV or your details, then paste a job ad.");
+  await expect(tailor).toHaveAccessibleDescription("Free account. Start with your CV or your details.");
   const check = main.getByRole("link", { name: "Check my CV in 2 minutes" });
   await expect(check).toHaveAccessibleDescription("No sign-up. Nothing is saved.");
 
