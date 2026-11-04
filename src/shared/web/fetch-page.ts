@@ -31,7 +31,11 @@ export type FetchPageFailure =
   | "failed";
 
 export type FetchPageResult =
-  | { ok: true; url: string; title: string | null; text: string }
+  /**
+   * truncated: the page had more text than we keep (30,000 characters, above the job ad form's own limit), so the
+   * form's own "too long" message still shows rather than a silent cut.
+   */
+  | { ok: true; url: string; title: string | null; text: string; truncated: boolean }
   | { ok: false; reason: FetchPageFailure };
 
 export type FetchPageOptions = {
@@ -240,7 +244,7 @@ async function readText(response: Response, maxBytes: number, charset: string): 
  * The page's title and readable text. Most job boards also describe the ad as schema.org JobPosting data for search
  * engines; when that is there, its title, employer and description come first, since they are the ad itself.
  */
-export function readablePage(html: string): { title: string | null; text: string } {
+export function readablePage(html: string): { title: string | null; text: string; truncated: boolean } {
   const title = textOf(html.match(/<title\b[^<>]*>([\s\S]*?)(?:<\/title\s*>|$)/i)?.[1] ?? "").slice(0, maxTitleLength) || null;
   const posting = jobPosting(html);
   const body = textOf(
@@ -250,8 +254,9 @@ export function readablePage(html: string): { title: string | null; text: string
       .replace(/<\/(p|div|li|h[1-6]|tr|section|article|header|footer)\s*>|<br\s*\/?>/gi, "\n"),
   );
   // Page text is untrusted: invisible and direction-changing characters go before anyone uses it (#68).
-  const text = cleanModelText([posting, body].filter(Boolean).join("\n\n").slice(0, maxTextLength)).text.trim();
-  return { title: title === null ? null : cleanModelText(title).text, text };
+  const full = [posting, body].filter(Boolean).join("\n\n");
+  const text = cleanModelText(full.slice(0, maxTextLength)).text.trim();
+  return { title: title === null ? null : cleanModelText(title).text, text, truncated: full.length > maxTextLength };
 }
 
 /** The JobPosting in the page's JSON-LD, as plain text, or "" when there is none. */

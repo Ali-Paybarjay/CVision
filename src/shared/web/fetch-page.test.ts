@@ -153,6 +153,14 @@ describe("fetchPublicPage", () => {
 });
 
 describe("readablePage", () => {
+  it("says when it cut a very long page, so the caller's own limit message still shows", () => {
+    expect(readablePage("<p>Short ad</p>").truncated).toBe(false);
+    const long = readablePage(`<p>${"word ".repeat(10_000)}</p>`);
+    expect(long.truncated).toBe(true);
+    expect(long.text.length).toBeLessThanOrEqual(30_000);
+    expect(long.text.length).toBeGreaterThan(20_000);
+  });
+
   it("puts the schema.org JobPosting first: title, employer and description", () => {
     const posting = {
       "@context": "https://schema.org",
