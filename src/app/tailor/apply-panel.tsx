@@ -15,6 +15,11 @@ export function linkSite(url: string): string | null {
   }
 }
 
+/** The interview practice for this job. Kept here rather than imported from the tracker, so this Client Component pulls in nothing else. */
+export function interviewPracticePath(jobId: string): string {
+  return `/interview?job=${encodeURIComponent(jobId)}`;
+}
+
 /**
  * Apply opens the job ad at the link the user gave, in a new tab, and adds the job to the user's tracker.
  * The app never sends an application on the user's behalf.
@@ -75,6 +80,13 @@ export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl
           </Link>
         </Notice>
       )}
+
+      {/* The next step after applying, shown before and after Apply. "Open the ad" stays the page's one Coral button,
+          and "practice" is a noun only, as on the dashboard (#258) and in the interview section (#239). */}
+      <div className="flex flex-col items-start gap-2 border-t border-line pt-4">
+        <p className="text-sm text-text-muted">Get ready for this job’s interview questions while you wait to hear back.</p>
+        <ButtonLink href={interviewPracticePath(jobId)}>Start interview practice</ButtonLink>
+      </div>
     </section>
   );
 }
