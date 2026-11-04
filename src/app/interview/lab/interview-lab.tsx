@@ -67,7 +67,7 @@ export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSour
             <FeedbackReport session={session} />
           ) : (
             session && (
-              <InterviewFlow store={store} session={session} jobs={jobs} run={runOf(envelope)} samples={mode === "mock" ? source?.samples : undefined} />
+              <InterviewFlow store={store} session={session} jobs={jobs} run={runOf(envelope)} cv={envelope.inputs.cv} samples={mode === "mock" ? source?.samples : undefined} />
             )
           )}
           {session && <LabDebug session={session} startupMs={envelope.startupMs} />}

@@ -12,7 +12,7 @@ import { behaviouralV1, technicalV1, type Rubric } from "@/features/interview/ru
 import { retryStartupStage } from "./flow";
 import type { JobState, PracticeStore } from "./store";
 import { Button, Card } from "@/shared/ui";
-import { firstQuestionId, Status } from "./ui";
+import { firstQuestionId, focusIsLost, Status } from "./ui";
 
 const questionCount = defaultComposition.technical + defaultComposition.behavioural;
 
@@ -167,10 +167,6 @@ function useNow(ticking: boolean): number {
   return now;
 }
 
-/** True when nothing on the page has focus, as after the focused button or card was removed. */
-function focusIsLost(): boolean {
-  return !document.activeElement || document.activeElement === document.body;
-}
 
 /**
  * While this tab is hidden, its title says when the questions are ready or a stage needs Try again, so nobody has to
@@ -261,7 +257,7 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
   }, []);
 
   return (
-    <Card className="space-y-4">
+    <Card className="max-w-3xl space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 ref={heading} tabIndex={-1} className="text-xl">
           Preparing your interview

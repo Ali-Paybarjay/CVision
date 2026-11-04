@@ -14,10 +14,12 @@ import {
   technicalQuestions,
 } from "@/features/interview/engine/session";
 import { technicalV1 } from "@/features/interview/rubrics";
-import { Card, Notice } from "@/shared/ui";
-import { Status, type Tone } from "./ui";
+import { Card, cn, Notice } from "@/shared/ui";
+import { sectionLabelClass, Status, type Tone } from "./ui";
 
-const readinessTone: Record<InterviewReport["readiness"], Tone> = { ready: "accent", "nearly-ready": "warning", "not-yet-ready": "error" };
+// Red is for something that went wrong in the app, not for where the candidate is (#275): "Not yet ready" is Amber, as
+// design A shows "Not on your CV"; "Nearly ready" a Teal edge; "Ready" Fit with a tick. Each has its own icon too.
+const readinessTone: Record<InterviewReport["readiness"], Tone> = { ready: "accent", "nearly-ready": "outline", "not-yet-ready": "warning" };
 
 const competencyStatus: Record<InterviewReport["competencyMap"][number]["status"], { tone: Tone; label: string }> = {
   strong: { tone: "accent", label: "Strong" },
@@ -42,7 +44,7 @@ export function FeedbackReport({ session }: { session: InterviewSession }) {
   return (
     <div className="space-y-4">
       <Card>
-        <p className="text-sm text-text-muted">Overall score</p>
+        <p className={sectionLabelClass}>Overall score</p>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <p className="text-4xl font-bold">
             {report.overall.toFixed(1)}
@@ -209,7 +211,7 @@ function FromYourCv({ session }: { session: InterviewSession }) {
       <div className="mt-3 grid gap-4 md:grid-cols-2">
         {strongest.length > 0 && (
           <div>
-            <h3 className="text-sm text-text-muted">Where your profile is strongest</h3>
+            <h3 className={sectionLabelClass}>Where your profile is strongest</h3>
             <ul className="mt-2 space-y-2 text-sm">
               {strongest.map((entry) => (
                 <li key={entry.id}>
@@ -222,7 +224,7 @@ function FromYourCv({ session }: { session: InterviewSession }) {
         )}
         {(gaps.length > 0 || claims.length > 0) && (
           <div>
-            <h3 className="text-sm text-text-muted">Where they&apos;re likely to probe</h3>
+            <h3 className={sectionLabelClass}>Where they&apos;re likely to probe</h3>
             <ul className="mt-2 space-y-2 text-sm">
               {gaps.map((gap) => (
                 <li key={gap.id}>
@@ -278,7 +280,7 @@ function SuggestionCard({ number, question, suggestion }: { number: number; ques
         </div>
       )}
 
-      <h4 className="mt-4 text-sm text-text-muted">What to cover</h4>
+      <h4 className={cn(sectionLabelClass, "mt-4")}>What to cover</h4>
       <ul className="mt-2 space-y-3 text-sm">
         {suggestion.points.map((point) => (
           <li key={point.lookForId}>
@@ -317,7 +319,7 @@ function SuggestionCard({ number, question, suggestion }: { number: number; ques
 
       {suggestion.followUpTips.length > 0 && (
         <div className="mt-4 text-sm">
-          <h4 className="text-text-muted">If they follow up</h4>
+          <h4 className={sectionLabelClass}>If they follow up</h4>
           <ul className="mt-2 space-y-2">
             {suggestion.followUpTips.map((tip) => (
               <li key={tip.followUpId}>
@@ -367,7 +369,7 @@ function QuestionCard(props: {
       <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {technicalV1.dimensions.map((dimension) => (
           <div key={dimension.key} className="rounded-md bg-canvas p-2">
-            <dt className="text-xs text-text-muted">{dimension.label}</dt>
+            <dt className={cn(sectionLabelClass, "tracking-[0.06em]")}>{dimension.label}</dt>
             <dd className="text-lg font-semibold">{evaluation.scores[dimension.key as keyof AnswerEvaluation["scores"]]} / 5</dd>
           </div>
         ))}
@@ -381,7 +383,7 @@ function QuestionCard(props: {
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>
-          <h4 className="text-sm text-text-muted">What a strong answer covers</h4>
+          <h4 className={sectionLabelClass}>What a strong answer covers</h4>
           <ul className="mt-2 space-y-2">
             {evaluation.lookForEvidence.map((entry) => {
               const lookFor = props.lookFors.find((l) => l.id === entry.lookForId);
@@ -416,7 +418,7 @@ function QuestionCard(props: {
             <p className="mt-1 whitespace-pre-wrap">{props.followUpAnswer}</p>
           </>
         )}
-        <h4 className="mt-3 text-text-muted">Why these scores</h4>
+        <h4 className={cn(sectionLabelClass, "mt-3")}>Why these scores</h4>
         <ul className="mt-1 list-disc pl-5">
           {technicalV1.dimensions.map((dimension) => (
             <li key={dimension.key}>
@@ -438,7 +440,7 @@ function AnswerFeedback({ evaluation }: { evaluation: AnswerEvaluation }) {
         <FeedbackList title="What worked" items={evaluation.strengths} />
       ) : (
         <div>
-          <h4 className="text-text-muted">What worked</h4>
+          <h4 className={sectionLabelClass}>What worked</h4>
           <p className="mt-1">Nothing in this answer earned credit yet. Build it from the outline below.</p>
         </div>
       )}
@@ -454,7 +456,7 @@ function AnswerFeedback({ evaluation }: { evaluation: AnswerEvaluation }) {
 function FeedbackList({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <h4 className="text-text-muted">{title}</h4>
+      <h4 className={sectionLabelClass}>{title}</h4>
       <ul className="mt-1 list-disc space-y-1 pl-5">
         {items.map((item) => (
           <li key={item}>{item}</li>

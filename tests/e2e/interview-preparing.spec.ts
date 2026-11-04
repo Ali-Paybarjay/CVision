@@ -25,6 +25,8 @@ test("says how long it takes, shows each stage and what it found, and keeps Star
   const release = await holdStartupSteps(page);
   await page.goto("/interview?job=sara-job-1");
   await expect(page.getByText("Getting them ready takes about 2 minutes.")).toBeVisible({ timeout: 120_000 });
+  // A sample job brings its own sample profile, so there is no "See your profile" link to the visitor's own (#252).
+  await expect(page.getByRole("link", { name: "See your profile (opens in a new tab)" })).toHaveCount(0);
   await page.getByRole("button", { name: "Start practice" }).click();
 
   const preparing = page.getByRole("heading", { name: "Preparing your interview" });
@@ -57,6 +59,15 @@ test("says how long it takes, shows each stage and what it found, and keeps Star
   await expect(preparing).toHaveCount(0);
   // Question 1's line takes focus, not the answer box, which would open the keyboard on a phone.
   await expect(firstQuestion).toBeFocused();
+  // Design A (#275): the question on its sheet, the six questions in "Your interview", and "Why this question".
+  await expect(page.getByText("Tests: Analysis in Python or R")).toBeVisible();
+  const list = page.getByRole("region", { name: "Your interview" });
+  await expect(list.getByText("0 of 6 answered")).toBeVisible();
+  await expect(list.locator('[aria-current="step"]')).toContainText("Answering now");
+  const why = page.getByRole("region", { name: "Why this question" });
+  await expect(why.getByText("From the job ad:")).toBeVisible();
+  // Question 1 already says its CV sentence word for word, so the sentence is not repeated beside it (#252).
+  await expect(page.getByText("From your profile:")).toHaveCount(0);
   // The card is gone, but a screen reader still hears that the questions are ready.
   await expect(page.getByRole("status").filter({ hasText: "questions are ready" })).toHaveText("Your 6 questions are ready. Question 1 is below.");
   await expect(page.getByRole("button", { name: "Start again" })).toBeVisible();
