@@ -95,6 +95,10 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
   await expect(page.getByText("✓ Approved: 2")).toBeVisible();
   await expect(tailoredLines).toHaveCount(2);
+
+  // Step 5 leads on to interview practice for the same job, as a secondary link beside Apply.
+  await page.getByRole("button", { name: /^5\. Download and apply/ }).click();
+  await expect(page.getByRole("link", { name: "Start interview practice" })).toHaveAttribute("href", "/interview?job=sara-job-1");
 });
 
 test.fixme("step 3: get the tailored CV for the pasted job, with each change marked (#49)", async ({ page }) => {
