@@ -35,7 +35,14 @@ export function StatusChip({ status, line, className }: StatusChipProps) {
   if (status === "tailored") {
     return (
       <span className={cn(base, "bg-fit text-accent", className)}>
-        {line !== undefined ? <MatchMarker line={line} /> : <CheckIcon className="size-3.5 shrink-0" />}
+        {line !== undefined ? (
+          // The chip says "Tailored, line 1" itself, so the circle's own "Line 1" is not read a second time.
+          <span aria-hidden="true" className="flex">
+            <MatchMarker line={line} />
+          </span>
+        ) : (
+          <CheckIcon className="size-3.5 shrink-0" />
+        )}
         {statusWords.tailored}
         {line !== undefined && <span className="sr-only">, line {line}</span>}
       </span>

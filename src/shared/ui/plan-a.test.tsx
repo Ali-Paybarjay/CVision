@@ -50,8 +50,11 @@ describe("StatusChip", () => {
     }
   });
 
-  it("names the line of a tailored requirement", () => {
-    expect(read(renderToStaticMarkup(<StatusChip status="tailored" line={1} />))).toBe("Line 1Tailored, line 1");
+  it("names the line of a tailored requirement once (Marzieh, #291)", () => {
+    const html = renderToStaticMarkup(<StatusChip status="tailored" line={1} />);
+    // The circle is hidden from screen readers, so only "Tailored, line 1" is read.
+    expect(html).toMatch(/<span aria-hidden="true" class="flex"><span class="[^"]*bg-accent/);
+    expect(read(html.replace(/<span aria-hidden="true" class="flex">.*?<\/span><\/span>/, ""))).toBe("Tailored, line 1");
   });
 
   it("uses the warning colours for a requirement that is not on the CV", () => {
