@@ -9,9 +9,10 @@ import { cleanModelText } from "@/shared/clean-text";
 // a size limit; and only web pages. It returns the page's readable text, or a reason the page can't help.
 //
 // Known limit: the address is checked when we look it up, and fetch looks it up again when it connects. A name that
-// changes its answer in between (DNS rebinding) could slip through. Pinning the checked address would need a new
-// dependency (undici); on Vercel there is no private network of ours to reach, and the port rule (80 and 443 only)
-// keeps the function's own runtime API on 127.0.0.1:9001 out of reach, so keep that rule and its test.
+// changes its answer in between (DNS rebinding) could slip through. Closing that means connecting with node:http or
+// node:https and a lookup that checks the address at connect time (a few dozen lines, no new dependency). Not needed
+// on Vercel today: there is no private network of ours to reach, and the port rule (80 and 443 only) keeps the
+// function's own runtime API on 127.0.0.1:9001 out of reach, so keep that rule and its test.
 //
 // Every pattern that reads the HTML ends at its closing tag or at the end of the input and never runs past a "<",
 // so a hostile page of unclosed tags can't make it rescan for minutes: the work is synchronous and no time limit
@@ -27,6 +28,8 @@ export type FetchPageFailure =
   | "too-large"
   /** Not a web page, such as a PDF or an image. */
   | "not-a-page"
+  /** A web page with no readable text, such as one built only by JavaScript in the browser. */
+  | "no-text"
   /** Anything else: the site is down, the connection failed, or there are too many redirects. */
   | "failed";
 
@@ -166,10 +169,11 @@ export async function fetchPublicPage(link: string, options: FetchPageOptions = 
       const declared = Number(response.headers.get("content-length"));
       if (declared > maxBytes) return discard(response, { ok: false, reason: "too-large" });
 
-      const html = await readText(response, maxBytes, charsetOf(type));
-      if (html === null) return { ok: false, reason: "too-large" };
+      const bytes = await readBytes(response, maxBytes);
+      if (bytes === null) return { ok: false, reason: "too-large" };
+      const html = new TextDecoder(charsetOf(type) ?? metaCharset(bytes) ?? "utf-8").decode(bytes);
       const page = readablePage(html);
-      if (page.text.length === 0) return { ok: false, reason: "blocked" };
+      if (page.text.length === 0) return { ok: false, reason: "no-text" };
       return { ok: true, url: url.href, ...page };
     }
   } catch (error) {
@@ -194,13 +198,23 @@ async function discard<T>(response: Response, result?: T): Promise<T> {
   return result as T;
 }
 
-/** The charset the page says it uses, if TextDecoder knows it, so a windows-1252 "£" isn't garbled. */
-function charsetOf(type: string): string {
-  const label = type.match(/charset\s*=\s*"?([\w-]+)/i)?.[1] ?? "utf-8";
+/** The charset the header names, if TextDecoder knows it, so a windows-1252 "£" isn't garbled. */
+function charsetOf(type: string): string | null {
+  return knownCharset(type.match(/charset\s*=\s*"?([\w-]+)/i)?.[1]);
+}
+
+/** The charset a page names in a <meta> tag near its top, when the header names none. */
+function metaCharset(bytes: Uint8Array): string | null {
+  const start = new TextDecoder("latin1").decode(bytes.subarray(0, 2048));
+  return knownCharset(start.match(/<meta\b[^<>]*charset\s*=\s*["']?([\w-]+)/i)?.[1]);
+}
+
+function knownCharset(label: string | undefined): string | null {
+  if (!label) return null;
   try {
     return new TextDecoder(label).encoding;
   } catch {
-    return "utf-8";
+    return null;
   }
 }
 
@@ -215,9 +229,9 @@ function isSignInPage(url: URL): boolean {
   return /(^|\/)(login|log-in|signin|sign-in|authwall|auth|account\/login)(\/|$)/i.test(url.pathname);
 }
 
-/** The body as text, or null once it passes maxBytes, so a huge page is never held in full. */
-async function readText(response: Response, maxBytes: number, charset: string): Promise<string | null> {
-  if (!response.body) return "";
+/** The body's bytes, or null once they pass maxBytes, so a huge page is never held in full. */
+async function readBytes(response: Response, maxBytes: number): Promise<Uint8Array | null> {
+  if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -237,53 +251,81 @@ async function readText(response: Response, maxBytes: number, charset: string): 
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder(charset).decode(bytes);
+  return bytes;
 }
+
+/** Most of the page's text is in blocks a reader never sees: comments, scripts, styles and the like. */
+const hiddenBlocks = /<!--[\s\S]*?(?:-->|$)|<(script|style|noscript|svg|template|iframe|title)\b[^<>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi;
+/** Where a block ends, a line ends, so a list keeps one requirement per line. */
+const blockEnds = /<\/(p|div|li|ul|ol|dd|dt|h[1-6]|tr|section|article|header|footer)\s*>|<br\s*\/?>/gi;
+/** A page has at most a few JSON-LD blocks; a hostile one could have tens of thousands, each a failed JSON.parse. */
+const maxJsonLdBlocks = 10;
+/** JobPosting sits at the top of JSON-LD or in its @graph; deeper is not a job board's data. */
+const maxJsonLdDepth = 4;
 
 /**
  * The page's title and readable text. Most job boards also describe the ad as schema.org JobPosting data for search
- * engines; when that is there, its title, employer and description come first, since they are the ad itself.
+ * engines. When that has a description, it is the ad itself, so the text is the posting alone: the page around it
+ * repeats the same ad among menus and cookie banners. Without one, the page's own text follows the posting's title.
  */
 export function readablePage(html: string): { title: string | null; text: string; truncated: boolean } {
-  const title = textOf(html.match(/<title\b[^<>]*>([\s\S]*?)(?:<\/title\s*>|$)/i)?.[1] ?? "").slice(0, maxTitleLength) || null;
+  const head = html.replace(/<svg\b[^<>]*>[\s\S]*?(?:<\/svg\s*>|$)/gi, " ");
+  const pageTitle = textOf(head.match(/<title\b[^<>]*>([\s\S]*?)(?:<\/title\s*>|$)/i)?.[1] ?? "");
   const posting = jobPosting(html);
-  const body = textOf(
-    html
-      .replace(/<(script|style|noscript|svg|template|iframe|head|title)\b[^<>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, " ")
-      .replace(/<!--[\s\S]*?(?:-->|$)/g, " ")
-      .replace(/<\/(p|div|li|h[1-6]|tr|section|article|header|footer)\s*>|<br\s*\/?>/gi, "\n"),
-  );
+  const full = posting?.description
+    ? posting.text
+    : [posting?.text ?? "", htmlToText(html.replace(hiddenBlocks, " "))].filter(Boolean).join("\n\n");
   // Page text is untrusted: invisible and direction-changing characters go before anyone uses it (#68).
-  const full = [posting, body].filter(Boolean).join("\n\n");
-  const text = cleanModelText(full.slice(0, maxTextLength)).text.trim();
-  return { title: title === null ? null : cleanModelText(title).text, text, truncated: full.length > maxTextLength };
+  const text = cleanModelText(wellFormed(full.slice(0, maxTextLength))).text.trim();
+  const title = pageTitle ? cleanModelText(wellFormed(pageTitle.slice(0, maxTitleLength))).text : null;
+  return { title, text, truncated: full.length > maxTextLength };
 }
 
-/** The JobPosting in the page's JSON-LD, as plain text, or "" when there is none. */
-function jobPosting(html: string): string {
+/** HTML as plain text, a line per block. */
+function htmlToText(html: string): string {
+  return textOf(html.replace(blockEnds, "\n"));
+}
+
+type Posting = { text: string; description: boolean };
+
+/** The JobPosting in the page's JSON-LD as plain text: title, employer, then the description, a line per block. */
+function jobPosting(html: string): Posting | null {
+  let blocks = 0;
   for (const match of html.matchAll(/<script\b([^<>]*)>([\s\S]*?)(?:<\/script\s*>|$)/gi)) {
     if (!/type\s*=\s*["']?application\/ld\+json/i.test(match[1])) continue;
+    if (++blocks > maxJsonLdBlocks) break;
     let data: unknown;
     try {
       data = JSON.parse(match[2]);
     } catch {
       continue;
     }
-    const found = findPosting(data);
-    if (found) {
-      const employer = typeof found.hiringOrganization === "object" && found.hiringOrganization ? (found.hiringOrganization as { name?: unknown }).name : undefined;
-      return [found.title, employer, typeof found.description === "string" ? textOf(found.description) : undefined]
-        .filter((part): part is string => typeof part === "string" && part.trim() !== "")
-        .join("\n");
-    }
+    const found = findPosting(data, 0);
+    if (!found) continue;
+    const raw = typeof found.description === "string" ? found.description : "";
+    // Some boards escape the description's HTML (&lt;li&gt;) as well as putting it in JSON.
+    const description = htmlToText(/&lt;\/?[a-z]/i.test(raw) ? decodeEntities(raw) : raw);
+    const parts = [textOf(String(found.title ?? "")), employerOf(found.hiringOrganization), description];
+    return { text: parts.filter(Boolean).join("\n"), description: description !== "" };
+  }
+  return null;
+}
+
+/** The employer's name, whether the posting gives a name, an Organization, or a list of either. */
+function employerOf(value: unknown): string {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (typeof first === "string") return textOf(first);
+  if (typeof first === "object" && first !== null && typeof (first as { name?: unknown }).name === "string") {
+    return textOf((first as { name: string }).name);
   }
   return "";
 }
 
-function findPosting(data: unknown): Record<string, unknown> | null {
+function findPosting(data: unknown, depth: number): Record<string, unknown> | null {
+  if (depth > maxJsonLdDepth) return null;
   if (Array.isArray(data)) {
     for (const item of data) {
-      const found = findPosting(item);
+      const found = findPosting(item, depth + 1);
       if (found) return found;
     }
     return null;
@@ -292,22 +334,57 @@ function findPosting(data: unknown): Record<string, unknown> | null {
   const record = data as Record<string, unknown>;
   const type = record["@type"];
   if (type === "JobPosting" || (Array.isArray(type) && type.includes("JobPosting"))) return record;
-  return findPosting(record["@graph"] ?? null);
+  return findPosting(record["@graph"] ?? null, depth + 1);
 }
 
-const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘", ldquo: "“", rdquo: "”", ndash: "–", mdash: "—", pound: "£", hellip: "…" };
+const entities: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  rsquo: "’",
+  lsquo: "‘",
+  ldquo: "“",
+  rdquo: "”",
+  ndash: "–",
+  mdash: "—",
+  pound: "£",
+  euro: "€",
+  hellip: "…",
+  bull: "•",
+  middot: "·",
+  copy: "©",
+  eacute: "é",
+  egrave: "è",
+  agrave: "à",
+  ccedil: "ç",
+};
+
+/** What pages write as &#145; to &#151;: the windows-1252 meanings, not the invisible C1 controls. */
+const windows1252: Record<number, string> = { 128: "€", 133: "…", 145: "‘", 146: "’", 147: "“", 148: "”", 149: "•", 150: "–", 151: "—" };
+
+function decodeEntities(text: string): string {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
+    if (name[0] !== "#") return entities[name.toLowerCase()] ?? whole;
+    const code = name[1].toLowerCase() === "x" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+    if (windows1252[code]) return windows1252[code];
+    // No half of a surrogate pair (Postgres refuses it in jsonb), no control character, nothing past Unicode.
+    const usable = Number.isFinite(code) && code >= 32 && code < 0x110000 && !(code >= 0x7f && code <= 0x9f) && !(code >= 0xd800 && code <= 0xdfff);
+    return usable ? String.fromCodePoint(code) : " ";
+  });
+}
+
+/** A cut can split an emoji in two; half of one would make the text unsavable, so it becomes U+FFFD. */
+function wellFormed(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "�");
+}
 
 /** Tags out, entities decoded, spaces tidied, one blank line at most between blocks. */
 function textOf(html: string): string {
-  return html
-    .replace(/<[^<>]*>/g, " ")
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
-      if (name[0] === "#") {
-        const code = name[1].toLowerCase() === "x" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
-        return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : " ";
-      }
-      return entities[name.toLowerCase()] ?? whole;
-    })
+  return decodeEntities(html.replace(/<[^<>]*>/g, " "))
+    .replace(/\r\n?/g, "\n")
     .replace(/[ \t\f\v ]+/g, " ")
     .replace(/ *\n[ \n]*/g, (gap) => (gap.split("\n").length > 2 ? "\n\n" : "\n"))
     .trim();

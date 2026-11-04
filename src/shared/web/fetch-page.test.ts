@@ -146,9 +146,28 @@ describe("fetchPublicPage", () => {
     expect(await fetchPublicPage("https://down.example.com/ad", { fetch, lookup: publicLookup })).toEqual({ ok: false, reason: "failed" });
   });
 
-  it("treats a page with no readable text, such as an app shell, as blocked", async () => {
+  it("says a page with no readable text, such as an app shell, has no text, not that the site said no", async () => {
     const fetch = vi.fn(async () => page('<html><head><title>Jobs</title></head><body><div id="root"></div><script>app()</script></body></html>'));
-    expect(await fetchPublicPage("https://jobs.example.com/app", { fetch, lookup: publicLookup })).toEqual({ ok: false, reason: "blocked" });
+    expect(await fetchPublicPage("https://jobs.example.com/app", { fetch, lookup: publicLookup })).toEqual({ ok: false, reason: "no-text" });
+  });
+
+  it.each([["https://jobs.corp.internal/ad"], ["https://:secret@jobs.example.com/ad"]])("refuses %s before opening anything", async (link) => {
+    const fetch = vi.fn(async () => page(ad));
+    expect(await fetchPublicPage(link, { fetch, lookup: publicLookup })).toEqual({ ok: false, reason: "invalid-url" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("gives up on a redirect with nowhere to go", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 302 }));
+    expect(await fetchPublicPage("https://jobs.example.com/r", { fetch, lookup: publicLookup })).toEqual({ ok: false, reason: "failed" });
+  });
+
+  it("reads the charset a page names in a meta tag when the header names none", async () => {
+    // <meta charset="windows-1252"><p>£30,000</p>, with £ as the single byte 0xA3.
+    const html = new TextEncoder().encode('<meta charset="windows-1252"><p>X30,000</p>');
+    html[html.indexOf(0x58)] = 0xa3;
+    const fetch = vi.fn(async () => new Response(html, { headers: { "content-type": "text/html" } }));
+    expect(await fetchPublicPage("https://jobs.example.com/ad", { fetch, lookup: publicLookup })).toMatchObject({ ok: true, text: "£30,000" });
   });
 });
 
@@ -161,14 +180,39 @@ describe("readablePage", () => {
     expect(long.text.length).toBeGreaterThan(20_000);
   });
 
-  it("puts the schema.org JobPosting first: title, employer and description", () => {
+  it("uses the schema.org JobPosting alone when it has a description, so the ad comes once (Shayan, #286)", () => {
     const posting = {
       "@context": "https://schema.org",
       "@graph": [{ "@type": "Organization", name: "Board" }, { "@type": "JobPosting", title: "Data Analyst", hiringOrganization: { name: "Acme" }, description: "<p>Use SQL &amp; Python.</p>" }],
     };
-    const html = `<html><head><script type="application/ld+json">${JSON.stringify(posting)}</script></head><body><p>Cookie banner</p></body></html>`;
+    // The page around it repeats the same ad among a cookie banner and menus.
+    const html = `<html><head><script type="application/ld+json">${JSON.stringify(posting)}</script></head><body><p>Cookie banner</p><h1>Data Analyst</h1><p>Use SQL &amp; Python.</p></body></html>`;
 
-    expect(readablePage(html).text).toBe("Data Analyst\nAcme\nUse SQL & Python.\n\nCookie banner");
+    expect(readablePage(html).text).toBe("Data Analyst\nAcme\nUse SQL & Python.");
+  });
+
+  it("keeps a line per requirement in the posting's description, escaped HTML included", () => {
+    const description = "<p>Essential</p><ul><li>Strong SQL</li><li>Advanced Excel</li></ul><p>Desirable</p><ul><li>Power BI</li></ul>";
+    for (const written of [description, description.replace(/</g, "&lt;").replace(/>/g, "&gt;")]) {
+      const posting = { "@type": "JobPosting", title: "Data Analyst", hiringOrganization: "Northgate", description: written };
+      const html = `<script type="application/ld+json">${JSON.stringify(posting)}</script>`;
+      expect(readablePage(html).text).toBe("Data Analyst\nNorthgate\nEssential\nStrong SQL\nAdvanced Excel\n\nDesirable\nPower BI");
+    }
+  });
+
+  it("adds the page's text after a posting with no description", () => {
+    const posting = { "@type": "JobPosting", title: "Data Analyst &amp; Insight", hiringOrganization: [{ name: "Acme" }] };
+    const html = `<script type="application/ld+json">${JSON.stringify(posting)}</script><p>The full ad</p>`;
+    expect(readablePage(html).text).toBe("Data Analyst & Insight\nAcme\n\nThe full ad");
+  });
+
+  it("reads the body of a page with no </head>, and a commented-out script doesn't hide what follows", () => {
+    expect(readablePage("<html><head><title>Ad</title><body><p>The ad</p>").text).toBe("The ad");
+    expect(readablePage("<p>Before</p><!-- <script> --><p>After</p>").text).toBe("Before\nAfter");
+  });
+
+  it("takes the page's title, not an icon's", () => {
+    expect(readablePage("<body><svg><title>Menu</title></svg><title>Data Analyst</title><p>Ad</p>").title).toBe("Data Analyst");
   });
 
   it("ignores JSON-LD it can't read", () => {
@@ -176,12 +220,31 @@ describe("readablePage", () => {
     expect(readablePage(html).text).toBe("The ad");
   });
 
-  it("decodes entities, including numbered ones", () => {
-    expect(readablePage("<p>£30,000 &#8211; &#x2014; caf&eacute;</p>").text).toBe("£30,000 – — caf&eacute;");
+  it("decodes entities, including numbered ones and the windows-1252 quotes pages write as &#146;", () => {
+    expect(readablePage("<p>£30,000 &#8211; &#x2014; caf&eacute; &euro;5 it&#146;s</p>").text).toBe("£30,000 – — café €5 it’s");
+  });
+
+  it("never returns half of a surrogate pair, which Postgres would refuse to save", () => {
+    expect(readablePage("<p>a&#xD800;b</p>").text).toBe("a b");
+    const emoji = readablePage(`<p>${"x".repeat(29_999)}😀</p>`);
+    expect(emoji.text.isWellFormed()).toBe(true);
+  });
+
+  it("drops carriage returns from pages written with Windows line endings", () => {
+    expect(readablePage("<p>Strong SQL\r\nAdvanced Excel</p>").text).toBe("Strong SQL\nAdvanced Excel");
+  });
+
+  it("doesn't overflow on JSON-LD nested thousands deep", () => {
+    const deep = '{"@graph":'.repeat(5000) + "null" + "}".repeat(5000);
+    expect(() => readablePage(`<script type="application/ld+json">${deep}</script><p>Ad</p>`)).not.toThrow();
   });
 });
 
 describe("isPrivateAddress", () => {
+  it.each(["64:ff9b:1::1", "2001::1", "ff02::1", "fec0::1", "2002:a00:1::1", "198.51.100.7", "203.0.113.9"])("blocks %s too", (address) =>
+    expect(isPrivateAddress(address)).toBe(true),
+  );
+
   it.each(["127.0.0.1", "10.2.3.4", "172.20.0.1", "192.168.0.10", "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "::1", "::", "fd00::1", "fe80::1", "::ffff:192.168.1.1", "not-an-ip"])(
     "blocks %s",
     (address) => expect(isPrivateAddress(address)).toBe(true),
@@ -248,6 +311,13 @@ describe("readablePage, on hostile pages", () => {
     const started = performance.now();
     readablePage(html);
     expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it("reads 2 MB of empty JSON-LD blocks in well under a second (Shayan, #286)", () => {
+    const html = "<script type=application/ld+json>{</script>".repeat(Math.ceil(2_000_000 / 43));
+    const started = performance.now();
+    readablePage(html);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("caps the title and drops invisible characters from the text", () => {
