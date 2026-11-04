@@ -26,7 +26,11 @@ type StepTrackerProps = {
   onSelect: (step: number) => void;
 };
 
-/** The row of numbered circles above the steps: where the user is in the application, and a way to jump to any step. */
+/**
+ * The row of numbered circles above the steps: where the user is in the application, and a way to jump to any step.
+ * Every step can be opened at any time, so every circle shows on hover that it can be clicked; the pointer comes from
+ * globals.css (#277) and the focus ring from the app-wide :focus-visible.
+ */
 export function StepTracker({ steps, current, onSelect }: StepTrackerProps) {
   return (
     <nav aria-label="Application steps">
@@ -43,12 +47,16 @@ export function StepTracker({ steps, current, onSelect }: StepTrackerProps) {
                 type="button"
                 onClick={() => onSelect(number)}
                 aria-current={isCurrent ? "step" : undefined}
-                className="relative flex min-h-11 w-full flex-col items-center gap-1 rounded-md"
+                className="group relative flex min-h-11 w-full flex-col items-center gap-1 rounded-md"
               >
                 <span
                   className={cn(
-                    "flex size-8 items-center justify-center rounded-full border-2 text-sm font-semibold",
-                    status === "completed" ? "border-accent bg-accent text-surface" : isCurrent ? "border-accent bg-surface text-accent" : "border-line bg-surface text-text-muted",
+                    "flex size-8 items-center justify-center rounded-full border-2 text-sm font-semibold transition-colors",
+                    status === "completed"
+                      ? "border-accent bg-accent text-surface"
+                      : isCurrent
+                        ? "border-accent bg-surface text-accent group-hover:bg-fit"
+                        : "border-line bg-surface text-text-muted group-hover:border-accent group-hover:text-accent",
                   )}
                 >
                   {status === "completed" ? (
@@ -59,7 +67,12 @@ export function StepTracker({ steps, current, onSelect }: StepTrackerProps) {
                     number
                   )}
                 </span>
-                <span className={cn("max-w-full text-xs", isCurrent ? "font-semibold text-text" : "text-text-muted")}>
+                <span
+                  className={cn(
+                    "max-w-full text-xs underline-offset-4 group-hover:text-accent group-hover:underline",
+                    isCurrent ? "font-semibold text-text" : "text-text-muted",
+                  )}
+                >
                   {label}
                   <span className="sr-only">, {statusNames[status]}</span>
                 </span>
@@ -100,11 +113,12 @@ export function TailorStep({ id, title, summary, status, icon, open, onToggle, c
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={panelId}
-          className={cn("flex min-h-11 w-full items-center gap-3 rounded-lg text-left", open ? "p-4" : "py-5")}
+          className={cn("group flex min-h-11 w-full items-center gap-3 rounded-lg text-left", open ? "p-4" : "py-5")}
         >
-          {!open && <span className="text-text-muted">{status === "completed" ? <DoneIcon /> : icon}</span>}
+          {!open && <span className="text-text-muted group-hover:text-accent">{status === "completed" ? <DoneIcon /> : icon}</span>}
           <span className="flex min-w-0 grow flex-col">
-            <span className="text-lg font-semibold sm:text-xl">{title}</span>
+            {/* On hover the title says it can be clicked, open or closed. */}
+            <span className="text-lg font-semibold underline-offset-4 group-hover:text-accent group-hover:underline sm:text-xl">{title}</span>
             {!open && <span className="text-sm font-normal text-text-muted">{summary}</span>}
           </span>
           <StatusPill status={status} />
