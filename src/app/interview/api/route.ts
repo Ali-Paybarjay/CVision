@@ -1,5 +1,5 @@
-// The interview practice API: one POST per engine step, plus "save". The browser sends only the job id; the job
-// ad and CV are read on the server from the user's own data, so this API cannot be used to run other text.
+// The interview practice API: one POST per engine step, plus "save" and "discard". The browser sends only the job
+// id; the job ad and CV are read on the server from the user's own data, so this API cannot be used to run other text.
 import { after } from "next/server";
 import { z } from "zod";
 import { getAiMode, type Requester } from "@/shared/ai";
@@ -9,7 +9,7 @@ import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, 
 import { interviewInputsFor, isCvTooThin } from "@/features/interview/engine/text";
 import { trackSessionCompleted, trackSessionEndedEarly, trackStartupReady } from "@/features/interview/server/completion-event";
 import { getMyJob, getMyProfile } from "@/features/interview/server/my-data";
-import { saveInterviewSession } from "@/features/interview/server/session-store";
+import { discardInterviewSession, saveInterviewSession } from "@/features/interview/server/session-store";
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
 
 /**
@@ -22,7 +22,15 @@ export const maxDuration = 300;
 const JobIdSchema = z.string().min(1).max(100);
 const QuestionIdSchema = z.string().min(1);
 /** A count the browser sends for interview.startup_ready (#232): a bad one is dropped, never a reason to refuse the step. */
-const CountSchema = z.number().int().nonnegative().optional().catch(undefined);
+const count = (max: number) => z.number().int().nonnegative().max(max).optional().catch(undefined);
+/**
+ * The whole wait has no limit: a start left and resumed days later still says so, as over 15 minutes. A stage's time
+ * and the number of goes do (#281): a stage stops after `stallSeconds`, so a number past an hour is not real and is
+ * dropped rather than skew the shares.
+ */
+const WaitSchema = count(Number.MAX_SAFE_INTEGER);
+const StageMsSchema = count(3_600_000);
+const RetriesSchema = count(1_000);
 
 const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("analyse"), jobId: JobIdSchema, id: z.uuid(), startedAt: z.iso.datetime() }),
@@ -33,10 +41,10 @@ const RequestSchema = z.discriminatedUnion("step", [
     step: z.literal("review"),
     jobId: JobIdSchema,
     session: InterviewSessionSchema,
-    waitedMs: CountSchema,
-    analyseMs: CountSchema,
-    generateMs: CountSchema,
-    retries: CountSchema,
+    waitedMs: WaitSchema,
+    analyseMs: StageMsSchema,
+    generateMs: StageMsSchema,
+    retries: RetriesSchema,
   }),
   z.object({ step: z.literal("follow-up"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("evaluate"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
@@ -44,6 +52,8 @@ const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("end"), jobId: JobIdSchema, session: InterviewSessionSchema }),
   z.object({ step: z.literal("suggest"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("save"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  // "Start again" (#281): the account's copy of the practice thrown away goes too, so a reload cannot bring it back.
+  z.object({ step: z.literal("discard"), jobId: JobIdSchema, sessionId: z.uuid() }),
 ]);
 
 export async function POST(request: Request): Promise<Response> {
@@ -123,6 +133,9 @@ export async function POST(request: Request): Promise<Response> {
       case "save":
         if (!user) return Response.json({ saved: false, reason: "signed-out" });
         return Response.json(await saveInterviewSession(body.session));
+      case "discard":
+        if (!user) return Response.json({ discarded: false });
+        return Response.json({ discarded: await discardInterviewSession(body.jobId, body.sessionId) });
     }
   } catch (error) {
     if (error instanceof MissingProfileError) return Response.json({ error: "We could not find your Profile." }, { status: 404 });

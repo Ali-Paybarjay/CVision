@@ -50,6 +50,8 @@ vi.mock("@/shared/analytics/track", () => ({
 }));
 
 const upserts = vi.hoisted(() => [] as { table: string; row: Record<string, unknown> }[]);
+// Each delete, as its table and the filters on it.
+const deletes = vi.hoisted(() => [] as { table: string; filters: string[] }[]);
 const supabaseConnected = vi.hoisted(() => ({ value: false }));
 // The events already recorded, for the check that interview.session_completed is recorded once per session.
 const recordedSessionIds = vi.hoisted(() => [] as string[]);
@@ -71,7 +73,21 @@ vi.mock("@/shared/supabase/admin", () => ({
 vi.mock("@/shared/supabase/server", () => ({
   createSupabaseServerClient: async () =>
     supabaseConnected.value
-      ? { from: (table: string) => ({ upsert: async (row: Record<string, unknown>) => (upserts.push({ table, row }), { error: null }) }) }
+      ? {
+          from: (table: string) => ({
+            upsert: async (row: Record<string, unknown>) => (upserts.push({ table, row }), { error: null }),
+            delete: () => {
+              const filters: string[] = [];
+              deletes.push({ table, filters });
+              const query = {
+                eq: (column: string, value: unknown) => (filters.push(`${column} = ${value}`), query),
+                is: (column: string, value: unknown) => (filters.push(`${column} is ${value}`), query),
+                then: (resolve: (result: { error: null }) => unknown) => resolve({ error: null }),
+              };
+              return query;
+            },
+          }),
+        }
       : null,
 }));
 
@@ -86,6 +102,7 @@ afterEach(() => {
   deferred.length = 0;
   tracked.length = 0;
   upserts.length = 0;
+  deletes.length = 0;
   recordedSessionIds.length = 0;
   profileReads.count = 0;
   profileOverride.value = null;
@@ -226,6 +243,14 @@ describe("interview.startup_ready (#232)", () => {
     await Promise.all(deferred.map((work) => work()));
     expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: false, retries: 0, generateSeconds: null });
   });
+
+  it("drops a stage time past an hour, which is not real, but keeps a start resumed days later as resumed (#281)", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const days = 3 * 24 * 3_600_000;
+    await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: days, analyseMs: 3_600_001, generateMs: 41_000, retries: 5_000 });
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: true, analyseSeconds: null, generateSeconds: 41, retries: 0 });
+  });
 });
 
 describe("'End here' (#205)", () => {
@@ -282,6 +307,25 @@ describe("saving a session", () => {
     const response = await post({ step: "save", jobId: storedJobId, session });
     expect(await response.json()).toEqual({ saved: true });
     expect(upserts).toEqual([{ table: "interview_sessions", row: { id: session.id, job_id: storedJobId, data: session } }]);
+  });
+});
+
+describe("Start again (#281)", () => {
+  const sessionId = "5f0c8a52-3d1e-4b7a-9c2f-6e8d1a4b7c90";
+
+  it("deletes the account's copy of the practice thrown away, but never a finished one", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    supabaseConnected.value = true;
+    expect(await (await post({ step: "discard", jobId: storedJobId, sessionId })).json()).toEqual({ discarded: true });
+    expect(deletes).toEqual([{ table: "interview_sessions", filters: [`id = ${sessionId}`, `job_id = ${storedJobId}`, "data->report is null"] }]);
+  });
+
+  it("does nothing for a signed-out visitor or a sample job, which have no copy in an account", async () => {
+    supabaseConnected.value = true;
+    expect(await (await post({ step: "discard", jobId: storedJobId, sessionId })).json()).toEqual({ discarded: false });
+    currentUser.value = { id: "user-1", email: null };
+    expect(await (await post({ step: "discard", jobId: "sara-job-1", sessionId })).json()).toEqual({ discarded: false });
+    expect(deletes).toHaveLength(0);
   });
 });
 

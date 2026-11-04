@@ -17,7 +17,7 @@ export type PracticeEnvelope = {
   startupMs: number | null;
   /** How many times a start-up stage was sent again, automatically or by Try again (#232), for interview.startup_ready. */
   startupRetries?: number;
-  /** How long stages 1 and 2 took in this browser, their last go only (#266), for interview.startup_ready. */
+  /** How long stages 1 and 2 took in this browser: the go that worked only (#266, #281), for interview.startup_ready. */
   stageMs?: { analyse?: number; generate?: number };
 };
 
@@ -27,6 +27,17 @@ export type PracticeEnvelope = {
  * same way, as at a daily limit, so the page offers none (#266).
  */
 export type JobState = { status: "running"; since?: number; retrying?: boolean } | { status: "failed"; message: string; final?: boolean };
+
+/**
+ * Said after a failure that Try again cannot fix now (#281), as at a daily limit: the page offers no Try again, so it
+ * says what happens to the practice instead.
+ */
+export const keptForLater = "Your practice is kept. Open this page again later to carry on.";
+
+/** A failed request's words, and with no Try again to offer, what happens next. */
+export function failureMessage(job: { message: string; final?: boolean }): string {
+  return job.final ? `${job.message} ${keptForLater}` : job.message;
+}
 
 /** What the user reads when a request fails without a message of its own from the API: plain words, never a status code. */
 export const stepProblems = {

@@ -33,7 +33,8 @@ import {
   type Provenance,
 } from "@/features/interview/engine/session";
 import { countWords } from "@/features/interview/engine/text";
-import { StepError, type JobState, type PracticeEnvelope, type PracticeStore } from "./store";
+import { ConfirmInPlace } from "./confirm";
+import { failureMessage, StepError, type JobState, type PracticeEnvelope, type PracticeStore } from "./store";
 import { Button, Card, Notice } from "@/shared/ui";
 import { InterviewList, QuestionSheet, WhyThisQuestion, type RowState } from "./sheet";
 import { Status } from "./ui";
@@ -73,20 +74,22 @@ export function retryStartupStage(store: PracticeStore, run: string, key: string
  * one, within `fastFailureSeconds` (#266): a slower failure may have left the server still working on the first
  * request, and a second would pay for the model twice. A second failure is the stage's, and so is a slow failure or a
  * request dropped after `stallSeconds` (see config): the page shows it with Try again. Try again runs the stage afresh,
- * with its own second go.
+ * with its own second go. `ms` is how long the go that worked took, without the failed one or the pause before the
+ * second (#281), for interview.startup_ready.
  */
-async function withOneRetry<T>(store: PracticeStore, run: string, key: string, request: () => Promise<T>): Promise<T> {
+async function withOneRetry<T>(store: PracticeStore, run: string, key: string, request: () => Promise<T>): Promise<{ result: T; ms: number }> {
   store.noteAttempt(key);
   const startedAt = Date.now();
   try {
-    return await request();
+    return { result: await request(), ms: Date.now() - startedAt };
   } catch (error) {
     if (!(error instanceof StepError) || !error.retryable || Date.now() - startedAt > fastFailureSeconds * 1000) throw error;
     countStartupRetry(store, run);
     store.noteAttempt(key);
     // A blip (a dropped connection, an overloaded server) often lasts a few seconds: an instant resend would meet it too.
     await new Promise((resolve) => setTimeout(resolve, startupRetryDelayMs));
-    return request();
+    const secondGoAt = Date.now();
+    return { result: await request(), ms: Date.now() - secondGoAt };
   }
 }
 
@@ -108,16 +111,13 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
   if (!session) {
     const key = `${run}:analyse`;
     store.runJob(key, async () => {
-      const begun = Date.now();
-      const result = await callStartup<{ session: InterviewSession }>(key, () => ({
+      const { result, ms } = await callStartup<{ session: InterviewSession }>(key, () => ({
         step: "analyse",
         id: crypto.randomUUID(),
         startedAt: new Date(envelope.startedAtMs).toISOString(),
       }));
       store.updateEnvelope((current) =>
-        current.session || runOf(current) !== run
-          ? current
-          : { ...current, session: result.session, stageMs: { ...current.stageMs, analyse: Date.now() - begun } },
+        current.session || runOf(current) !== run ? current : { ...current, session: result.session, stageMs: { ...current.stageMs, analyse: ms } },
       );
     });
     return;
@@ -128,9 +128,8 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
     const step = next.step;
     const key = `${run}:${step}`;
     store.runJob(key, async () => {
-      const begun = Date.now();
       // The review request also says how long this start, and stages 1 and 2, have taken, for interview.startup_ready.
-      const result = await callStartup<{ session: InterviewSession }>(key, () => {
+      const { result, ms } = await callStartup<{ session: InterviewSession }>(key, () => {
         if (step !== "review") return { step, session };
         const saved = store.readEnvelope();
         return {
@@ -144,7 +143,7 @@ export function drive(store: PracticeStore, envelope: PracticeEnvelope, context:
       });
       store.updateEnvelope((envelope) => {
         if (!envelope.session || envelope.session.id !== session.id || nextStep(envelope.session).step !== step) return envelope;
-        if (step === "generate") return { ...envelope, session: result.session, stageMs: { ...envelope.stageMs, generate: Date.now() - begun } };
+        if (step === "generate") return { ...envelope, session: result.session, stageMs: { ...envelope.stageMs, generate: ms } };
         return { ...envelope, session: advance(result.session), startupMs: Date.now() - envelope.startedAtMs };
       });
     });
@@ -224,6 +223,9 @@ export function InterviewFlow({
   onDraftChange?: (hasDraft: boolean) => void;
 }) {
   const step = nextStep(session);
+  // While the questions are prepared, "Preparing your interview" (progress.tsx) is all there is: the list would be
+  // empty, then show draft questions the review may still change (#282).
+  if (step.step === "analyse" || step.step === "generate" || step.step === "review") return null;
   const scoredIds = reportQuestionIds(session);
   const scored = scoredIds.filter((id) => evaluationFor(session, id)).length;
   const unanswered = new Set(unansweredQuestionIds(session));
@@ -290,7 +292,7 @@ export function InterviewFlow({
         </ul>
         {suggestFailure?.status === "failed" && (
           <div className="mt-2 space-y-2">
-            <Notice tone="error">{suggestFailure.message}</Notice>
+            <Notice tone="error">{failureMessage(suggestFailure)}</Notice>
             {!suggestFailure.final && <Button onClick={() => failedSuggestions.forEach((key) => store.retryJob(key))}>Try again</Button>}
           </div>
         )}
@@ -306,7 +308,7 @@ export function InterviewFlow({
         </p>
         {reportJob?.status === "failed" && (
           <div className="mt-2 space-y-2">
-            <Notice tone="error">{reportJob.message}</Notice>
+            <Notice tone="error">{failureMessage(reportJob)}</Notice>
             {!reportJob.final && <Button onClick={() => store.retryJob(`${run}:report`)}>Try again</Button>}
           </div>
         )}
@@ -332,12 +334,12 @@ export function InterviewFlow({
   );
 }
 
-/** A request for one question that failed: its message, and Try again unless it would only fail the same way. */
+/** A request for one question that failed: its message, and Try again unless it would only fail the same way (#281). */
 function FailedJob({ store, job, jobKey, failed }: { store: PracticeStore; job: JobState; jobKey: string; failed: string }) {
   return (
     <div className="space-y-1">
       <p className="font-semibold text-error">{failed}</p>
-      {job.status === "failed" && <p className="text-error">{job.message}</p>}
+      {job.status === "failed" && <p className="text-error">{failureMessage(job)}</p>}
       {job.status === "failed" && !job.final && <Button onClick={() => store.retryJob(jobKey)}>Try again</Button>}
     </div>
   );
@@ -351,10 +353,16 @@ function FailedJob({ store, job, jobKey, failed }: { store: PracticeStore; job: 
  */
 export function EndHere({ store, session }: { store: PracticeStore; session: InterviewSession }) {
   const [confirming, setConfirming] = useState(false);
-  const heading = useRef<HTMLParagraphElement>(null);
+  // The question takes focus as it opens (ConfirmInPlace); after "Keep going" or Escape, focus goes back to the button.
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancelled = useRef(false);
   useEffect(() => {
-    if (confirming) heading.current?.focus();
+    if (!confirming && cancelled.current) trigger.current?.focus();
   }, [confirming]);
+  const cancel = () => {
+    cancelled.current = true;
+    setConfirming(false);
+  };
 
   let left: number;
   try {
@@ -370,28 +378,21 @@ export function EndHere({ store, session }: { store: PracticeStore; session: Int
     return (
       <div className="space-y-2 rounded-md bg-fit p-3">
         <p className="text-sm">Short on time? Stop now and get a suggested answer for every question you haven&apos;t answered.</p>
-        <Button className="bg-surface" onClick={() => setConfirming(true)}>
+        <Button ref={trigger} className="bg-surface" onClick={() => setConfirming(true)}>
           End here and see suggested answers
         </Button>
       </div>
     );
   }
+  const outcome =
+    answered > 0
+      ? `You've answered ${answered} of ${total} questions. Those get your feedback; the other ${left} get a suggested answer built from your profile.`
+      : `Each of the ${total} questions gets a suggested answer built from your profile.`;
   return (
-    <div className="space-y-2 rounded-md border border-line bg-canvas p-3">
-      <p ref={heading} tabIndex={-1} className="font-semibold">
-        End the practice here?
-      </p>
-      <p className="text-sm">
-        {answered > 0
-          ? `You've answered ${answered} of ${total} questions. Those get your feedback; the other ${left} get a suggested answer built from your profile.`
-          : `Each of the ${total} questions gets a suggested answer built from your profile.`}{" "}
-        Anything you haven&apos;t submitted won&apos;t be saved.
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => store.updateSession((current) => endEarly(current, now()))}>End practice</Button>
-        <Button onClick={() => setConfirming(false)}>Keep going</Button>
-      </div>
-    </div>
+    <ConfirmInPlace question="End the practice here?" detail={`${outcome} Anything you haven't submitted won't be saved.`} onCancel={cancel}>
+      <Button onClick={() => store.updateSession((current) => endEarly(current, now()))}>End practice</Button>
+      <Button onClick={cancel}>Keep going</Button>
+    </ConfirmInPlace>
   );
 }
 
@@ -399,7 +400,7 @@ function DecisionStatus({ store, job, jobKey }: { store: PracticeStore; job?: Jo
   if (job?.status === "failed") {
     return (
       <div className="space-y-2">
-        <Notice tone="error">{job.message}</Notice>
+        <Notice tone="error">{failureMessage(job)}</Notice>
         {!job.final && <Button onClick={() => store.retryJob(jobKey)}>Try again</Button>}
       </div>
     );

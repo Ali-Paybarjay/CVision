@@ -57,7 +57,7 @@ export function stagesDone(session: InterviewSession | null): number {
 /** Where the start is: still preparing, stopped at a stage that needs Try again, or ready (the questions are checked). */
 export function preparationState(session: InterviewSession | null, jobs: Readonly<Record<string, JobState>>, run: string): PreparationState {
   if (stagesDone(session) === startupStages.length) return "ready";
-  return startupStages.some((stage) => jobs[`${run}:${stage.key}`]?.status === "failed") ? "failed" : "preparing";
+  return startupFailure(jobs, run) ? "failed" : "preparing";
 }
 
 /** The usual wait, said once before it starts: "about 2 minutes". */
@@ -100,8 +100,23 @@ export function timeLeft(done: number, stageElapsedMs: number): string {
 /**
  * Said once a stage is very late (#266). Start again stays hidden even then: it would throw away the stages already
  * done and pay for the slow one twice, while this stage is stopped within `stallSeconds` anyway, with Try again.
+ * It counts from now, not from the stage's start, which the user never saw (#281): stage 1 has about 2 minutes left
+ * when the line comes, stages 2 and 3 about a minute.
  */
-export const veryLateMessage = `This step is slower than usual. If it hasn't finished ${Math.round(stallSeconds / 60)} minutes after it started, we'll stop it and you can try again.`;
+export function veryLateMessage(stage: number): string {
+  const left = stallSeconds - (2 * budgetMs(stage)) / 1000 - overrunGraceSeconds;
+  const within = left > 90 ? `about ${Math.round(left / 60)} minutes` : "about a minute";
+  return `This step is slower than usual. If it isn't done in ${within}, we'll stop it so you can try again.`;
+}
+
+/** The failed start-up stage, if one has failed: its message, and whether Try again is offered (`final`). */
+export function startupFailure(jobs: Readonly<Record<string, JobState>>, run: string): Extract<JobState, { status: "failed" }> | null {
+  for (const stage of startupStages) {
+    const job = jobs[`${run}:${stage.key}`];
+    if (job?.status === "failed") return job;
+  }
+  return null;
+}
 
 const rubricsByCategory = { technical: technicalV1, behavioural: behaviouralV1 } as const;
 
@@ -216,6 +231,7 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
   const job = jobs[`${run}:${working.key}`];
   const failure = job?.status === "failed" ? job : null;
   const failed = failure !== null;
+  const kept = failure ? keptLine(done, failure.final === true) : "";
   const retrying = job?.status === "running" && job.retrying === true;
 
   // Nothing moves while a stage waits for Try again.
@@ -274,8 +290,8 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
             {index === done && failure && (
               <div className="col-start-2 space-y-2">
                 <p className="text-sm text-error">{failure.message}</p>
-                {done > 0 && <p className="text-sm text-text-muted">The steps already done are kept.</p>}
-                {/* At a daily limit, Try again would only fail the same way (#266). */}
+                {/* At a daily limit, Try again would only fail the same way (#266): the line says what to do instead (#281). */}
+                {kept && <p className="text-sm text-text-muted">{kept}</p>}
                 {!failure.final && (
                   <Button
                     variant="primary"
@@ -295,9 +311,10 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
       </ol>
       {/* Here from the card's start, so a screen reader hears the line once when a stage becomes very late (#266). */}
       <p role="status" className={veryLate ? "text-sm" : "sr-only"}>
-        {veryLate ? veryLateMessage : ""}
+        {veryLate ? veryLateMessage(done) : ""}
       </p>
-      <p className="text-sm text-text-muted">Keep this page open. You can use another tab while you wait.</p>
+      {/* Only while waiting: after a failure there is nothing to wait for, and with no Try again it says to come back later. */}
+      {!failed && <p className="text-sm text-text-muted">Keep this page open. You can use another tab while you wait.</p>}
       {/* Below the line, something to use the wait for: the scoring from the start, what the role asks for after stage 1. */}
       <div className="space-y-4 border-t border-line pt-4">
         {session && <WhileYouWait session={session} />}
@@ -305,6 +322,15 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
       </div>
     </Card>
   );
+}
+
+/**
+ * Under a failed stage: what is kept, and with no Try again (`final`), when to come back (#281). Start again is hidden
+ * then too (practice.tsx): it would throw away the stages done and fail the same way.
+ */
+export function keptLine(done: number, final: boolean): string {
+  if (!final) return done > 0 ? "The steps already done are kept." : "";
+  return done > 0 ? "The steps already done are kept. Open this page again later to carry on." : "Open this page again later to try again.";
 }
 
 /**

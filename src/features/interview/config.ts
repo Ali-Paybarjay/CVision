@@ -21,12 +21,13 @@ export const stageConfig: Record<StageName, StageSettings> = {
   analyse: { prompt: "interview-analyse", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
   // Most of the wait before question 1 is the model thinking, not writing (#100). At medium the eval of 2 Nov 2026
   // started in 89 to 107 seconds (run 41453905106); at low in 63 to 75 (run 41456709365), with the same scoring
-  // spread. The draft is a little weaker at low (the review rewrote 2 or 3 questions, not 0 to 2), and the review and
-  // the code checks catch it. If real questions read worse, move generate back to medium first.
-  generate: { prompt: "interview-generate-technical", model: "claude-haiku-5-5", effort: "low", maxTokens: 16000 },
+  // spread, but the draft was weaker at low (the review rewrote 2 or 3 questions, not 0 to 2). On the live site low
+  // felt no faster, so generate and review went back to medium on 3 Nov 2026: good questions matter more than
+  // the wait. Shorten the wait by writing the questions in parallel instead, not by lowering effort.
+  generate: { prompt: "interview-generate-technical", model: "claude-haiku-5-5", effort: "medium", maxTokens: 16000 },
   // A stronger model is worth trialling here, so that a different model checks the generator's work.
   // Compare with the eval: INTERVIEW_EVAL_REVIEW_MODEL=claude-sonnet-5-5 npm run eval
-  review: { prompt: "interview-review", model: "claude-haiku-5-5", effort: "low", maxTokens: 16000 },
+  review: { prompt: "interview-review", model: "claude-haiku-5-5", effort: "medium", maxTokens: 16000 },
   // At low effort Haiku can let reasoning leak into its reply; the code falls back to the planned text.
   // If tests show quality problems, raise effort to medium.
   followUp: { prompt: "interview-followup", model: "claude-haiku-5-5", effort: "low", maxTokens: 2000 },

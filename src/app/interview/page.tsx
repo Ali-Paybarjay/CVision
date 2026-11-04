@@ -145,7 +145,7 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     return (
       <Frame job={job}>
         <Notice tone="info" title="Add more to your profile first">
-          The questions are written from your profile, and there isn’t enough in it yet. Add your experience, education or
+          The questions are written from your profile, and there isn&apos;t enough in it yet. Add your experience, education or
           skills, then come back.{" "}
           <ButtonLink href="/profile" variant="quiet">
             Go to Profile

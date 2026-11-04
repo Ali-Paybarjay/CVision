@@ -23,7 +23,9 @@ export default function UiKitPage() {
           <Button>Upload a different CV</Button>
           <Button variant="quiet">Skip this question</Button>
           <Button size="compact">Compact, for the top menu</Button>
+          <Button disabled>Disabled while it works</Button>
         </div>
+        <p className="mt-3 text-sm text-text-muted">On a computer the pointer turns into a hand over every button, but not over a disabled one.</p>
       </Card>
 
       <Card>
