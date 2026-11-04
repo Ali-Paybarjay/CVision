@@ -6,6 +6,8 @@ export const brand = {
   tagline: "Every application, made to fit.",
   /** The home page's first words, chosen by team vote in #178: the pain first, then what CVision does about it. */
   hero: {
+    /** The small capitals label above the headline (docs/design/paper-desk). */
+    label: "For anyone applying for a job in the UK",
     headline: "Stop rewriting your CV for every job.",
     subline:
       "Paste a job ad. We tailor your CV to it and write your cover letter in minutes, from your own experience. You approve every change.",
@@ -30,6 +32,18 @@ export const brand = {
     },
   ],
   motto: "Paste. Tailor. Apply.",
+  stepsIntro: "Three steps, one outcome: a CV and cover letter matched to the job you want.",
+  /** The home page's match table: why each line of the example CV changed, or did not (#176). */
+  match: {
+    label: "The match, line by line",
+    title: "See why every line changed.",
+    text: "We check each requirement in the ad against your CV. Where your CV is unclear, we ask you a question. Where you don’t have it, we say so and leave it out.",
+    columns: { requirement: "The ad asks for", need: "Need", result: "Result", evidence: "Evidence" },
+    fromCv: "From your CV:",
+    before: "Your CV said:",
+    fromAnswer: "From your answer:",
+    notAdded: "Not on your CV, so we won’t add it.",
+  },
   /** Proof of competence: the brand is the guide, never the hero. */
   proof: "Every line in your CV traces back to something you told us. Nothing invented.",
   /**
@@ -50,6 +64,7 @@ export const brand = {
   /** Our Honest CV Promise: four promises we keep. */
   promise: {
     title: "Our Honest CV Promise",
+    subtitle: "Four promises we keep.",
     items: [
       {
         title: "Nothing invented",
@@ -62,10 +77,10 @@ export const brand = {
   },
   /** The home page's real product example: a fictional persona's CV with the lines CVision tailored. */
   example: {
-    label: (name: string) => `${name}'s CV, tailored`,
-    evidenceIntro: (firstName: string) => `${firstName}'s own answer to a follow-up question:`,
-    caption: (name: string, job: string, company: string) =>
-      `${name} is a fictional example. The highlighted lines were tailored for the ${job} job at ${company}.`,
+    /** Above the example, so a new visitor sees the outcome is a whole CV, not one sentence (Marzieh, #176). */
+    title: (firstName: string, job: string) => `${firstName}’s CV, tailored for a ${job} job`,
+    caption: (name: string, firstName: string, job: string, company: string) =>
+      `${name} is a fictional example. The numbered lines were tailored for the ${job} job at ${company}, from ${firstName}’s own answers to follow-up questions.`,
   },
   /** Never write these anywhere: app copy, AI output, invitations or slides. */
   bannedPhrases: ["guaranteed", "dream job", "beat the bots", "hack the ATS", "revolutionary", "10x", "effortless"],

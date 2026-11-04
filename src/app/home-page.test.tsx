@@ -88,6 +88,20 @@ describe("home page headline (#178)", () => {
     expect(words(hero).toLowerCase().split("paste a job ad").length - 1).toBe(1);
   });
 
+  it("shows Sara's tailored CV with its title, the fictional-example caption and Nothing invented (Marzieh, #176)", () => {
+    expect(html).toContain("<h2 id=\"example-title\"");
+    expect(words(html)).toContain("Sara’s CV, tailored for a Junior Data Analyst job");
+    expect(words(html)).toContain("Sara Khan is a fictional example.");
+    expect(words(hero).split(brand.proof).length - 1).toBe(1);
+  });
+
+  it("explains every requirement in a table, with the line Sara's answer changed", () => {
+    const table = html.slice(html.indexOf("<table"), html.indexOf("</table>"));
+    expect(table.match(/<th scope="row"/g)).toHaveLength(7);
+    expect(words(table)).toContain("Your CV said: “Built Tableau dashboards for the regional sales team”");
+    expect(words(table)).toContain("Not on your CV, so we won’t add it.");
+  });
+
   it("uses no words the brand bans", () => {
     for (const phrase of brand.bannedPhrases) {
       expect(`${brand.hero.headline} ${brand.hero.subline}`.toLowerCase()).not.toContain(phrase.toLowerCase());
