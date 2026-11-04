@@ -672,8 +672,35 @@ export function namedItemsAbsentFromCv(role: RoleProfile, cv: string): string[] 
 const firstPerson = /\b(?:I|[Mm]e|[Mm]y|[Ww]e|[Oo]ur|[Uu]s)\b/;
 /** The candidate in their own answer (I, we) or in advice to them (you): points and tips speak to the candidate. */
 const aboutTheCandidate = /\b(?:I|[Mm]e|[Mm]y|[Ww]e|[Oo]ur|[Uu]s|[Yy]ou|[Yy]our)\b/;
-/** What the candidate would do, not what they did: "I'd…", "we would…", "you would…", or a sentence that opens with "If". */
-const hypothetical = /\b(?:I|we|you)(?:['’]d|['’]ll| would| will| might)\b|^\s*if\b/i;
+/**
+ * What the candidate would do, not what they did: "I'd…", "we would…", "you would…". "If" alone makes nothing
+ * hypothetical ("If I'm honest, I cut errors by 47 per cent"); a real condition has one of these in it.
+ */
+const hypothetical = /\b(?:I|we|you)(?:['’]d|['’]ll| would| will| might)\b/i;
+/** "I'd" followed, after any of these, by a past participle is "I had": "I'd already built it". */
+const contractedHad = /\b(?:I|we|you)['’]d((?:\s+[a-z]+){1,4})/gi;
+const adverbsBeforeParticiple = new Set(["already", "just", "never", "previously", "recently", "also", "once", "first", "then", "still", "always", "only", "actually", "really"]);
+// The irregular ones; "cut", "run", "set", "put" and "read" are also plain verbs, so "I'd cut…" counts as "I had cut…"
+// and a sample answer says "I would cut…" for what the candidate would do.
+const irregularParticiples = new Set(
+  (
+    "been done gone had made built run cut set put kept taught brought bought thought caught sought fought found held met sent spent lent " +
+    "lost won got gotten seen written given taken begun shown grown known drawn chosen spoken broken driven become come read paid said " +
+    "told sold left felt dealt meant sat stood understood hit shut split spread let cost learnt burnt"
+  ).split(" "),
+);
+
+function isPastParticiple(word: string): boolean {
+  return irregularParticiples.has(word) || /[^e]ed$/.test(word);
+}
+
+/** True when an "I'd" in the sentence is "I had": what the candidate did, however it reads. */
+function saysHad(sentence: string): boolean {
+  return [...sentence.matchAll(contractedHad)].some((match) => {
+    const verb = match[1].trim().toLowerCase().split(/\s+/).find((word) => !adverbsBeforeParticiple.has(word));
+    return verb !== undefined && isPastParticiple(verb);
+  });
+}
 
 function figures(text: string): string[] {
   return (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((figure) => figure.replace(/,/g, "").replace(/\.0+$/, ""));
@@ -681,7 +708,7 @@ function figures(text: string): string[] {
 
 /** A sentence that says what the candidate did, not what they would do. */
 function isClaim(sentence: string): boolean {
-  return aboutTheCandidate.test(sentence) && !hypothetical.test(sentence);
+  return aboutTheCandidate.test(sentence) && (!hypothetical.test(sentence) || saysHad(sentence));
 }
 
 /**
@@ -700,6 +727,17 @@ export function inventedFigures(text: string, sources: string, workingFrom = "")
 
 /** An honest line says what the candidate has not done: "I haven't…", "not yet", "I'm new to…". */
 const honestWording = /\b(?:not|never|no|yet|new to)\b|n['’]t\b/i;
+
+/**
+ * The parts of an honest line that say what the candidate has done rather than what they haven't: "I've built Power
+ * BI dashboards" in "I've built Power BI dashboards, but I haven't worked with NHS data". They are checked like any
+ * other claim, since the report shows the honest line as the plain truth.
+ */
+function honestLineClaims(line: string): string[] {
+  return line
+    .split(/[;:—–]|,?\s*\b(?:but|although|though|whereas|while|however)\b|,?\s*\band\b(?=\s+(?:I|we)\b)/i)
+    .filter((part) => part.trim() && !honestWording.test(part));
+}
 
 /** Every rule a suggested answer must pass (#205). Messages name the rule, never the CV, job ad or answer text. */
 export function suggestionProblems(output: SuggestionDraft, context: SuggestionContext): Problem[] {
@@ -739,10 +777,15 @@ export function suggestionProblems(output: SuggestionDraft, context: SuggestionC
     if (!honestWording.test(honest)) problems.push({ path: ["honestLine"], message: "The honest line must say plainly what the CV does not show." });
   }
 
-  // R4: a tool, method or regulation the CV never names is never claimed. It may appear in the honest line, in what the
-  // candidate would do ("In Power BI I'd…") and in plain facts about it ("DSEAR needs the area zoned"), never in what they did.
+  // R4: a tool, method or regulation the CV never names is never claimed. It may appear where the honest line owns up
+  // to it, in what the candidate would do ("In Power BI I'd…") and in plain facts about it ("DSEAR needs the area
+  // zoned"), never in what they did, not even in the rest of the honest line.
   const answerOutsideHonest = honest ? splitSentences(output.sampleAnswer).filter((sentence) => !isVerbatim(honest, sentence)) : splitSentences(output.sampleAnswer);
-  const elsewhere = [...answerOutsideHonest, ...[...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip), output.uncertainty ?? ""].flatMap(splitSentences)];
+  const elsewhere = [
+    ...answerOutsideHonest,
+    ...honestLineClaims(honest),
+    ...[...output.points.map((p) => p.text), ...output.followUpTips.map((t) => t.tip), output.uncertainty ?? ""].flatMap(splitSentences),
+  ];
   const claimed = namedItemsAbsentFromCv(context.role, context.cv).filter((item) => elsewhere.some((sentence) => mentions(sentence, item) && isClaim(sentence)));
   if (claimed.length) {
     problems.push({

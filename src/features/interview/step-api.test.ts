@@ -4,7 +4,7 @@ import { AskModelError } from "@/shared/ai";
 import { limits } from "./config";
 import { fixtures } from "./fixtures";
 import { questionsNotWritten } from "./engine/stages";
-import { badRequest, RequestSessionSchema, stepFailed } from "./server/step-api";
+import { answerStepDeclined, badRequest, inputTooLong, practiceUnavailable, RequestSessionSchema, stepDeclined, stepFailed } from "./server/step-api";
 import { runMockSession } from "./test-support";
 
 describe("a session sent by the browser", () => {
@@ -32,7 +32,8 @@ describe("a step whose answer broke a rule twice (#220)", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const response = stepFailed("interview", "review", invalid, { plain: true });
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({ error: questionsNotWritten });
+    // It usually works on the second go, so the page sends a start-up stage once more by itself (#232).
+    expect(await response.json()).toEqual({ error: questionsNotWritten, retryable: true });
     expect(log).toHaveBeenCalledWith(expect.stringContaining("questions.4.followUps.0.text: Must be one question."));
   });
 
@@ -43,8 +44,104 @@ describe("a step whose answer broke a rule twice (#220)", () => {
     expect((await stepFailed("interview", "report", invalid, { plain: true }).json()).error).toMatch(/^We could not write your report/);
   });
 
-  it("still shows the rule in the lab", async () => {
+  it("still shows the rule in the lab, with no second go by itself, which would pay for two more requests (#281)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    expect((await stepFailed("interview lab", "review", invalid).json()).error).toBe(invalid.message);
+    expect(await stepFailed("interview lab", "review", invalid).json()).toEqual({ error: invalid.message, retryable: false });
+  });
+});
+
+describe("other failures (#232)", () => {
+  it("an unexpected one, such as the model's API being overloaded: plain words for the user, the step in the lab, and worth a second go", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const overloaded = new Error("529 Overloaded");
+
+    const user = stepFailed("interview", "generate", overloaded, { plain: true });
+    expect(user.status).toBe(500);
+    expect(await user.json()).toEqual({ error: questionsNotWritten, retryable: true });
+    expect(await stepFailed("interview", "suggest", overloaded, { plain: true }).json()).toEqual({
+      error: "We could not finish this step this time. Try again: it usually works on the second go.",
+      retryable: true,
+    });
+    expect(await stepFailed("interview lab", "generate", overloaded).json()).toEqual({ error: "The generate step failed. Try again.", retryable: true });
+  });
+
+  it("a daily limit: the reason as it is, with no Try again, since it would only fail the same way (#266)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const limit = new AskModelError("You have reached today's limit for interview practice.", "limit-reached");
+
+    const response = stepFailed("interview", "generate", limit, { plain: true });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: limit.message, final: true });
+  });
+
+  it("a refusal: plain words for the user, not the model's feature name, and no second go by itself (#266)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const refused = new AskModelError("The model declined the interview-analyse request.", "refused");
+
+    const user = await stepFailed("interview", "analyse", refused, { plain: true }).json();
+    expect(user).toEqual({ error: stepDeclined });
+    expect(user.error).not.toContain("interview-analyse");
+    expect((await stepFailed("interview lab", "analyse", refused).json()).error).toBe(refused.message);
+  });
+
+  it("a refusal once answers are given: no 'try another job', which would mean leaving them (#281)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const refused = new AskModelError("The model declined the interview-evaluate request.", "refused");
+    for (const step of ["generate", "review"]) {
+      expect((await stepFailed("interview", step, refused, { plain: true }).json()).error).toBe(stepDeclined);
+    }
+    for (const step of ["follow-up", "evaluate", "suggest", "report"]) {
+      expect(await stepFailed("interview", step, refused, { plain: true }).json()).toEqual({ error: answerStepDeclined });
+    }
+    expect(answerStepDeclined).not.toContain("another job");
+  });
+});
+
+/** An error as the AI service's SDK throws it: a class of its own with the HTTP status. */
+function serviceError(status: number): Error {
+  return Object.assign(new Error(`${status} {"error":{"message":"…"}}`), { name: "APIError", status });
+}
+
+describe("the AI service's own answers (#266)", () => {
+  it("worth a second go only when the service is busy or failing, or the connection dropped", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const status of [500, 502, 503, 529, 429, 408]) {
+      expect(await stepFailed("interview", "generate", serviceError(status), { plain: true }).json()).toEqual({ error: questionsNotWritten, retryable: true });
+    }
+    const dropped = Object.assign(new Error("Connection error."), { name: "APIConnectionError" });
+    expect(await stepFailed("interview", "generate", dropped, { plain: true }).json()).toMatchObject({ retryable: true });
+  });
+
+  it("turned away (out of credit, a bad key, a bad request): plain words, no second go and no Try again", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const status of [400, 401, 402, 403]) {
+      const response = stepFailed("interview", "generate", serviceError(status), { plain: true });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: practiceUnavailable, final: true });
+    }
+    // The log says which, for whoever looks into it; the lab says it too.
+    expect(log).toHaveBeenCalledWith("interview: generate failed (APIError, HTTP 402)");
+    expect((await stepFailed("interview lab", "generate", serviceError(402)).json()).error).toBe(
+      "The generate step failed: the AI service answered 402.",
+    );
+  });
+
+  it("too long for the AI service: says what to change, not 'try again later', and keeps Try again for after (#281)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const promptTooLong = Object.assign(serviceError(400), { message: '400 {"error":{"message":"prompt is too long: 212000 tokens > 200000 maximum"}}' });
+    for (const error of [promptTooLong, serviceError(413)]) {
+      const response = stepFailed("interview", "analyse", error, { plain: true });
+      expect(response.status).toBe(422);
+      // Not final: the job ad and profile are read again on each go, so Try again works once one is shorter.
+      expect(await response.json()).toEqual({ error: inputTooLong });
+    }
+    expect(inputTooLong).not.toMatch(/later/i);
+  });
+
+  it("no AI key on the server: plain words for the user, never the setting's name", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const noKey = new AskModelError("AI_MODE is live but neither ANTHROPIC_API_KEY nor OPENROUTER_API_KEY is set.", "no-api-key");
+
+    expect(await stepFailed("interview", "analyse", noKey, { plain: true }).json()).toEqual({ error: practiceUnavailable, final: true });
   });
 });

@@ -180,10 +180,13 @@ test("a row's Job ad link opens the full ad on its own page (#208)", async ({ pa
   // Only rows whose job has an ad to show get the link, and the ad itself stays off the dashboard.
   await expect(trackerRow(page, "Reporting Analyst").getByRole("link", { name: /^Job ad/ })).toHaveCount(0);
   await expect(page.getByText("You will write SQL to pull data from our warehouse")).toHaveCount(0);
-  // Sample rows have no saved practice, so no Interview report link, and the interview row keeps its Practise button
+  // Sample rows have no saved practice, so no Interview report link, and the interview row keeps its practice button
   // (the report link is tested in application-list.test.tsx).
   await expect(page.getByRole("link", { name: /^Interview report/ })).toHaveCount(0);
-  await expect(row.getByRole("link", { name: "Practise for this interview" })).toHaveAttribute("href", "/interview?job=sara-job-1");
+  await expect(row.getByRole("link", { name: "Start interview practice for Junior Data Analyst at Pennine Health Analytics" })).toHaveAttribute(
+    "href",
+    "/interview?job=sara-job-1",
+  );
 
   await row.getByRole("link", { name: "Job ad for Junior Data Analyst at Pennine Health Analytics" }).click();
   await expect(page).toHaveURL(/\/dashboard\/jobs\/sara-job-1$/);
@@ -195,7 +198,7 @@ test("a row's Job ad link opens the full ad on its own page (#208)", async ({ pa
   await page.getByRole("link", { name: "Back to your dashboard" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(row).toContainText("Interview stage since");
-  await expect(row).toContainText("Next step: Practise the interview questions");
+  await expect(row).toContainText("Next step: Prepare for the interview questions");
   await expect(row.getByRole("button", { name: "Edit Junior Data Analyst at Pennine Health Analytics" })).toBeVisible();
 });
 

@@ -231,7 +231,11 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
         </div>
         {/* With a report, the Interview report link above leads to practice instead. */}
         {saved.status === "interview" && !(job && item.report) && (
-          <ButtonLink href={interviewPath(saved.jobId)}>Practise for this interview</ButtonLink>
+          // "practice" as a noun only, as in the interview section (#239).
+          <ButtonLink href={interviewPath(saved.jobId)}>
+            Start interview practice
+            {job && <span className="sr-only">{` for ${job.title} at ${job.company}`}</span>}
+          </ButtonLink>
         )}
       </div>
 

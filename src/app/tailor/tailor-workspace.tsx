@@ -57,7 +57,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
   const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
-  const cv = buildTailoredCv(profile, changes);
+  const cv = buildTailoredCv(profile, changes, job);
   // Worked out on every render, so a letter approved before the CV changed is never used as approved.
   const approvedLetter = currentLetter(letter, letterBasis(changes, Object.values(answers)));
 
@@ -248,6 +248,11 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   answer the question again for a new suggestion.
                 </Notice>
               )}
+              {cv.overLimit.length > 0 && (
+                <Notice tone="info" title="Your CV shows six skills, four tools and four certificates at most">
+                  {cv.overLimit.map((line) => `“${line}”`).join(", ")} did not fit. Reject another change to make room.
+                </Notice>
+              )}
               <CvPreview cv={cv} />
             </aside>
             <div>
@@ -278,7 +283,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
             icon={<DownloadIcon />}
           >
             <DownloadBar jobId={job.id} changes={changes} letter={approvedLetter} onGoToLetter={() => goTo(4)} />
-            <ApplyPanel jobId={job.id} jobUrl={jobUrl} company={job.company} onApplied={() => setApplied(true)} />
+            <ApplyPanel jobId={job.id} jobUrl={jobUrl} onApplied={() => setApplied(true)} />
           </TailorStep>
         </div>
     </Card>

@@ -191,7 +191,7 @@ describe("a row's next step (#210, #211)", () => {
     ]) {
       const html = text(render(sampleApplicationsOn(today), today));
 
-      expect(html).toContain("Next step: Practise the interview questions Due tomorrow");
+      expect(html).toContain("Next step: Prepare for the interview questions Due tomorrow");
       expect(html).toContain(`Next step: Email the recruiter if there is no reply yet Overdue. It was due ${overdue}.`);
     }
   });
@@ -253,19 +253,26 @@ describe("the link to a job's interview report", () => {
     for (const status of ApplicationStatusSchema.options) expect(render([reported(status, 3.4)])).toContain(">Interview report<");
   });
 
-  it("replaces the Practise button at interview stage, which stays when there is no report", () => {
-    expect(render([reported("interview", 3.4)])).not.toContain("Practise for this interview");
-    expect(render([row("1", "interview", "2026-10-20", "Data Analyst")])).toMatch(
-      /<a href="\/interview\?job=job-1"[^>]*>Practise for this interview<\/a>/,
+  it("replaces the practice button at interview stage, which stays when there is no report", () => {
+    expect(render([reported("interview", 3.4)])).not.toContain("Start interview practice");
+    expect(text(render([row("1", "interview", "2026-10-20", "Data Analyst")]))).toContain(
+      "Start interview practice for Data Analyst at",
     );
+    expect(render([row("1", "interview", "2026-10-20", "Data Analyst")])).toMatch(/<a href="\/interview\?job=job-1"[^>]*>Start interview practice/);
   });
 
   it("is not shown without a finished practice, or when the job cannot be read", () => {
     expect(render([row("1", "applied", "2026-10-20", "Data Analyst")])).not.toContain("Interview report");
     const unreadable = { ...reported("interview", 3.4), job: null };
     expect(render([unreadable])).not.toContain("Interview report");
-    // With no title to name the link, the Practise button stays.
-    expect(render([unreadable])).toContain("Practise for this interview");
+    // With no title to name the link, the practice button stays, without a job in its name.
+    expect(text(render([unreadable]))).toContain("Start interview practice");
+    expect(text(render([unreadable]))).not.toContain("Start interview practice for");
+  });
+
+  it("uses practice as a noun only, never the verb practise, as the interview section does (#239)", () => {
+    const rows = [...sampleApplications, row("1", "interview", "2026-10-20", "Data Analyst"), { ...reported("interview", 3.4), job: null }];
+    expect(text(render(rows))).not.toMatch(/practis/i);
   });
 
   it("is not shown for Sara's sample rows, which have no saved practice", () => {

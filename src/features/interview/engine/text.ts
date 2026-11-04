@@ -160,6 +160,20 @@ export function cvEvidenceLines(cv: string): CvLine[] {
   return texts.map((text, i) => ({ id: `L${i + 1}`, text }));
 }
 
+/**
+ * Stage 1 quotes 3 to 6 claims from the CV word for word (checks.ts). With fewer lines than this it almost always fails
+ * after a paid request, and the questions would have little to work from.
+ */
+export const MIN_CV_LINES = 3;
+
+/**
+ * True when the CV has too few lines to start a practice, such as a profile typed in by hand with only a name (#179).
+ * Checked before any request to the model, so it costs nothing.
+ */
+export function isCvTooThin(cv: string): boolean {
+  return cvEvidenceLines(cv).length < MIN_CV_LINES;
+}
+
 /** The job ad as plain text for the prompts: title line, then the full ad as pasted. */
 export function jobToText(job: Job): string {
   return `${job.title}, ${job.company}, ${job.location}\n\n${job.description}`;

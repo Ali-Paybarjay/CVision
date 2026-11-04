@@ -5,12 +5,14 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { answerGuide, defaultComposition } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
-import { nextStep, openingView } from "@/features/interview/engine/session";
+import { mainAnswer, nextStep, openingView } from "@/features/interview/engine/session";
 import type { LastReport } from "@/features/interview/server/session-store";
-import { drive, InterviewFlow, Progress, runOf, type SampleAnswers } from "./_practice/flow";
+import { drive, InterviewFlow, runOf, type SampleAnswers } from "./_practice/flow";
+import { ConfirmInPlace } from "./_practice/confirm";
+import { preparationState, Progress, startupEstimate, startupFailure } from "./_practice/progress";
 import { FeedbackReport } from "./_practice/report";
 import { createPracticeStore, parseEnvelope, type PracticeStore } from "./_practice/store";
-import { Button, Card } from "@/shared/ui";
+import { Button, Card, Notice } from "@/shared/ui";
 import { practisedOn, Status } from "./_practice/ui";
 
 // One practice per job, each under its own key, so opening another job never replaces a practice in progress.
@@ -43,6 +45,26 @@ function moveLegacyPractice(jobId: string, key: string) {
 
 const hydratedSnapshot = () => true;
 const serverHydratedSnapshot = () => false;
+
+// "#practice" in the address: this tab chose the practice over the last report, so a reload (or a phone reopening
+// the tab) stays on the practice, while a link to the job, which has no mark, opens the report.
+const practiceMark = "#practice";
+const practiceMarkSnapshot = () => window.location.hash === practiceMark;
+
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+
+function writePracticeMark(on: boolean) {
+  const url = new URL(window.location.href);
+  url.hash = on ? practiceMark : "";
+  window.history.replaceState(null, "", url);
+}
+
+function resumeFromAccount(store: PracticeStore, jobId: string, session: InterviewSession) {
+  store.writeEnvelope({ sourceId: jobId, inputs: null, session, startedAtMs: Date.parse(session.startedAt), startupMs: null });
+}
 
 type SaveState = "idle" | "saving" | "saved" | "retrying" | "failed";
 
@@ -80,9 +102,16 @@ export function InterviewPractice({
   const session = envelope?.session ?? null;
   const autoSave = signedIn && canSave;
 
-  // Set by "Practise again", so the page goes to the intro rather than back to the account's last report.
+  // Set by "New practice", so the page goes to the intro rather than back to the account's last report.
   const [practiseAgain, setPractiseAgain] = useState(false);
-  const view = openingView({ inBrowser: envelope, saved, lastReport: lastReport?.session ?? null, practiseAgain });
+  // Read on the first render after hydration, so a reload in the middle of a practice resumes it.
+  const markedInAddress = useSyncExternalStore(subscribeToHash, practiceMarkSnapshot, serverHydratedSnapshot);
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const practising = chosen ?? markedInAddress;
+  const choices = { inBrowser: envelope, saved, lastReport: lastReport?.session ?? null, practiseAgain };
+  const view = openingView({ ...choices, practising });
+  // When the last report is shown over an unfinished practice, the practice "Continue your practice" opens.
+  const behindReport = view === "last-report" ? openingView({ ...choices, practising: true }) : "intro";
 
   // Resume from the account once: when this browser has nothing for this job, or an older copy of it (another
   // device went further). A finished session is not resumed into an empty browser: its report is shown read-only.
@@ -92,15 +121,25 @@ export function InterviewPractice({
   useEffect(() => {
     if (!hydrated || resumed.current) return;
     resumed.current = true;
-    if (saved && view === "resume") {
-      store.writeEnvelope({ sourceId: jobId, inputs: null, session: saved, startedAtMs: Date.parse(saved.startedAt), startupMs: null });
-    }
+    if (saved && view === "resume") resumeFromAccount(store, jobId, saved);
   }, [store, hydrated, view, saved, jobId]);
 
+  // Behind the last report, an unfinished practice waits: no model calls until it is continued.
   useEffect(() => {
-    if (envelope) drive(store, envelope, { jobId });
-  }, [store, envelope, jobs, jobId]);
+    if (envelope && view !== "last-report") drive(store, envelope, { jobId });
+  }, [store, envelope, jobs, jobId, view]);
 
+  // After "Continue your practice", the button is gone: focus moves to the answer box, where the practice goes on.
+  const practiceRef = useRef<HTMLDivElement>(null);
+  const focusAnswer = useRef(false);
+  useEffect(() => {
+    if (!focusAnswer.current || view === "last-report" || !envelope) return;
+    focusAnswer.current = false;
+    practiceRef.current?.querySelector("textarea")?.focus();
+  }, [view, envelope]);
+
+  // True while the answer box holds text not yet submitted, so "Start again" asks before throwing it away.
+  const [hasDraft, setHasDraft] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // Failed saves of the current session; a new value of `retry` runs the effect again.
   const failures = useRef({ json: "", count: 0 });
@@ -153,60 +192,199 @@ export function InterviewPractice({
     };
   }, [store, autoSave, session, jobId, retry]);
 
+  const setPractising = (on: boolean) => {
+    writePracticeMark(on);
+    setChosen(on);
+  };
   const start = () => {
+    setPractising(true);
     store.clearJobs();
     store.writeEnvelope({ sourceId: jobId, inputs: null, session: null, startedAtMs: Date.now(), startupMs: null });
   };
+  // Also "New practice" under the last report, which drops an unfinished practice in this browser.
   const restart = () => {
+    setPractising(false);
     store.writeEnvelope(null);
     store.clearJobs();
     setSaveState("idle");
     setPractiseAgain(true);
   };
+  // "Start again" during a practice (#281): the account's copy of the practice thrown away goes too, so a reload or
+  // another device cannot resume it. It waits behind any save still on its way, which would otherwise bring it back.
+  const startAgain = () => {
+    const sessionId = session?.id;
+    if (autoSave && sessionId) {
+      saveQueue = saveQueue.then(() => store.callStep({ step: "discard", jobId, sessionId }, { keepalive: true })).catch(() => undefined);
+      accountCopy.current = null;
+    }
+    restart();
+  };
+  const continuePractice = () => {
+    // The account's copy goes into this browser first, so the intro never shows in between.
+    if (behindReport === "resume" && saved) resumeFromAccount(store, jobId, saved);
+    focusAnswer.current = true;
+    setPractising(true);
+  };
 
   if (!hydrated) return <p className="text-text-muted">Loading…</p>;
-  if (!envelope) {
-    if (view === "last-report" && lastReport) return <LastPractice report={lastReport} onPractiseAgain={() => setPractiseAgain(true)} />;
-    return <Intro signedIn={signedIn} canSave={canSave} onStart={start} />;
+  if (view === "last-report" && lastReport) {
+    const unfinishedSince =
+      behindReport === "resume" && saved
+        ? saved.startedAt
+        : behindReport === "browser" && envelope
+          ? (envelope.session?.startedAt ?? new Date(envelope.startedAtMs).toISOString())
+          : null;
+    return <LastPractice report={lastReport} unfinishedSince={unfinishedSince} onContinue={continuePractice} onPractiseAgain={restart} />;
   }
+  if (!envelope) return <Intro signedIn={signedIn} canSave={canSave} onStart={start} focusHeading={practiseAgain} />;
 
   const done = session !== null && nextStep(session).step === "done";
+  const run = runOf(envelope);
+  // While the questions are being prepared, Start again would throw away a start that is going fine and begin the
+  // wait again (#232). It comes back when a stage fails, next to Try again, and once question 1 is here. Not after a
+  // failure Try again cannot fix, as at a daily limit (#281): it would throw away the stages done and fail the same way.
+  const canStartAgain = !done && preparationState(session, jobs, run) !== "preparing" && !startupFailure(jobs, run)?.final;
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={practiceRef} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SaveStatus autoSave={autoSave} signedIn={signedIn} state={saveState} />
-        <Button onClick={restart}>{done ? "Practise again" : "Start again"}</Button>
+        {canStartAgain && <StartAgain answers={answersGiven(session)} hasDraft={hasDraft} onRestart={startAgain} />}
       </div>
-      <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
+      <Progress store={store} session={session} jobs={jobs} run={run} />
       {session && done ? (
-        <FeedbackReport session={session} />
+        <>
+          <FeedbackReport session={session} />
+          <PractiseAgain onPractiseAgain={restart} />
+        </>
       ) : (
-        session && <InterviewFlow store={store} session={session} jobs={jobs} run={runOf(envelope)} samples={samples} />
+        session && <InterviewFlow store={store} session={session} jobs={jobs} run={run} samples={samples} onDraftChange={setHasDraft} />
       )}
     </div>
   );
 }
 
-function LastPractice({ report, onPractiseAgain }: { report: LastReport; onPractiseAgain: () => void }) {
+export function LastPractice({
+  report,
+  unfinishedSince,
+  onContinue,
+  onPractiseAgain,
+}: {
+  report: LastReport;
+  /** When a later practice was left unfinished: when it started. Offered above the report, so it is not missed. */
+  unfinishedSince: string | null;
+  onContinue: () => void;
+  onPractiseAgain: () => void;
+}) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-text-muted">
-          Your last practice · <time dateTime={report.practisedAt}>{practisedOn(report.practisedAt)}</time>
-        </p>
-        <Button onClick={onPractiseAgain}>Practise again</Button>
-      </div>
+      {unfinishedSince && (
+        <Notice tone="info" title="You have an unfinished practice">
+          <p>
+            Started <time dateTime={unfinishedSince}>{practisedOn(unfinishedSince)}</time>. The report below is from your last finished
+            practice.
+          </p>
+          <Button className="mt-3" onClick={onContinue}>
+            Continue your practice
+          </Button>
+        </Notice>
+      )}
+      <p className="text-sm text-text-muted">
+        Your last practice · <time dateTime={report.practisedAt}>{practisedOn(report.practisedAt)}</time>
+      </p>
       <FeedbackReport session={report.session} />
+      <PractiseAgain onPractiseAgain={onPractiseAgain} />
     </div>
   );
 }
 
-function Intro({ signedIn, canSave, onStart }: { signedIn: boolean; canSave: boolean; onStart: () => void }) {
+/** The questions the candidate has sent an answer to in this practice. */
+export function answersGiven(session: InterviewSession | null): number {
+  return session ? session.questions.filter((q) => mainAnswer(session, q.id) !== null).length : 0;
+}
+
+/**
+ * "Start again" during a practice (#263). With nothing to lose it starts again at once. Once an answer is sent, or
+ * the answer box holds text not yet submitted, it asks in place first, as "End here" does, so one tap on a phone
+ * cannot throw the work away.
+ */
+function StartAgain({ answers, hasDraft, onRestart }: { answers: number; hasDraft: boolean; onRestart: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  // The question takes focus as it opens (ConfirmInPlace); after "Keep going" or Escape, focus goes back to the button.
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancelled = useRef(false);
+  useEffect(() => {
+    if (!confirming && cancelled.current) trigger.current?.focus();
+  }, [confirming]);
+  const cancel = () => {
+    cancelled.current = true;
+    setConfirming(false);
+  };
+
+  return (
+    // Full width when asking, so the question sits on its own line under the save status.
+    <div className={confirming ? "w-full" : undefined}>
+      {confirming ? (
+        <ConfirmStartAgain answers={answers} hasDraft={hasDraft} onConfirm={onRestart} onCancel={cancel} />
+      ) : (
+        <Button ref={trigger} onClick={answers > 0 || hasDraft ? () => setConfirming(true) : onRestart}>
+          Start again
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function ConfirmStartAgain({
+  answers,
+  hasDraft = false,
+  onConfirm,
+  onCancel,
+}: {
+  answers: number;
+  /** The answer box holds text not yet submitted: say that goes too, as "End here" does. */
+  hasDraft?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const lost = [
+    answers === 1 ? "You'll lose your answer and its feedback." : answers > 1 ? `You'll lose your ${answers} answers and their feedback.` : null,
+    hasDraft ? (answers > 0 ? "Anything you haven't submitted will be lost too." : "Anything you haven't submitted will be lost.") : null,
+  ].filter(Boolean);
+  // The button names what it does (#281): a screen reader's list of buttons reads it without the question.
+  return (
+    <ConfirmInPlace question="Start again?" detail={lost.length > 0 ? lost.join(" ") : undefined} onCancel={onCancel}>
+      <Button onClick={onConfirm}>Start again with new questions</Button>
+      <Button onClick={onCancel}>Keep going</Button>
+    </ConfirmInPlace>
+  );
+}
+
+/** Below the report, not above it, so the feedback is read before a new practice starts. */
+function PractiseAgain({ onPractiseAgain }: { onPractiseAgain: () => void }) {
   return (
     <Card className="space-y-4">
-      <h2 className="text-xl">How it works</h2>
+      <p>Read your feedback first. When you are ready, start a new practice.</p>
+      <Button onClick={onPractiseAgain}>New practice</Button>
+    </Card>
+  );
+}
+
+function Intro({ signedIn, canSave, onStart, focusHeading }: { signedIn: boolean; canSave: boolean; onStart: () => void; focusHeading: boolean }) {
+  // After "New practice" or "Start again", the button that was pressed is gone: focus (and the view) moves here.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focusHeading) headingRef.current?.focus();
+  }, [focusHeading]);
+
+  return (
+    <Card className="space-y-4">
+      <h2 ref={headingRef} tabIndex={-1} className="text-xl">
+        How it works
+      </h2>
       <ul className="list-disc space-y-2 pl-5">
-        <li>{defaultComposition.technical} technical questions, written from this job ad and your CV.</li>
+        <li>
+          {defaultComposition.technical} technical questions, written from this job ad and your profile. Getting them ready takes {startupEstimate()}.
+        </li>
         <li>
           Type each answer: aim for {answerGuide.minWords} to {answerGuide.maxWords} words, about {answerGuide.suggestedMinutes} minutes. The
           interviewer may ask one follow-up.

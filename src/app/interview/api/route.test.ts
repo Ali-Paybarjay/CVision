@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { profileToCvText } from "@/features/interview/engine/text";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
-import { runMockSession } from "@/features/interview/test-support";
+import { practiceUnavailable } from "@/features/interview/server/step-api";
+import { endedSessionFor, readySessionFor, runMockSession } from "@/features/interview/test-support";
 import type { AskModelOptions } from "@/shared/ai";
+import type { Profile } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { POST } from "./route";
 
@@ -13,11 +15,13 @@ vi.mock("@/features/account/current-user", () => ({ getCurrentUser: async () => 
 
 // Sara's sample jobs, plus one with a database id, so saving can be tested.
 const profileReads = vi.hoisted(() => ({ count: 0 }));
+// Replaces Sara's profile for one test, e.g. a profile typed in by hand with only a name.
+const profileOverride = vi.hoisted(() => ({ value: null as Profile | null }));
 vi.mock("@/features/interview/server/my-data", async () => {
   const { personas } = await import("@/shared/sample-data");
   const jobs = [...personas.sara.jobs, { ...personas.sara.jobs[0], id: storedJobId }];
   return {
-    getMyProfile: async () => (profileReads.count++, personas.sara.profile),
+    getMyProfile: async () => (profileReads.count++, profileOverride.value ?? personas.sara.profile),
     listMyJobs: async () => jobs,
     getMyJob: async (id: string) => jobs.find((job) => job.id === id) ?? null,
   };
@@ -46,6 +50,8 @@ vi.mock("@/shared/analytics/track", () => ({
 }));
 
 const upserts = vi.hoisted(() => [] as { table: string; row: Record<string, unknown> }[]);
+// Each delete, as its table and the filters on it.
+const deletes = vi.hoisted(() => [] as { table: string; filters: string[] }[]);
 const supabaseConnected = vi.hoisted(() => ({ value: false }));
 // The events already recorded, for the check that interview.session_completed is recorded once per session.
 const recordedSessionIds = vi.hoisted(() => [] as string[]);
@@ -67,7 +73,21 @@ vi.mock("@/shared/supabase/admin", () => ({
 vi.mock("@/shared/supabase/server", () => ({
   createSupabaseServerClient: async () =>
     supabaseConnected.value
-      ? { from: (table: string) => ({ upsert: async (row: Record<string, unknown>) => (upserts.push({ table, row }), { error: null }) }) }
+      ? {
+          from: (table: string) => ({
+            upsert: async (row: Record<string, unknown>) => (upserts.push({ table, row }), { error: null }),
+            delete: () => {
+              const filters: string[] = [];
+              deletes.push({ table, filters });
+              const query = {
+                eq: (column: string, value: unknown) => (filters.push(`${column} = ${value}`), query),
+                is: (column: string, value: unknown) => (filters.push(`${column} is ${value}`), query),
+                then: (resolve: (result: { error: null }) => unknown) => resolve({ error: null }),
+              };
+              return query;
+            },
+          }),
+        }
       : null,
 }));
 
@@ -82,8 +102,10 @@ afterEach(() => {
   deferred.length = 0;
   tracked.length = 0;
   upserts.length = 0;
+  deletes.length = 0;
   recordedSessionIds.length = 0;
   profileReads.count = 0;
+  profileOverride.value = null;
 });
 
 describe("the interview API in mock mode", () => {
@@ -161,6 +183,109 @@ describe("the interview API in mock mode", () => {
   });
 });
 
+describe("interview.startup_ready (#232)", () => {
+  // After stage 2: the questions are written and wait for the check.
+  const written = { ...readySessionFor(dataAnalystSara), reviewChangelog: undefined };
+
+  it("records how long the start took once the questions are checked, in seconds and counts only", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const response = await post({
+      step: "review",
+      jobId: "sara-job-1",
+      session: written,
+      waitedMs: 95_000,
+      analyseMs: 24_400,
+      generateMs: 61_600,
+      retries: 1,
+    });
+    expect(response.status).toBe(200);
+    expect(tracked).toHaveLength(0);
+
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked).toHaveLength(1);
+    expect(tracked[0].name).toBe("interview.startup_ready");
+    expect(tracked[0].properties).toMatchObject({ sessionId: written.id, jobId: "sara-job-1", mode: "mock", retries: 1, resumed: false });
+    // The browser's 95 seconds plus the check on the server, which is instant in mock mode.
+    expect(tracked[0].properties.seconds).toBe(95);
+    // Each stage on its own, so its share of the bar can come from real starts (#266).
+    expect(tracked[0].properties).toMatchObject({ analyseSeconds: 24, generateSeconds: 62, reviewSeconds: 0 });
+    expect(Object.keys(tracked[0].properties).sort()).toEqual([
+      "analyseSeconds",
+      "generateSeconds",
+      "jobId",
+      "mode",
+      "resumed",
+      "retries",
+      "reviewSeconds",
+      "seconds",
+      "sessionId",
+    ]);
+  });
+
+  it("records no total for a start left and resumed later, nor anything for a signed-out visitor", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: 3_600_000 });
+    await Promise.all(deferred.map((work) => work()));
+    // A browser that sent no stage times (an older tab) records none.
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: true, retries: 0, analyseSeconds: null, generateSeconds: null });
+
+    currentUser.value = null;
+    deferred.length = 0;
+    expect((await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: 95_000 })).status).toBe(200);
+    expect(deferred).toHaveLength(0);
+  });
+
+  it("never refuses the check over a bad count from the browser", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const response = await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: "soon", generateMs: 1.5, retries: -1 });
+    expect(response.status).toBe(200);
+
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: false, retries: 0, generateSeconds: null });
+  });
+
+  it("drops a stage time past an hour, which is not real, but keeps a start resumed days later as resumed (#281)", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const days = 3 * 24 * 3_600_000;
+    await post({ step: "review", jobId: "sara-job-1", session: written, waitedMs: days, analyseMs: 3_600_001, generateMs: 41_000, retries: 5_000 });
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked[0].properties).toMatchObject({ seconds: null, resumed: true, analyseSeconds: null, generateSeconds: 41, retries: 0 });
+  });
+});
+
+describe("'End here' (#205)", () => {
+  it("records interview.session_ended_early once, with counts only", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    const session = endedSessionFor(dataAnalystSara);
+    expect((await post({ step: "end", jobId: "sara-job-1", session })).status).toBe(200);
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked).toEqual([
+      { name: "interview.session_ended_early", properties: { sessionId: session.id, jobId: "sara-job-1", mode: "mock", questions: 6, answered: 0 }, actor: { userId: "user-1" } },
+    ]);
+
+    recordedSessionIds.push(session.id);
+    deferred.length = 0;
+    await post({ step: "end", jobId: "sara-job-1", session });
+    await Promise.all(deferred.map((work) => work()));
+    expect(tracked).toHaveLength(1);
+  });
+
+  it("records nothing for a signed-out visitor, and refuses a practice that cannot end", async () => {
+    expect((await post({ step: "end", jobId: "sara-job-1", session: endedSessionFor(dataAnalystSara) })).status).toBe(200);
+    expect(deferred).toHaveLength(0);
+    const full = await runMockSession(dataAnalystSara);
+    expect((await post({ step: "end", jobId: "sara-job-1", session: full })).status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("writes a suggested answer from the CV read on the server", async () => {
+    const response = await post({ step: "suggest", jobId: "sara-job-1", session: endedSessionFor(dataAnalystSara), questionId: "q1" });
+    expect(response.status).toBe(200);
+    const { suggestion } = await response.json();
+    expect(suggestion).toMatchObject({ questionId: "q1", kind: "evidence", fallback: false });
+    expect(profileReads.count).toBe(1);
+  });
+});
+
 describe("saving a session", () => {
   it("does nothing for a signed-out visitor", async () => {
     const session = await runMockSession(dataAnalystSara);
@@ -185,6 +310,25 @@ describe("saving a session", () => {
   });
 });
 
+describe("Start again (#281)", () => {
+  const sessionId = "5f0c8a52-3d1e-4b7a-9c2f-6e8d1a4b7c90";
+
+  it("deletes the account's copy of the practice thrown away, but never a finished one", async () => {
+    currentUser.value = { id: "user-1", email: null };
+    supabaseConnected.value = true;
+    expect(await (await post({ step: "discard", jobId: storedJobId, sessionId })).json()).toEqual({ discarded: true });
+    expect(deletes).toEqual([{ table: "interview_sessions", filters: [`id = ${sessionId}`, `job_id = ${storedJobId}`, "data->report is null"] }]);
+  });
+
+  it("does nothing for a signed-out visitor or a sample job, which have no copy in an account", async () => {
+    supabaseConnected.value = true;
+    expect(await (await post({ step: "discard", jobId: storedJobId, sessionId })).json()).toEqual({ discarded: false });
+    currentUser.value = { id: "user-1", email: null };
+    expect(await (await post({ step: "discard", jobId: "sara-job-1", sessionId })).json()).toEqual({ discarded: false });
+    expect(deletes).toHaveLength(0);
+  });
+});
+
 describe("the interview API in live mode", () => {
   it("needs a signed-in user", async () => {
     vi.stubEnv("AI_MODE", "live");
@@ -197,7 +341,34 @@ describe("the interview API in live mode", () => {
     vi.stubEnv("AI_MODE", "live");
     currentUser.value = { id: "user-1", email: null };
     const response = await analyse("sara-job-2");
-    expect(response.status).toBe(422);
+    // Tests have no AI key, so askModel stops there: plain words for the user, never the setting's name (#266).
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: practiceUnavailable, final: true });
     expect(asked[0]?.requester).toEqual({ userId: "user-1" });
+  });
+});
+
+describe("a profile with too little in it (#179)", () => {
+  const empty: Profile = { ...personas.sara.profile, summary: "", skills: [], experience: [], education: [], certifications: [], followUpAnswers: [] };
+
+  it.each([
+    ["only a name", empty],
+    ["two lines", { ...empty, summary: "Data analyst.", skills: ["SQL"] }],
+  ])("refuses to start a practice from %s, before any AI request", async (_, profile) => {
+    vi.stubEnv("AI_MODE", "live");
+    currentUser.value = { id: "user-1", email: null };
+    profileOverride.value = profile;
+    const response = await analyse("sara-job-1");
+    expect(response.status).toBe(422);
+    expect((await response.json()).error).toContain("Add more to your profile first");
+    expect(asked).toHaveLength(0);
+  });
+
+  it("asks the model from three lines", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    currentUser.value = { id: "user-1", email: null };
+    profileOverride.value = { ...empty, summary: "Data analyst.", skills: ["SQL"], certifications: [{ name: "Tableau Desktop Specialist" }] };
+    await analyse("sara-job-1");
+    expect(asked).toHaveLength(1);
   });
 });

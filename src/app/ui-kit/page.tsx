@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { personas } from "@/shared/sample-data";
-import { Button, Card, CvPaper, Field, FitLine, Input, Notice, Page, Textarea, Wordmark } from "@/shared/ui";
+import { BrandMark, Button, Card, CvPaper, Field, FitLine, Input, Notice, Page, Textarea, WaitNote, Wordmark } from "@/shared/ui";
 
 export const metadata: Metadata = { title: "UI kit" };
 
@@ -22,13 +22,33 @@ export default function UiKitPage() {
           <Button variant="primary">Tailor my CV</Button>
           <Button>Upload a different CV</Button>
           <Button variant="quiet">Skip this question</Button>
+          <Button size="compact">Compact, for the top menu</Button>
+          <Button disabled>Disabled while it works</Button>
+        </div>
+        <p className="mt-3 text-sm text-text-muted">On a computer the pointer turns into a hand over every button, but not over a disabled one.</p>
+      </Card>
+
+      <Card>
+        <h2 className="text-xl">Logo</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          The Tick V icon beside the wordmark. Use the icon alone only where the name does not fit, such as a browser tab.
+        </p>
+        <div className="mt-4 flex flex-wrap items-end gap-6">
+          <p className="flex items-center gap-2 text-xl">
+            <BrandMark className="size-7" />
+            <Wordmark />
+          </p>
+          <BrandMark className="size-16" />
+          <BrandMark className="size-8" />
+          <BrandMark className="size-4" />
         </div>
       </Card>
 
       <section className="rounded-lg bg-emphasis p-5 sm:p-6">
         <h2 className="text-xl text-on-emphasis">Emphasis section</h2>
         <p className="mt-1 text-sm text-on-emphasis">Ink with white text in light mode, Raised with Chalk in dark mode.</p>
-        <p className="mt-4 text-2xl">
+        <p className="mt-4 flex items-center gap-2 text-2xl">
+          <BrandMark tone="on-emphasis" className="size-8" />
           <Wordmark tone="on-emphasis" />
         </p>
       </section>
@@ -57,6 +77,18 @@ export default function UiKitPage() {
           </div>
         </Card>
       </div>
+
+      <Card>
+        <h2 className="text-xl">Waiting for a slow request</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          Under the button while a request runs: say what is happening and how long it can take. Pass nothing when it
+          is done; the empty live region stays, so a screen reader reads the sentence when it appears.
+        </p>
+        <div className="mt-4">
+          <Button disabled>Checking your CV…</Button>
+          <WaitNote className="mt-3">Checking your CV. This can take up to a minute. Keep this page open.</WaitNote>
+        </div>
+      </Card>
 
       <section>
         <h2 className="text-xl">CV preview</h2>

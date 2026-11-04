@@ -6,15 +6,25 @@ import { recordApply, type ApplyResult } from "@/features/tailor/actions";
 import { ButtonLink, Notice } from "@/shared/ui";
 import { unreachableMessage } from "./messages";
 
+/** The site a link really opens, e.g. "linkedin.com". The link is the one the user gave, often a job board, so it is never called the employer's. */
+export function linkSite(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Apply opens the employer's own job page in a new tab and adds the job to the user's tracker.
+ * Apply opens the job ad at the link the user gave, in a new tab, and adds the job to the user's tracker.
  * The app never sends an application on the user's behalf.
  */
-export function ApplyPanel({ jobId, jobUrl, company, onApplied }: { jobId: string; jobUrl: string | null; company: string; onApplied: () => void }) {
+export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl: string | null; onApplied: () => void }) {
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [, startTransition] = useTransition();
   // A double click must not record the application twice; the link itself still opens every time.
   const recording = useRef(false);
+  const site = jobUrl ? linkSite(jobUrl) : null;
 
   const onApply = () => {
     if (recording.current || result?.recorded) return;
@@ -39,15 +49,15 @@ export function ApplyPanel({ jobId, jobUrl, company, onApplied }: { jobId: strin
           Apply
         </h4>
         <p className="mt-1 text-sm text-text-muted">
-          We never apply for you. Apply opens {company}’s own job page in a new tab, where you send your CV and cover letter yourself.
+          We never apply for you. {site ? `This opens the job ad on ${site}` : "This opens the job ad"} in a new tab, where you send your CV and cover letter yourself.
         </p>
       </div>
 
       {jobUrl ? (
         <div>
-          {/* A real link, so the employer's page opens even if recording the application fails. */}
+          {/* A real link, so the ad opens even if recording the application fails. */}
           <ButtonLink href={jobUrl} variant="primary" target="_blank" rel="noopener noreferrer" onClick={onApply}>
-            Apply on {company}’s site
+            {site ? `Open the ad on ${site}` : "Open the job ad"}
             <span className="sr-only"> (opens in a new tab)</span>
           </ButtonLink>
         </div>

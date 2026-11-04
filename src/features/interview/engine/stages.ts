@@ -48,8 +48,10 @@ import {
   analyseOutputSchema,
   evaluateOutputSchema,
   generateOutputSchema,
+  mergeReviewReply,
   reportOutputSchema,
-  reviewOutputSchema,
+  reviewReplyFromSet,
+  reviewReplySchema,
   suggestOutputSchema,
   FollowUpOutputSchema,
   type AnalyseOutput,
@@ -57,7 +59,7 @@ import {
   type FollowUpOutput,
   type GenerateOutput,
   type ReportOutput,
-  type ReviewOutput,
+  type ReviewReply,
   type SuggestOutput,
   type InterviewInputs,
 } from "./schemas";
@@ -117,7 +119,8 @@ export const reviewRuleEvent = "interview.review_rule_broken";
 export const reviewRejectedEvent = "interview.review_rejected";
 
 /** What the user sees when the questions cannot be written, instead of the rule that failed (#220). */
-export const questionsNotWritten = "We could not finish writing your questions this time. Try again: it usually works on the second go.";
+// Often shown after the page has already sent the stage once more by itself (#232), so it does not promise that a second go works.
+export const questionsNotWritten = "We could not finish writing your questions this time. Try again in a moment.";
 
 /**
  * Records each rule a reply breaks (one that is kept, or for the review one that is sent back), by stage and rule
@@ -303,25 +306,30 @@ export async function generateStep(session: InterviewSession, inputs: InterviewI
   return applyQuestions(session, { blueprint: output.blueprint, questions }, usage, provenance);
 }
 
-/** Stage 3: a separate call reviews the whole set and rewrites what fails the checklist. */
+/**
+ * Stage 3: a separate call reviews the whole set and rewrites what fails the checklist. It sends back only the
+ * questions it rewrote (#100); the code puts them in place and checks the whole set.
+ */
 export async function reviewStep(session: InterviewSession, inputs: InterviewInputs, run: StageRun = {}): Promise<InterviewSession> {
   const context = questionSetContext(session, inputs);
   if (!session.blueprint || session.questions.length === 0) throw new InterviewStageError("There are no questions to review yet.");
+  const before = { blueprint: session.blueprint, questions: technicalQuestions(session).map(toDraft) };
+  const fixture = sampleFixture(session.jobId);
   // The rules of each answer sent back to the model, recorded whether the retry passes or the step fails.
   const rejected: string[] = [];
-  const { output, usage, provenance } = await callStage<ReviewOutput>({
+  const { output: reply, usage, provenance } = await callStage<ReviewReply>({
     stage: "review",
     values: {
       ...levelPlanValues(context),
-      blueprint: data(session.blueprint),
-      questions: data(technicalQuestions(session).map(toDraft)),
+      blueprint: data(before.blueprint),
+      questions: data(before.questions),
     },
-    schema: reviewOutputSchema(context, (problems) => rejected.push(...problems.map(retryRuleName))),
-    sample: sampleFixture(session.jobId).review,
+    schema: reviewReplySchema(context, before, (problems) => rejected.push(...problems.map(retryRuleName))),
+    sample: reviewReplyFromSet(fixture.review, fixture.generate),
     voice: false,
     run,
   }).finally(() => recordRules(reviewRejectedEvent, "review", rejected, run.requester));
-  const before = { blueprint: session.blueprint, questions: technicalQuestions(session).map(toDraft) };
+  const output = mergeReviewReply(reply, before);
   const repair = repairReviewedSet(output, before, context);
   await recordRules(reviewRuleEvent, "review", repair.broken, run.requester);
   if (!repair.set) throw new InterviewStageError(questionsNotWritten);
@@ -331,19 +339,6 @@ export async function reviewStep(session: InterviewSession, inputs: InterviewInp
   // A question put back as it was before the review no longer has the review's changes.
   const changelog = kept.changelog.filter((change) => !repair.restored.includes(change.questionId));
   return applyQuestions(session, { blueprint: kept.blueprint, questions, changelog }, usage, provenance);
-}
-
-/** Stages 1 to 3 back to back, for the eval. The page calls them one by one to show progress. */
-export async function runStartup(
-  inputs: InterviewInputs,
-  options: { id: string; startedAt: string; onProgress?: (stage: "analyse" | "generate" | "review") => void } & StageRun,
-): Promise<InterviewSession> {
-  options.onProgress?.("analyse");
-  let session = await analyseStep(inputs, options);
-  options.onProgress?.("generate");
-  session = await generateStep(session, inputs, options);
-  options.onProgress?.("review");
-  return reviewStep(session, inputs, options);
 }
 
 function findQuestion(session: InterviewSession, questionId: string): TechnicalInterviewQuestion {
@@ -465,6 +460,7 @@ export async function evaluateAnswer(
   if (!role) throw new InterviewStageError("The session has not been analysed yet.");
   const main = mainAnswer(session, questionId);
   if (main === null) throw new InterviewStageError(`${questionId} has no answer yet.`);
+  if (unansweredQuestionIds(session).includes(questionId)) throw new InterviewStageError(`${questionId} was not answered, so it gets a suggested answer instead.`);
   const asked = followUpQuestion(session, questionId) !== null;
   const followUp = followUpAnswer(session, questionId);
   if (asked && followUp === null) throw new InterviewStageError(`${questionId} is waiting for its follow-up answer.`);
@@ -533,6 +529,7 @@ export async function writeReport(
   const role = session.roleProfile;
   const candidate = session.candidateProfile;
   if (!role || !candidate) throw new InterviewStageError("The session has not been analysed yet.");
+  if (session.endedAt) throw new InterviewStageError("A practice ended early has no overall report.");
   const evaluations = session.evaluations ?? [];
   const missing = session.questions.filter((q) => !evaluations.some((e) => e.questionId === q.id));
   if (session.questions.length === 0 || missing.length) throw new InterviewStageError("Every question must be scored before the report.");

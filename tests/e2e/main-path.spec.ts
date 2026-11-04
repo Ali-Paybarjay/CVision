@@ -12,11 +12,14 @@ function sampleJobs(persona: string): SampleJob[] {
   return JSON.parse(readFileSync(`sample-data/personas/${persona}/jobs.json`, "utf8")) as SampleJob[];
 }
 
-test("the home page says what CVision does and leads to Get started free", async ({ page }) => {
+test("the home page says what CVision does and leads to Tailor my CV to a job", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "Every application, made to fit." })).toBeVisible();
 
-  await page.getByRole("main").getByRole("link", { name: "Get started free" }).click();
+  // The header has the same action under the same name; the hero's button is the page's one Coral button.
+  await expect(page.getByRole("banner").getByRole("link", { name: "Tailor my CV to a job" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Check my CV in 2 minutes" })).toBeVisible();
+  await page.getByRole("main").getByRole("link", { name: "Tailor my CV to a job" }).click();
 
   await expect(page).toHaveURL(/\/sign-up$/);
   await expect(page.getByRole("heading", { level: 1, name: "Create your free account" })).toBeVisible();

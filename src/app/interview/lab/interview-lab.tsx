@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { AiMode } from "@/shared/ai/config";
 import { limits } from "@/features/interview/config";
 import { nextStep } from "@/features/interview/engine/session";
-import { drive, InterviewFlow, Progress, runOf } from "../_practice/flow";
+import { drive, InterviewFlow, runOf } from "../_practice/flow";
+import { Progress } from "../_practice/progress";
 import { FeedbackReport } from "../_practice/report";
 import { createPracticeStore, parseEnvelope } from "../_practice/store";
 import { Button, Card } from "@/shared/ui";
@@ -61,7 +62,7 @@ export function InterviewLab({ mode, sources }: { mode: AiMode; sources: LabSour
             <p className="text-sm text-text-muted">{source ? source.label : "Pasted job ad and CV"}</p>
             <Button onClick={restart}>Start again</Button>
           </div>
-          <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} startupMs={envelope.startupMs} />
+          <Progress store={store} session={session} jobs={jobs} run={runOf(envelope)} />
           {session && nextStep(session).step === "done" ? (
             <FeedbackReport session={session} />
           ) : (

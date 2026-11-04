@@ -19,8 +19,11 @@ export type StageSettings = {
  */
 export const stageConfig: Record<StageName, StageSettings> = {
   analyse: { prompt: "interview-analyse", model: "claude-haiku-5-5", effort: "medium", maxTokens: 8000 },
-  // generate and review ran at high: about 13K output tokens each and most of a 138-second start. Medium is the
-  // default now; move one back to high only if the eval shows its questions get worse.
+  // Most of the wait before question 1 is the model thinking, not writing (#100). At medium the eval of 2 Nov 2026
+  // started in 89 to 107 seconds (run 41453905106); at low in 63 to 75 (run 41456709365), with the same scoring
+  // spread, but the draft was weaker at low (the review rewrote 2 or 3 questions, not 0 to 2). On the live site low
+  // felt no faster, so generate and review went back to medium on 3 Nov 2026: good questions matter more than
+  // the wait. Shorten the wait by writing the questions in parallel instead, not by lowering effort.
   generate: { prompt: "interview-generate-technical", model: "claude-haiku-5-5", effort: "medium", maxTokens: 16000 },
   // A stronger model is worth trialling here, so that a different model checks the generator's work.
   // Compare with the eval: INTERVIEW_EVAL_REVIEW_MODEL=claude-sonnet-5-5 npm run eval
@@ -69,6 +72,38 @@ export const levelDescriptions: Record<LevelBand, string> = {
 
 /** Typed answers: the guide shown next to the word count, and stored on every question. */
 export const answerGuide = { minWords: 150, maxWords: 300, suggestedMinutes: 4 };
+
+/**
+ * The usual wait from "Start practice" to the first question, in seconds. The intro and "Preparing your interview"
+ * (#232) say it, and it sets each stage's share of the bar. The eval of 30 Oct 2026 measured 89.3 on the server (run
+ * 41052056548), but a pilot user waited 136.6 with network and cold starts (#243), so it says about 2 minutes for now.
+ * Once interview.startup_ready has a week of real starts, set it to their 80th percentile: then most people finish a
+ * little early, and "longer than usual" is true when it is said. Lower it when #100 makes the start faster.
+ */
+export const startupSeconds = 120;
+
+/**
+ * When a start-up stage has stopped answering: after this many seconds its request is dropped and the stage fails with
+ * Try again (the steps already done are kept). A stage usually takes about 40 seconds, so this catches a connection
+ * that has died without cutting off a slow stage that would still succeed. The interview API lets Vercel run a request
+ * for 300 seconds (its maxDuration), so this limit is always the first to stop one, never a 504 from Vercel.
+ * It is not sent again by itself: the server is most likely still working on it, and a second request would pay for
+ * the model twice and count twice towards the user's daily limit.
+ */
+export const stallSeconds = 180;
+
+/** A start-up stage that failed fast (no connection, a server error) is sent once more after this pause. */
+export const startupRetryDelayMs = 3000;
+
+/**
+ * Only a failure this quick is sent once more by itself (#266). A slower one may have been dropped by the browser or
+ * the phone (iOS can cut a request off about 60 seconds after the user switched apps) while the server still works on
+ * it: a second request would pay for the model twice. A slow failure waits for Try again instead.
+ */
+export const fastFailureSeconds = 15;
+
+/** "Taking a little longer than usual" once a stage has run this many seconds past its usual share of the wait. */
+export const overrunGraceSeconds = 10;
 
 export const limits = {
   /** Longest job ad, CV and single answer the lab API accepts, in characters, so one request cannot run up a large bill. */

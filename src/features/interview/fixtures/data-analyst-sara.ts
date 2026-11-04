@@ -346,14 +346,14 @@ export const dataAnalystSara: InterviewFixture = {
       "Not yet ready: your stock report automation shows real hands-on skill, but this role expects confident SQL and clear explanations to clinical managers, and those answers fell short.",
     priorities: [
       {
-        title: "Practise handling a challenged number",
+        title: "Prepare for a challenged number",
         detail:
           "The role puts communication on a par with technical skill. Prepare a short answer for a manager who says your dashboard is wrong: listen, check how the measure is defined, explain it plainly and agree a next step.",
       },
       {
         title: "Drill rates and joins until they are automatic",
         detail:
-          "Work through problems where counts and rates point different ways, and practise spotting repeated rows after a join before anyone has to ask why.",
+          "Work through problems where counts and rates point different ways, and get into the habit of spotting repeated rows after a join before anyone has to ask why.",
       },
       {
         title: "Learn the basics of handling NHS data",
