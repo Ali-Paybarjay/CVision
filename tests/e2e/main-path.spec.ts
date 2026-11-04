@@ -14,7 +14,8 @@ function sampleJobs(persona: string): SampleJob[] {
 
 test("the home page says what CVision does and leads to Tailor my CV to a job", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: "Every application, made to fit." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Stop rewriting your CV for every job." })).toBeVisible();
+  await expect(page.getByRole("main")).toContainText("You approve every change.");
 
   // The header has the same action under the same name; the hero's button is the page's one Coral button.
   await expect(page.getByRole("banner").getByRole("link", { name: "Tailor my CV to a job" })).toBeVisible();

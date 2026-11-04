@@ -3,9 +3,17 @@
 // The interview itself, shared by the main page and the lab: answer one question at a time while finished
 // questions are scored in the background. The saved session drives everything: whatever it needs next is
 // requested, so a reload resumes exactly where it stopped.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { answerGuide, fastFailureSeconds, limits, stallSeconds, startupRetryDelayMs } from "@/features/interview/config";
-import type { AnswerEvaluation, AnswerSuggestion, FollowUpDecision, InterviewReport, InterviewSession, StageUsage } from "@/features/interview/contracts";
+import type {
+  AnswerEvaluation,
+  AnswerSuggestion,
+  FollowUpDecision,
+  InterviewQuestion,
+  InterviewReport,
+  InterviewSession,
+  StageUsage,
+} from "@/features/interview/contracts";
 import {
   addAnswer,
   applyEvaluation,
@@ -21,7 +29,6 @@ import {
   nextStep,
   reportQuestionIds,
   suggestionFor,
-  turnsFor,
   unansweredQuestionIds,
   type Provenance,
 } from "@/features/interview/engine/session";
@@ -29,7 +36,8 @@ import { countWords } from "@/features/interview/engine/text";
 import { ConfirmInPlace } from "./confirm";
 import { failureMessage, StepError, type JobState, type PracticeEnvelope, type PracticeStore } from "./store";
 import { Button, Card, Notice } from "@/shared/ui";
-import { firstQuestionId, Status } from "./ui";
+import { InterviewList, QuestionSheet, WhyThisQuestion, type RowState } from "./sheet";
+import { Status } from "./ui";
 
 /** Sample answers by question id, for one-click answers in mock mode. */
 export type SampleAnswers = Record<string, { main: string; followUp: string | null }>;
@@ -199,6 +207,7 @@ export function InterviewFlow({
   session,
   jobs,
   run,
+  cv,
   samples,
   onDraftChange,
 }: {
@@ -206,144 +215,133 @@ export function InterviewFlow({
   session: InterviewSession;
   jobs: Readonly<Record<string, JobState>>;
   run: string;
+  /** The CV text the questions were written from, to show the sentence a question quotes (#252). */
+  cv: string;
   /** Mock mode only. */
   samples?: SampleAnswers;
   /** Told whether the answer box holds text not yet submitted, so "Start again" can ask first (#269). */
   onDraftChange?: (hasDraft: boolean) => void;
 }) {
   const step = nextStep(session);
-  const asked = session.questions.filter((q) => turnsFor(session, q.id).length > 0);
+  // While the questions are prepared, "Preparing your interview" (progress.tsx) is all there is: the list would be
+  // empty, then show draft questions the review may still change (#282).
+  if (step.step === "analyse" || step.step === "generate" || step.step === "review") return null;
   const scoredIds = reportQuestionIds(session);
   const scored = scoredIds.filter((id) => evaluationFor(session, id)).length;
   const unanswered = new Set(unansweredQuestionIds(session));
   const failedSuggestions = [...unanswered].map((id) => `${run}:suggest:${id}`).filter((key) => jobs[key]?.status === "failed");
   const suggestFailure = failedSuggestions.length > 0 ? jobs[failedSuggestions[0]] : undefined;
   const reportJob = jobs[`${run}:report`];
+  const current = step.step === "answer" || step.step === "decide" ? session.questions.find((q) => q.id === step.questionId) : undefined;
+  const answered = session.questions.filter((q) => isQuestionFinished(session, q.id) && !unanswered.has(q.id)).length;
 
-  return (
-    <div className="space-y-4">
-      {asked.map((question, index) => {
-        const turns = turnsFor(session, question.id);
-        const finished = isQuestionFinished(session, question.id);
-        const evaluateJob = jobs[`${run}:evaluate:${question.id}`];
-        const suggestJob = jobs[`${run}:suggest:${question.id}`];
-        return (
-          <Card key={question.id} className="space-y-3">
-            {/* Question 1's line takes focus when "Preparing your interview" gives way to it (#232). */}
-            <p id={index === 0 ? firstQuestionId : undefined} tabIndex={index === 0 ? -1 : undefined} className="text-sm text-text-muted">
-              Question {index + 1} of {session.questions.length}
-            </p>
-            {turns.map((turn) =>
-              turn.speaker === "interviewer" ? (
-                <p key={turn.id} className={turn.kind === "follow-up" ? "border-l-2 border-accent pl-3 font-semibold" : "font-semibold"}>
-                  {turn.kind === "follow-up" && <span className="block text-xs font-normal text-text-muted">Follow-up</span>}
-                  {turn.text}
-                </p>
-              ) : (
-                // A follow-up skipped by "End here" is an empty answer: nothing to show.
-                turn.text && (
-                  <p key={turn.id} className="ml-auto max-w-[90%] whitespace-pre-wrap rounded-md bg-canvas p-3 text-sm sm:max-w-[80%]">
-                    {turn.text}
-                  </p>
-                )
-              ),
-            )}
-            {unanswered.has(question.id) ? (
-              <p>
-                {suggestionFor(session, question.id) ? (
-                  <Status tone="accent">Suggested answer ready</Status>
-                ) : (
-                  <JobStatus
-                    store={store}
-                    job={suggestJob}
-                    jobKey={`${run}:suggest:${question.id}`}
-                    failed="Suggested answer failed"
-                    working="Not answered: writing a suggested answer from your profile…"
-                  />
-                )}
-              </p>
-            ) : (
-              finished && (
-                <p>
-                  {evaluationFor(session, question.id) ? (
-                    <Status tone="accent">Scored</Status>
-                  ) : (
-                    <JobStatus store={store} job={evaluateJob} jobKey={`${run}:evaluate:${question.id}`} failed="Scoring failed" working="Scoring in the background…" />
-                  )}
-                </p>
-              )
-            )}
-            {step.step === "answer" && step.questionId === question.id && (
-              <>
-                <AnswerForm
-                  key={`${question.id}-${step.kind}`}
-                  store={store}
-                  questionId={question.id}
-                  kind={step.kind}
-                  sample={step.kind === "main" ? samples?.[question.id]?.main : samples?.[question.id]?.followUp}
-                  onDraftChange={onDraftChange}
-                />
-                <EndHere key={`${question.id}-${step.kind}-end`} store={store} session={session} />
-              </>
-            )}
-            {step.step === "decide" && step.questionId === question.id && (
-              <DecisionStatus store={store} job={jobs[`${run}:decide:${question.id}`]} jobKey={`${run}:decide:${question.id}`} />
-            )}
-          </Card>
-        );
-      })}
+  /** Where each question is, for "Your interview". A failed request keeps its Try again there. */
+  const rowState = (question: InterviewQuestion): RowState => {
+    const id = question.id;
+    if (id === current?.id) {
+      // The sheet says "The interviewer is reading your answer…" meanwhile, so the list does not repeat it.
+      const status = step.step === "decide" ? "Answer sent" : step.step === "answer" && step.kind === "follow-up" ? "Answering the follow-up" : "Answering now";
+      return { kind: "current", status };
+    }
+    if (unanswered.has(id)) {
+      if (suggestionFor(session, id)) return { kind: "unanswered", status: "Not answered · suggested answer ready" };
+      const key = `${run}:suggest:${id}`;
+      const job = jobs[key];
+      if (job?.status === "failed") return { kind: "failed", status: <FailedJob store={store} job={job} jobKey={key} failed="Suggested answer failed" /> };
+      return { kind: "unanswered", status: "Not answered · writing a suggested answer…" };
+    }
+    if (!isQuestionFinished(session, id)) return { kind: "upcoming" };
+    if (evaluationFor(session, id)) return { kind: "scored" };
+    const key = `${run}:evaluate:${id}`;
+    const job = jobs[key];
+    if (job?.status === "failed") return { kind: "failed", status: <FailedJob store={store} job={job} jobKey={key} failed="Scoring failed" /> };
+    return { kind: "scoring", status: "Scoring in the background…" };
+  };
 
-      {session.endedAt ? (
-        <Card>
-          <h2 className="text-xl">Writing your report</h2>
-          <ul className="mt-2 space-y-1 text-text-muted">
-            {scoredIds.length > 0 && (
-              <li>
-                Scoring your answers: {scored} of {scoredIds.length}
-              </li>
-            )}
+  let main: ReactNode = null;
+  if (current && (step.step === "answer" || step.step === "decide")) {
+    main = (
+      <QuestionSheet session={session} question={current} answering={step.step === "answer" ? step.kind : null}>
+        {step.step === "answer" ? (
+          <AnswerForm
+            key={`${current.id}-${step.kind}`}
+            store={store}
+            questionId={current.id}
+            kind={step.kind}
+            sample={step.kind === "main" ? samples?.[current.id]?.main : samples?.[current.id]?.followUp}
+            onDraftChange={onDraftChange}
+          />
+        ) : (
+          <DecisionStatus store={store} job={jobs[`${run}:decide:${current.id}`]} jobKey={`${run}:decide:${current.id}`} />
+        )}
+      </QuestionSheet>
+    );
+  } else if (session.endedAt) {
+    main = (
+      <Card>
+        <h2 className="text-xl">Writing your report</h2>
+        <ul className="mt-2 space-y-1 text-text-muted">
+          {scoredIds.length > 0 && (
             <li>
-              Writing suggested answers from your profile: {unanswered.size - missingSuggestionIds(session).length} of {unanswered.size} ready
+              Scoring your answers: {scored} of {scoredIds.length}
             </li>
-          </ul>
-          {suggestFailure?.status === "failed" && (
-            // Questions never reached have no card of their own, so their failures are retried from here.
-            <div className="mt-2 space-y-2">
-              <Notice tone="error">{failureMessage(suggestFailure)}</Notice>
-              {!suggestFailure.final && <Button onClick={() => failedSuggestions.forEach((key) => store.retryJob(key))}>Try again</Button>}
-            </div>
           )}
-        </Card>
-      ) : (
-        (step.step === "evaluate" || step.step === "report") && (
-          <Card>
-            <h2 className="text-xl">Writing your report</h2>
-            <p className="mt-2 text-text-muted">
-              {scored} of {session.questions.length} answers scored.
-              {step.step === "report" ? " Putting the report together…" : ""}
-            </p>
-            {reportJob?.status === "failed" && (
-              <div className="mt-2 space-y-2">
-                <Notice tone="error">{failureMessage(reportJob)}</Notice>
-                {!reportJob.final && <Button onClick={() => store.retryJob(`${run}:report`)}>Try again</Button>}
-              </div>
-            )}
-          </Card>
-        )
-      )}
+          <li>
+            Writing suggested answers from your profile: {unanswered.size - missingSuggestionIds(session).length} of {unanswered.size} ready
+          </li>
+        </ul>
+        {suggestFailure?.status === "failed" && (
+          <div className="mt-2 space-y-2">
+            <Notice tone="error">{failureMessage(suggestFailure)}</Notice>
+            {!suggestFailure.final && <Button onClick={() => failedSuggestions.forEach((key) => store.retryJob(key))}>Try again</Button>}
+          </div>
+        )}
+      </Card>
+    );
+  } else if (step.step === "evaluate" || step.step === "report") {
+    main = (
+      <Card>
+        <h2 className="text-xl">Writing your report</h2>
+        <p className="mt-2 text-text-muted">
+          {scored} of {session.questions.length} answers scored.
+          {step.step === "report" ? " Putting the report together…" : ""}
+        </p>
+        {reportJob?.status === "failed" && (
+          <div className="mt-2 space-y-2">
+            <Notice tone="error">{failureMessage(reportJob)}</Notice>
+            {!reportJob.final && <Button onClick={() => store.retryJob(`${run}:report`)}>Try again</Button>}
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  // Design A: the sheet, with the questions and "Why this question" beside it from 1024px. On a phone they follow the
+  // sheet, "Why this question" first, as it helps with the answer being written.
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] lg:gap-7">
+      <div className="min-w-0">{main}</div>
+      <div className="flex min-w-0 flex-col gap-5">
+        <InterviewList
+          session={session}
+          answered={answered}
+          rowState={rowState}
+          footer={step.step === "answer" && <EndHere key={`${step.questionId}-${step.kind}-end`} store={store} session={session} />}
+        />
+        {current && <WhyThisQuestion session={session} question={current} cv={cv} className="max-lg:order-first" />}
+      </div>
     </div>
   );
 }
 
-/** A background request still working, or failed: its message, and Try again unless it would only fail again (#281). */
-function JobStatus({ store, job, jobKey, failed, working }: { store: PracticeStore; job?: JobState; jobKey: string; failed: string; working: string }) {
-  if (job?.status !== "failed") return <Status tone="working">{working}</Status>;
+/** A request for one question that failed: its message, and Try again unless it would only fail the same way (#281). */
+function FailedJob({ store, job, jobKey, failed }: { store: PracticeStore; job: JobState; jobKey: string; failed: string }) {
   return (
-    <span className="flex flex-wrap items-center gap-2">
-      <Status tone="error">{failed}</Status>
-      <span className="text-sm text-error">{failureMessage(job)}</span>
-      {!job.final && <Button onClick={() => store.retryJob(jobKey)}>Try again</Button>}
-    </span>
+    <div className="space-y-1">
+      <p className="font-semibold text-error">{failed}</p>
+      {job.status === "failed" && <p className="text-error">{failureMessage(job)}</p>}
+      {job.status === "failed" && !job.final && <Button onClick={() => store.retryJob(jobKey)}>Try again</Button>}
+    </div>
   );
 }
 
@@ -436,7 +434,8 @@ function AnswerForm({
   const markStart = () => {
     startedAt.current ??= now();
   };
-  const tone = words === 0 ? "text-text-muted" : words < answerGuide.minWords ? "text-warning" : words > answerGuide.maxWords ? "text-warning" : "text-accent";
+  const inRange = words >= answerGuide.minWords && words <= answerGuide.maxWords;
+  const tone = words === 0 ? "text-text-muted" : inRange ? "text-accent" : "text-warning";
 
   const submit = () => {
     try {
@@ -450,11 +449,11 @@ function AnswerForm({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <label className="block">
-        <span className="text-sm font-semibold">{kind === "main" ? "Your answer" : "Your answer to the follow-up"}</span>
+        <span className="text-sm font-bold">{kind === "main" ? "Your answer" : "Your answer to the follow-up"}</span>
         <textarea
-          className="mt-1 h-48 w-full rounded-md border border-text-muted bg-surface p-2 text-base"
+          className="mt-2 h-56 w-full resize-y rounded-[10px] border-[1.5px] border-text-muted bg-surface p-4 text-base leading-relaxed"
           maxLength={limits.answerMaxChars}
           value={text}
           onFocus={markStart}
@@ -464,11 +463,13 @@ function AnswerForm({
           }}
         />
       </label>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className={`text-sm ${tone}`} aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        {/* Amber outside the range, Teal inside it; it never stops Submit, as a short answer can still be right. */}
+        <p className={`inline-flex items-center gap-2 text-sm font-semibold ${tone}`} aria-live="polite">
+          <WordCountIcon inRange={inRange} empty={words === 0} />
           {words} {words === 1 ? "word" : "words"} · aim for {answerGuide.minWords} to {answerGuide.maxWords} words
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           {sample && (
             <Button
               onClick={() => {
@@ -486,5 +487,26 @@ function AnswerForm({
       </div>
       {problem && <Notice tone="error">{problem}</Notice>}
     </div>
+  );
+}
+
+/** A tick inside the range; otherwise a circled "!", so the count's state is not told by colour alone. */
+function WordCountIcon({ inRange, empty }: { inRange: boolean; empty: boolean }) {
+  const common = { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+  if (empty) return null;
+  if (inRange) {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8 12 3 3 5-6" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </svg>
   );
 }

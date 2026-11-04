@@ -15,11 +15,14 @@ test("ending after one answer scores it and suggests answers for the other five"
   const followUp = page.getByText("Your answer to the follow-up");
   const second = page.getByText("Question 2 of 6");
   await expect(followUp.or(second)).toBeVisible({ timeout: 120_000 });
+  // What came takes focus, so a screen reader says it (#282 review): the label of the follow-up or of question 2.
+  await expect(page.getByRole("heading", { name: /^Question [12] of 6/ })).toBeFocused();
   if (await followUp.isVisible()) {
     await page.getByRole("button", { name: "Use sample answer" }).click();
     await page.getByRole("button", { name: "Submit answer" }).click();
   }
   await expect(second).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("heading", { name: /^Question 2 of 6/ })).toBeFocused();
 
   await page.getByRole("button", { name: "End here and see suggested answers" }).click();
   await expect(page.getByText("You've answered 1 of 6 questions.")).toBeVisible();
