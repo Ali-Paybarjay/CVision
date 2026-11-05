@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trackHomeCtaClick } from "@/shared/analytics/actions";
 import { brand } from "@/shared/brand";
 import { navItems } from "@/shared/navigation";
@@ -67,6 +67,39 @@ export function MainNavFallback() {
 export function MainNav({ signedIn }: { signedIn: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+
+  // A new page closes the menu, however the visitor got there: the logo, the header button, a link on the page, or
+  // Back (#302). The header stays in the layout from page to page, so its state would otherwise outlive the page.
+  const [shownOn, setShownOn] = useState(pathname);
+  if (shownOn !== pathname) {
+    setShownOn(pathname);
+    setOpen(false);
+  }
+
+  // Escape, or a tap anywhere but the menu and its button, closes it too. The tap still reaches what it was on.
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      // Focus inside the menu goes back to the button that opened it, so a keyboard user is not left nowhere.
+      if (panel.current?.contains(document.activeElement)) button.current?.focus();
+      setOpen(false);
+    }
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && (panel.current?.contains(target) || button.current?.contains(target))) return;
+      setOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [open]);
+
   const showSignIn = !signedIn && !isCurrent(pathname, "/sign-in");
   const showGetStarted = !signedIn && !isCurrent(pathname, "/sign-up");
   // Whole class names, so Tailwind finds them: page links inline from md when signed in, from lg when signed out.
@@ -93,6 +126,7 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
           </ButtonLink>
         )}
         <button
+          ref={button}
           type="button"
           className={cn(
             // Under the pointer it shows it can be clicked, as the other header controls do (#277).
@@ -109,6 +143,7 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
       </div>
       {open && (
         <div
+          ref={panel}
           id="mobile-menu"
           // Its own layer, above anything positioned on the page, such as Tailor's steps (#298).
           className={cn("absolute inset-x-0 top-full z-20 border-b border-line bg-surface px-4 pb-3", wide.narrowOnly)}
