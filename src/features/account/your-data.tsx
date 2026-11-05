@@ -16,6 +16,7 @@ const tableLabels: Record<UserTable, { label: string; detail: string }> = {
   match_results: { label: "Match results", detail: "How well your experience fits each job." },
   tailoring_changes: { label: "Suggested CV changes", detail: "Each tailored line, and whether you approved it." },
   tailored_cvs: { label: "Saved tailored CVs", detail: "The CV and cover letter you approved for each job." },
+  gap_questions: { label: "Tailor questions", detail: "The questions we asked you about each job, so we don’t ask them again." },
   interview_sessions: { label: "Interview practice", detail: "The questions, your answers and the feedback." },
   applications: { label: "Applications", detail: "Your tracker: the status and next step for each job." },
   events: { label: "Usage records", detail: "Which features you used, such as finishing a practice interview. Never your CV or answers." },

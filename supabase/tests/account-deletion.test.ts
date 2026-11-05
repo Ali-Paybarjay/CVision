@@ -31,7 +31,7 @@ async function addEverything(userId: string) {
     await tx.query("insert into public.profiles (data, cv_file_path) values ('{}', $1)", [`${userId}/cv.pdf`]);
     const { rows } = await tx.query<{ id: string }>("insert into public.jobs (data) values ('{}'), ('{}') returning id");
     for (const job of rows) {
-      for (const table of ["match_results", "tailoring_changes", "tailored_cvs", "interview_sessions", "applications"]) {
+      for (const table of ["match_results", "tailoring_changes", "tailored_cvs", "gap_questions", "interview_sessions", "applications"]) {
         await tx.query(`insert into public.${table} (job_id, data) values ($1, '{}')`, [job.id]);
       }
     }

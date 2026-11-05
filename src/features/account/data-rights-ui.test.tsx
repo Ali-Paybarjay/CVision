@@ -40,6 +40,7 @@ const summary: DataSummary = {
     match_results: 3,
     tailoring_changes: 12,
     tailored_cvs: 2,
+    gap_questions: 2,
     interview_sessions: 2,
     applications: 2,
     events: 5,
