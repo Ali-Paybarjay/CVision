@@ -10,7 +10,7 @@ import { BackLink } from "./back-link";
 import { PreferencesForm } from "./preferences-form";
 import { consentToSend, ProfileBuilder } from "./profile-builder";
 import { deleteQuestion, ProfileOverview } from "./profile-overview";
-import { ReviewStep } from "./review-step";
+import { dutiesHint, ReviewStep } from "./review-step";
 import { SignInToStart } from "./sign-in-to-start";
 import { SignInNotice, UploadStep } from "./upload-step";
 
@@ -176,6 +176,65 @@ describe("profile screens", () => {
     expect(html.match(/bg-cta/g)).toHaveLength(1);
     expect(words).toContain("Approve your profile");
     expect(words).toContain("Start again");
+  });
+
+  // #236: a pilot user saw "What you did" empty for two older jobs and thought we had dropped their lines.
+  it("says why “What you did” is empty for a job read from the CV, and only for that job", () => {
+    const daniel = personas.daniel.profile;
+    const [first, second] = daniel.experience;
+    const profile = {
+      ...daniel,
+      experience: [
+        first,
+        { ...second, duties: [], achievements: [] },
+        { ...second, title: "Stock assistant", duties: [], achievements: ["Cut stock loss from 2.1% to 1.3%"] },
+      ],
+    };
+    const fromCv = reviewReducer(draftFromExtraction(extractionFromProfile(profile)), {
+      type: "add",
+      section: "experience",
+      key: "new-experience-page-1",
+    });
+    const words = text(
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={fromCv}
+          base={profile}
+          source="cv"
+          storage="account"
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      ),
+    );
+    const hints = words.match(/What you did (Your CV has no lines|Your CV lists only results|One per line, as on your CV)/g);
+
+    // The job with lines, the job with none, the job with only results, then the job the user added.
+    expect(hints).toEqual([
+      "What you did One per line, as on your CV",
+      "What you did Your CV has no lines",
+      "What you did Your CV lists only results",
+      "What you did One per line, as on your CV",
+    ]);
+    expect(words).toContain("Your CV has no lines for this job. Add what you did if you want us to use it.");
+    expect(words).toContain(
+      "Your CV lists only results for this job, so they’re under Results and achievements. Add what you did if you want us to use it.",
+    );
+  });
+
+  it("gives the usual hint back as soon as the user writes what they did", () => {
+    const empty = { duties: "", achievements: "" };
+
+    expect(dutiesHint(empty, true, true)).toMatch(/^Your CV has no lines/);
+    expect(dutiesHint({ ...empty, achievements: "Cut stock loss" }, true, true)).toMatch(/^Your CV lists only results/);
+    expect(dutiesHint({ ...empty, duties: "R" }, true, true)).toBe("One per line, as on your CV.");
+    expect(dutiesHint({ ...empty, duties: "  \n " }, true, true)).toMatch(/^Your CV has no lines/);
+    // A job added by hand, and a profile typed in or edited later, keep their usual hints.
+    expect(dutiesHint(empty, true, false)).toBe("One per line, as on your CV.");
+    expect(dutiesHint(empty, false, false)).toBe("One per line.");
   });
 
   it("asks for the changes to a saved profile to be approved once, or cancelled", () => {

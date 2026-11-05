@@ -232,6 +232,7 @@ export function ReviewStep({
               value={item.value}
               errors={item.errors}
               fromCv={fromCv}
+              readFromCv={fromCv && !item.key.startsWith("new-")}
               onChange={(change) => act({ type: "edit-experience", key: item.key, change })}
             />
           </ItemCard>
@@ -406,8 +407,25 @@ function ItemCard({ item, title, children, registerCard, onRemove, removeLabel }
 
 type FieldsProps<T> = { value: T; errors: FieldErrors; onChange: (change: Partial<T>) => void };
 
-/** `fromCv`: the job was read from a CV just uploaded, so the hints can point to the CV. */
-type ExperienceFieldsProps = FieldsProps<ExperienceDraft> & { fromCv: boolean };
+/**
+ * `fromCv`: the page shows a CV just uploaded, so the hints can point to the CV.
+ * `readFromCv`: this job came from that CV, not from "Add a job".
+ */
+type ExperienceFieldsProps = FieldsProps<ExperienceDraft> & { fromCv: boolean; readFromCv: boolean };
+
+/**
+ * The hint under "What you did" (#236). A job read from the CV with nothing under it says why the box is empty,
+ * so the user doesn't think we dropped their lines; once they type, it is the usual hint again.
+ */
+export function dutiesHint(value: Pick<ExperienceDraft, "duties" | "achievements">, fromCv: boolean, readFromCv: boolean): string {
+  if (!fromCv) return "One per line.";
+  if (readFromCv && value.duties.trim() === "") {
+    return value.achievements.trim() === ""
+      ? "Your CV has no lines for this job. Add what you did if you want us to use it."
+      : "Your CV lists only results for this job, so they’re under Results and achievements. Add what you did if you want us to use it.";
+  }
+  return "One per line, as on your CV.";
+}
 
 /** The user's own details, so each field names its purpose and the phone can fill it in (WCAG 1.3.5). */
 function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
@@ -468,7 +486,7 @@ function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
   );
 }
 
-function ExperienceFields({ value, errors, fromCv, onChange }: ExperienceFieldsProps) {
+function ExperienceFields({ value, errors, fromCv, readFromCv, onChange }: ExperienceFieldsProps) {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -492,7 +510,7 @@ function ExperienceFields({ value, errors, fromCv, onChange }: ExperienceFieldsP
         errors={errors}
         onChange={onChange}
       />
-      <Field label="What you did" hint={fromCv ? "One per line, as on your CV." : "One per line."} error={errors.duties}>
+      <Field label="What you did" hint={dutiesHint(value, fromCv, readFromCv)} error={errors.duties}>
         {(props) => (
           <Textarea {...props} value={value.duties} onChange={(event) => onChange({ duties: event.target.value })} className="min-h-28" />
         )}
