@@ -118,7 +118,10 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
 
   const [access, profile, job, match] = await Promise.all([tailorModelAccess(), getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   const gap = match?.gaps.find((item) => item.id === gapId);
-  if (!profile || !job || !match || !gap) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
+  if (!profile || !job || !match || !gap) {
+    // A user whose session ended reads the sample data, where a real job's gap is missing: they need to sign in again.
+    return { ok: false, message: access.allowed ? "We could not find this job. Open it again from your jobs." : access.message };
+  }
   const answer = !hasExperience
     ? (typed ? chosen : detail) || "I haven't done this."
     : chosen
@@ -177,7 +180,11 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
     if (!hasExperience && nextSteps.length === 0) nextSteps.push(plainNextStep(gapId));
     return { ok: true, answer, hasExperience, changes, nextSteps, hint, removed };
   } catch (error) {
-    if (!hasExperience) return keptNo();
+    if (!hasExperience) {
+      // Logs the reason only; the no is kept either way.
+      modelFailureMessage(error, "suggest a next step", "");
+      return keptNo();
+    }
     return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
   }
 }

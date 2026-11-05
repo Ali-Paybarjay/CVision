@@ -12,6 +12,7 @@ vi.mock("next/server", () => ({ after: (task: () => Promise<void>) => task() }))
 const limit = new AskModelError("You have reached today's limit for AI requests.", "limit-reached");
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   proposeChanges.mockReset();
   proposeChanges.mockRejectedValue(limit);
 });
@@ -33,5 +34,13 @@ describe("answering a gap question at the daily limit (#314)", () => {
   it("still gives the limit's message for a yes, which needs the model to write a line", async () => {
     const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-3", answer: "I used Git at work.", hasExperience: true });
     expect(result).toEqual({ ok: false, message: limit.message });
+  });
+});
+
+describe("answering after the session has ended", () => {
+  it("asks the user to sign in again, rather than saying the job is missing", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    const result = await answerGap({ jobId: "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b", gapId: "gap-1", answer: "", hasExperience: false });
+    expect(result).toEqual({ ok: false, message: "Sign in to get suggestions for your CV." });
   });
 });
