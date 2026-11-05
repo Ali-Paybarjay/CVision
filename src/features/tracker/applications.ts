@@ -64,8 +64,8 @@ export async function loadTracker(today: string): Promise<Tracker> {
     items: applications.map((application) => {
       const summary = summaries.get(application.jobId);
       const report = reports.get(application.jobId);
-      const hasSavedCv = withSavedCv.has(application.jobId);
-      return { application, job: summary?.job ?? null, hasAd: summary?.hasAd ?? false, ...(report && { report }), ...(hasSavedCv && { hasSavedCv }) };
+      const hasCv = withSavedCv.has(application.jobId);
+      return { application, job: summary?.job ?? null, hasAd: summary?.hasAd ?? false, ...(report && { report }), ...(hasCv && { hasCv }) };
     }),
   };
 }

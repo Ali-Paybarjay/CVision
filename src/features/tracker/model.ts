@@ -10,14 +10,14 @@ export type JobSummary = Pick<Job, "title" | "company" | "deadline">;
  * One row on the dashboard: the application and the job it is for (null when the job cannot be read). `hasAd` is
  * true when the job's full ad can be opened on its own page (jobAdPath): a saved job that matches the whole contract, or one of Sara's sample jobs.
  * `report` is the overall score, out of 5, of the latest finished interview practice for the job, when there is one.
- * `hasSavedCv` is true when the CV and cover letter the user downloaded or sent with Apply are saved for the job (#207).
+ * `hasCv` is true when the CV and cover letter the user downloaded or sent with Apply are saved for the job (#207).
  */
 export type TrackedApplication = {
   application: Application;
   job: JobSummary | null;
   hasAd?: boolean;
   report?: { overall: number };
-  hasSavedCv?: boolean;
+  hasCv?: boolean;
 };
 
 /** The interview page, which opens the job's latest practice report when it has one. */

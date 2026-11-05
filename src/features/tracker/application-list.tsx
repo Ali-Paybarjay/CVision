@@ -207,14 +207,14 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
         <div className="flex flex-col gap-1">
           <Heading className="text-lg leading-snug">{job ? job.title : "Job details unavailable"}</Heading>
           {job && <p className="text-text-muted">{job.company}</p>}
-          {job && (item.hasAd || item.hasSavedCv || item.report) && (
+          {job && (item.hasAd || item.hasCv || item.report) && (
             <div className="flex flex-wrap gap-x-5">
               {item.hasAd && (
                 <Link href={jobAdPath(saved.jobId)} className={rowLinkClass}>
                   Job ad<span className="sr-only">{` for ${job.title} at ${job.company}`}</span>
                 </Link>
               )}
-              {item.hasSavedCv && (
+              {item.hasCv && (
                 <Link href={savedCvPath(saved.jobId)} className={rowLinkClass}>
                   CV and cover letter<span className="sr-only">{` you saved for ${job.title} at ${job.company}`}</span>
                 </Link>

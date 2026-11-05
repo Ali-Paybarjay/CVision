@@ -178,7 +178,7 @@ describe("loadTracker", () => {
 
     const tracker = await loadTracker(today);
 
-    expect(tracker.kind === "account" && tracker.items.map((item) => [item.application.id, item.hasSavedCv])).toEqual([
+    expect(tracker.kind === "account" && tracker.items.map((item) => [item.application.id, item.hasCv])).toEqual([
       ["app-2", true],
       ["app-1", undefined],
     ]);
