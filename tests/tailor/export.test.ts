@@ -101,13 +101,14 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file follows the templates"
     expect(text.split("Sara Ahmadi")).toHaveLength(3);
   });
 
-  it("lists every main skill and prints a line with the skill it shows", async () => {
+  it("lists every main skill and prints the line that shows it without a skill name in front", async () => {
     const line = "Built Tableau dashboards for the regional sales team";
     const skill = { id: "s", jobId: "j", section: "skills" as const, before: null, evidence: line, evidenceSource: "cv" as const, status: "approved" as const };
     const cv = buildTailoredCv(profile, ["Communication", "Leadership", "Teamwork"].map((after) => ({ ...skill, id: after, after })));
     const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
     for (const name of ["Communication", "Leadership", "Teamwork"]) expect(text).toContain(name);
-    expect(text).toContain(`Communication: ${line}`);
+    expect(text).toContain(line);
+    expect(text).not.toContain(`Communication: ${line}`);
     expect(text).toContain("Tools:");
   });
 });

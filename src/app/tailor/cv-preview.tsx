@@ -1,22 +1,15 @@
 import { cvHeadings, otherLines, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
-import { CvPaper, FitLine } from "@/shared/ui";
+import { CvPaper } from "@/shared/ui";
 
-function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
-  const content = (
-    <>
+/** Every line looks the same: no highlight for a tailored line and no bold inside it; only a screen reader hears which lines were tailored.
+ *  Only the last section's labels ("Tools:") stay bold. */
+function Line({ line, as: Tag = "p" }: { line: CvLine; as?: "p" | "li" }) {
+  return (
+    <Tag>
       {line.label && <strong>{line.label} </strong>}
       {line.text}
-    </>
-  );
-  if (!line.tailored) {
-    const Tag = as;
-    return <Tag>{content}</Tag>;
-  }
-  return (
-    <FitLine as={as}>
-      {content}
-      <span className="sr-only"> (tailored for this job)</span>
-    </FitLine>
+      {line.tailored && <span className="sr-only"> (tailored for this job)</span>}
+    </Tag>
   );
 }
 
@@ -24,7 +17,7 @@ function Heading({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 border-b border-cv-ink/20 pb-1 text-xs font-bold tracking-wider text-accent">{children}</h3>;
 }
 
-/** The tailored CV in the layout of the template, as the download will look, with approved lines on Fit. */
+/** The tailored CV in the layout of the template, as the download will look: every line plain, tailored or not. */
 export function CvPreview({ cv }: { cv: TailoredCv }) {
   const other = otherLines(cv);
   return (
