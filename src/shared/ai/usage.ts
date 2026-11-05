@@ -220,7 +220,8 @@ async function reachedLimit(requester: Requester | undefined, usage: UsageStore,
 
   if (requester && "userId" in requester) {
     if ((await usage.countSince({ userId: requester.userId }, since)) > limits.perUser) {
-      return { limit: "perUser", message: "You have reached today's limit. Try again tomorrow." };
+      // Says the limit is on AI requests only, so nothing the user saved is lost (#296).
+      return { limit: "perUser", message: "You have used today's AI requests. Everything you have saved is still here, and you can try again tomorrow." };
     }
     return undefined;
   }
