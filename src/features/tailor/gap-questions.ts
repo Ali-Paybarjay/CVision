@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
@@ -42,17 +43,58 @@ export function defaultGapQuestion(gap: Gap): GapQuestion {
   return { gapId: gap.id, question };
 }
 
-/** A question about the user's real experience for each gap worth asking about, with answers they can tap. */
-export async function askGapQuestions(input: {
+type GapQuestionsInput = {
   profile: Profile;
   job: Job;
   match: MatchResult;
   /** Whose daily limit the request counts against: { userId } for a signed-in user. */
   requester?: Requester;
-}): Promise<GapQuestion[]> {
-  const { profile, job, match, requester } = input;
+};
+
+/** How long one job's questions are kept, and how many sets at most, so memory stays small. */
+const keepFor = 6 * 60 * 60 * 1000;
+const maxKept = 500;
+const kept = new Map<string, { at: number; questions: Promise<GapQuestion[]> }>();
+
+/**
+ * A question about the user's real experience for each gap worth asking about, with answers they can tap.
+ * Asked once per user and job (#296): opening the page again, going Back or reloading reuses the same questions
+ * for six hours, and two requests at the same moment share one model request. A new Profile, job ad or match
+ * asks again. A failure is not kept, so the next visit tries again. The questions live only in this server's
+ * memory, never in a file or the database.
+ */
+export async function askGapQuestions(input: GapQuestionsInput): Promise<GapQuestion[]> {
+  if (skillGaps(input.match.gaps).length === 0) return [];
+
+  const key = cacheKey(input);
+  const now = Date.now();
+  const hit = kept.get(key);
+  if (hit && now - hit.at < keepFor) return hit.questions;
+
+  for (const [oldKey, entry] of kept) if (now - entry.at >= keepFor) kept.delete(oldKey);
+  while (kept.size >= maxKept) kept.delete(kept.keys().next().value!);
+
+  const questions = writeGapQuestions(input);
+  kept.set(key, { at: now, questions });
+  questions.catch(() => {
+    if (kept.get(key)?.questions === questions) kept.delete(key);
+  });
+  return questions;
+}
+
+/** Whose questions they are, and a hash of everything they are written from: no CV text is kept in the key. */
+function cacheKey({ profile, job, match, requester }: GapQuestionsInput): string {
+  const who = JSON.stringify(requester ?? null);
+  return createHash("sha256").update(JSON.stringify([who, profile, job, match])).digest("hex");
+}
+
+/** For tests: forgets every kept set of questions. */
+export function forgetGapQuestions(): void {
+  kept.clear();
+}
+
+async function writeGapQuestions({ profile, job, match, requester }: GapQuestionsInput): Promise<GapQuestion[]> {
   const gaps = skillGaps(match.gaps);
-  if (gaps.length === 0) return [];
 
   const prompt = await loadPrompt("tailor-gap-questions", {
     job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
