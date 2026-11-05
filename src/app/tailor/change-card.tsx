@@ -32,8 +32,18 @@ export function ChangeCard({ change, onDecide }: { change: TailoringChange; onDe
       <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">{sectionNames[change.section]}</p>
 
       <CvPaper as="div" className="text-sm">
-        <p className="text-xs font-semibold text-text-muted">Before</p>
-        <p className="mt-1 text-text-muted line-through">{change.before ?? "New line"}</p>
+        {change.before?.trim() ? (
+          <>
+            <p className="text-xs font-semibold text-text-muted">Before</p>
+            <p className="mt-1 text-text-muted line-through">{change.before}</p>
+          </>
+        ) : (
+          // A new line removes nothing, so nothing is struck through (#299).
+          <>
+            <p className="text-xs font-semibold text-text-muted">New line</p>
+            <p className="mt-1 text-text-muted">This line is added to your CV. Nothing is removed.</p>
+          </>
+        )}
         <p className="mt-4 text-xs font-semibold text-text-muted">After</p>
         <FitLine className="mt-1">{change.after}</FitLine>
       </CvPaper>
