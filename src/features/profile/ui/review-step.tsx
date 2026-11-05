@@ -235,7 +235,10 @@ export function ReviewStep({
               value={item.value}
               errors={item.errors}
               fromCv={fromCv}
-              readFromCv={fromCv && !item.key.startsWith("new-")}
+              readFromCv={
+                // A job added with "Add a job" (a "new-" key) never came from the CV, even in a draft passed in.
+                fromCv && !item.key.startsWith("new-") ? (initialDraft.experience.find((read) => read.key === item.key)?.value ?? null) : null
+              }
               onChange={(change) => act({ type: "edit-experience", key: item.key, change })}
             />
           </ItemCard>
@@ -494,14 +497,19 @@ type FieldsProps<T> = { value: T; errors: FieldErrors; onChange: (change: Partia
 /** `fromCv`: the page shows a CV just uploaded, so the hints can point to the CV. */
 type FromCvFieldsProps<T> = FieldsProps<T> & { fromCv: boolean };
 
+/** A job's lines: what is in its boxes now, or what the CV had for it. */
+type JobLines = Pick<ExperienceDraft, "duties" | "achievements">;
+
 /**
  * The hint under "What you did" (#236). A job read from the CV with nothing under it says why the box is empty,
  * so the user doesn't think we dropped their lines; once they type, it is the usual hint again.
+ * `read` is what the CV had for this job (null for a job added by hand). The hint speaks of what the CV had, not of
+ * what the boxes hold now, so clearing a job's lines or typing a result never makes it say something untrue (#310).
  */
-export function dutiesHint(value: Pick<ExperienceDraft, "duties" | "achievements">, fromCv: boolean, readFromCv: boolean): string {
+export function dutiesHint(value: JobLines, fromCv: boolean, read: JobLines | null): string {
   if (!fromCv) return "One per line.";
-  if (readFromCv && value.duties.trim() === "") {
-    return value.achievements.trim() === ""
+  if (read && value.duties.trim() === "" && read.duties.trim() === "") {
+    return read.achievements.trim() === ""
       ? "Your CV has no lines for this job. Add what you did if you want us to use it."
       : "Your CV lists only results for this job, so they’re under Results and achievements. Add what you did if you want us to use it.";
   }
@@ -567,8 +575,8 @@ function ContactFields({ value, errors, onChange }: FieldsProps<ContactDraft>) {
   );
 }
 
-/** `readFromCv`: this job came from that CV, not from "Add a job". */
-function ExperienceFields({ value, errors, fromCv, readFromCv, onChange }: FromCvFieldsProps<ExperienceDraft> & { readFromCv: boolean }) {
+/** `readFromCv`: what the CV had for this job; null for a job added with "Add a job". */
+function ExperienceFields({ value, errors, fromCv, readFromCv, onChange }: FromCvFieldsProps<ExperienceDraft> & { readFromCv: JobLines | null }) {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2">
