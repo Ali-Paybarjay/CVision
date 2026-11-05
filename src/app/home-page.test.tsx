@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { brand } from "@/shared/brand";
 import HomePage from "./page";
 
@@ -86,6 +87,30 @@ describe("home page headline (#178)", () => {
     for (const sentence of sentences) expect(words(hero).split(sentence).length - 1, sentence).toBe(1);
     // "Paste a job ad" opens the subline, so the line under the button doesn't say it again (Marzieh, #268).
     expect(words(hero).toLowerCase().split("paste a job ad").length - 1).toBe(1);
+  });
+
+  it("shows Sara's tailored CV with its title, the fictional-example caption and Nothing invented (Marzieh, #176)", () => {
+    expect(html).toContain("<h2 id=\"example-title\"");
+    expect(words(html)).toContain("Sara’s CV, tailored for a Junior Data Analyst job");
+    expect(words(html)).toContain("Sara Khan is a fictional example.");
+    expect(words(hero).split(brand.proof).length - 1).toBe(1);
+  });
+
+  it("gives Sara's CV the real tailored CV's headings, in its order (#216, Marzieh in #295)", () => {
+    const paper = words(html.slice(html.indexOf("<article"), html.indexOf("</article>")));
+    const at = [cvHeadings.skills, cvHeadings.experience, cvHeadings.education].map((heading) => paper.indexOf(` ${heading} `));
+    expect(at.every((index) => index > 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+
+  it("explains every requirement in a table, with the line Sara's answer changed", () => {
+    const table = html.slice(html.indexOf("<table"), html.indexOf("</table>"));
+    expect(table.match(/<th scope="row"/g)).toHaveLength(7);
+    expect(words(table)).toContain("Your CV said: “Built Tableau dashboards for the regional sales team”");
+    expect(words(table)).toContain("Not on your CV, so we won’t add it.");
+    // A summary of the CV is not put in quote marks; only a line of it word for word is (Nazanin, #295).
+    expect(words(table)).toContain("From your CV, in short: Skills: Python (pandas), R; MSc Data Science");
+    expect(words(table)).not.toContain("“Skills:");
   });
 
   it("uses no words the brand bans", () => {
