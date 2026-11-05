@@ -1,3 +1,4 @@
+import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { trackHomeCtaClick } from "@/shared/analytics/actions";
 import { brand } from "@/shared/brand";
 import { CheckIcon, CvPaper, FitLine, MatchMarker, RequirementList, SectionLabel, StatusChip, TrackedButtonLink } from "@/shared/ui";
@@ -124,7 +125,17 @@ function Example() {
           <p className="text-lg leading-tight font-bold">{cv.name}</p>
           <p className="text-xs text-cv-ink/70">{cv.contact}</p>
 
-          <CvHeading>Experience</CvHeading>
+          {/* The real tailored CV's headings and order, locked in #216 (Marzieh, #295): skills, work experience, education. */}
+          <CvHeading>{cvHeadings.skills}</CvHeading>
+          <p className="mt-2">{cv.skills}</p>
+          {cv.addedSkills.map(({ text, line }) => (
+            <FitLine key={text} className="mt-1.5 flex items-start gap-2">
+              <MatchMarker line={line} className="mt-0.5" />
+              <span>{text}</span>
+            </FitLine>
+          ))}
+
+          <CvHeading>{cvHeadings.experience}</CvHeading>
           <p className="mt-2 font-semibold">{cv.role.heading}</p>
           <p className="text-xs text-cv-ink/70">{cv.role.dates}</p>
           <ul className="mt-2 flex flex-col gap-1.5">
@@ -140,16 +151,7 @@ function Example() {
             )}
           </ul>
 
-          <CvHeading>Skills</CvHeading>
-          <p className="mt-2">{cv.skills}</p>
-          {cv.addedSkills.map(({ text, line }) => (
-            <FitLine key={text} className="mt-1.5 flex items-start gap-2">
-              <MatchMarker line={line} className="mt-0.5" />
-              <span>{text}</span>
-            </FitLine>
-          ))}
-
-          <CvHeading>Education</CvHeading>
+          <CvHeading>{cvHeadings.education}</CvHeading>
           <p className="mt-2 font-semibold">{cv.education.heading}</p>
           <p>{cv.education.detail}</p>
         </CvPaper>

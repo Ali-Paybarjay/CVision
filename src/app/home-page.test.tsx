@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { brand } from "@/shared/brand";
 import HomePage from "./page";
 
@@ -93,6 +94,13 @@ describe("home page headline (#178)", () => {
     expect(words(html)).toContain("Sara’s CV, tailored for a Junior Data Analyst job");
     expect(words(html)).toContain("Sara Khan is a fictional example.");
     expect(words(hero).split(brand.proof).length - 1).toBe(1);
+  });
+
+  it("gives Sara's CV the real tailored CV's headings, in its order (#216, Marzieh in #295)", () => {
+    const paper = words(html.slice(html.indexOf("<article"), html.indexOf("</article>")));
+    const at = [cvHeadings.skills, cvHeadings.experience, cvHeadings.education].map((heading) => paper.indexOf(` ${heading} `));
+    expect(at.every((index) => index > 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
   });
 
   it("explains every requirement in a table, with the line Sara's answer changed", () => {
