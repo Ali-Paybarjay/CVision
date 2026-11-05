@@ -18,16 +18,15 @@ export const cvHeadings = {
   skills: "SKILLS",
   experience: "WORK EXPERIENCE",
   projects: "PROJECTS",
-  volunteering: "VOLUNTEERING",
   education: "EDUCATION",
   other: "CERTIFICATES AND TOOLS",
   certificates: "Certificates:",
+  languages: "Languages:",
   drivingLicence: "Driving licence:",
   tools: "Tools:",
-  languages: "LANGUAGES",
 };
 
-/** A job, project or volunteering role on the CV. `company` is empty when the CV names no organisation. */
+/** A job or project on the CV. `company` is empty when the CV names no organisation. */
 export type CvEntry = {
   title: string;
   company: string;
@@ -50,9 +49,9 @@ export type TailoredCv = {
   education: CvLine[];
   certifications: CvLine[];
   drivingLicences: CvLine[];
-  /** Projects, volunteering and languages as the Profile has them: these sections take no tailoring changes yet. */
+  /** Projects and languages as the Profile has them: they take no tailoring changes yet. Volunteering is not on the CV in this phase. */
   projects: CvEntry[];
-  volunteering: CvEntry[];
+  /** Listed as "Languages" in the last section of the CV, under the certificates. */
   languages: CvLine[];
   /** Approved changes whose `before` line is not on the CV (or was already changed), so they could not be placed. */
   unplaced: TailoringChange[];
@@ -248,22 +247,17 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     certifications: certificates.slice(0, maxCertificates),
     drivingLicences: [...allCertificates, ...allSkills].filter(isDrivingLicence).map(licenceDetail),
     projects: (profile.projects ?? []).map((item) => ({ title: item.name, company: item.organisation ?? "", dates: dateRange(item.startDate, item.endDate), lines: item.details.map(asIs) })),
-    volunteering: (profile.volunteering ?? []).map((item) => ({
-      title: item.role,
-      company: [item.organisation, item.location].filter(Boolean).join(", "),
-      dates: dateRange(item.startDate, item.endDate),
-      lines: item.details.map(asIs),
-    })),
     languages: (profile.languages ?? []).map((item) => asIs(item.level ? `${item.name} (${item.level})` : item.name)),
     unplaced: approved.filter((change) => !used.has(change.id)),
     overLimit: [...leftOut, ...tools.slice(maxTools), ...certificates.slice(maxCertificates)].filter((line) => line.tailored).map((line) => line.text),
   };
 }
 
-/** The last section of the CV: one labelled line each for certificates, driving licences and tools, the same in the preview and the files. */
+/** The last section of the CV: one labelled line each for certificates, languages, driving licences and tools, the same in the preview and the files. */
 export function otherLines(cv: TailoredCv): CvLine[] {
   const groups: [string, CvLine[], string][] = [
     [cvHeadings.certificates, cv.certifications, "; "],
+    [cvHeadings.languages, cv.languages, ", "],
     [cvHeadings.drivingLicence, cv.drivingLicences, "; "],
     [cvHeadings.tools, cv.technicalSkills, ", "],
   ];

@@ -230,7 +230,7 @@ describe("the tailored CV for a job (#216)", () => {
   });
 });
 
-describe("languages, projects and volunteering on the tailored CV (#228)", () => {
+describe("languages and projects on the tailored CV (#228)", () => {
   const full = {
     ...profile,
     languages: [{ name: "Welsh", level: "Fluent" }, { name: "Farsi" }],
@@ -238,20 +238,30 @@ describe("languages, projects and volunteering on the tailored CV (#228)", () =>
     volunteering: [{ role: "Volunteer tutor", details: ["Taught maths to adults every week"] }],
   };
 
-  it("shows them as the Profile has them, and invents no level", () => {
+  it("shows them as the Profile has them, invents no level, and leaves volunteering off the CV", () => {
     const cv = buildTailoredCv(full, []);
     expect(cv.languages.map((line) => line.text)).toEqual(["Welsh (Fluent)", "Farsi"]);
     expect(cv.projects).toEqual([{ title: "Bus delay dashboard", company: "University of Manchester", dates: "Jan 2024 – Jun 2024", lines: [{ text: "Built a dashboard of bus delays", tailored: false }] }]);
-    expect(cv.volunteering).toEqual([{ title: "Volunteer tutor", company: "", dates: "", lines: [{ text: "Taught maths to adults every week", tailored: false }] }]);
+    expect(JSON.stringify(cv)).not.toContain("Volunteer tutor");
+  });
+
+  it("lists languages in the last section, right under the certificates", () => {
+    const cv = buildTailoredCv({ ...full, skills: ["Excel"], certifications: [{ name: "PRINCE2 Foundation", year: 2023 }, { name: "Full UK driving licence" }] }, []);
+    expect(otherLines(cv).map((line) => `${line.label} ${line.text}`)).toEqual([
+      "Certificates: PRINCE2 Foundation (2023)",
+      "Languages: Welsh (Fluent), Farsi",
+      "Driving licence: Full UK",
+      "Tools: Excel",
+    ]);
   });
 
   it("leaves them empty for a Profile without them", () => {
     const cv = buildTailoredCv(profile, []);
-    expect([cv.languages, cv.projects, cv.volunteering]).toEqual([[], [], []]);
+    expect([cv.languages, cv.projects]).toEqual([[], []]);
   });
 
-  it("counts them as evidence for Nothing invented", () => {
+  it("counts languages and projects as evidence for Nothing invented", () => {
     const lines = cvLines(full);
-    for (const line of ["Welsh", "Fluent", "Bus delay dashboard", "Built a dashboard of bus delays", "Volunteer tutor", "Taught maths to adults every week"]) expect(lines).toContain(line);
+    for (const line of ["Welsh", "Fluent", "Bus delay dashboard", "Built a dashboard of bus delays"]) expect(lines).toContain(line);
   });
 });

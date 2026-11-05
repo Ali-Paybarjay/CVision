@@ -33,7 +33,7 @@ export const mimeTypes: Record<ExportFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** The CV in the template's order: skills in two columns, then work experience, projects, volunteering, education, certificates and tools, and languages last. */
+/** The CV in the template's order: skills in two columns, then work experience, projects, education, and certificates, languages and tools last. */
 export function cvBlocks(cv: TailoredCv): Block[] {
   const bullets = (lines: CvLine[]): Block[] => lines.map((line) => ({ kind: "bullet", text: line.text, label: line.label }));
   const half = Math.ceil(cv.skills.length / 2);
@@ -59,12 +59,10 @@ export function cvBlocks(cv: TailoredCv): Block[] {
     ...cv.skills.slice(0, half).map((line, index): Block => ({ kind: "skills", text: line.text, right: cv.skills[half + index]?.text })),
     ...entries(cvHeadings.experience, cv.experience),
     ...entries(cvHeadings.projects, cv.projects),
-    ...entries(cvHeadings.volunteering, cv.volunteering),
     ...(cv.education.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.education }] : []),
     ...cv.education.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
     ...(other.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.other }] : []),
     ...other.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
-    ...(cv.languages.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.languages }, ...bullets(cv.languages)] : []),
   ];
 }
 

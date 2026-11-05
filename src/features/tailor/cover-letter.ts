@@ -137,7 +137,6 @@ export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLe
         certifications: profile.certifications,
         languages: profile.languages,
         projects: profile.projects,
-        volunteering: profile.volunteering,
         followUpAnswers: profile.followUpAnswers.map(({ question, answer }) => ({ question, answer })),
       },
       null,

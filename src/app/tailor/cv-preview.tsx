@@ -86,7 +86,6 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
 
       <Entries heading={cvHeadings.experience} items={cv.experience} />
       <Entries heading={cvHeadings.projects} items={cv.projects} />
-      <Entries heading={cvHeadings.volunteering} items={cv.volunteering} />
 
       {cv.education.length > 0 && (
         <>
@@ -107,17 +106,6 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
               <Line key={index} line={line} />
             ))}
           </div>
-        </>
-      )}
-
-      {cv.languages.length > 0 && (
-        <>
-          <Heading>{cvHeadings.languages}</Heading>
-          <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-            {cv.languages.map((line, index) => (
-              <Line key={index} line={line} as="li" />
-            ))}
-          </ul>
         </>
       )}
     </CvPaper>

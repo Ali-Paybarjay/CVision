@@ -37,7 +37,6 @@ export async function askForProposal({ profile, job, match, answers, sample, req
         certifications: profile.certifications,
         languages: profile.languages,
         projects: profile.projects,
-        volunteering: profile.volunteering,
         followUpAnswers: profile.followUpAnswers.map(({ question, answer }) => ({ question, answer })),
       },
       null,
