@@ -22,7 +22,7 @@ export type SaveOutcome = "saved" | "skipped" | "failed";
 /**
  * Saves the CV and cover letter the user is sending for one job, when they download a file or press Apply (#207).
  * The changes come from tailoring_changes, not from the browser, and only approved ones are kept. One row per job:
- * the latest download or Apply replaces the one before. It never throws, so a failure never stops the download or
+ * the latest download or Apply replaces the one before, but a save with no letter keeps the letter saved earlier. It never throws, so a failure never stops the download or
  * the Apply.
  */
 export async function saveTailoredCv(jobId: string, coverLetter: string | null): Promise<SaveOutcome> {
@@ -52,7 +52,8 @@ async function save(jobId: string, coverLetter: string | null): Promise<SaveOutc
     jobId,
     cv: applyApprovedChanges(profile, approved),
     changes: approved,
-    coverLetter: coverLetter?.trim() ? coverLetter : null,
+    // No letter this time (e.g. the page was reloaded, so the letter is gone from it): keep the one saved before.
+    coverLetter: coverLetter?.trim() ? coverLetter : previous.success ? previous.data.coverLetter : null,
     savedAt: new Date().toISOString(),
   };
 

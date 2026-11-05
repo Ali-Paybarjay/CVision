@@ -56,12 +56,20 @@ describe("saving what the user sends (#207)", () => {
     expect(data.coverLetter).toBe("Dear hiring manager,");
   });
 
-  it("keeps the saved row's id when it saves again, and stores no letter as null", async () => {
-    db.row = { data: { id: "kept-id", jobId, cv: profile, changes: [], coverLetter: "Old", savedAt: "2026-11-01T09:00:00.000Z" } };
+  it("keeps the saved row's id when it saves again, and stores no letter as null when none was saved", async () => {
+    db.row = { data: { id: "kept-id", jobId, cv: profile, changes: [], coverLetter: null, savedAt: "2026-11-01T09:00:00.000Z" } };
     await saveTailoredCv(jobId, "  ");
     const data = TailoredCvSchema.parse(db.upsert.mock.calls[0][0].data);
     expect(data.id).toBe("kept-id");
     expect(data.coverLetter).toBeNull();
+  });
+
+  it("keeps the letter saved before when a later save has none, as after a reload", async () => {
+    db.row = { data: { id: "kept-id", jobId, cv: profile, changes: [], coverLetter: "Old", savedAt: "2026-11-01T09:00:00.000Z" } };
+    await saveTailoredCv(jobId, null);
+    expect(TailoredCvSchema.parse(db.upsert.mock.calls[0][0].data).coverLetter).toBe("Old");
+    await saveTailoredCv(jobId, "New letter");
+    expect(TailoredCvSchema.parse(db.upsert.mock.calls[1][0].data).coverLetter).toBe("New letter");
   });
 
   it("saves nothing for a sample job or a signed-out visitor", async () => {
