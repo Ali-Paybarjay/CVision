@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { brand } from "@/shared/brand";
 import { SiteFooter, SiteHeader } from "@/shared/ui";
 import "./globals.css";
 
-const inter = Inter({
+// Inter lives in the repo (fonts/, SIL Open Font License in fonts/OFL.txt), so no build downloads it from Google:
+// a failed download used to break the e2e build in CI (#311). One variable file, Latin only, covers 400, 600 and 700.
+const inter = localFont({
+  src: "./fonts/inter-latin-wght-normal.woff2",
+  weight: "100 900",
+  style: "normal",
   variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
