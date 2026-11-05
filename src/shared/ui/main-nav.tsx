@@ -110,7 +110,8 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
       {open && (
         <div
           id="mobile-menu"
-          className={cn("absolute inset-x-0 top-full border-b border-line bg-surface px-4 pb-3", wide.narrowOnly)}
+          // Its own layer, above anything positioned on the page, such as Tailor's steps (#298).
+          className={cn("absolute inset-x-0 top-full z-20 border-b border-line bg-surface px-4 pb-3", wide.narrowOnly)}
         >
           <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} className="flex flex-col">
             {showSignIn && (
