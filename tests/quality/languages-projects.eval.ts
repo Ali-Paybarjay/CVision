@@ -1,16 +1,32 @@
 // Live prompt evals for the languages and projects a real CV sends to the model since #253: two real requests, run with `npm run eval`.
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { askForProposal, coverLetterText, findBrandProblems, inventedTerms, unsupportedReason, writeCoverLetter } from "@/features/tailor";
 import { getAiProvider } from "@/shared/ai";
 import { ownPhrasesUsed, templatePhrases } from "../tailor/cover-letter.cases";
-import { answers, claimsLevel, gaps, input, job, match, numbersNotInSources, overstatedLevels, wordsNotOnCv } from "./languages-projects.cases";
+import {
+  answers,
+  claimsHerSpanish,
+  claimsLevel,
+  gaps,
+  input,
+  job,
+  match,
+  namesHerProject,
+  numbersNotInSources,
+  overstatedLevels,
+  wordsNotOnCv,
+} from "./languages-projects.cases";
 
 describe.skipIf(!getAiProvider())("Languages and projects (live)", () => {
   describe("cover letter", () => {
     let text = "";
 
-    it("Nothing invented: adds nothing she said no to, and no tool, talk or number her CV does not have", async () => {
+    // In beforeAll, so a failed request fails every check below instead of letting them pass on an empty letter.
+    beforeAll(async () => {
       text = coverLetterText(await writeCoverLetter(input), input.profile.fullName);
+    }, 120_000);
+
+    it("Nothing invented: adds nothing she said no to or lacks, and no tool, talk or number her CV does not have", () => {
       expect(inventedTerms(text, gaps, answers, input.profile)).toEqual([]);
       expect(wordsNotOnCv(text)).toEqual([]);
       expect(numbersNotInSources(text)).toEqual([]);
@@ -20,9 +36,9 @@ describe.skipIf(!getAiProvider())("Languages and projects (live)", () => {
       expect(overstatedLevels(text)).toEqual([]);
     });
 
-    it("the model reads both sections: her Spanish and her project answer what the ad requires", () => {
-      expect(text).toMatch(/\bspanish\b/i);
-      expect(text).toMatch(/recipe finder|vitest/i);
+    it("the model reads both sections: it claims her Spanish and names a project that only those sections hold", () => {
+      expect(text).toMatch(claimsHerSpanish);
+      expect(text).toMatch(namesHerProject);
     });
 
     it("Sounds like you: reuses her own phrases and no template phrases", () => {
