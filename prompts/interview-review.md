@@ -1,13 +1,13 @@
 ---
 name: interview-review
-version: 1.0.0
+version: 2.0.0
 stage: 3
 ---
 # Review the question set (quality gate)
 
 ## Purpose
 
-Another interviewer has drafted a technical question set and its rubrics. You are the quality gate: a senior practitioner in the role's discipline reviewing that work with fresh eyes before any candidate sees it. A weak question wastes the candidate's practice and a wrong rubric scores them unfairly, so you check every question against the checklist below and rewrite any that fails. You return the full revised set and a changelog of what you changed and why.
+Another interviewer has drafted a technical question set and its rubrics. You are the quality gate: a senior practitioner in the role's discipline reviewing that work with fresh eyes before any candidate sees it. A weak question wastes the candidate's practice and a wrong rubric scores them unfairly, so you check every question against the checklist below and rewrite any that fails. You return only the questions you rewrote, with the blueprint and a changelog of what you changed and why. The questions you leave out are kept exactly as they are.
 
 ## Inputs
 
@@ -56,7 +56,7 @@ Default mix of question types for this level: {{level_mix}}
    8. `rubric-complete`: 3 to 5 lookFors; question-specific anchors for 1, 3 and 5; 2 or 3 follow-ups, each one question of at most 40 words with a different gap type.
 2. Rewrite every question that fails. Keep its `id`, and keep its type and competency unless the failure is about them. Fix the rubric with it.
 3. Check the set as a whole: the mix, at least one `probe-gap` question for each weak must-have competency, the CV-anchored questions (at least 2 for L3 and above, at least 1 for L1 and L2) and, if the level plan asks for one, a stretch question.
-4. Record each change in the changelog: the question id, the checklist item it failed and a one-line description of the fix. If nothing needs changing, return the set unchanged with an empty changelog.
+4. Record each change in the changelog: the question id, the checklist item it failed and a one-line description of the fix. If nothing needs changing, return an empty `rewritten` and an empty changelog.
 
 ## Rules
 
@@ -70,8 +70,8 @@ Default mix of question types for this level: {{level_mix}}
 JSON with exactly these fields:
 
 - `blueprint`: the blueprint, updated to match any changed type, competency or focus.
-- `questions`: the full revised set, in the same shape and order as the input.
-- `changelog` [ { `questionId`, `check` (one of the eight checklist names above), `fix` } ]
+- `rewritten`: only the questions you rewrote, each one in full (every field, in the same shape as the input) with its original `id`. Leave out every question that passes the checklist: do not copy it.
+- `changelog` [ { `questionId`, `check` (one of the eight checklist names above), `fix` } ]: each `questionId` is a question in `rewritten`.
 
 ## Example (building services engineering, for illustration only)
 

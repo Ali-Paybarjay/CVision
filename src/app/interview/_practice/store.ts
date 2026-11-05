@@ -3,6 +3,7 @@
 // answers scored in the background never overwrite each other. The lab and the main page each create their own.
 import { InterviewSessionSchema, type InterviewSession } from "@/features/interview/contracts";
 import { InterviewInputsSchema, type InterviewInputs } from "@/features/interview/engine/schemas";
+import { brand } from "@/shared/brand";
 
 export type PracticeEnvelope = {
   /** The lab's fixture or persona id, or the job id on the main page. */
@@ -14,9 +15,53 @@ export type PracticeEnvelope = {
   /** Milliseconds since the epoch when Start was pressed, and the start-up time once stages 1 to 3 finish. */
   startedAtMs: number;
   startupMs: number | null;
+  /** How many times a start-up stage was sent again, automatically or by Try again (#232), for interview.startup_ready. */
+  startupRetries?: number;
+  /** How long stages 1 and 2 took in this browser: the go that worked only (#266, #281), for interview.startup_ready. */
+  stageMs?: { analyse?: number; generate?: number };
 };
 
-export type JobState = { status: "running" } | { status: "failed"; message: string };
+/**
+ * A request in flight or stopped. `since`: when its current try started in this tab. `retrying`: an earlier try did not
+ * finish, and this is a second go, by itself or after Try again (#232, #266). `final`: Try again now would only fail the
+ * same way, as at a daily limit, so the page offers none (#266).
+ */
+export type JobState = { status: "running"; since?: number; retrying?: boolean } | { status: "failed"; message: string; final?: boolean };
+
+/**
+ * Said after a failure that Try again cannot fix now (#281), as at a daily limit: the page offers no Try again, so it
+ * says what happens to the practice instead.
+ */
+export const keptForLater = "Your practice is kept. Open this page again later to carry on.";
+
+/** A failed request's words, and with no Try again to offer, what happens next. */
+export function failureMessage(job: { message: string; final?: boolean }): string {
+  return job.final ? `${job.message} ${keptForLater}` : job.message;
+}
+
+/** What the user reads when a request fails without a message of its own from the API: plain words, never a status code. */
+export const stepProblems = {
+  offline: `We could not reach ${brand.name}. Check your connection, then try again.`,
+  timeout: "This step took too long to answer.",
+  server: "Something went wrong on our side. Try again in a moment.",
+} as const;
+
+/**
+ * A step that failed. `retryable`: a second go a moment later may well work (no connection, a server error, or the API
+ * says so), unlike a daily limit, a missing Profile, a request the API refuses, or a step that ran out of time while
+ * the server is most likely still working on it. `final`: the API says Try again now would only fail the same way
+ * (#266), as at a daily limit or when the AI service turns requests away.
+ */
+export class StepError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly final = false,
+  ) {
+    super(message);
+    this.name = "StepError";
+  }
+}
 
 const emptyJobs: Readonly<Record<string, JobState>> = {};
 
@@ -34,10 +79,20 @@ export function parseEnvelope(raw: string | null): PracticeEnvelope | null {
       session: data.session === null ? null : InterviewSessionSchema.parse(data.session),
       startedAtMs: Number(data.startedAtMs) || 0,
       startupMs: typeof data.startupMs === "number" ? data.startupMs : null,
+      ...(typeof data.startupRetries === "number" ? { startupRetries: data.startupRetries } : {}),
+      ...(data.stageMs && typeof data.stageMs === "object" ? { stageMs: stageTimes(data.stageMs) } : {}),
     };
   } catch {
     return null;
   }
+}
+
+/** Only the stage times that are counts: a saved envelope from another version of the page drops the rest. */
+function stageTimes(saved: Record<string, unknown>): NonNullable<PracticeEnvelope["stageMs"]> {
+  const count = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined);
+  const analyse = count(saved.analyse);
+  const generate = count(saved.generate);
+  return { ...(analyse !== undefined && { analyse }), ...(generate !== undefined && { generate }) };
 }
 
 /** Runs `work` only in the tab that holds the lock; any other tab waits until it is released and runs nothing. */
@@ -55,6 +110,10 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
   let storageFailed = false;
   const listeners = new Set<() => void>();
   let jobs: Readonly<Record<string, JobState>> = {};
+  // Jobs run with `once` that have succeeded in this tab.
+  const succeeded = new Set<string>();
+  // How many tries each job has started in this tab (noteAttempt), so a second go says so however it began.
+  const attempts = new Map<string, number>();
 
   function emit() {
     for (const listener of listeners) listener();
@@ -125,37 +184,76 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
     /**
      * Runs one request unless it is already running or has failed (a failed job waits for retryJob). Tabs share
      * the session, so a tab that finds another tab already running the same request waits for it instead; the
-     * result arrives through storage, and if the other tab failed, this tab's next drive runs it.
+     * result arrives through storage, and if the other tab failed, this tab's next drive runs it. A job whose
+     * success leaves no mark on the session runs with `once`, so the next drive does not send it again.
      */
-    runJob(key: string, work: () => Promise<void>) {
-      if (jobs[key]) return;
+    runJob(key: string, work: () => Promise<void>, options: { once?: boolean } = {}) {
+      if (jobs[key] || succeeded.has(key)) return;
       setJob(key, { status: "running" });
       withTabLock(`${storageKey}:${key}`, work).then(
-        () => setJob(key, null),
-        (error: unknown) => setJob(key, { status: "failed", message: error instanceof Error ? error.message : "Something went wrong." }),
+        () => {
+          if (options.once) succeeded.add(key);
+          setJob(key, null);
+        },
+        (error: unknown) =>
+          setJob(key, {
+            status: "failed",
+            message: error instanceof Error ? error.message : "Something went wrong.",
+            ...(error instanceof StepError && error.final && { final: true }),
+          }),
       );
     },
     retryJob(key: string) {
       if (jobs[key]?.status === "failed") setJob(key, null);
     },
+    /**
+     * Marks the start of a running job's try in this tab, so the page can time it and say when it is a second go: the
+     * one sent by itself after a quick failure, or the one Try again started (#266).
+     */
+    noteAttempt(key: string) {
+      if (jobs[key]?.status !== "running") return;
+      const tries = (attempts.get(key) ?? 0) + 1;
+      attempts.set(key, tries);
+      setJob(key, { status: "running", since: Date.now(), retrying: tries > 1 });
+    },
     clearJobs() {
       jobs = {};
+      succeeded.clear();
+      attempts.clear();
       emit();
     },
     /**
-     * POSTs one engine step to the API and returns its JSON, or throws the API's error message. With `keepalive`,
-     * the request outlives the page when it fits the browser's 64 KB keepalive limit.
+     * POSTs one engine step to the API and returns its JSON, or throws a StepError with the API's message, or with
+     * plain words when the API gave none (stepProblems). With `keepalive`, the request outlives the page when it fits
+     * the browser's 64 KB keepalive limit. With `timeoutMs`, a request that has not answered by then is dropped.
      */
-    async callStep<T>(body: Record<string, unknown>, options: { keepalive?: boolean } = {}): Promise<T> {
+    async callStep<T>(body: Record<string, unknown>, options: { keepalive?: boolean; timeoutMs?: number } = {}): Promise<T> {
       const json = JSON.stringify(body);
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: json,
-        keepalive: options.keepalive && new Blob([json]).size < keepaliveLimitBytes,
-      });
+      const controller = options.timeoutMs ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : undefined;
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: json,
+          keepalive: options.keepalive && new Blob([json]).size < keepaliveLimitBytes,
+          signal: controller?.signal,
+        });
+      } catch {
+        // No answer at all: the step ran out of time and was dropped here, or the connection dropped.
+        if (controller?.signal.aborted) throw new StepError(stepProblems.timeout, false);
+        throw new StepError(stepProblems.offline, true);
+      } finally {
+        clearTimeout(timer);
+      }
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `The request failed (${response.status}).`);
+      if (!response.ok) {
+        // Without a message of its own, the server or the platform in front of it failed (a 504, a crash page).
+        const own = typeof data.error === "string";
+        const final = own && data.final === true;
+        throw new StepError(own ? data.error : stepProblems.server, !final && (data.retryable === true || (!own && response.status >= 500)), final);
+      }
       return data as T;
     },
   };

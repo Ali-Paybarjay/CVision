@@ -10,7 +10,7 @@ import { BackLink } from "./back-link";
 import { PreferencesForm } from "./preferences-form";
 import { consentToSend, ProfileBuilder } from "./profile-builder";
 import { deleteQuestion, ProfileOverview } from "./profile-overview";
-import { ReviewStep } from "./review-step";
+import { dutiesHint, ReviewStep } from "./review-step";
 import { SignInToStart } from "./sign-in-to-start";
 import { SignInNotice, UploadStep } from "./upload-step";
 
@@ -18,8 +18,20 @@ import { SignInNotice, UploadStep } from "./upload-step";
 // Clicking through the flow is covered by the reducer tests and by trying it in a browser.
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
-    <a href={href} className={className}>
+  default: ({
+    href,
+    children,
+    className,
+    target,
+    rel,
+  }: {
+    href: string;
+    children: React.ReactNode;
+    className?: string;
+    target?: string;
+    rel?: string;
+  }) => (
+    <a href={href} className={className} target={target} rel={rel}>
       {children}
     </a>
   ),
@@ -29,7 +41,16 @@ vi.mock("../actions", () => ({ deleteMyProfileAction: vi.fn() }));
 
 const noop = () => {};
 const names = Object.keys(personas) as PersonaName[];
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+// The Privacy link opens in a new tab, and says so on the page (issue #235). privacyLink checks that; text drops the words,
+// so a consent point compares as the sentence it is.
+const privacyLink = /<a href="\/privacy" class="[^"]*" target="_blank" rel="noopener noreferrer">Privacy page<span class="font-normal"> \(opens in a new tab\)<\/span><\/a>/;
+const text = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/ \(opens in a new tab\)/g, "")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ");
 
 function stored(name: PersonaName): StoredProfile {
   return {
@@ -55,11 +76,20 @@ describe("profile screens", () => {
     expect(text(html)).toContain("we save it and your CV file to your CVision account");
     expect(text(html)).toContain("through OpenRouter on Google Cloud or Amazon Web Services");
     expect(text(html)).not.toContain("don’t keep");
-    expect(html).toMatch(/<a href="\/privacy"[^>]*>Privacy page<\/a>/);
+    expect(html).toMatch(privacyLink);
     expect(html).toMatch(new RegExp(`<input type="checkbox"[^>]*name="consent" value="${cvConsent.version}"`));
     expect(html).not.toMatch(/name="consent"[^>]*checked/);
     expect(html).toContain('accept=".pdf,.docx');
     expect(text(html)).not.toContain("Demo mode");
+  });
+
+  it("keeps an empty live region under the button, where the wait shows on screen (issue #235)", () => {
+    const html = renderToStaticMarkup(
+      <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} />,
+    );
+
+    expect(html).toMatch(/<\/button><\/div><div aria-live="polite"><\/div><\/div><\/form>/);
+    expect(html).not.toContain('class="sr-only"');
   });
 
   it("warns before an upload in demo mode that the CV won’t become the profile", () => {
@@ -206,6 +236,65 @@ describe("profile screens", () => {
     for (const label of ["Add a volunteering role", "Add a project", "Add a language"]) expect(words).toContain(label);
   });
 
+  // #236: a pilot user saw "What you did" empty for two older jobs and thought we had dropped their lines.
+  it("says why “What you did” is empty for a job read from the CV, and only for that job", () => {
+    const daniel = personas.daniel.profile;
+    const [first, second] = daniel.experience;
+    const profile = {
+      ...daniel,
+      experience: [
+        first,
+        { ...second, duties: [], achievements: [] },
+        { ...second, title: "Stock assistant", duties: [], achievements: ["Cut stock loss from 2.1% to 1.3%"] },
+      ],
+    };
+    const fromCv = reviewReducer(draftFromExtraction(extractionFromProfile(profile)), {
+      type: "add",
+      section: "experience",
+      key: "new-experience-page-1",
+    });
+    const words = text(
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={fromCv}
+          base={profile}
+          source="cv"
+          storage="account"
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      ),
+    );
+    const hints = words.match(/What you did (Your CV has no lines|Your CV lists only results|One per line, as on your CV)/g);
+
+    // The job with lines, the job with none, the job with only results, then the job the user added.
+    expect(hints).toEqual([
+      "What you did One per line, as on your CV",
+      "What you did Your CV has no lines",
+      "What you did Your CV lists only results",
+      "What you did One per line, as on your CV",
+    ]);
+    expect(words).toContain("Your CV has no lines for this job. Add what you did if you want us to use it.");
+    expect(words).toContain(
+      "Your CV lists only results for this job, so they’re under Results and achievements. Add what you did if you want us to use it.",
+    );
+  });
+
+  it("gives the usual hint back as soon as the user writes what they did", () => {
+    const empty = { duties: "", achievements: "" };
+
+    expect(dutiesHint(empty, true, true)).toMatch(/^Your CV has no lines/);
+    expect(dutiesHint({ ...empty, achievements: "Cut stock loss" }, true, true)).toMatch(/^Your CV lists only results/);
+    expect(dutiesHint({ ...empty, duties: "R" }, true, true)).toBe("One per line, as on your CV.");
+    expect(dutiesHint({ ...empty, duties: "  \n " }, true, true)).toMatch(/^Your CV has no lines/);
+    // A job added by hand, and a profile typed in or edited later, keep their usual hints.
+    expect(dutiesHint(empty, true, false)).toBe("One per line, as on your CV.");
+    expect(dutiesHint(empty, false, false)).toBe("One per line.");
+  });
+
   it("asks for the changes to a saved profile to be approved once, or cancelled", () => {
     const profile = personas.emma.profile;
     const html = text(
@@ -346,7 +435,7 @@ describe("profile screens", () => {
       for (const point of manualConsentPoints(storage)) expect(words).toContain(point);
       expect(words).toContain(manualConsent.label);
       expect(words).not.toContain(cvConsent.label);
-      expect(html).toMatch(/<a href="\/privacy"[^>]*>Privacy page<\/a>/);
+      expect(html).toMatch(privacyLink);
       expect(html).toMatch(/<input type="checkbox" id="review-consent"/);
       expect(html).not.toMatch(/id="review-consent"[^>]*checked/);
       expect(words.indexOf(manualConsent.label)).toBeLessThan(words.indexOf("Approve and save"));

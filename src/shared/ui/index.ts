@@ -1,4 +1,5 @@
 // The shared UI kit. See it all at /ui-kit, in light and dark mode.
+export { BrandMark } from "./brand-mark";
 export { Button, ButtonLink } from "./button";
 export { Card } from "./card";
 export { cn } from "./cn";
@@ -6,9 +7,14 @@ export { CvPaper } from "./cv-paper";
 export { FitLine } from "./fit-line";
 export { Field, Input, Select, Textarea } from "./form";
 export { CalendarIcon, CheckIcon, ErrorIcon, InfoIcon, WarningIcon } from "./icons";
+export { MatchMarker } from "./match-marker";
 export { Notice } from "./notice";
 export { Page } from "./page";
+export { RequirementList, type Requirement, type RequirementGroup } from "./requirement-list";
+export { SectionLabel } from "./section-label";
 export { SiteFooter } from "./site-footer";
 export { SiteHeader } from "./site-header";
+export { StatusChip, type RequirementStatus } from "./status-chip";
 export { TrackedButtonLink } from "./tracked-button-link";
+export { WaitNote } from "./wait-note";
 export { Wordmark } from "./wordmark";

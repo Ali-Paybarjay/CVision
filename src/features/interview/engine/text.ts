@@ -160,6 +160,32 @@ export function cvEvidenceLines(cv: string): CvLine[] {
   return texts.map((text, i) => ({ id: `L${i + 1}`, text }));
 }
 
+/**
+ * The CV sentence a question is written from, shown under the question (#252): the whole sentence that holds the
+ * question's cvQuote, or the quote itself when it runs across sentences. Null when there is nothing to show: no quote,
+ * a quote the CV no longer holds (the profile was edited after the questions were written), or a sentence the question
+ * already says word for word.
+ */
+export function quotedCvSentence(cvQuote: string | undefined, cv: string, question: string): string | null {
+  if (!cvQuote || !isVerbatim(cvQuote, cv)) return null;
+  const sentence = cvEvidenceLines(cv).find((line) => isVerbatim(cvQuote, line.text))?.text ?? stripQuoteEdges(cvQuote);
+  return isVerbatim(sentence, question) ? null : sentence;
+}
+
+/**
+ * Stage 1 quotes 3 to 6 claims from the CV word for word (checks.ts). With fewer lines than this it almost always fails
+ * after a paid request, and the questions would have little to work from.
+ */
+export const MIN_CV_LINES = 3;
+
+/**
+ * True when the CV has too few lines to start a practice, such as a profile typed in by hand with only a name (#179).
+ * Checked before any request to the model, so it costs nothing.
+ */
+export function isCvTooThin(cv: string): boolean {
+  return cvEvidenceLines(cv).length < MIN_CV_LINES;
+}
+
 /** The job ad as plain text for the prompts: title line, then the full ad as pasted. */
 export function jobToText(job: Job): string {
   return `${job.title}, ${job.company}, ${job.location}\n\n${job.description}`;

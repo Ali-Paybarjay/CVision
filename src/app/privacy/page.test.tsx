@@ -16,6 +16,9 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+const feedback = vi.hoisted(() => ({ feedbackFormUrl: null as string | null }));
+vi.mock("@/shared/feedback", () => feedback);
+
 const html = renderToStaticMarkup(<PrivacyPage />);
 const text = html.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 
@@ -106,9 +109,35 @@ describe("privacy page", () => {
     expect(text).toContain("Delete my account");
     expect(text).toContain("To withdraw your consent.");
     expect(html).toContain('href="https://ico.org.uk/make-a-complaint/');
+    // A way to reach us for the rights the app has no button for (#134).
+    expect(html).toContain(`href="mailto:${brand.contactEmail}"`);
+    expect(text).toContain("We’ll reply within one month.");
   });
 
   it("never uses a banned phrase", () => {
     for (const phrase of brand.bannedPhrases) expect(text.toLowerCase()).not.toContain(phrase.toLowerCase());
+  });
+
+  it("has no Feedback section until the form's link is set", () => {
+    expect(html).not.toContain('id="feedback"');
+    expect(html).not.toContain('href="#feedback"');
+  });
+
+  it("says where Give feedback answers go, once the form's link is set (#134)", async () => {
+    feedback.feedbackFormUrl = "https://forms.gle/example";
+    vi.resetModules();
+    const { default: Page } = await import("./page");
+    const withForm = renderToStaticMarkup(<Page />);
+    const words = withForm.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+    expect(withForm).toContain('href="#feedback"');
+    expect(withForm).toContain('id="feedback"');
+    expect(words).toContain("isn’t linked to your CVision account");
+    expect(words).toContain("We delete them by 30 November 2026");
+    expect(words).toContain("kept in Google Forms and in our team’s private Google Drive");
+    expect(words).toContain("may store the answers outside the UK");
+    expect(words).toContain("Google (Forms and Drive)");
+    expect(words).toContain("To have your answers deleted sooner, email us at");
+    feedback.feedbackFormUrl = null;
   });
 });

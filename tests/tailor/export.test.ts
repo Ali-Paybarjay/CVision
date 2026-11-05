@@ -76,7 +76,7 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file (You approve everythin
   it("keeps every heading of the preview as real text, in order", async () => {
     const cv = buildTailoredCv(profile, []);
     const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
-    const headings = ["PROFESSIONAL SUMMARY", "EDUCATION", "PROFESSIONAL SKILLS DEMONSTRATED", "CERTIFICATES AND SKILLS"].map((heading) => text.indexOf(heading));
+    const headings = ["PROFESSIONAL SUMMARY", "WORK EXPERIENCE", "EDUCATION", "CERTIFICATES AND TOOLS"].map((heading) => text.indexOf(heading));
     expect(headings.every((index) => index >= 0)).toBe(true);
     expect([...headings].sort((a, b) => a - b)).toEqual(headings);
   });
@@ -108,7 +108,52 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file follows the templates"
     const text = await fileText(await blocksToFile(cvBlocks(cv), format, { title: "CV", author: profile.fullName }), format);
     for (const name of ["Communication", "Leadership", "Teamwork"]) expect(text).toContain(name);
     expect(text).toContain(`Communication: ${line}`);
-    expect(text).toContain("Skills and tools:");
+    expect(text).toContain("Tools:");
+  });
+});
+
+describe.each<ExportFormat>(["pdf", "docx"])("the layout of the %s file", (format) => {
+  const cv = buildTailoredCv(profile, []);
+  const meta = { title: "CV", author: profile.fullName };
+
+  it("shows the name, the latest role and the contact details first", async () => {
+    const text = await fileText(await blocksToFile(cvBlocks(cv), format, meta), format);
+    const order = [profile.fullName, profile.experience[0].title, profile.contact.email!, "PROFESSIONAL SUMMARY"].map((item) => text.indexOf(item));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("reads each line under its own role, so an applicant tracking system credits the right employer", async () => {
+    const text = await fileText(await blocksToFile(cvBlocks(cv), format, meta), format);
+    let from = text.indexOf("WORK EXPERIENCE");
+    for (const job of cv.experience) {
+      const parts = [job.title, job.company, ...job.lines.map((line) => line.text)];
+      for (const part of parts) {
+        const at = text.indexOf(part, from);
+        expect(at, part).toBeGreaterThanOrEqual(from);
+        from = at;
+      }
+    }
+  });
+});
+
+describe("the page footer of a CV", () => {
+  const lines = Array.from({ length: 80 }, (_, index) => ({ kind: "bullet" as const, text: `Line ${index} of a long CV` }));
+  const meta = { title: "CV", author: "Sara", footer: "Sara Ahmadi – CV" };
+
+  it("numbers every page of the PDF", async () => {
+    const { text, totalPages } = await extractText(await getDocumentProxy(await blocksToFile(lines, "pdf", meta)));
+    expect(totalPages).toBe(2);
+    expect(text[0]).toContain("Sara Ahmadi – CV");
+    expect(text[0]).toContain("1 / 2");
+    expect(text[1]).toContain("2 / 2");
+  });
+
+  it("is in the Word file, and neither file has one without being asked", async () => {
+    const zip = await JSZip.loadAsync(await blocksToFile(lines, "docx", meta));
+    expect(await zip.file("word/footer1.xml")!.async("string")).toContain("Sara Ahmadi – CV");
+    const { text } = await extractText(await getDocumentProxy(await blocksToFile(lines, "pdf", { title: "CV", author: "Sara" })));
+    expect(text[0]).not.toContain("1 / 2");
   });
 });
 
@@ -164,5 +209,40 @@ describe("exportDocument", () => {
     const result = await exportDocument({ jobId: job.id, document: "cover-letter", format: "docx", changes: [], letter: null });
     expect(result.ok).toBe(false);
     expect(track).not.toHaveBeenCalled();
+  });
+});
+
+describe("the CV's section headings are the brand's Teal (#216)", () => {
+  it("in the Word file", async () => {
+    const bytes = await blocksToFile([{ kind: "heading", text: "EDUCATION" }, { kind: "text", text: "Body text" }], "docx", { title: "CV", author: "Sara" });
+    const xml = await (await JSZip.loadAsync(bytes)).file("word/document.xml")!.async("string");
+    expect(xml).toMatch(/<w:color w:val="167480"\/>.*EDUCATION/);
+    expect(xml.match(/167480/g)).toHaveLength(1);
+  });
+});
+
+describe("languages and projects in the files (#228)", () => {
+  const full = {
+    ...profile,
+    languages: [{ name: "Welsh", level: "Fluent" }],
+    projects: [{ name: "Bus delay dashboard", details: ["Built a dashboard of bus delays"] }],
+    volunteering: [{ role: "Volunteer tutor", organisation: "Learn Together", details: ["Taught maths to adults"] }],
+  };
+
+  it.each(["pdf", "docx"] as const)("are in the %s, with languages under the certificates and no volunteering", async (format) => {
+    const text = await fileText(await blocksToFile(cvBlocks(buildTailoredCv(full, [])), format, { title: "CV", author: "Sara" }), format);
+    for (const line of ["PROJECTS", "Bus delay dashboard", "Languages:", "Welsh (Fluent)"]) expect(text).toContain(line);
+    for (const line of ["VOLUNTEERING", "Volunteer tutor", "Learn Together"]) expect(text).not.toContain(line);
+  });
+
+  it("keeps the fixed headings: languages add none of their own", () => {
+    const headings = cvBlocks(buildTailoredCv(full, [])).flatMap((block) => (block.kind === "heading" ? [block.text] : []));
+    expect(headings).toContain("CERTIFICATES AND TOOLS");
+    for (const heading of ["LANGUAGES", "VOLUNTEERING"]) expect(headings).not.toContain(heading);
+  });
+
+  it("add no heading for a Profile without them", () => {
+    const headings = cvBlocks(buildTailoredCv(profile, [])).flatMap((block) => (block.kind === "heading" ? [block.text] : []));
+    expect(headings).not.toContain("PROJECTS");
   });
 });

@@ -12,11 +12,15 @@ function sampleJobs(persona: string): SampleJob[] {
   return JSON.parse(readFileSync(`sample-data/personas/${persona}/jobs.json`, "utf8")) as SampleJob[];
 }
 
-test("the home page says what CVision does and leads to Get started free", async ({ page }) => {
+test("the home page says what CVision does and leads to Tailor my CV to a job", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: "Every application, made to fit." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Stop rewriting your CV for every job." })).toBeVisible();
+  await expect(page.getByRole("main")).toContainText("You approve every change.");
 
-  await page.getByRole("main").getByRole("link", { name: "Get started free" }).click();
+  // The header has the same action under the same name; the hero's button is the page's one Coral button.
+  await expect(page.getByRole("banner").getByRole("link", { name: "Tailor my CV to a job" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Check my CV in 2 minutes" })).toBeVisible();
+  await page.getByRole("main").getByRole("link", { name: "Tailor my CV to a job" }).click();
 
   await expect(page).toHaveURL(/\/sign-up$/);
   await expect(page.getByRole("heading", { level: 1, name: "Create your free account" })).toBeVisible();
@@ -102,6 +106,10 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
   await expect(page.getByText("✓ Approved: 2")).toBeVisible();
   await expect(tailoredLines).toHaveCount(2);
+
+  // Step 5 leads on to interview practice for the same job, as a secondary link beside Apply.
+  await page.getByRole("button", { name: /^5\. Download and apply/ }).click();
+  await expect(page.getByRole("link", { name: "Start interview practice" })).toHaveAttribute("href", "/interview?job=sara-job-1");
 });
 
 test.fixme("step 3: get the tailored CV for the pasted job, with each change marked (#49)", async ({ page }) => {

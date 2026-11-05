@@ -19,27 +19,37 @@ export default function HomePage() {
     <main className="w-full">
       <section className="mx-auto grid max-w-6xl gap-12 px-4 py-12 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-center xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] xl:gap-16">
         <div>
-          <h1 className="text-4xl leading-[1.05] tracking-tight sm:text-6xl lg:text-5xl xl:text-6xl">{brand.tagline}</h1>
-          <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.oneLiner}</p>
+          <h1 className="text-4xl leading-[1.05] tracking-tight sm:text-6xl lg:text-5xl xl:text-6xl">{brand.hero.headline}</h1>
+          <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.hero.subline}</p>
           <div className="mt-8">
             <TrackedButtonLink
               href="/sign-up"
               variant="primary"
               className="w-full sm:w-auto"
+              aria-describedby="hero-cta-note"
               onTrack={trackHomeCtaClick.bind(null, { cta: "get_started", placement: "hero" })}
             >
               {brand.cta.primary}
             </TrackedButtonLink>
+            <p id="hero-cta-note" className="mt-2 text-sm text-text-muted">
+              {brand.cta.primaryNote}
+            </p>
           </div>
-          <div className="mt-10 flex max-w-xl flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
-            <p className="font-semibold">{brand.cta.cvCheckQuestion}</p>
-            <TrackedButtonLink
-              href="/cv-check"
-              className="w-full shrink-0 sm:w-auto"
-              onTrack={trackHomeCtaClick.bind(null, { cta: "cv_check", placement: "hero" })}
-            >
-              {brand.cta.cvCheck}
-            </TrackedButtonLink>
+          <div className="mt-10 flex max-w-xl flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:items-start sm:justify-between">
+            <p className="font-semibold sm:pt-2.5">{brand.cta.cvCheckQuestion}</p>
+            <div className="shrink-0">
+              <TrackedButtonLink
+                href="/cv-check"
+                className="w-full sm:w-auto"
+                aria-describedby="cv-check-cta-note"
+                onTrack={trackHomeCtaClick.bind(null, { cta: "cv_check", placement: "hero" })}
+              >
+                {brand.cta.cvCheckAction}
+              </TrackedButtonLink>
+              <p id="cv-check-cta-note" className="mt-2 text-sm text-text-muted">
+                {brand.cta.cvCheckNote}
+              </p>
+            </div>
           </div>
         </div>
 

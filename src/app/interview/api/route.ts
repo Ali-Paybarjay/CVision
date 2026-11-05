@@ -1,34 +1,65 @@
-// The interview practice API: one POST per engine step, plus "save". The browser sends only the job id; the job
-// ad and CV are read on the server from the user's own data, so this API cannot be used to run other text.
+// The interview practice API: one POST per engine step, plus "save" and "discard". The browser sends only the job
+// id; the job ad and CV are read on the server from the user's own data, so this API cannot be used to run other text.
 import { after } from "next/server";
 import { z } from "zod";
 import { getAiMode, type Requester } from "@/shared/ai";
 import { getCurrentUser } from "@/features/account/current-user";
-import { applyReport } from "@/features/interview/engine/session";
-import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, writeReport } from "@/features/interview/engine/stages";
-import { interviewInputsFor } from "@/features/interview/engine/text";
-import { trackSessionCompleted } from "@/features/interview/server/completion-event";
+import { applyReport, endEarly } from "@/features/interview/engine/session";
+import { analyseStep, decideFollowUp, evaluateAnswer, generateStep, reviewStep, suggestAnswer, writeReport } from "@/features/interview/engine/stages";
+import { interviewInputsFor, isCvTooThin } from "@/features/interview/engine/text";
+import { trackSessionCompleted, trackSessionEndedEarly, trackStartupReady } from "@/features/interview/server/completion-event";
 import { getMyJob, getMyProfile } from "@/features/interview/server/my-data";
-import { saveInterviewSession } from "@/features/interview/server/session-store";
+import { discardInterviewSession, saveInterviewSession } from "@/features/interview/server/session-store";
 import { badRequest, RequestSessionSchema as InterviewSessionSchema, stepFailed } from "@/features/interview/server/step-api";
+
+/**
+ * A start-up stage can take well over a minute. Vercel may run it for 300 seconds, so the browser's own limit
+ * (`stallSeconds`, 180) always stops a slow stage first: a 504 from Vercel would count as worth a second go, and the
+ * second go would pay for the model again (#266).
+ */
+export const maxDuration = 300;
 
 const JobIdSchema = z.string().min(1).max(100);
 const QuestionIdSchema = z.string().min(1);
+/** A count the browser sends for interview.startup_ready (#232): a bad one is dropped, never a reason to refuse the step. */
+const count = (max: number) => z.number().int().nonnegative().max(max).optional().catch(undefined);
+/**
+ * The whole wait has no limit: a start left and resumed days later still says so, as over 15 minutes. A stage's time
+ * and the number of goes do (#281): a stage stops after `stallSeconds`, so a number past an hour is not real and is
+ * dropped rather than skew the shares.
+ */
+const WaitSchema = count(Number.MAX_SAFE_INTEGER);
+const StageMsSchema = count(3_600_000);
+const RetriesSchema = count(1_000);
 
 const RequestSchema = z.discriminatedUnion("step", [
   z.object({ step: z.literal("analyse"), jobId: JobIdSchema, id: z.uuid(), startedAt: z.iso.datetime() }),
   z.object({ step: z.literal("generate"), jobId: JobIdSchema, session: InterviewSessionSchema }),
-  z.object({ step: z.literal("review"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  // How long this start has taken in the browser so far, how long stages 1 and 2 took there (#266), and how many
+  // stages were sent again.
+  z.object({
+    step: z.literal("review"),
+    jobId: JobIdSchema,
+    session: InterviewSessionSchema,
+    waitedMs: WaitSchema,
+    analyseMs: StageMsSchema,
+    generateMs: StageMsSchema,
+    retries: RetriesSchema,
+  }),
   z.object({ step: z.literal("follow-up"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("evaluate"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("report"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  z.object({ step: z.literal("end"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  z.object({ step: z.literal("suggest"), jobId: JobIdSchema, session: InterviewSessionSchema, questionId: QuestionIdSchema }),
   z.object({ step: z.literal("save"), jobId: JobIdSchema, session: InterviewSessionSchema }),
+  // "Start again" (#281): the account's copy of the practice thrown away goes too, so a reload cannot bring it back.
+  z.object({ step: z.literal("discard"), jobId: JobIdSchema, sessionId: z.uuid() }),
 ]);
 
 export async function POST(request: Request): Promise<Response> {
   const user = await getCurrentUser();
   // Live requests spend the team's credit, so they need a signed-in user and count towards that user's daily limit.
-  if (getAiMode() === "live" && !user) return Response.json({ error: "Sign in to practise for this interview." }, { status: 401 });
+  if (getAiMode() === "live" && !user) return Response.json({ error: "Sign in for interview practice." }, { status: 401 });
   const requester: Requester | undefined = getAiMode() === "live" && user ? { userId: user.id } : undefined;
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
@@ -41,7 +72,7 @@ export async function POST(request: Request): Promise<Response> {
   // Only the user's own job: another user's job id finds nothing.
   const job = await getMyJob(body.jobId);
   if (!job) return Response.json({ error: "We could not find this job." }, { status: 404 });
-  // The job ad and CV are read only by the first three steps; later steps work from the session.
+  // The job ad and CV are read only by the first three steps and "suggest"; the other steps work from the session.
   const inputs = async () => {
     const profile = await getMyProfile({ jobId: body.jobId });
     if (!profile) throw new MissingProfileError();
@@ -50,12 +81,36 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     switch (body.step) {
-      case "analyse":
-        return Response.json({ session: await analyseStep(await inputs(), { id: body.id, startedAt: body.startedAt, requester }) });
+      case "analyse": {
+        const start = await inputs();
+        // Before any AI request: stage 1 cannot quote enough from a profile with almost nothing in it (#179).
+        if (isCvTooThin(start.cv)) {
+          return Response.json(
+            { error: "Add more to your profile first: your experience, education or skills. The questions are written from it." },
+            { status: 422 },
+          );
+        }
+        return Response.json({ session: await analyseStep(start, { id: body.id, startedAt: body.startedAt, requester }) });
+      }
       case "generate":
         return Response.json({ session: await generateStep(body.session, await inputs(), { requester }) });
-      case "review":
-        return Response.json({ session: await reviewStep(body.session, await inputs(), { requester }) });
+      case "review": {
+        const reviewStartedAt = Date.now();
+        const session = await reviewStep(body.session, await inputs(), { requester });
+        // The questions are ready: how long the whole start took (#232), and each stage (#266). Only signed-in practice
+        // is counted.
+        if (user) {
+          const timing = {
+            waitedMs: body.waitedMs,
+            analyseMs: body.analyseMs,
+            generateMs: body.generateMs,
+            retries: body.retries,
+            reviewMs: Date.now() - reviewStartedAt,
+          };
+          after(() => trackStartupReady(session, timing, user.id));
+        }
+        return Response.json({ session });
+      }
       case "follow-up":
         return Response.json(await decideFollowUp(body.session, body.questionId, { requester }));
       case "evaluate":
@@ -67,9 +122,20 @@ export async function POST(request: Request): Promise<Response> {
         if (user) after(() => trackSessionCompleted(completed, result.report, user.id));
         return Response.json(result);
       }
+      case "end": {
+        // "End here" is applied in the browser; this step only records it, once per session (#205).
+        const ended = endEarly(body.session, new Date().toISOString());
+        if (user) after(() => trackSessionEndedEarly(ended, user.id));
+        return Response.json({ ended: true });
+      }
+      case "suggest":
+        return Response.json(await suggestAnswer(body.session, body.questionId, await inputs(), { requester }));
       case "save":
         if (!user) return Response.json({ saved: false, reason: "signed-out" });
         return Response.json(await saveInterviewSession(body.session));
+      case "discard":
+        if (!user) return Response.json({ discarded: false });
+        return Response.json({ discarded: await discardInterviewSession(body.jobId, body.sessionId) });
     }
   } catch (error) {
     if (error instanceof MissingProfileError) return Response.json({ error: "We could not find your Profile." }, { status: 404 });

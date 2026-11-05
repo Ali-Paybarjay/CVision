@@ -370,7 +370,7 @@ export const processEngineer: InterviewFixture = {
       {
         title: "Rebuild your heat and mass balance fundamentals",
         detail:
-          "Your scale-up answer had the area to volume effect backwards and you did not attempt the dryer balance. Practise a few balances out loud, starting from the quantity that does not change.",
+          "Your scale-up answer had the area to volume effect backwards and you did not attempt the dryer balance. Work through a few balances out loud, starting from the quantity that does not change.",
       },
       {
         title: "Prepare a firm position on overriding safety trips",

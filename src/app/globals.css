@@ -24,6 +24,8 @@
   --color-error: #B42318;
   --color-cv-paper: #FFFFFF;    /* CV preview, both modes */
   --color-cv-ink: #0F2A47;
+  --color-mark: #167480;        /* Teal: the icon's tile */
+  --color-on-mark: #FFFFFF;     /* the icon's C and tick */
   color-scheme: light;
 }
 
@@ -45,6 +47,8 @@
     --color-warning: #F4B860;   /* Amber */
     --color-warning-bg: #3B2A0F;
     --color-error: #FF8597;     /* Rose */
+    --color-mark: #42B9C3;      /* Lagoon */
+    --color-on-mark: #0B1724;   /* Night */
     color-scheme: dark;
   }
 }
@@ -66,6 +70,8 @@
   --color-warning: #F4B860;
   --color-warning-bg: #3B2A0F;
   --color-error: #FF8597;
+  --color-mark: #42B9C3;
+  --color-on-mark: #0B1724;
   color-scheme: dark;
 }
 
@@ -91,8 +97,13 @@
   --color-error: var(--color-error);
   --color-cv-paper: var(--color-cv-paper);
   --color-cv-ink: var(--color-cv-ink);
+  --color-mark: var(--color-mark);
+  --color-on-mark: var(--color-on-mark);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Plan A's paper shadow under the CV (CvPaper shadow), in the CV's own Ink, so no hex value (#276). */
+  --shadow-paper: 0 30px 60px -36px color-mix(in srgb, var(--color-cv-ink) 30%, transparent);
 }
 
 @layer base {
@@ -120,5 +131,11 @@
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+
+  /* Tailwind 4 gives buttons the plain arrow, so on a computer only links showed they can be clicked (#277).
+     A control that is disabled, or aria-disabled while it saves (#154), keeps the arrow. */
+  :where(button, [role="button"], summary, select, input:is([type="checkbox"], [type="radio"], [type="file"])):not(:disabled, [aria-disabled="true"]) {
+    cursor: pointer;
   }
 }

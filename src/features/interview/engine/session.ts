@@ -16,6 +16,7 @@ import {
   type TechnicalInterviewQuestion,
 } from "../contracts";
 import type { StageName } from "../config";
+import { sessionOverall } from "./scoring";
 import { isNonAnswer } from "./text";
 
 /** Which prompt and model produced a stage's output. */
@@ -188,14 +189,35 @@ export type SessionStep =
   | { step: "answer"; questionId: string; kind: InterviewTurn["kind"] }
   | { step: "decide"; questionId: string }
   | { step: "evaluate"; questionIds: string[] }
+  | { step: "suggest"; questionIds: string[] }
   | { step: "report" }
   | { step: "done" };
+
+/** The questions the report scores: every question, or after "End here" only those with a genuine answer. */
+export function reportQuestionIds(session: InterviewSession): string[] {
+  const unanswered = new Set(unansweredQuestionIds(session));
+  return session.questions.filter((q) => !unanswered.has(q.id)).map((q) => q.id);
+}
+
+/** The score after "End here": the average of the answered questions only, or null when none was answered. */
+export function endedOverall(session: InterviewSession): number | null {
+  const evaluations = reportQuestionIds(session).flatMap((id) => evaluationFor(session, id) ?? []);
+  return evaluations.length > 0 ? sessionOverall(evaluations) : null;
+}
 
 /** What the session needs next. Lets a page resume a saved session exactly where it stopped. */
 export function nextStep(session: InterviewSession): SessionStep {
   if (!session.roleProfile) return { step: "analyse" };
   if (session.questions.length === 0) return { step: "generate" };
   if (!session.reviewChangelog) return { step: "review" };
+  if (session.endedAt) {
+    // After "End here": answered questions are scored and the rest get a suggested answer. No overall report is written.
+    const unscored = reportQuestionIds(session).filter((id) => !evaluationFor(session, id));
+    if (unscored.length) return { step: "evaluate", questionIds: unscored };
+    const missing = missingSuggestionIds(session);
+    if (missing.length) return { step: "suggest", questionIds: missing };
+    return { step: "done" };
+  }
   for (const question of session.questions) {
     if (isQuestionFinished(session, question.id)) continue;
     if (!findTurn(session, question.id, "interviewer", "main")) return { step: "ask", questionId: question.id };
@@ -234,9 +256,12 @@ export function isNewerSession(a: InterviewSession, b: InterviewSession): boolea
 export type OpeningView = "browser" | "resume" | "last-report" | "intro";
 
 /**
- * This browser's practice, unless the account has a later copy of it ("resume"). With nothing in this browser: the
- * account's unfinished practice, then its last report, then the intro. After "Practise again" the report is skipped,
- * so the button leads to a new practice rather than back to the same report.
+ * The practice is this browser's, unless the account has a later copy of it ("resume"); with nothing in this browser,
+ * the account's unfinished practice. A link to the job (the dashboard's "Interview report", the job list's "See your
+ * report") opens the account's last report even over an unfinished practice, and the page offers to continue it. Once
+ * this tab chooses the practice ("Start practice" or "Continue your practice"), it stays on it, through a reload too.
+ * After "New practice" the report and the unfinished practice are skipped, so the button leads to a new practice
+ * rather than back to the same report.
  */
 export function openingView(options: {
   /** This browser's practice for the job; its session is null while the first stage runs. */
@@ -245,12 +270,32 @@ export function openingView(options: {
   saved: InterviewSession | null;
   lastReport: InterviewSession | null;
   practiseAgain: boolean;
+  /** This tab chose the practice over the last report. */
+  practising: boolean;
 }): OpeningView {
-  const { inBrowser, saved, lastReport, practiseAgain } = options;
-  if (inBrowser) return saved && inBrowser.session && isNewerSession(saved, inBrowser.session) ? "resume" : "browser";
-  if (saved && nextStep(saved).step !== "done") return "resume";
-  if (lastReport && !practiseAgain) return "last-report";
-  return "intro";
+  const { inBrowser, saved, lastReport, practiseAgain, practising } = options;
+  const practice = practiceToShow(inBrowser, saved, practiseAgain);
+  // A finished practice is the latest report, so the practice view shows it as it is.
+  if (lastReport && !practiseAgain && !practising && !(practice && isDone(practice.session))) return "last-report";
+  return practice?.view ?? "intro";
+}
+
+function practiceToShow(
+  inBrowser: { session: InterviewSession | null } | null,
+  saved: InterviewSession | null,
+  practiseAgain: boolean,
+): { view: "browser" | "resume"; session: InterviewSession | null } | null {
+  if (inBrowser) {
+    return saved && inBrowser.session && isNewerSession(saved, inBrowser.session)
+      ? { view: "resume", session: saved }
+      : { view: "browser", session: inBrowser.session };
+  }
+  if (saved && !isDone(saved) && !practiseAgain) return { view: "resume", session: saved };
+  return null;
+}
+
+function isDone(session: InterviewSession | null): boolean {
+  return session !== null && nextStep(session).step === "done";
 }
 
 function question(session: InterviewSession, questionId: string) {

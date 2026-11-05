@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { limits } from "@/features/interview/config";
 import { fixtures } from "@/features/interview/fixtures";
-import { inputsFor, runMockSession } from "@/features/interview/test-support";
+import { endedSessionFor, inputsFor, runMockSession } from "@/features/interview/test-support";
 import type { AskModelOptions } from "@/shared/ai";
 import { isLabEnabled } from "../lab-access";
 import { POST } from "./route";
@@ -57,6 +57,14 @@ describe("the lab API in mock mode", () => {
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/too long/);
   });
+
+  it("ends a practice and writes a suggested answer from the CV it is sent (#205)", async () => {
+    const session = endedSessionFor(fixture);
+    expect(await (await post({ step: "end", session })).json()).toEqual({ ended: true });
+    const response = await post({ step: "suggest", inputs: inputsFor(fixture), session, questionId: "q1" });
+    expect(response.status).toBe(200);
+    expect((await response.json()).suggestion.questionId).toBe("q1");
+  });
 });
 
 describe("the lab API in live mode", () => {
@@ -71,7 +79,9 @@ describe("the lab API in live mode", () => {
     vi.stubEnv("AI_MODE", "live");
     currentUser.value = { id: "user-1", email: null };
     const response = await analyse();
-    expect(response.status).toBe(422);
+    // Tests have no AI key, so askModel stops there; the lab, for the team, shows its message as it is (#266).
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toBe("No API key in tests.");
     expect(asked[0]?.requester).toEqual({ userId: "user-1" });
   });
 });

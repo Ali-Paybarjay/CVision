@@ -46,8 +46,14 @@ export function DeleteAccountForm() {
         </p>
         <p className="mt-2 max-w-[65ch] text-sm text-text-muted">
           A few copies, such as backups and service logs, are not deleted straight away.{" "}
-          <Link href="/privacy#not-deleted-straight-away" className="font-semibold text-accent hover:underline">
-            See which, and for how long
+          {/* A new tab, so someone halfway through deleting does not lose the form (issue #237). */}
+          <Link
+            href="/privacy#not-deleted-straight-away"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-accent hover:underline"
+          >
+            See which, and for how long<span className="sr-only"> (opens in a new tab)</span>
           </Link>
           .
         </p>

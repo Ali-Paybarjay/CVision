@@ -1,4 +1,4 @@
-import { cvHeadings, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
+import { cvHeadings, otherLines, type CvEntry, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
 import { CvPaper, FitLine } from "@/shared/ui";
 
 function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
@@ -21,16 +21,47 @@ function Line({ line, as = "p" }: { line: CvLine; as?: "p" | "li" }) {
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
-  return <h3 className="mt-6 text-base font-bold">{children}</h3>;
+  return <h3 className="mt-6 border-b border-cv-ink/20 pb-1 text-xs font-bold tracking-wider text-accent">{children}</h3>;
+}
+
+function Entries({ heading, items }: { heading: string; items: CvEntry[] }) {
+  if (items.length === 0) return null;
+  return (
+    <>
+      <Heading>{heading}</Heading>
+      {items.map((item, index) => (
+        <div key={index} className="mt-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+            <p className="font-semibold">{item.title}</p>
+            {item.dates && <p className="text-xs text-cv-ink/70">{item.dates}</p>}
+          </div>
+          {item.company && <p className="text-cv-ink/70">{item.company}</p>}
+          {item.lines.length > 0 && (
+            <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+              {item.lines.map((line, lineIndex) => (
+                <Line key={lineIndex} line={line} as="li" />
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </>
+  );
 }
 
 /** The tailored CV in the layout of the template, as the download will look, with approved lines on Fit. */
 export function CvPreview({ cv }: { cv: TailoredCv }) {
+  const other = otherLines(cv);
   return (
     <CvPaper aria-label="Your tailored CV" className="text-sm leading-relaxed">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-line pb-2">
+      <div>
         <h2 className="text-2xl font-bold">{cv.fullName}</h2>
-        {cv.contact.length > 0 && <p className="text-xs">{cv.contact.join(" | ")}</p>}
+        {cv.headline && <p className="font-semibold text-cv-ink/70">{cv.headline}</p>}
+        {cv.contact.map((line) => (
+          <p key={line} className="text-xs text-cv-ink/70">
+            {line}
+          </p>
+        ))}
       </div>
 
       {cv.summary && (
@@ -53,6 +84,9 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
         </>
       )}
 
+      <Entries heading={cvHeadings.experience} items={cv.experience} />
+      <Entries heading={cvHeadings.projects} items={cv.projects} />
+
       {cv.education.length > 0 && (
         <>
           <Heading>{cvHeadings.education}</Heading>
@@ -64,42 +98,14 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
         </>
       )}
 
-      {cv.experience.length > 0 && (
-        <>
-          <Heading>{cvHeadings.experience}</Heading>
-          {cv.experience.map((job, index) => (
-            <div key={index} className="mt-2">
-              <p className="uppercase">{job.company}</p>
-              {job.dates && <p>{job.dates}</p>}
-              <p className="font-semibold">{job.title}</p>
-              <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-                {job.lines.map((line, lineIndex) => (
-                  <Line key={lineIndex} line={line} as="li" />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </>
-      )}
-
-      {cv.certifications.length + cv.technicalSkills.length > 0 && (
+      {other.length > 0 && (
         <>
           <Heading>{cvHeadings.other}</Heading>
-          {cv.certifications.length > 0 && (
-            <>
-              <p className="mt-1 italic">{cvHeadings.certificates}</p>
-              <ul className="flex list-disc flex-col gap-1 pl-5">
-                {cv.certifications.map((line, index) => (
-                  <Line key={index} line={line} as="li" />
-                ))}
-              </ul>
-            </>
-          )}
-          {cv.technicalSkills.length > 0 && (
-            <p className="mt-1">
-              <strong>{cvHeadings.technical}</strong> {cv.technicalSkills.map((line) => line.text).join(", ")}
-            </p>
-          )}
+          <div className="mt-1 flex flex-col gap-1">
+            {other.map((line, index) => (
+              <Line key={index} line={line} />
+            ))}
+          </div>
         </>
       )}
     </CvPaper>
