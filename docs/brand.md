@@ -329,7 +329,7 @@ Name colours by role in code, so one set of components works in both modes. The 
 In Tailwind, point each colour at its variable (for example `canvas: 'var(--color-canvas)'`), so components switch mode without `dark:` variants.
 
 ### Typography
-*Inter, a free Google Font.*
+*Inter, a free Google Font. The app serves it from the repo (`src/app/fonts/inter-latin-wght-normal.woff2`, the Latin variable font from Fontsource 5.3.0, SIL Open Font License in `src/app/fonts/OFL.txt`), so no build downloads it (#311).*
 
 | Style | Weight | Sample |
 |---|---|---|
