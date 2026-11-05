@@ -61,6 +61,12 @@ describe("privacy page", () => {
     expect(text).not.toContain("saved in this browser only");
   });
 
+  it("says Tailor keeps its questions and the CV and cover letter you sent, and deletes them with the account (#207, #304)", () => {
+    expect(text).toContain("the questions we asked you about it (so we don’t ask them again)");
+    expect(text).toContain("the tailored CV and cover letter you last downloaded or sent with Apply, as they were");
+    expect(text).toContain("the questions we asked you, suggested CV changes, saved tailored CVs and cover letters");
+  });
+
   // Card #179: a profile typed in by hand sends nothing to the AI while typing, keeps no CV file, and needs its own consent.
   it("says what happens to a profile typed in without a CV", () => {
     expect(text).toContain("Nothing is sent to the AI while you type, and nothing is saved until you approve your profile.");
