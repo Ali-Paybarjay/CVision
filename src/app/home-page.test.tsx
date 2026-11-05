@@ -100,6 +100,9 @@ describe("home page headline (#178)", () => {
     expect(table.match(/<th scope="row"/g)).toHaveLength(7);
     expect(words(table)).toContain("Your CV said: “Built Tableau dashboards for the regional sales team”");
     expect(words(table)).toContain("Not on your CV, so we won’t add it.");
+    // A summary of the CV is not put in quote marks; only a line of it word for word is (Nazanin, #295).
+    expect(words(table)).toContain("From your CV, in short: Skills: Python (pandas), R; MSc Data Science");
+    expect(words(table)).not.toContain("“Skills:");
   });
 
   it("uses no words the brand bans", () => {

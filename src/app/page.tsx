@@ -209,11 +209,11 @@ function MatchTable() {
         <ul className="mt-8 flex flex-col divide-y divide-line border-y border-line md:hidden">
           {matchRows.map((row) => (
             <li key={row.text} className="flex flex-col gap-2 py-5 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 font-semibold">
                   {row.text} <span className="font-normal text-text-muted">· {row.need}</span>
                 </p>
-                <StatusChip status={row.status} line={row.line} />
+                <StatusChip status={row.status} line={row.line} className="shrink-0" />
               </div>
               <EvidenceText evidence={row.evidence} />
             </li>
@@ -235,8 +235,17 @@ function EvidenceText({ evidence }: { evidence: Evidence }) {
   }
   if (evidence.from === "cv") {
     return (
+      // Quote marks only around a line of the CV word for word; a summary of it is not put in quotes (Nazanin, #295).
       <p>
-        <span className="text-text-muted">{brand.match.fromCv}</span> “{evidence.quote}”
+        {evidence.verbatim ? (
+          <>
+            <span className="text-text-muted">{brand.match.fromCv}</span> “{evidence.quote}”
+          </>
+        ) : (
+          <>
+            <span className="text-text-muted">{brand.match.fromCvInShort}</span> {evidence.quote}
+          </>
+        )}
       </p>
     );
   }

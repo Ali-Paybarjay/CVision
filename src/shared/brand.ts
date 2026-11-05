@@ -40,6 +40,8 @@ export const brand = {
     text: "We check each requirement in the ad against your CV. Where your CV is unclear, we ask you a question. Where you don’t have it, we say so and leave it out.",
     columns: { requirement: "The ad asks for", need: "Need", result: "Result", evidence: "Evidence" },
     fromCv: "From your CV:",
+    /** When the match sums up the CV in its own words rather than quoting one line of it (Nazanin, #295). */
+    fromCvInShort: "From your CV, in short:",
     before: "Your CV said:",
     fromAnswer: "From your answer:",
     notAdded: "Not on your CV, so we won’t add it.",

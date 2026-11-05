@@ -14,11 +14,15 @@ describe("the home page's match rows", () => {
     expect(matchRows.map((row) => row.need)).toEqual([...ad.essential.map(() => "Essential"), ...ad.desirable.map(() => "Desirable")]);
   });
 
-  it("mark Matched only what the CV shows, with the CV's own words", () => {
+  it("mark Matched only what the CV shows, and quote only a line of the CV word for word (Nazanin, #295)", () => {
+    const lines = new Set(cvLines(sara.profile));
     for (const row of matchRows.filter((item) => item.status === "matched")) {
       const strength = sara.match.strengths.find((item) => item.requirement === row.text);
-      expect(row.evidence).toEqual({ from: "cv", quote: strength?.evidence });
+      expect(row.evidence).toEqual({ from: "cv", quote: strength?.evidence, verbatim: lines.has(strength?.evidence ?? "") });
     }
+    // "Skills: Python (pandas), R; MSc Data Science" sums up two parts of the CV, so it is not a quote.
+    expect(matchRows.find((row) => row.text === "Python or R for analysis")?.evidence).toMatchObject({ verbatim: false });
+    expect(matchRows.find((row) => row.text === "Strong SQL")?.evidence).toMatchObject({ verbatim: true });
     expect(matchRows.filter((row) => row.status === "matched")).toHaveLength(sara.match.strengths.length);
   });
 

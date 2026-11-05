@@ -3,15 +3,18 @@
 // does: a requirement her CV shows is Matched, one her own answer covers is Tailored with the number of the CV line it
 // changed, and anything else is Not on your CV, and stays off it.
 import { sampleProposals } from "@/features/tailor";
+import { cvLines } from "@/features/tailor/nothing-invented";
 import type { RequirementGroup, RequirementStatus } from "@/shared/ui";
 import { personas } from "@/shared/sample-data";
 
 const sara = personas.sara;
 const job = sara.jobs[0];
 const changes = sampleProposals.sara.changes;
+const saraLines = new Set(cvLines(sara.profile));
 
 export type Evidence =
-  | { from: "cv"; quote: string }
+  /** `verbatim` is true when the quote is one line of the CV word for word; otherwise it is the match's own summary. */
+  | { from: "cv"; quote: string; verbatim: boolean }
   /** `before` is the CV's line before the change, when the answer rewrote one rather than adding a new one. */
   | { from: "answer"; quote: string; before: string | null }
   | { from: "none"; suggestion: string | null };
@@ -26,7 +29,7 @@ function lineOf(requirement: string): { line: number; change: (typeof changes)[n
 
 function rowFor(text: string, need: MatchRow["need"]): MatchRow {
   const strength = sara.match.strengths.find((item) => item.requirement === text);
-  if (strength) return { text, need, status: "matched", evidence: { from: "cv", quote: strength.evidence } };
+  if (strength) return { text, need, status: "matched", evidence: { from: "cv", quote: strength.evidence, verbatim: saraLines.has(strength.evidence) } };
   const tailored = lineOf(text);
   if (tailored) {
     const { line, change } = tailored;
