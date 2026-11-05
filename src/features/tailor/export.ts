@@ -5,7 +5,7 @@ import { AlignmentType, Document, Footer, HeadingLevel, Packer, PageNumber, Para
 import { PDFDocument, StandardFonts, rgb, setCharacterSpacing, type PDFFont, type PDFPage } from "pdf-lib";
 import { brand } from "@/shared/brand";
 import type { LetterHead } from "./letter-state";
-import { cvHeadings, otherLines, type CvLine, type TailoredCv } from "./tailored-cv";
+import { cvHeadings, otherLines, type CvEntry, type CvLine, type TailoredCv } from "./tailored-cv";
 
 export type ExportFormat = "pdf" | "docx";
 export type ExportDocument = "cv" | "cover-letter";
@@ -33,11 +33,22 @@ export const mimeTypes: Record<ExportFormat, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
-/** The CV in the template's order: skills in two columns, then work experience, education, and certificates and tools last. */
+/** The CV in the template's order: skills in two columns, then work experience, projects, education, and certificates, languages and tools last. */
 export function cvBlocks(cv: TailoredCv): Block[] {
   const bullets = (lines: CvLine[]): Block[] => lines.map((line) => ({ kind: "bullet", text: line.text, label: line.label }));
   const half = Math.ceil(cv.skills.length / 2);
   const other = otherLines(cv);
+  const entries = (heading: string, items: CvEntry[]): Block[] =>
+    items.length === 0
+      ? []
+      : [
+          { kind: "heading", text: heading },
+          ...items.flatMap((item): Block[] => [
+            { kind: "job", text: item.title, right: item.dates || undefined },
+            ...(item.company ? [{ kind: "company" as const, text: item.company }] : []),
+            ...bullets(item.lines),
+          ]),
+        ];
 
   return [
     { kind: "name", text: cv.fullName },
@@ -46,12 +57,8 @@ export function cvBlocks(cv: TailoredCv): Block[] {
     ...(cv.summary ? [{ kind: "heading" as const, text: cvHeadings.summary }, { kind: "text" as const, text: cv.summary.text }] : []),
     ...(cv.skills.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.skills }] : []),
     ...cv.skills.slice(0, half).map((line, index): Block => ({ kind: "skills", text: line.text, right: cv.skills[half + index]?.text })),
-    ...(cv.experience.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.experience }] : []),
-    ...cv.experience.flatMap((job): Block[] => [
-      { kind: "job", text: job.title, right: job.dates || undefined },
-      { kind: "company", text: job.company },
-      ...bullets(job.lines),
-    ]),
+    ...entries(cvHeadings.experience, cv.experience),
+    ...entries(cvHeadings.projects, cv.projects),
     ...(cv.education.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.education }] : []),
     ...cv.education.map((line): Block => ({ kind: "line", text: line.text, label: line.label })),
     ...(other.length > 0 ? [{ kind: "heading" as const, text: cvHeadings.other }] : []),

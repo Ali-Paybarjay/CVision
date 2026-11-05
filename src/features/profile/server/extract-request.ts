@@ -32,8 +32,14 @@ export async function handleExtractRequest(
   form: FormData,
   options: { requester?: Requester } = {},
 ): Promise<ExtractResponse> {
-  if (form.get(extractFields.consent) !== cvConsent.version) {
-    return { ok: false, code: "consent", message: "Tick the box to agree, so we can read your CV." };
+  const consent = form.get(extractFields.consent);
+  if (consent !== cvConsent.version) {
+    // A ticked box with another version comes from a page opened before the wording changed: the user hasn't read it.
+    const message =
+      typeof consent === "string"
+        ? "We’ve updated what you agree to since you opened this page. Reload the page to read the new wording, then choose your CV and tick the box again."
+        : "Tick the box to agree, so we can read your CV.";
+    return { ok: false, code: "consent", message };
   }
 
   const file = form.get(extractFields.file);

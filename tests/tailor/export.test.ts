@@ -220,3 +220,29 @@ describe("the CV's section headings are the brand's Teal (#216)", () => {
     expect(xml.match(/167480/g)).toHaveLength(1);
   });
 });
+
+describe("languages and projects in the files (#228)", () => {
+  const full = {
+    ...profile,
+    languages: [{ name: "Welsh", level: "Fluent" }],
+    projects: [{ name: "Bus delay dashboard", details: ["Built a dashboard of bus delays"] }],
+    volunteering: [{ role: "Volunteer tutor", organisation: "Learn Together", details: ["Taught maths to adults"] }],
+  };
+
+  it.each(["pdf", "docx"] as const)("are in the %s, with languages under the certificates and no volunteering", async (format) => {
+    const text = await fileText(await blocksToFile(cvBlocks(buildTailoredCv(full, [])), format, { title: "CV", author: "Sara" }), format);
+    for (const line of ["PROJECTS", "Bus delay dashboard", "Languages:", "Welsh (Fluent)"]) expect(text).toContain(line);
+    for (const line of ["VOLUNTEERING", "Volunteer tutor", "Learn Together"]) expect(text).not.toContain(line);
+  });
+
+  it("keeps the fixed headings: languages add none of their own", () => {
+    const headings = cvBlocks(buildTailoredCv(full, [])).flatMap((block) => (block.kind === "heading" ? [block.text] : []));
+    expect(headings).toContain("CERTIFICATES AND TOOLS");
+    for (const heading of ["LANGUAGES", "VOLUNTEERING"]) expect(headings).not.toContain(heading);
+  });
+
+  it("add no heading for a Profile without them", () => {
+    const headings = cvBlocks(buildTailoredCv(profile, [])).flatMap((block) => (block.kind === "heading" ? [block.text] : []));
+    expect(headings).not.toContain("PROJECTS");
+  });
+});

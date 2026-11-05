@@ -34,6 +34,8 @@ export function cvLines(profile: Profile): string[] {
     ...profile.experience.flatMap((job) => [job.title, ...job.duties, ...job.achievements]),
     ...profile.education.flatMap((item) => [item.qualification, item.subject ?? "", item.grade ?? ""]),
     ...profile.certifications.map((item) => item.name),
+    ...(profile.languages ?? []).flatMap((item) => [item.name, item.level ?? ""]),
+    ...(profile.projects ?? []).flatMap((item) => [item.name, item.organisation ?? "", ...item.details]),
   ].filter((line) => line.trim() !== "");
 }
 

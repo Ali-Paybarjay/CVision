@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { recordApply, type ApplyResult } from "@/features/tailor/actions";
 import { ButtonLink, Notice } from "@/shared/ui";
-import { unreachableMessage } from "./messages";
+import { saveFailedMessage, unreachableMessage } from "./messages";
 
 /** The site a link really opens, e.g. "linkedin.com". The link is the one the user gave, often a job board, so it is never called the employer's. */
 export function linkSite(url: string): string | null {
@@ -24,7 +24,18 @@ export function interviewPracticePath(jobId: string): string {
  * Apply opens the job ad at the link the user gave, in a new tab, and adds the job to the user's tracker.
  * The app never sends an application on the user's behalf.
  */
-export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl: string | null; onApplied: () => void }) {
+export function ApplyPanel({
+  jobId,
+  jobUrl,
+  coverLetter = null,
+  onApplied,
+}: {
+  jobId: string;
+  jobUrl: string | null;
+  /** The approved cover letter, saved with the CV when the user presses Apply (#207). */
+  coverLetter?: string | null;
+  onApplied: () => void;
+}) {
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [, startTransition] = useTransition();
   // A double click must not record the application twice; the link itself still opens every time.
@@ -36,7 +47,7 @@ export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl
     recording.current = true;
     startTransition(async () => {
       try {
-        const recorded = await recordApply(jobId);
+        const recorded = await recordApply(jobId, coverLetter);
         setResult(recorded);
         if (recorded.recorded) onApplied();
       } catch {
@@ -80,6 +91,7 @@ export function ApplyPanel({ jobId, jobUrl, onApplied }: { jobId: string; jobUrl
           </Link>
         </Notice>
       )}
+      {result?.saveFailed && <p className="text-sm text-text-muted">{saveFailedMessage}</p>}
 
       {/* The next step after applying, shown before and after Apply. "Open the ad" stays the page's one Coral button,
           and "practice" is a noun only, as on the dashboard (#258) and in the interview section (#239). */}

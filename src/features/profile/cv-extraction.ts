@@ -38,6 +38,34 @@ const CvCertificateSchema = z.object({
   year: z.number().int().optional(),
 });
 
+const CvLanguageSchema = z.object({
+  name: z.string(),
+  /** Only when the CV gives one ("Native", "Fluent", "B2"). */
+  level: z.string().optional(),
+});
+
+const CvProjectSchema = z.object({
+  name: z.string(),
+  organisation: z.string().optional(),
+  startDate: CvDateSchema,
+  endDate: CvDateSchema,
+  /** True when the CV says the user is still working on it. */
+  current: z.boolean(),
+  details: z.array(z.string()),
+  url: z.string().optional(),
+});
+
+const CvVolunteeringSchema = z.object({
+  role: z.string(),
+  organisation: z.string().optional(),
+  location: z.string().optional(),
+  startDate: CvDateSchema,
+  endDate: CvDateSchema,
+  /** True when the CV says the user still does it. */
+  current: z.boolean(),
+  details: z.array(z.string()),
+});
+
 /** What the model reads from a CV (see prompts/profile-extract.md), and what the review step starts from. */
 export const CvExtractionSchema = z.object({
   fullName: z.string(),
@@ -52,6 +80,9 @@ export const CvExtractionSchema = z.object({
   experience: z.array(CvJobSchema),
   education: z.array(CvCourseSchema),
   certifications: z.array(CvCertificateSchema),
+  languages: z.array(CvLanguageSchema),
+  projects: z.array(CvProjectSchema),
+  volunteering: z.array(CvVolunteeringSchema),
 });
 export type CvExtraction = z.infer<typeof CvExtractionSchema>;
 
@@ -91,7 +122,61 @@ export function tidyExtraction(extraction: CvExtraction): CvExtraction {
     certifications: extraction.certifications
       .map((certificate) => ({ name: text(certificate.name), issuer: optional(certificate.issuer), year: certificate.year }))
       .filter((certificate) => certificate.name !== "" || certificate.issuer !== undefined),
+    // A level with no language is nothing to complete, so it goes.
+    languages: extraction.languages
+      .map((language) => ({ name: text(language.name), level: optional(language.level) }))
+      .filter((language) => language.name !== ""),
+    // A project or a role the CV says something about stays, for the user to complete; an empty one goes.
+    projects: extraction.projects
+      .map((project) => ({
+        name: text(project.name),
+        organisation: optional(project.organisation),
+        startDate: text(project.startDate),
+        endDate: project.current ? "" : text(project.endDate),
+        current: project.current,
+        details: uniqueLines(project.details),
+        url: optional(project.url),
+      }))
+      .filter(
+        (project) =>
+          project.name !== "" || project.organisation !== undefined || project.details.length > 0 || project.url !== undefined,
+      ),
+    volunteering: extraction.volunteering
+      .map((role) => ({
+        role: text(role.role),
+        organisation: optional(role.organisation),
+        location: optional(role.location),
+        startDate: text(role.startDate),
+        endDate: role.current ? "" : text(role.endDate),
+        current: role.current,
+        details: uniqueLines(role.details),
+      }))
+      .filter((role) => role.role !== "" || role.organisation !== undefined || role.details.length > 0)
+      // A role the CV lists among its jobs stays a job (prompts/profile-extract.md), so an exact copy of it here goes.
+      // Anything less exact stays for the user to check: a separate period at the same organisation is real.
+      .filter((role) => !extraction.experience.some((job) => isCopyOfJob(role, job))),
   };
+}
+
+/** A volunteering role that repeats a job: the same named role at the same named organisation, over the same dates. */
+function isCopyOfJob(
+  role: { role: string; organisation?: string; startDate: string; endDate: string; current: boolean },
+  job: CvExtraction["experience"][number],
+): boolean {
+  // Two roles with no organisation, such as two "Football coach" lines, may be different roles, so neither goes.
+  if (role.role === "" || role.organisation === undefined) return false;
+  return (
+    sameText(job.title, role.role) &&
+    sameText(job.company, role.organisation) &&
+    sameText(job.startDate, role.startDate) &&
+    job.current === role.current &&
+    sameText(job.current ? "" : job.endDate, role.endDate)
+  );
+}
+
+/** The same words, ignoring case and the spaces around them. */
+function sameText(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
 /** A profile written the way the model answers: the mock answer for a sample CV. */
@@ -121,6 +206,25 @@ export function extractionFromProfile(profile: Profile): CvExtraction {
       grade: course.grade,
     })),
     certifications: profile.certifications.map((certificate) => ({ ...certificate })),
+    languages: (profile.languages ?? []).map((language) => ({ ...language })),
+    projects: (profile.projects ?? []).map((project) => ({
+      name: project.name,
+      organisation: project.organisation,
+      startDate: project.startDate ?? "",
+      endDate: project.endDate ?? "",
+      current: project.endDate === null,
+      details: project.details,
+      url: project.url,
+    })),
+    volunteering: (profile.volunteering ?? []).map((role) => ({
+      role: role.role,
+      organisation: role.organisation,
+      location: role.location,
+      startDate: role.startDate ?? "",
+      endDate: role.endDate ?? "",
+      current: role.endDate === null,
+      details: role.details,
+    })),
   };
 }
 
