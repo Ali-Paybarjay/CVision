@@ -7,11 +7,11 @@ import { getCurrentUser } from "@/features/account/current-user";
 import { recordApplication } from "@/features/tracker/actions";
 import { track } from "@/shared/analytics/track";
 import { getAnonymousKey } from "@/shared/ai/anonymous-key";
-import { TailoringChangeSchema, type TailoringChange } from "@/shared/contracts";
+import { TailoringChangeSchema, type Job, type TailoringChange } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
 import { coverLetterText, declinedRequirements, inventedTerms, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
-import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters } from "./export";
+import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
 import { defaultGapQuestion } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
@@ -19,6 +19,8 @@ import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
 import { letterHead } from "./letter-state";
 import { modelFailureMessage, tailorModelAccess } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
+import { savedCvLayout } from "./saved-cv";
+import { getMyTailoredCv, saveTailoredCv } from "./server/tailored-cvs";
 import { buildTailoredCv, fitsCv } from "./tailored-cv";
 import type { GapAnswer, NextStep } from "./types";
 
@@ -322,17 +324,21 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
   }
 }
 
-export type ApplyResult = { recorded: boolean; message: string };
+/** `saveFailed`: the CV and cover letter being sent could not be kept (#207), so the page says to download them. */
+export type ApplyResult = { recorded: boolean; message: string; saveFailed?: boolean };
 
 /**
  * Called when the user presses Apply, as the employer's page opens in a new tab: adds the job to their
  * tracker with Ali's recordApplication and records tailor.apply_clicked. The app never applies itself.
+ * It also saves the CV and the approved cover letter being sent (#207), so the user can see them again later.
  */
-export async function recordApply(jobId: string): Promise<ApplyResult> {
+export async function recordApply(jobId: string, coverLetter: string | null = null): Promise<ApplyResult> {
   const parsed = z.string().min(1).max(100).safeParse(jobId);
   if (!parsed.success) return { recorded: false, message: "We could not read this job." };
+  const letter = z.string().max(10000).nullable().catch(null).parse(coverLetter);
 
-  const result = await recordApplication(parsed.data);
+  const [result, save] = await Promise.all([recordApplication(parsed.data), saveTailoredCv(parsed.data, letter)]);
+  const saveFailed = save === "failed";
   after(async () => {
     const user = await getCurrentUser();
     await track(
@@ -343,8 +349,8 @@ export async function recordApply(jobId: string): Promise<ApplyResult> {
   });
 
   return result.ok
-    ? { recorded: true, message: "Added to your applications, so you can follow it up from your dashboard." }
-    : { recorded: false, message: result.message };
+    ? { recorded: true, message: "Added to your applications, so you can follow it up from your dashboard.", saveFailed }
+    : { recorded: false, message: result.message, saveFailed };
 }
 
 const ExportRequestSchema = z.object({
@@ -359,7 +365,7 @@ export type ExportRequest = z.infer<typeof ExportRequestSchema>;
 
 export type ExportResult =
   /** `warning` tells the user when the file is not quite what they see, e.g. letters the PDF cannot show. */
-  | { ok: true; fileName: string; mimeType: string; base64: string; warning: string | null }
+  | { ok: true; fileName: string; mimeType: string; base64: string; warning: string | null; saveFailed?: boolean }
   | { ok: false; message: string };
 
 /**
@@ -377,26 +383,52 @@ export async function exportDocument(request: ExportRequest): Promise<ExportResu
 
   const changes = parsed.data.changes.filter((change) => change.jobId === jobId);
   const blocks = document === "cv" ? cvBlocks(buildTailoredCv(profile, changes, job)) : letterBlocks(letter ?? "", letterHead(profile, new Date()));
+  const file = await makeFile(blocks, document, format, profile.fullName, job);
+  if (!file.ok) return file;
+  // Keeps what the user is sending, with the approved letter if there is one (#207). A failure never stops the download.
+  const save = await saveTailoredCv(jobId, letter);
+  after(async () => {
+    const user = await getCurrentUser();
+    const approvedChanges = changes.filter((change) => change.status === "approved").length;
+    await track("tailor.cv_exported", { format, document, approvedChanges }, user ? { userId: user.id } : await getAnonymousKey());
+  });
+  return { ...file, saveFailed: save === "failed" };
+}
+
+const SavedExportRequestSchema = z.object({
+  jobId: z.string().min(1).max(100),
+  document: z.enum(["cv", "cover-letter"]),
+  format: z.enum(["pdf", "docx"]),
+});
+
+/**
+ * Builds the PDF or Word file from the copy saved when the user downloaded or applied (#207), not from today's
+ * Profile, so it is the file they sent. The letter is dated the day it was saved. For the dashboard's sent page (#208).
+ */
+export async function exportSavedDocument(request: z.infer<typeof SavedExportRequestSchema>): Promise<ExportResult> {
+  const parsed = SavedExportRequestSchema.safeParse(request);
+  if (!parsed.success) return { ok: false, message: "We could not read this request. Try again." };
+  const { jobId, document, format } = parsed.data;
+
+  const [saved, job] = await Promise.all([getMyTailoredCv(jobId), getMyJob(jobId)]);
+  if (!saved || !job) return { ok: false, message: "We could not find a saved copy for this job." };
+  if (document === "cover-letter" && !saved.coverLetter) return { ok: false, message: "You had not approved a cover letter when you sent this CV." };
+
+  const blocks =
+    document === "cv" ? cvBlocks(savedCvLayout(saved, job)) : letterBlocks(saved.coverLetter ?? "", letterHead(saved.cv, new Date(saved.savedAt)));
+  return makeFile(blocks, document, format, saved.cv.fullName, job);
+}
+
+/** The file itself, the same for a fresh download and a saved copy. */
+async function makeFile(blocks: Block[], document: ExportDocument, format: ExportFormat, fullName: string, job: Job): Promise<ExportResult> {
   const title = `${document === "cv" ? "CV" : "Cover letter"}: ${job.title}, ${job.company}`;
   const warning =
-    format === "pdf" && pdfLosesLetters(blocks, { title, author: profile.fullName })
+    format === "pdf" && pdfLosesLetters(blocks, { title, author: fullName })
       ? `Some letters in your ${document === "cv" ? "CV" : "cover letter"} cannot be shown in the PDF, so they appear as ?. Download the Word file instead.`
       : null;
-
   try {
-    const bytes = await blocksToFile(blocks, format, { title, author: profile.fullName, footer: document === "cv" ? `${profile.fullName} – CV` : undefined });
-    after(async () => {
-      const user = await getCurrentUser();
-      const approvedChanges = changes.filter((change) => change.status === "approved").length;
-      await track("tailor.cv_exported", { format, document, approvedChanges }, user ? { userId: user.id } : await getAnonymousKey());
-    });
-    return {
-      ok: true,
-      fileName: exportFileName(profile.fullName, job.title, document, format),
-      mimeType: mimeTypes[format],
-      base64: Buffer.from(bytes).toString("base64"),
-      warning,
-    };
+    const bytes = await blocksToFile(blocks, format, { title, author: fullName, footer: document === "cv" ? `${fullName} – CV` : undefined });
+    return { ok: true, fileName: exportFileName(fullName, job.title, document, format), mimeType: mimeTypes[format], base64: Buffer.from(bytes).toString("base64"), warning };
   } catch {
     return { ok: false, message: "We could not make your file just now. Try again in a moment." };
   }
