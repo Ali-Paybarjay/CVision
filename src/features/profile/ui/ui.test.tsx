@@ -285,14 +285,28 @@ describe("profile screens", () => {
 
   it("gives the usual hint back as soon as the user writes what they did", () => {
     const empty = { duties: "", achievements: "" };
+    const onlyResults = { ...empty, achievements: "Cut stock loss" };
 
-    expect(dutiesHint(empty, true, true)).toMatch(/^Your CV has no lines/);
-    expect(dutiesHint({ ...empty, achievements: "Cut stock loss" }, true, true)).toMatch(/^Your CV lists only results/);
-    expect(dutiesHint({ ...empty, duties: "R" }, true, true)).toBe("One per line, as on your CV.");
-    expect(dutiesHint({ ...empty, duties: "  \n " }, true, true)).toMatch(/^Your CV has no lines/);
+    expect(dutiesHint(empty, true, empty)).toMatch(/^Your CV has no lines/);
+    expect(dutiesHint(onlyResults, true, onlyResults)).toMatch(/^Your CV lists only results/);
+    expect(dutiesHint({ ...empty, duties: "R" }, true, empty)).toBe("One per line, as on your CV.");
+    expect(dutiesHint({ ...empty, duties: "  \n " }, true, empty)).toMatch(/^Your CV has no lines/);
     // A job added by hand, and a profile typed in or edited later, keep their usual hints.
-    expect(dutiesHint(empty, true, false)).toBe("One per line, as on your CV.");
-    expect(dutiesHint(empty, false, false)).toBe("One per line.");
+    expect(dutiesHint(empty, true, null)).toBe("One per line, as on your CV.");
+    expect(dutiesHint(empty, false, null)).toBe("One per line.");
+  });
+
+  // #310: the hint says what the CV had, not what the boxes hold now.
+  it("speaks of what the CV had, whatever the user has deleted or typed since", () => {
+    const empty = { duties: "", achievements: "" };
+    const read = { duties: "Ran the tills", achievements: "Cut stock loss" };
+
+    // The CV had lines for this job, so clearing both boxes doesn't make the CV "have no lines".
+    expect(dutiesHint(empty, true, read)).toBe("One per line, as on your CV.");
+    // The CV had nothing for this job: a result the user types in doesn't make the CV "list only results".
+    expect(dutiesHint({ ...empty, achievements: "Won an award" }, true, empty)).toMatch(/^Your CV has no lines/);
+    // The CV had only results: clearing them still says so, as that is what the CV had.
+    expect(dutiesHint(empty, true, { ...empty, achievements: "Cut stock loss" })).toMatch(/^Your CV lists only results/);
   });
 
   it("asks for the changes to a saved profile to be approved once, or cancelled", () => {
