@@ -21,6 +21,19 @@ function layout(html: string) {
   };
 }
 
+describe("Sign out in the top menu (#328)", () => {
+  const signOut = <button type="submit">Sign out</button>;
+
+  it("signed in: shows the Sign out control the layout passes in, beside the page links from 768px", () => {
+    const html = renderToStaticMarkup(<MainNav signedIn signOut={signOut} />);
+    expect(html).toContain('<div class="hidden md:block"><button type="submit">Sign out</button></div>');
+  });
+
+  it("signed out: no Sign out control", () => {
+    expect(renderToStaticMarkup(<MainNav signedIn={false} signOut={signOut} />)).not.toContain("Sign out");
+  });
+});
+
 describe("top menu (#177)", () => {
   it("signed out: makes room for the call to action by moving the page links into the Menu below 1024px", () => {
     const html = renderToStaticMarkup(<MainNav signedIn={false} />);

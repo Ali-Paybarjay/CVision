@@ -11,6 +11,8 @@ export type AuthFormState = {
   fieldErrors?: { email?: string; password?: string };
   /** Set after sign-up when the user must confirm their email first. */
   checkEmail?: string;
+  /** Set after sign-up when the email already has an account, so no email is sent (#328). */
+  existingAccount?: string;
 };
 
 const CredentialsSchema = z.object({
@@ -46,6 +48,10 @@ export async function signUp(_: AuthFormState, formData: FormData): Promise<Auth
     options: { emailRedirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(next)}` },
   });
   if (error) return { error: error.message };
+
+  // An email that already has an account gets no email from Supabase, and a user with no identities back (#328).
+  // Saying so, rather than "Check your email", sends the user to sign in instead of waiting for nothing.
+  if (data.user && data.user.identities?.length === 0) return { existingAccount: credentials.email };
 
   // With email confirmation on, there is no session until the link is opened.
   if (!data.session) return { checkEmail: credentials.email };

@@ -63,8 +63,10 @@ export function MainNavFallback() {
  * The call to action keeps its one name everywhere, so the menu makes room for it instead (#177): for signed-out
  * visitors the page links move into the Menu below 1024px, and the button is compact and stays on one line on a
  * 360px phone. Signed-in visitors have no call to action here, so they keep the page links from 768px.
+ * `signOut` is the Sign out control (from @/features/account, passed in by the layout): signed-in visitors get it
+ * after the page links, in the Menu on a phone (#328).
  */
-export function MainNav({ signedIn }: { signedIn: boolean }) {
+export function MainNav({ signedIn, signOut }: { signedIn: boolean; signOut?: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
@@ -109,6 +111,7 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
     <>
       <NavLinks pathname={pathname} className={cn("hidden items-center gap-5", wide.links)} />
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        {signedIn && signOut && <div className="hidden md:block">{signOut}</div>}
         {showSignIn && (
           <Link href="/sign-in" className="hidden py-2 text-sm font-semibold text-accent hover:underline sm:block">
             Sign in
@@ -160,6 +163,8 @@ export function MainNav({ signedIn }: { signedIn: boolean }) {
                 </Link>
               </li>
             )}
+            {/* Not closed on click: that would remove the form before it posts. Signing out opens another page. */}
+            {signedIn && signOut && <li>{signOut}</li>}
           </NavLinks>
         </div>
       )}
