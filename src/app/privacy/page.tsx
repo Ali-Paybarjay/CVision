@@ -56,6 +56,15 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
           in, your IP address and browser details.
         </p>
         <p>We use these to sign you in.</p>
+        <p>
+          We also use your email address to send you account emails, such as the link that confirms it, and, while
+          CVision is in its pilot, to contact you about the pilot: to ask how it went for you or to tell you about a
+          change. We don’t send marketing. To stop pilot emails, email us at{" "}
+          <a href={`mailto:${brand.contactEmail}`} className={link}>
+            {brand.contactEmail}
+          </a>
+          .
+        </p>
       </>
     ),
   },
@@ -138,7 +147,11 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
 const services: { name: string; body: React.ReactNode }[] = [
   {
     name: "Supabase",
-    body: "Runs our database, file storage and sign-in, including the confirmation email you get when you sign up.",
+    body: "Runs our database, file storage and sign-in.",
+  },
+  {
+    name: "Google (Gmail)",
+    body: "Sends our account emails, such as the link that confirms your email address, and our emails about the pilot, from our team’s Gmail address. Google sees your email address and what we send you, and keeps a copy of each email in our Gmail.",
   },
   {
     name: "Vercel",
@@ -189,6 +202,7 @@ const howLong: { what: string; until: string }[] = [
   },
   { what: "Usage and AI use records linked to your account", until: "Until you delete your account." },
   { what: "Usage and AI use records made while you weren’t signed in", until: "We haven’t set an end date yet." },
+  { what: "Copies of the emails we’ve sent you, in our team’s Gmail", until: "We haven’t set an end date yet." },
   {
     what: "Interview practice in this browser",
     until: "Until you sign out, delete your account or clear this browser’s data.",
@@ -360,6 +374,7 @@ export default function PrivacyPage() {
             copied to locations around the world.
           </li>
           <li>Supabase says its backups, logs and the services it relies on can be outside the region we chose.</li>
+          <li>Our emails to you are sent through Gmail, run by Google, which may process and store them in the US.</li>
         </ul>
         <p>
           The UK recognises the countries of the European Economic Area, Ireland included, as protecting personal data
