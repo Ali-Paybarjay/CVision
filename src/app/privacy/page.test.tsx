@@ -61,6 +61,11 @@ describe("privacy page", () => {
     expect(text).not.toContain("saved in this browser only");
   });
 
+  it("says the CV and cover letter you sent are kept and deleted with the account (#207, #208)", () => {
+    expect(text).toContain("the tailored CV and cover letter you last downloaded or sent with Apply, as they were");
+    expect(text).toContain("suggested CV changes, saved tailored CVs and cover letters, interview practice");
+  });
+
   // Card #179: a profile typed in by hand sends nothing to the AI while typing, keeps no CV file, and needs its own consent.
   it("says the gap questions are kept with each job and deleted with the account", () => {
     expect(text).toContain("the questions we asked you about it (so we don’t ask them again)");

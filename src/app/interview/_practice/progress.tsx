@@ -231,7 +231,7 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
   const job = jobs[`${run}:${working.key}`];
   const failure = job?.status === "failed" ? job : null;
   const failed = failure !== null;
-  const kept = failure ? keptLine(done, failure.final === true) : "";
+  const kept = failure ? keptLine(done, failure.final === true, failure.limit === true) : "";
   const retrying = job?.status === "running" && job.retrying === true;
 
   // Nothing moves while a stage waits for Try again.
@@ -328,8 +328,9 @@ function PreparingCard({ store, session, jobs, run }: Parameters<typeof Progress
  * Under a failed stage: what is kept, and with no Try again (`final`), when to come back (#281). Start again is hidden
  * then too (practice.tsx): it would throw away the stages done and fail the same way.
  */
-export function keptLine(done: number, final: boolean): string {
-  if (!final) return done > 0 ? "The steps already done are kept." : "";
+export function keptLine(done: number, final: boolean, limit = false): string {
+  // At the daily limit its own message says when to come back (tomorrow); "later" today would hit it again (#313).
+  if (!final || limit) return done > 0 ? "The steps already done are kept." : "";
   return done > 0 ? "The steps already done are kept. Open this page again later to carry on." : "Open this page again later to try again.";
 }
 

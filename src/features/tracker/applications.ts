@@ -40,9 +40,16 @@ export async function loadTracker(today: string): Promise<Tracker> {
 
   const jobIds = [...new Set(applications.map((application) => application.jobId))];
   // The latest finished practice for each job. It reads as empty on any error, so a row then just has no report link.
-  const [jobs, practices] = await Promise.all([supabase.from("jobs").select("id, data").in("id", jobIds), listPracticeSummaries()]);
+  // The same for the saved CVs (#207): only which jobs have one, never the CV itself.
+  const [jobs, practices, savedCvs] = await Promise.all([
+    supabase.from("jobs").select("id, data").in("id", jobIds),
+    listPracticeSummaries(),
+    supabase.from("tailored_cvs").select("job_id").in("job_id", jobIds),
+  ]);
   if (jobs.error) return failed("read the jobs", jobs.error.code);
   const reports = new Map(practices.map((practice) => [practice.jobId, { overall: practice.overall }]));
+  if (savedCvs.error) console.error(`tracker: could not read the saved CVs (${savedCvs.error.code ?? "unknown"})`);
+  const withSavedCv = new Set((savedCvs.data ?? []).map((row) => row.job_id as string));
 
   const summaries = new Map(
     jobs.data.flatMap((row) => {
@@ -57,7 +64,8 @@ export async function loadTracker(today: string): Promise<Tracker> {
     items: applications.map((application) => {
       const summary = summaries.get(application.jobId);
       const report = reports.get(application.jobId);
-      return { application, job: summary?.job ?? null, hasAd: summary?.hasAd ?? false, ...(report && { report }) };
+      const hasCv = withSavedCv.has(application.jobId);
+      return { application, job: summary?.job ?? null, hasAd: summary?.hasAd ?? false, ...(report && { report }), ...(hasCv && { hasCv }) };
     }),
   };
 }

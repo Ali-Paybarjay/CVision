@@ -118,9 +118,25 @@ describe("profile screens", () => {
 
     expect(words).toContain("No CV to upload?");
     expect(html).toMatch(/<button type="button"[^>]*>Fill in my details<\/button>/);
-    expect(words.indexOf("No CV to upload?")).toBeGreaterThan(words.indexOf("Read my CV"));
+    // The card with the details stays after the upload, as the second choice.
+    expect(words.lastIndexOf("No CV to upload?")).toBeGreaterThan(words.indexOf("Read my CV"));
     // Read my CV stays the page's one main button.
     expect(html.match(/bg-cta/g)).toHaveLength(1);
+  });
+
+  // #204: on a phone the card is a long scroll away, so the way in for someone without a CV is under the heading too.
+  it("shows someone with no CV their way in right under the heading", () => {
+    const html = renderToStaticMarkup(
+      <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} onStartManual={noop} />,
+    );
+    const words = text(html);
+    const heading = words.indexOf("Upload your CV");
+    const shortcut = words.indexOf("No CV to upload? Fill in my details");
+
+    expect(shortcut).toBeGreaterThan(heading);
+    expect(shortcut).toBeLessThan(words.indexOf("Your CV"));
+    // Two ways in, one action: both are "Fill in my details", and neither is Coral.
+    expect(html.match(/>Fill in my details<\/button>/g)).toHaveLength(2);
   });
 
   it("offers no second choice when the page doesn't ask for one", () => {

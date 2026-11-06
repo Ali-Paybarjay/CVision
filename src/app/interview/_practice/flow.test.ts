@@ -98,7 +98,8 @@ describe("the start-up stages (#232)", () => {
     await settle();
 
     expect(calls).toBe(1);
-    expect(store.getJobsSnapshot()["1:generate"]).toEqual({ status: "failed", message: "You have reached today's limit.", final: true });
+    // A 429 is the daily limit, so the page lets its own words say when to come back (#313).
+    expect(store.getJobsSnapshot()["1:generate"]).toEqual({ status: "failed", message: "You have reached today's limit.", final: true, limit: true });
     expect(store.readEnvelope()!.startupRetries).toBeUndefined();
   });
 

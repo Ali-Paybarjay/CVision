@@ -100,8 +100,8 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
       <p>
         When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
         match result, the questions we asked you about it (so we don’t ask them again), the CV changes suggested for
-        it and your interview practice for it. Interview practice is also
-        saved in this browser, so you can pick up where you left off.
+        it, the tailored CV and cover letter you last downloaded or sent with Apply, as they were, and your interview
+        practice for it. Interview practice is also saved in this browser, so you can pick up where you left off.
       </p>
     ),
   },
@@ -400,7 +400,8 @@ export default function PrivacyPage() {
           <li>your account, with your email address, password and sign-in sessions</li>
           <li>
             everything saved with it in our database: your applications, saved jobs, matches, the questions we asked you,
-            suggested CV changes, interview practice, usage records and AI use records
+            suggested CV changes, saved tailored CVs and cover letters, interview practice, usage records and AI use
+            records
           </li>
           <li>any CV files stored with your account</li>
           <li>CVision’s data in the browser you use to delete it.</li>
