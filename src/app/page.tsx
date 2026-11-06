@@ -1,25 +1,20 @@
-import { sampleProposals } from "@/features/tailor";
+import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { trackHomeCtaClick } from "@/shared/analytics/actions";
 import { brand } from "@/shared/brand";
-import { personas } from "@/shared/sample-data";
-import { CheckIcon, CvPaper, FitLine, TrackedButtonLink } from "@/shared/ui";
+import { CheckIcon, CvPaper, FitLine, MatchMarker, RequirementList, SectionLabel, StatusChip, TrackedButtonLink } from "@/shared/ui";
+import { ad, cv, example, matchRows, requirementGroups, type Evidence } from "./_home/sara-example";
 
-// The real product: Sara's CV with the changes Tailor proposes for her first job, each backed by her own words.
-const sara = personas.sara;
-const job = sara.jobs[0];
-const firstName = sara.profile.fullName.split(" ")[0];
-const internship = sara.profile.experience[0];
-const changes = sampleProposals.sara.changes;
-const rewritten = new Map(changes.flatMap((change) => (change.before ? [[change.before, change.after] as const] : [])));
-const addedSkills = changes.filter((change) => change.section === "skills" && change.before === null);
-const evidence = changes.find((change) => change.evidenceSource === "follow-up-answer")?.evidence;
+// Plan A's home page (docs/design/paper-desk/home.html): the job ad beside Sara's CV, the three steps, the match table
+// that says why every line changed, and the Honest CV Promise. Sara and her job are fictional sample data.
+const container = "mx-auto w-full max-w-6xl px-4";
 
 export default function HomePage() {
   return (
     <main className="w-full">
-      <section className="mx-auto grid max-w-6xl gap-12 px-4 py-12 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-center xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] xl:gap-16">
-        <div>
-          <h1 className="text-4xl leading-[1.05] tracking-tight sm:text-6xl lg:text-5xl xl:text-6xl">{brand.hero.headline}</h1>
+      <section className={`${container} grid gap-12 pt-12 pb-16 sm:pt-20 sm:pb-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)] xl:gap-16`}>
+        <div className="lg:pt-10">
+          <SectionLabel size="large">{brand.hero.label}</SectionLabel>
+          <h1 className="mt-4 text-5xl leading-[1.02] tracking-[-0.035em] sm:text-6xl xl:text-7xl">{brand.hero.headline}</h1>
           <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.hero.subline}</p>
           <div className="mt-8">
             <TrackedButtonLink
@@ -51,77 +46,53 @@ export default function HomePage() {
               </p>
             </div>
           </div>
+          <p className="mt-8 flex max-w-xl items-start gap-3 font-semibold">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-fit text-accent">
+              <CheckIcon className="size-4" />
+            </span>
+            {brand.proof}
+          </p>
         </div>
 
-        <figure>
-          <CvPaper aria-label={brand.example.label(sara.profile.fullName)} className="text-sm">
-            <p className="text-xl font-bold">{sara.profile.fullName}</p>
-            <p className="text-text-muted">{sara.profile.contact.location}</p>
-            <p className="mt-5 border-b border-line pb-1 font-semibold">Experience</p>
-            <p className="mt-3 font-semibold">
-              {internship.title}, {internship.company}
-            </p>
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {[...internship.duties, ...internship.achievements].map((line) => {
-                const tailored = rewritten.get(line);
-                return tailored ? (
-                  <FitLine as="li" key={line}>
-                    {tailored}
-                  </FitLine>
-                ) : (
-                  <li key={line}>{line}</li>
-                );
-              })}
-            </ul>
-            <p className="mt-5 border-b border-line pb-1 font-semibold">Skills</p>
-            <p className="mt-3">{sara.profile.skills.join(", ")}</p>
-            {addedSkills.map((change) => (
-              <FitLine key={change.after} className="mt-1.5">
-                {change.after}
-              </FitLine>
-            ))}
-          </CvPaper>
-          <figcaption className="mt-5 flex flex-col gap-3 text-sm">
-            <p className="font-semibold">{brand.proof}</p>
-            {evidence && (
-              <div>
-                <p className="text-text-muted">{brand.example.evidenceIntro(firstName)}</p>
-                <FitLine as="div" className="mt-1.5">
-                  <q>{evidence}</q>
-                </FitLine>
-              </div>
-            )}
-            <p className="text-text-muted">{brand.example.caption(firstName, job.title, job.company)}</p>
-          </figcaption>
-        </figure>
+        <Example />
       </section>
 
-      <section aria-labelledby="steps-title" className="mx-auto max-w-6xl px-4 pb-16 sm:pb-24">
-        <h2 id="steps-title" className="text-3xl">
-          {brand.motto}
-        </h2>
-        <ol className="mt-8 grid gap-8 md:grid-cols-3">
+      <section aria-labelledby="steps-title" className={`${container} pb-16 sm:pb-24`}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-12">
+          <h2 id="steps-title" className="text-4xl tracking-[-0.03em] sm:text-5xl">
+            {brand.motto}
+          </h2>
+          <p className="max-w-[40ch] text-text-muted">{brand.stepsIntro}</p>
+        </div>
+        <ol className="mt-10 grid gap-10 md:grid-cols-3 md:gap-8">
           {brand.steps.map((step, index) => (
-            <li key={step.title} className="border-t-2 border-line pt-5">
-              <p aria-hidden="true" className="text-3xl font-bold text-accent">
-                {index + 1}
+            <li key={step.title} className="border-t-2 border-text pt-5">
+              <p aria-hidden="true" className="text-5xl font-bold tracking-[-0.03em] text-accent">
+                {String(index + 1).padStart(2, "0")}
               </p>
-              <h3 className="mt-3 text-lg">{step.title}</h3>
+              <h3 className="mt-4 text-lg">{step.title}</h3>
               <p className="mt-2 max-w-[40ch] text-text-muted">{step.detail}</p>
             </li>
           ))}
         </ol>
       </section>
 
+      <MatchTable />
+
       <section aria-labelledby="promise-title" className="bg-emphasis text-on-emphasis">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:py-20">
-          <h2 id="promise-title" className="text-3xl">
-            {brand.promise.title}
-          </h2>
-          <ul className="mt-8 grid gap-x-12 gap-y-8 sm:grid-cols-2">
+        <div className={`${container} grid gap-10 py-16 sm:py-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]`}>
+          <div>
+            <h2 id="promise-title" className="text-4xl tracking-[-0.03em] sm:text-5xl">
+              {brand.promise.title}
+            </h2>
+            <p className="mt-4">{brand.promise.subtitle}</p>
+          </div>
+          <ul className="grid gap-x-12 gap-y-8 sm:grid-cols-2">
             {brand.promise.items.map((item) => (
               <li key={item.title} className="flex gap-3">
-                <CheckIcon className="mt-0.5 size-5 shrink-0" />
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-current">
+                  <CheckIcon className="size-4" />
+                </span>
                 <div>
                   <h3 className="text-lg">{item.title}</h3>
                   <p className="mt-1 max-w-[48ch]">{item.text}</p>
@@ -132,5 +103,164 @@ export default function HomePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+/** Sara's job ad beside her CV: a number joins each tailored CV line to the requirement that asked for it. */
+function Example() {
+  return (
+    <figure aria-labelledby="example-title" className="flex min-w-0 flex-col gap-4">
+      <h2 id="example-title" className="text-lg leading-snug">
+        {brand.example.title(example.firstName, example.job)}
+      </h2>
+      <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
+        <div className="rounded-[14px] border border-line bg-surface p-4">
+          <SectionLabel as="h3">The job ad</SectionLabel>
+          <p className="mt-1.5 font-semibold">{ad.title}</p>
+          <p className="text-xs text-text-muted">{[ad.company, ...ad.details].join(" · ")}</p>
+          <RequirementList groups={requirementGroups} size="compact" headingLevel="h4" className="mt-4 border-t border-line pt-4" />
+        </div>
+
+        <CvPaper shadow aria-label={`${cv.name}’s CV`} className="px-5 py-6 text-[13px] leading-relaxed sm:px-6 sm:py-7">
+          <p className="text-lg leading-tight font-bold">{cv.name}</p>
+          <p className="text-xs text-cv-ink/70">{cv.contact}</p>
+
+          {/* The real tailored CV's headings and order, locked in #216 (Marzieh, #295): skills, work experience, education. */}
+          <CvHeading>{cvHeadings.skills}</CvHeading>
+          <p className="mt-2">{cv.skills}</p>
+          {cv.addedSkills.map(({ text, line }) => (
+            <FitLine key={text} className="mt-1.5 flex items-start gap-2">
+              <MatchMarker line={line} className="mt-0.5" />
+              <span>{text}</span>
+            </FitLine>
+          ))}
+
+          <CvHeading>{cvHeadings.experience}</CvHeading>
+          <p className="mt-2 font-semibold">{cv.role.heading}</p>
+          <p className="text-xs text-cv-ink/70">{cv.role.dates}</p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {cv.role.lines.map(({ text, line }) =>
+              line ? (
+                <FitLine as="li" key={text} className="flex items-start gap-2">
+                  <MatchMarker line={line} className="mt-0.5" />
+                  <span>{text}</span>
+                </FitLine>
+              ) : (
+                <li key={text}>{text}</li>
+              ),
+            )}
+          </ul>
+
+          <CvHeading>{cvHeadings.education}</CvHeading>
+          <p className="mt-2 font-semibold">{cv.education.heading}</p>
+          <p>{cv.education.detail}</p>
+        </CvPaper>
+      </div>
+      <figcaption className="text-sm text-text-muted">{brand.example.caption(example.fullName, example.firstName, example.job, example.company)}</figcaption>
+    </figure>
+  );
+}
+
+function CvHeading({ children }: { children: React.ReactNode }) {
+  return <SectionLabel className="mt-5 border-b border-cv-ink/15 pb-1 text-cv-ink">{children}</SectionLabel>;
+}
+
+/** Why every line of the example changed, or did not: a table on a computer, a list on a phone. */
+function MatchTable() {
+  const { columns } = brand.match;
+  return (
+    <section aria-labelledby="match-title" className="border-y border-line bg-surface">
+      <div className={`${container} py-16 sm:py-24`}>
+        <SectionLabel size="large">{brand.match.label}</SectionLabel>
+        <h2 id="match-title" className="mt-3 text-4xl tracking-[-0.03em] sm:text-5xl">
+          {brand.match.title}
+        </h2>
+        <p className="mt-4 max-w-[60ch] text-lg text-text-muted">{brand.match.text}</p>
+
+        <div className="mt-10 hidden overflow-hidden rounded-[14px] border border-line md:block">
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">{brand.example.title(example.firstName, example.job)}</caption>
+            <thead className="bg-canvas">
+              <tr>
+                {[columns.requirement, columns.need, columns.result, columns.evidence].map((column) => (
+                  <th key={column} scope="col" className="px-5 py-3 text-[11px] font-bold tracking-[0.1em] text-text-muted uppercase">
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matchRows.map((row) => (
+                <tr key={row.text} className="border-t border-line align-top">
+                  <th scope="row" className="w-[28%] px-5 py-4 font-semibold">
+                    {row.text}
+                  </th>
+                  <td className="px-5 py-4 text-text-muted">{row.need}</td>
+                  <td className="px-5 py-4">
+                    <StatusChip status={row.status} line={row.line} />
+                  </td>
+                  <td className="w-[42%] px-5 py-4">
+                    <EvidenceText evidence={row.evidence} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <ul className="mt-8 flex flex-col divide-y divide-line border-y border-line md:hidden">
+          {matchRows.map((row) => (
+            <li key={row.text} className="flex flex-col gap-2 py-5 text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 font-semibold">
+                  {row.text} <span className="font-normal text-text-muted">· {row.need}</span>
+                </p>
+                <StatusChip status={row.status} line={row.line} className="shrink-0" />
+              </div>
+              <EvidenceText evidence={row.evidence} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function EvidenceText({ evidence }: { evidence: Evidence }) {
+  if (evidence.from === "none") {
+    return (
+      <p className="text-text-muted">
+        {brand.match.notAdded}
+        {evidence.suggestion && ` ${evidence.suggestion}`}
+      </p>
+    );
+  }
+  if (evidence.from === "cv") {
+    return (
+      // Quote marks only around a line of the CV word for word; a summary of it is not put in quotes (Nazanin, #295).
+      <p>
+        {evidence.verbatim ? (
+          <>
+            <span className="text-text-muted">{brand.match.fromCv}</span> “{evidence.quote}”
+          </>
+        ) : (
+          <>
+            <span className="text-text-muted">{brand.match.fromCvInShort}</span> {evidence.quote}
+          </>
+        )}
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {evidence.before && (
+        <p>
+          <span className="text-text-muted">{brand.match.before}</span> “{evidence.before}”
+        </p>
+      )}
+      <p>
+        <span className="text-text-muted">{brand.match.fromAnswer}</span> “{evidence.quote}”
+      </p>
+    </div>
   );
 }
