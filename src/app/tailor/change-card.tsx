@@ -12,7 +12,7 @@ const sectionNames: Record<TailoringChange["section"], string> = {
   certifications: "Certificates",
 };
 
-/** One suggested change with its before, after and evidence, and the user's Approve, Reject and Edit. */
+/** One suggested change with its before, after and evidence, and the user's Approve, Reject and Edit. Approve and Reject switch the decision. */
 export function ChangeCard({ change, onDecide }: { change: TailoringChange; onDecide: (change: TailoringChange) => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(change.after);
@@ -69,30 +69,24 @@ export function ChangeCard({ change, onDecide }: { change: TailoringChange; onDe
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
+          {/* A decision already made looks done: its button goes quiet and cannot be pressed again. The other one changes the decision. */}
           <Button
             onClick={() => decide("approved")}
             aria-pressed={change.status === "approved"}
-            disabled={pending}
-            className="aria-pressed:bg-accent aria-pressed:text-surface"
+            disabled={pending || change.status === "approved"}
           >
             Approve
           </Button>
           <Button
             onClick={() => decide("rejected")}
             aria-pressed={change.status === "rejected"}
-            disabled={pending}
-            className="aria-pressed:bg-emphasis aria-pressed:text-on-emphasis"
+            disabled={pending || change.status === "rejected"}
           >
             Reject
           </Button>
           <Button variant="quiet" onClick={() => setEditing(true)} disabled={pending}>
             Edit
           </Button>
-          {change.status !== "proposed" && (
-            <Button variant="quiet" onClick={() => decide("proposed")} disabled={pending}>
-              Undo
-            </Button>
-          )}
           <span className="text-sm text-text-muted" aria-live="polite">
             {statusText}
           </span>

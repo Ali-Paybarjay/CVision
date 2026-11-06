@@ -69,11 +69,11 @@ describe("the tailored CV (You approve everything)", () => {
     expect(cv.skills).toEqual([]);
   });
 
-  it("adds an approved main skill to the main skills and marks the CV line that shows it", () => {
+  it("adds an approved main skill to the main skills and leaves the CV line that shows it plain", () => {
     const line = "Built Tableau dashboards for the regional sales team";
     const cv = buildTailoredCv(profile, [change("approved", { gapId: undefined, section: "skills", before: null, after: "Communication", evidence: line, evidenceSource: "cv" })]);
     expect(cv.skills).toEqual([{ text: "Communication", tailored: true }]);
-    expect(cv.experience.flatMap((job) => job.lines).find((item) => item.text === line)?.label).toBe("Communication:");
+    expect(cv.experience.flatMap((job) => job.lines).find((item) => item.text === line)?.label).toBeUndefined();
   });
 
   it("leaves a main skill the user has not approved off the CV", () => {
@@ -96,6 +96,11 @@ describe("the tailored CV (You approve everything)", () => {
     const cv = buildTailoredCv(profile, [approved]);
     expect(cv.experience[0].lines).toContainEqual({ text: approved.after, tailored: true });
     expect(cv.unplaced).toEqual([]);
+  });
+
+  it("prints an education line as plain text, with no bold degree in front", () => {
+    const cv = buildTailoredCv(profile, []);
+    expect(cv.education.every((line) => line.label === undefined)).toBe(true);
   });
 
   it("places a change to an education line written the way the CV shows it", () => {

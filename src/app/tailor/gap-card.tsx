@@ -117,11 +117,14 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
             </Notice>
           ))}
           {state.hint && <Notice tone="info">{state.hint}</Notice>}
-          <div>
-            <Button variant="quiet" onClick={() => setState({ phase: "open" })}>
-              Change my answer
-            </Button>
-          </div>
+          {/* With a suggested line, Edit and Reject on its card already change what goes in; going back to the question is only for an answer with no line. */}
+          {changes.length === 0 && (
+            <div>
+              <Button variant="quiet" onClick={() => setState({ phase: "open" })}>
+                Change my answer
+              </Button>
+            </div>
+          )}
         </>
       )}
     </article>

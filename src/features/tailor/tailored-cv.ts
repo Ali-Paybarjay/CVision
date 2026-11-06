@@ -8,7 +8,7 @@ import { normalise } from "./nothing-invented";
 export type CvLine = {
   text: string;
   tailored: boolean;
-  /** Printed in bold before the text, e.g. the main skill a line shows: "Communication:" before "Walked managers through…". */
+  /** Printed in bold before the text; only the labels of the last section use it: "Certificates:", "Driving licence:", "Tools:". */
   label?: string;
 };
 
@@ -181,20 +181,14 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
       .slice(0, max)
       .map((change) => (used.add(change.id), { text: change.after, tailored: true }));
 
-  // Approving a main skill also marks the CV line that shows it, as the template does.
-  const shown = approved.filter((change) => change.section === "skills" && change.before === null && change.evidenceSource === "cv" && isBigSix(change.after));
-  const withSkill = (original: string, line: CvLine): CvLine => {
-    const skill = shown.find((change) => normalise(original).includes(normalise(change.evidence)));
-    return skill ? { ...line, label: `${skill.after.trim()}:` } : line;
-  };
-
   const summary = profile.summary.trim() ? apply(profile.summary, "summary") : (added("summary", 1)[0] ?? null);
 
   const experience = profile.experience.map((role) => ({
     title: role.title,
     company: role.company,
     dates: dateRange(role.startDate, role.endDate),
-    lines: [...role.duties, ...role.achievements].map((line) => withSkill(line, apply(line, "experience"))),
+    // Every line looks the same: no skill name in bold in front of it.
+    lines: [...role.duties, ...role.achievements].map((line) => apply(line, "experience")),
   }));
   // A new experience line has no role to sit under, so it goes under the most recent one.
   if (experience[0]) experience[0].lines.push(...added("experience"));
@@ -219,12 +213,12 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
   const otherSkills = allSkills.filter((line) => !isBigSix(line.text) && !isDrivingLicence(line));
   const tools = relevantLinesFirst(otherSkills, job, true);
   const technicalSkills = tools.slice(0, maxTools);
-  // Laid out as the template: "MSc (Data Science), Merit." in bold, then the institution. A tailored line stays as approved.
+  // "MSc (Data Science), Merit. University of Manchester", in plain text like every other line. A tailored line stays as approved.
   const education = profile.education.map((item) => {
     const line = apply(educationLine(item), "education");
     if (line.tailored) return line;
     const degree = `${item.qualification}${item.subject ? ` (${item.subject})` : ""}${item.grade ? `, ${item.grade}` : ""}.`;
-    return { ...line, label: degree, text: item.institution };
+    return { ...line, text: `${degree} ${item.institution}` };
   });
   const certifications = profile.certifications.map((item) => {
     const line = apply(certificationLine(item), "certifications");
