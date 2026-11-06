@@ -94,6 +94,15 @@ function saysNo(text: string): boolean {
   return /^(no(?!-)|nope|nah|not yet|not really|none)\b|^never (used|done|had|worked|held)\b|^i (have not|haven't|havent|have never|haven't ever|do not|don't|dont|did not|didn't|didnt|never)\b/.test(answer);
 }
 
+/** The next step for a "no" when the model gives none, or cannot be asked. */
+function plainNextStep(gapId: string): NextStep {
+  return {
+    gapId,
+    kind: "learn",
+    suggestion: "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
+  };
+}
+
 /**
  * Turns the user's answer to one gap question into suggested changes. A tap is enough: "yes" to a single tool or
  * skill always gives a suggestion, and the user is never asked for more. Every change starts as "proposed" and has
@@ -109,17 +118,21 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
   // A "no" in the user's own words counts as the No button does, so every guard against adding it applies.
   const hasExperience = parsed.data.hasExperience && !(typed && saysNo(chosen));
 
-  const access = await tailorModelAccess();
-  if (!access.allowed) return { ok: false, message: access.message };
-
-  const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
+  const [access, profile, job, match] = await Promise.all([tailorModelAccess(), getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   const gap = match?.gaps.find((item) => item.id === gapId);
-  if (!profile || !job || !match || !gap) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
+  if (!profile || !job || !match || !gap) {
+    // A user whose session ended reads the sample data, where a real job's gap is missing: they need to sign in again.
+    return { ok: false, message: access.allowed ? "We could not find this job. Open it again from your jobs." : access.message };
+  }
   const answer = !hasExperience
     ? (typed ? chosen : detail) || "I haven't done this."
     : chosen
       ? [chosen, detail].filter(Boolean).join(". ")
       : answerSentence(gap.requirement, parsed.data.where ?? "work", detail);
+  // A "no" never changes the CV, so it is kept even when the model cannot be asked, as at the daily limit (#314).
+  // It gets the plain next step instead of one written for this job.
+  const keptNo = (): AnswerGapResult => ({ ok: true, answer, hasExperience, changes: [], nextSteps: [plainNextStep(gapId)], hint: null, removed: 0 });
+  if (!access.allowed) return hasExperience ? { ok: false, message: access.message } : keptNo();
 
   // Only answers to this job's real gaps count; the current gap's answer is the one just sent.
   const earlier: GapAnswer[] = (parsed.data.earlierAnswers ?? []).flatMap((item) => {
@@ -166,15 +179,14 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
               : "Add where you did this and what changed, and we will suggest a line for your CV. This is optional.";
       }
     }
-    if (!hasExperience && nextSteps.length === 0) {
-      nextSteps.push({
-        gapId,
-        kind: "learn",
-        suggestion: "You told us you have not done this yet, so it stays off your CV. Build it through a short course or a small project first, then add it.",
-      });
-    }
+    if (!hasExperience && nextSteps.length === 0) nextSteps.push(plainNextStep(gapId));
     return { ok: true, answer, hasExperience, changes, nextSteps, hint, removed };
   } catch (error) {
+    if (!hasExperience) {
+      // Logs the reason only; the no is kept either way.
+      modelFailureMessage(error, "suggest a next step", "");
+      return keptNo();
+    }
     return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
   }
 }
