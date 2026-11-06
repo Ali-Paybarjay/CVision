@@ -114,6 +114,7 @@ describe("summariseUserData", () => {
           match_results: 1,
           tailoring_changes: 1,
           tailored_cvs: 1,
+          gap_questions: 1,
           interview_sessions: 1,
           applications: 1,
           events: 1,
@@ -122,7 +123,7 @@ describe("summariseUserData", () => {
         cvFiles: 3,
       },
     });
-    expect(result.ok && totalRows(result.summary)).toBe(11);
+    expect(result.ok && totalRows(result.summary)).toBe(12);
   });
 
   it("counts CV files across pages of the Storage listing", async () => {
@@ -194,7 +195,7 @@ describe("exportUserData", () => {
 
     expect(result.fileName).toBe("cvision-data-2026-10-23.zip");
     expect(result.summary.cvFiles).toBe(3);
-    expect(totalRows(result.summary)).toBe(11);
+    expect(totalRows(result.summary)).toBe(12);
   });
 
   it("includes the account's details from Supabase Auth, and says what it leaves out", async () => {

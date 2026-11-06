@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "5 November 2026";
+const lastUpdated = "6 November 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -99,9 +99,9 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     body: (
       <p>
         When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
-        match result, the CV changes suggested for it, the tailored CV and cover letter you last downloaded or sent with
-        Apply, as they were, and your interview practice for it. Interview practice is also saved in this browser, so
-        you can pick up where you left off.
+        match result, the questions we asked you about it (so we don’t ask them again), the CV changes suggested for
+        it, the tailored CV and cover letter you last downloaded or sent with Apply, as they were, and your interview
+        practice for it. Interview practice is also saved in this browser, so you can pick up where you left off.
       </p>
     ),
   },
@@ -399,8 +399,9 @@ export default function PrivacyPage() {
         <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>your account, with your email address, password and sign-in sessions</li>
           <li>
-            everything saved with it in our database: your applications, saved jobs, matches, suggested CV changes,
-            saved tailored CVs and cover letters, interview practice, usage records and AI use records
+            everything saved with it in our database: your applications, saved jobs, matches, the questions we asked you,
+            suggested CV changes, saved tailored CVs and cover letters, interview practice, usage records and AI use
+            records
           </li>
           <li>any CV files stored with your account</li>
           <li>CVision’s data in the browser you use to delete it.</li>

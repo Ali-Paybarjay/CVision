@@ -67,6 +67,11 @@ describe("privacy page", () => {
   });
 
   // Card #179: a profile typed in by hand sends nothing to the AI while typing, keeps no CV file, and needs its own consent.
+  it("says the gap questions are kept with each job and deleted with the account", () => {
+    expect(text).toContain("the questions we asked you about it (so we don’t ask them again)");
+    expect(text).toContain("matches, the questions we asked you, suggested CV changes");
+  });
+
   it("says what happens to a profile typed in without a CV", () => {
     expect(text).toContain("Nothing is sent to the AI while you type, and nothing is saved until you approve your profile.");
     expect(text).toContain("Then we save your profile, with no CV file.");

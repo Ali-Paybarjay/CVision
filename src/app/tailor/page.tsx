@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { askGapQuestions, defaultGapQuestion, skillGaps } from "@/features/tailor/gap-questions";
+import { keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
 import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
 import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
 import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
@@ -116,7 +117,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
 }
 
 /**
- * The gap questions, written by the model for a signed-in user. The page always opens: for a visitor in live mode,
+ * The gap questions, written by the model for a signed-in user once per job and kept (#304). The page always opens: for a visitor in live mode,
  * or when the model fails (the daily limit included), each gap gets its plain default question instead.
  */
 async function questionsFor(input: { profile: Profile; job: Job; match: MatchResult }): Promise<{ questions: GapQuestion[]; notice: string | null }> {
@@ -124,7 +125,10 @@ async function questionsFor(input: { profile: Profile; job: Job; match: MatchRes
   const access = await tailorModelAccess();
   if (!access.allowed) return { questions: fallback, notice: access.message };
   try {
-    return { questions: await askGapQuestions({ ...input, requester: access.requester }), notice: null };
+    const { requester } = access;
+    // Asked once per job and kept, because the page is rebuilt after many of its actions (#304).
+    const questions = await keptGapQuestions({ ...input, userId: requester && "userId" in requester ? requester.userId : undefined }, () => askGapQuestions({ ...input, requester }));
+    return { questions, notice: null };
   } catch (error) {
     const message = modelFailureMessage(error, "write the gap questions", "");
     return { questions: fallback, notice: message || null };

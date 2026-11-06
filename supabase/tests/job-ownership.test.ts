@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asUser, createTestDatabase } from "./test-database";
 
 // The tables whose rows belong to one job (issue #28; tailored_cvs from issue #67).
-const jobTables = ["match_results", "tailoring_changes", "tailored_cvs", "interview_sessions", "applications"] as const;
+const jobTables = ["match_results", "tailoring_changes", "tailored_cvs", "gap_questions", "interview_sessions", "applications"] as const;
 type JobTable = (typeof jobTables)[number];
 
 const sara = randomUUID();
