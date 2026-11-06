@@ -67,6 +67,17 @@ describe("signUp", () => {
     expect(auth.signUp.mock.calls[0][0].options.emailRedirectTo).toBe("https://cvision.test/auth/confirm?next=%2Fdashboard");
   });
 
+  // Supabase sends no email for an address that already has an account, and returns a user with no identities (#328).
+  it("says the email already has an account instead of 'Check your email', which would never come", async () => {
+    auth.signUp.mockResolvedValue({ data: { session: null, user: { identities: [] } }, error: null });
+    expect(await signUp({}, form({ next: "/interview?job=1" }))).toEqual({ existingAccount: "sara@example.com" });
+  });
+
+  it("still says 'Check your email' for a new address", async () => {
+    auth.signUp.mockResolvedValue({ data: { session: null, user: { identities: [{ id: "1" }] } }, error: null });
+    expect(await signUp({}, form({}))).toEqual({ checkEmail: "sara@example.com" });
+  });
+
   it("sends the user straight back when no confirmation is needed", async () => {
     auth.signUp.mockResolvedValue({ data: { session: {} }, error: null });
     await expect(signUp({}, form({ next: "/interview?job=1" }))).rejects.toThrow("redirect /interview?job=1");

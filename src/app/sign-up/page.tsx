@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { accountsOffNotice } from "@/features/account/account-panel";
 import { AuthForm } from "@/features/account/auth-form";
+import { getCurrentUser } from "@/features/account/current-user";
 import { safeRedirectPath } from "@/features/account/safe-redirect";
+import { SignedInNotice } from "@/features/account/signed-in-notice";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { Card, Page } from "@/shared/ui";
 
@@ -29,5 +31,9 @@ export default function SignUpPage({ searchParams }: PageProps<"/sign-up">) {
 
 async function SignUpForm({ searchParams, disabled }: Pick<PageProps<"/sign-up">, "searchParams"> & { disabled: boolean }) {
   const { next } = await searchParams;
-  return <AuthForm mode="sign-up" disabled={disabled} next={safeRedirectPath(next)} />;
+  const destination = safeRedirectPath(next);
+  // Someone already signed in, say from the home page's main button, gets their account instead of the form (#328).
+  const user = disabled ? null : await getCurrentUser();
+  if (user) return <SignedInNotice mode="sign-up" email={user.email} next={destination} />;
+  return <AuthForm mode="sign-up" disabled={disabled} next={destination} />;
 }

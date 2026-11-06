@@ -5,7 +5,8 @@ import { BrandMark } from "./brand-mark";
 import { MainNav, MainNavFallback } from "./main-nav";
 import { Wordmark } from "./wordmark";
 
-export function SiteHeader() {
+/** `signOut` is the Sign out control, shown to signed-in visitors (#328). The layout passes it in, so @/shared stays free of @/features. */
+export function SiteHeader({ signOut }: { signOut?: React.ReactNode }) {
   return (
     <header className="relative border-b border-line bg-surface">
       <nav aria-label="Main" className="mx-auto flex min-h-16 max-w-6xl items-center gap-4 px-4 lg:gap-8">
@@ -15,7 +16,7 @@ export function SiteHeader() {
           <Wordmark />
         </Link>
         <Suspense fallback={<MainNavFallback />}>
-          <SessionAwareNav />
+          <SessionAwareNav signOut={signOut} />
         </Suspense>
       </nav>
     </header>
@@ -23,6 +24,6 @@ export function SiteHeader() {
 }
 
 /** Reads the session, so it streams in behind the Suspense boundary above. */
-async function SessionAwareNav() {
-  return <MainNav signedIn={(await getSignedInUserId()) !== null} />;
+async function SessionAwareNav({ signOut }: { signOut?: React.ReactNode }) {
+  return <MainNav signedIn={(await getSignedInUserId()) !== null} signOut={signOut} />;
 }

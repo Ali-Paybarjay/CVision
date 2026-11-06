@@ -35,6 +35,15 @@ export function AuthForm({
   return (
     <form action={action} className="flex flex-col gap-5">
       {state.error && <Notice tone="error">{state.error}</Notice>}
+      {state.existingAccount && (
+        <Notice tone="info" title="You already have an account">
+          {state.existingAccount} already has a CVision account.{" "}
+          <Link href={withNext("/sign-in", next)} className="font-semibold text-accent hover:underline">
+            Sign in instead
+          </Link>
+          .
+        </Notice>
+      )}
       <input type="hidden" name="next" value={next} />
       <Field label="Email" error={state.fieldErrors?.email}>
         {(props) => <Input {...props} name="email" type="email" autoComplete="email" required disabled={disabled} />}

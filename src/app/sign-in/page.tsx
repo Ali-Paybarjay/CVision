@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { accountsOffNotice } from "@/features/account/account-panel";
 import { AuthForm } from "@/features/account/auth-form";
+import { getCurrentUser } from "@/features/account/current-user";
 import { safeRedirectPath } from "@/features/account/safe-redirect";
+import { SignedInNotice } from "@/features/account/signed-in-notice";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { Card, Page } from "@/shared/ui";
 
@@ -26,5 +28,9 @@ export default function SignInPage({ searchParams }: PageProps<"/sign-in">) {
 
 async function SignInForm({ searchParams, disabled }: Pick<PageProps<"/sign-in">, "searchParams"> & { disabled: boolean }) {
   const { next } = await searchParams;
-  return <AuthForm mode="sign-in" disabled={disabled} next={safeRedirectPath(next)} />;
+  const destination = safeRedirectPath(next);
+  // Someone already signed in sees which account, rather than a form that seems to switch accounts (#328).
+  const user = disabled ? null : await getCurrentUser();
+  if (user) return <SignedInNotice mode="sign-in" email={user.email} next={destination} />;
+  return <AuthForm mode="sign-in" disabled={disabled} next={destination} />;
 }
