@@ -10,8 +10,7 @@ import { CheckIcon, Page } from "@/shared/ui";
 
 export const metadata: Metadata = {
   title: "Privacy",
-  description:
-    "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
+  description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
 const lastUpdated = "6 November 2026";
@@ -22,10 +21,7 @@ const contents = [
   { id: "where", title: "Where it’s kept" },
   { id: "who-sees-it", title: "Who else sees it" },
   { id: "how-long", title: "How long we keep it" },
-  {
-    id: "not-deleted-straight-away",
-    title: "What isn’t deleted straight away",
-  },
+  { id: "not-deleted-straight-away", title: "What isn’t deleted straight away" },
   { id: "cookies", title: "Cookies and browser storage" },
   { id: "feedback", title: "Feedback" },
   { id: "your-rights", title: "Your rights" },
@@ -34,9 +30,7 @@ const contents = [
 type SectionId = (typeof contents)[number]["id"];
 
 /** The Feedback section is only on the page once the form's link is set (src/shared/feedback.ts, #134). */
-const shownContents = contents.filter(
-  (section) => section.id !== "feedback" || feedbackFormUrl,
-);
+const shownContents = contents.filter((section) => section.id !== "feedback" || feedbackFormUrl);
 
 const link = "font-semibold text-accent hover:underline";
 
@@ -57,10 +51,9 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Your email address and your password, which we store only in a
-          scrambled form that can’t be turned back into your password. We also
-          keep when you signed up and last signed in, and, for each session
-          where you’re signed in, your IP address and browser details.
+          Your email address and your password, which we store only in a scrambled form that can’t be turned back into
+          your password. We also keep when you signed up and last signed in, and, for each session where you’re signed
+          in, your IP address and browser details.
         </p>
         <p>We use these to sign you in.</p>
       </>
@@ -71,28 +64,23 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          When you upload your CV, our server reads the file and sends its text
-          to the AI to build your profile. Nothing is saved at this point: you
-          check and approve every item first, and if you stop before approving,
-          we don’t keep the file.
+          When you upload your CV, our server reads the file and sends its text to the AI to build your profile.
+          Nothing is saved at this point: you check and approve every item first, and if you stop before approving, we
+          don’t keep the file.
         </p>
         <p>
-          When you approve your profile, we save it to your account, with the CV
-          file you uploaded (PDF or Word) if there is one. You need to be signed
-          in to build a profile. If you upload a new CV later, the new file
-          replaces the old one.
+          When you approve your profile, we save it to your account, with the CV file you uploaded (PDF or Word) if
+          there is one. You need to be signed in to build a profile. If you upload a new CV later, the new file replaces
+          the old one.
         </p>
         <p>
-          If you don’t have a CV to upload, you can type your details in
-          yourself instead. Nothing is sent to the AI while you type, and
-          nothing is saved until you approve your profile. Then we save your
-          profile, with no CV file.
+          If you don’t have a CV to upload, you can type your details in yourself instead. Nothing is sent to the AI
+          while you type, and nothing is saved until you approve your profile. Then we save your profile, with no CV
+          file.
         </p>
         <p>
-          We read your CV only with your explicit consent, which you give when
-          you upload it. If you type your details in instead, we save them only
-          with your explicit consent, which you give when you approve your
-          profile.
+          We read your CV only with your explicit consent, which you give when you upload it. If you type your details
+          in instead, we save them only with your explicit consent, which you give when you approve your profile.
         </p>
       </>
     ),
@@ -101,9 +89,8 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     title: "Your applications",
     body: (
       <p>
-        The applications you track on your dashboard: which job each one is for,
-        its status, the date and your next step. We keep them with your account,
-        so you can see where each application stands.
+        The applications you track on your dashboard: which job each one is for, its status, the date and your next
+        step. We keep them with your account, so you can see where each application stands.
       </p>
     ),
   },
@@ -111,11 +98,10 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     title: "Jobs and interview practice",
     body: (
       <p>
-        When you check a job ad while signed in, we keep the ad as you pasted it
-        with your account, together with its match result, the questions we
-        asked you about it (so we don’t ask them again), the CV changes
-        suggested for it and your interview practice for it. Interview practice
-        is also saved in this browser, so you can pick up where you left off.
+        When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
+        match result, the questions we asked you about it (so we don’t ask them again), the CV changes suggested for
+        it and your interview practice for it. Interview practice is also
+        saved in this browser, so you can pick up where you left off.
       </p>
     ),
   },
@@ -124,11 +110,9 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          A short record when you do certain things, such as pressing the Tailor
-          my CV to a job button, changing an application’s status or finishing
-          an interview practice (with its scores, how many questions you
-          answered and how long it took). These records never include your CV,
-          your answers, the job ad or your contact details.
+          A short record when you do certain things, such as pressing the Tailor my CV to a job button, changing an
+          application’s status or finishing an interview practice (with its scores, how many questions you answered
+          and how long it took). These records never include your CV, your answers, the job ad or your contact details.
         </p>
         <p>We use them to see how CVision is used and to make it better.</p>
       </>
@@ -139,14 +123,12 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          One record for each request to the AI: which feature and model it was
-          for, how much text was processed, what it cost and whether it worked.
-          Never the text itself.
+          One record for each request to the AI: which feature and model it was for, how much text was processed, what
+          it cost and whether it worked. Never the text itself.
         </p>
         <p>
-          We use these to set daily limits on AI use. We also add them up by
-          day, or over a set time when we test the app, without saying whose
-          they are, to see what the AI costs and how often it fails.
+          We use these to set daily limits on AI use. We also add them up by day, or over a set time when we test the app,
+          without saying whose they are, to see what the AI costs and how often it fails.
         </p>
       </>
     ),
@@ -167,16 +149,14 @@ const services: { name: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Passes your text to the AI and returns the answer. We don’t send your
-          account ID or email address with it, but the text we send, from your
-          CV or your profile, may include your name and contact details.
+          Passes your text to the AI and returns the answer. We don’t send your account ID or email address with it,
+          but the text we send, from your CV or your profile, may include your name and contact details.
         </p>
         <p>
-          OpenRouter deletes the text as soon as the answer is ready, unless the
-          law requires it to keep it or it detects misuse. It keeps technical
-          details of each request, such as how much text was processed and how
-          long it took. It also says it may categorise a small sample of
-          requests anonymously, without linking them to our account.
+          OpenRouter deletes the text as soon as the answer is ready, unless the law requires it to keep it or it
+          detects misuse. It keeps technical details of each request, such as how much text was processed and how long
+          it took. It also says it may categorise a small sample of requests anonymously, without linking them to our
+          account.
         </p>
       </>
     ),
@@ -185,10 +165,9 @@ const services: { name: string; body: React.ReactNode }[] = [
     name: "Claude, by Anthropic, on Google Cloud or Amazon Web Services",
     body: (
       <p>
-        The AI model that reads your text and writes the answer. We’ve set our
-        OpenRouter account to use only services that don’t keep the text (zero
-        data retention), so Google Cloud and Amazon Web Services process it to
-        write the answer and don’t store it.
+        The AI model that reads your text and writes the answer. We’ve set our OpenRouter account to use only services
+        that don’t keep the text (zero data retention), so Google Cloud and Amazon Web Services process it to write the
+        answer and don’t store it.
       </p>
     ),
   },
@@ -208,26 +187,15 @@ const howLong: { what: string; until: string }[] = [
     until:
       "Until you delete your account. You can also delete your profile and any CV file on their own, on the Profile page.",
   },
-  {
-    what: "Usage and AI use records linked to your account",
-    until: "Until you delete your account.",
-  },
-  {
-    what: "Usage and AI use records made while you weren’t signed in",
-    until: "We haven’t set an end date yet.",
-  },
+  { what: "Usage and AI use records linked to your account", until: "Until you delete your account." },
+  { what: "Usage and AI use records made while you weren’t signed in", until: "We haven’t set an end date yet." },
   {
     what: "Interview practice in this browser",
-    until:
-      "Until you sign out, delete your account or clear this browser’s data.",
+    until: "Until you sign out, delete your account or clear this browser’s data.",
   },
 ];
 
-const notDeletedStraightAway: {
-  what: string;
-  howLong: string;
-  detail: string;
-}[] = [
+const notDeletedStraightAway: { what: string; howLong: string; detail: string }[] = [
   {
     what: "Database backups",
     howLong: "Up to 7 days",
@@ -237,14 +205,12 @@ const notDeletedStraightAway: {
   {
     what: "Supabase’s service logs",
     howLong: "1 day, sign-in logs 1 hour",
-    detail:
-      "Each request to our database and sign-in service is logged with your IP address and browser details.",
+    detail: "Each request to our database and sign-in service is logged with your IP address and browser details.",
   },
   {
     what: "Vercel’s request logs",
     howLong: "Up to 30 days",
-    detail:
-      "Each page you open is logged with its address, your browser details and your IP address.",
+    detail: "Each page you open is logged with its address, your browser details and your IP address.",
   },
   {
     what: "OpenRouter’s request details",
@@ -283,8 +249,7 @@ const cookies: { name: string; purpose: string; howLong: string }[] = [
     name: "sb-…-auth-token-code-verifier",
     purpose:
       "Set while you sign up, so the link in your confirmation email can finish signing you in. Related cookies end in -flow-…-code-verifier and -flows-code-verifier.",
-    howLong:
-      "Usually removed once you confirm your email in this browser. Otherwise it expires after up to 400 days.",
+    howLong: "Usually removed once you confirm your email in this browser. Otherwise it expires after up to 400 days.",
   },
   {
     name: "cvision-account-deleted",
@@ -299,15 +264,13 @@ const browserStorage: { name: string; purpose: string; howLong: string }[] = [
     name: "cvision.profile",
     purpose:
       "A copy of your profile and the record of your consent, from before profiles were saved to accounts. We remove it when you save your profile to your account.",
-    howLong:
-      "Until you save your profile to your account, sign out, delete your account or clear this browser’s data.",
+    howLong: "Until you save your profile to your account, sign out, delete your account or clear this browser’s data.",
   },
   {
     name: "cvision.interview.v1:…",
     purpose:
       "Your interview practice for each job, including your answers and feedback, so you can pick up where you left off or see your report again.",
-    howLong:
-      "Until you start that practice again, sign out, delete your account or clear this browser’s data.",
+    howLong: "Until you start that practice again, sign out, delete your account or clear this browser’s data.",
   },
   {
     name: "cvision.storage-check",
@@ -322,18 +285,12 @@ export default function PrivacyPage() {
       title="Privacy"
       description={
         <>
-          <p>
-            What CVision keeps about you, where, for how long, who else sees it,
-            and how to download or delete it.
-          </p>
+          <p>What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.</p>
           <p className="mt-2 text-sm">Last updated {lastUpdated}</p>
         </>
       }
     >
-      <section
-        aria-labelledby="in-short-title"
-        className="rounded-lg bg-emphasis p-5 text-on-emphasis sm:p-6"
-      >
+      <section aria-labelledby="in-short-title" className="rounded-lg bg-emphasis p-5 text-on-emphasis sm:p-6">
         <h2 id="in-short-title" className="text-xl">
           In short
         </h2>
@@ -354,10 +311,7 @@ export default function PrivacyPage() {
         <ul className="mt-2 grid gap-x-8 sm:grid-cols-2">
           {shownContents.map((section) => (
             <li key={section.id}>
-              <a
-                href={`#${section.id}`}
-                className={`inline-flex min-h-11 items-center ${link}`}
-              >
+              <a href={`#${section.id}`} className={`inline-flex min-h-11 items-center ${link}`}>
                 {section.title}
               </a>
             </li>
@@ -376,19 +330,15 @@ export default function PrivacyPage() {
           <h3 className="text-lg">If you’re not signed in</h3>
           <div className="mt-1 flex flex-col gap-2">
             <p>
-              If you use CVision without signing in, usage records and AI use
-              records are kept against a code instead of an account. The code is
-              made by scrambling your IP address with a secret key and changes
-              every day. These records never contain your IP address itself,
-              only the daily code.
+              If you use CVision without signing in, usage records and AI use records are kept against a code instead
+              of an account. The code is made by scrambling your IP address with a secret key and changes every day.
+              These records never contain your IP address itself, only the daily code.
             </p>
             <p>
-              If you use the free CV check, our server sends your CV text to the
-              AI to review it. We don’t save your CV or the review, only a usage
-              record with the score and how many issues were found, and an AI
-              use record for each request to the AI. The free CV check keeps
-              these records against the daily code, not your account, even if
-              you’re signed in.
+              If you use the free CV check, our server sends your CV text to the AI to review it. We don’t save your CV
+              or the review, only a usage record with the score and how many issues were found, and an AI use record for
+              each request to the AI. The free CV check keeps these records against the daily code, not your account,
+              even if you’re signed in.
             </p>
           </div>
         </div>
@@ -396,33 +346,26 @@ export default function PrivacyPage() {
 
       <Section id="where">
         <p>
-          Our database, file storage and sign-in are run by Supabase in London.
-          The app runs on Vercel, also in London, although the small step that
-          keeps you signed in may run at the Vercel location nearest to you.
+          Our database, file storage and sign-in are run by Supabase in London. The app runs on Vercel, also in London,
+          although the small step that keeps you signed in may run at the Vercel location nearest to you.
         </p>
         <p>Some processing happens outside the UK:</p>
         <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>
-            Your text reaches the AI through OpenRouter, a US company, and is
-            processed by Claude on Google Cloud or Amazon Web Services, in the
-            EU or the US.
+            Your text reaches the AI through OpenRouter, a US company, and is processed by Claude on Google Cloud or
+            Amazon Web Services, in the EU or the US.
           </li>
           <li>
-            Vercel is a US company. Its terms say its main processing facilities
-            are in the US and its backups are copied to locations around the
-            world.
+            Vercel is a US company. Its terms say its main processing facilities are in the US and its backups are
+            copied to locations around the world.
           </li>
-          <li>
-            Supabase says its backups, logs and the services it relies on can be
-            outside the region we chose.
-          </li>
+          <li>Supabase says its backups, logs and the services it relies on can be outside the region we chose.</li>
         </ul>
         <p>
-          The UK recognises the countries of the European Economic Area, Ireland
-          included, as protecting personal data adequately. For transfers to the
-          US, the data processing terms of Supabase, Vercel and OpenRouter use
-          the International Data Transfer Addendum issued by the ICO, which adds
-          UK protections to the EU’s Standard Contractual Clauses.
+          The UK recognises the countries of the European Economic Area, Ireland included, as protecting personal data
+          adequately. For transfers to the US, the data processing terms of Supabase, Vercel and OpenRouter use the
+          International Data Transfer Addendum issued by the ICO, which adds UK protections to the EU’s Standard
+          Contractual Clauses.
         </p>
       </Section>
 
@@ -440,10 +383,7 @@ export default function PrivacyPage() {
       <Section id="how-long">
         <dl className="divide-y divide-line border-y border-line">
           {howLong.map((row) => (
-            <div
-              key={row.what}
-              className="grid gap-1 py-3 sm:grid-cols-2 sm:gap-6"
-            >
+            <div key={row.what} className="grid gap-1 py-3 sm:grid-cols-2 sm:gap-6">
               <dt className="font-semibold">{row.what}</dt>
               <dd>{row.until}</dd>
             </div>
@@ -454,17 +394,13 @@ export default function PrivacyPage() {
           <Link href={yourDataPath} className={link}>
             Your data page
           </Link>
-          , which you reach from your dashboard, we sign you out and delete
-          straight away:
+          , which you reach from your dashboard, we sign you out and delete straight away:
         </p>
         <ul className="flex list-disc flex-col gap-2 pl-5">
+          <li>your account, with your email address, password and sign-in sessions</li>
           <li>
-            your account, with your email address, password and sign-in sessions
-          </li>
-          <li>
-            everything saved with it in our database: your applications, saved
-            jobs, matches, the questions we asked you, suggested CV changes,
-            interview practice, usage records and AI use records
+            everything saved with it in our database: your applications, saved jobs, matches, the questions we asked you,
+            suggested CV changes, interview practice, usage records and AI use records
           </li>
           <li>any CV files stored with your account</li>
           <li>CVision’s data in the browser you use to delete it.</li>
@@ -481,10 +417,7 @@ export default function PrivacyPage() {
       <Section id="not-deleted-straight-away">
         <dl className="flex flex-col gap-5">
           {notDeletedStraightAway.map((item) => (
-            <div
-              key={item.what}
-              className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:gap-6"
-            >
+            <div key={item.what} className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:gap-6">
               <dt>
                 <span className="block font-semibold">{item.what}</span>
                 <span className="block text-text-muted">{item.howLong}</span>
@@ -497,38 +430,30 @@ export default function PrivacyPage() {
 
       <Section id="cookies">
         <p>
-          Every cookie and item of browser storage CVision uses is needed to
-          sign you in or to keep what you entered for a feature you asked to
-          use. Under UK law these are strictly necessary, so we don’t ask for
-          consent and there’s no cookie banner.
+          Every cookie and item of browser storage CVision uses is needed to sign you in or to keep what you entered
+          for a feature you asked to use. Under UK law these are strictly necessary, so we don’t ask for consent and
+          there’s no cookie banner.
         </p>
         <p>
-          We don’t use analytics or advertising cookies, tracking scripts or
-          anything loaded from other websites. Our font is served from our own
-          site, so your browser doesn’t contact Google. If you don’t sign up or
-          sign in, we don’t set any cookies.
+          We don’t use analytics or advertising cookies, tracking scripts or anything loaded from other websites. Our
+          font is served from our own site, so your browser doesn’t contact Google. If you don’t sign up or sign in, we
+          don’t set any cookies.
         </p>
         <StorageList title="Cookies" items={cookies} />
         <StorageList title="Browser storage" items={browserStorage} />
-        <p>
-          Usage and AI use records are kept on our servers, not on your device.
-        </p>
+        <p>Usage and AI use records are kept on our servers, not on your device.</p>
       </Section>
 
       {feedbackFormUrl && (
         <Section id="feedback">
           <p>
-            The Give feedback link at the bottom of every page opens a Google
-            Form in a new tab. It isn’t linked to your CVision account: we see
-            only what you type into the form, and nothing from your profile or
-            CV.
+            The Give feedback link at the bottom of every page opens a Google Form in a new tab. It isn’t linked to
+            your CVision account: we see only what you type into the form, and nothing from your profile or CV.
           </p>
           <p>
-            Your answers are kept in Google Forms and in our team’s private
-            Google Drive, and only the CVision team reads them. Google runs the
-            form for us and may store the answers outside the UK. We delete them
-            by 30 November 2026. To have your answers deleted sooner, email us
-            at{" "}
+            Your answers are kept in Google Forms and in our team’s private Google Drive, and only the CVision team
+            reads them. Google runs the form for us and may store the answers outside the UK. We delete them by 30
+            November 2026. To have your answers deleted sooner, email us at{" "}
             <a href={`mailto:${brand.contactEmail}`} className={link}>
               {brand.contactEmail}
             </a>
@@ -541,16 +466,11 @@ export default function PrivacyPage() {
         <p>UK data protection law (UK GDPR) gives you these rights.</p>
         <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>
-            <span className="font-semibold">
-              To be told how your data is used.
-            </span>{" "}
-            This page does that.
+            <span className="font-semibold">To be told how your data is used.</span> This page does that.
           </li>
           <li>
-            <span className="font-semibold">
-              To get a copy of your data and take it elsewhere.
-            </span>{" "}
-            Use Download a copy of my data on the{" "}
+            <span className="font-semibold">To get a copy of your data and take it elsewhere.</span> Use Download a
+            copy of my data on the{" "}
             <Link href={yourDataPath} className={link}>
               Your data page
             </Link>
@@ -561,34 +481,25 @@ export default function PrivacyPage() {
             page.
           </li>
           <li>
-            <span className="font-semibold">To have it corrected.</span> Check
-            and edit your profile on the Profile page, and update your
-            applications on your dashboard.
+            <span className="font-semibold">To have it corrected.</span> Check and edit your profile on the Profile
+            page, and update your applications on your dashboard.
           </li>
           <li>
-            <span className="font-semibold">To have it deleted.</span> Use
-            Delete my account on the Your data page, or Delete my profile on the
-            Profile page to delete your profile and any CV file on their own.
+            <span className="font-semibold">To have it deleted.</span> Use Delete my account on the Your data page,
+            or Delete my profile on the Profile page to delete your profile and any CV file on their own.
           </li>
           <li>
-            <span className="font-semibold">To withdraw your consent.</span> You
-            can withdraw your consent to us reading your CV, or to us saving the
-            details you typed in, at any time: use Delete my profile on the
-            Profile page, which deletes your profile and any CV file. This
-            doesn’t affect what we did before you withdrew it.
+            <span className="font-semibold">To withdraw your consent.</span> You can withdraw your consent to us
+            reading your CV, or to us saving the details you typed in, at any time: use Delete my profile on the Profile
+            page, which deletes your profile and any CV file. This doesn’t affect what we did before you withdrew it.
           </li>
           <li>
-            <span className="font-semibold">
-              To ask us to limit how we use your data, or to object to how we
-              use it.
-            </span>
+            <span className="font-semibold">To ask us to limit how we use your data, or to object to how we use it.</span>
           </li>
           <li>
-            <span className="font-semibold">
-              Not to be subject to decisions made only by a computer.
-            </span>{" "}
-            CVision makes no such decisions about you: the AI suggests, you
-            approve every change, and we never apply for a job on your behalf.
+            <span className="font-semibold">Not to be subject to decisions made only by a computer.</span> CVision
+            makes no such decisions about you: the AI suggests, you approve every change, and we never apply for a job
+            on your behalf.
           </li>
         </ul>
         <p>
@@ -617,21 +528,11 @@ export default function PrivacyPage() {
   );
 }
 
-function Section({
-  id,
-  children,
-}: {
-  id: SectionId;
-  children: React.ReactNode;
-}) {
+function Section({ id, children }: { id: SectionId; children: React.ReactNode }) {
   const title = contents.find((section) => section.id === id)?.title;
 
   return (
-    <section
-      id={id}
-      aria-labelledby={`${id}-title`}
-      className="scroll-mt-4 border-t border-line pt-8"
-    >
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-4 border-t border-line pt-8">
       <h2 id={`${id}-title`} className="text-2xl">
         {title}
       </h2>
@@ -640,13 +541,7 @@ function Section({
   );
 }
 
-function StorageList({
-  title,
-  items,
-}: {
-  title: string;
-  items: { name: string; purpose: string; howLong: string }[];
-}) {
+function StorageList({ title, items }: { title: string; items: { name: string; purpose: string; howLong: string }[] }) {
   return (
     <div>
       <h3 className="text-lg">{title}</h3>
@@ -654,9 +549,7 @@ function StorageList({
         {items.map((item) => (
           <div key={item.name} className="py-3">
             <dt>
-              <code className="text-sm font-semibold break-all">
-                {item.name}
-              </code>
+              <code className="text-sm font-semibold break-all">{item.name}</code>
             </dt>
             <dd className="mt-1">{item.purpose}</dd>
             <dd className="mt-1 text-text-muted">{item.howLong}</dd>
