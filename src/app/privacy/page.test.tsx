@@ -54,6 +54,16 @@ describe("privacy page", () => {
     expect(text).toContain("in the EU or the US");
   });
 
+  // Since #202 Supabase sends the sign-up emails through the team's Gmail, and the pilot uses the email to get in touch.
+  it("says Gmail sends the account emails, and that the email is used to contact pilots", () => {
+    expect(text).toContain("Google (Gmail)");
+    expect(text).toContain("Our emails to you are sent through Gmail");
+    expect(text).toContain("to contact you about the pilot");
+    expect(text).toContain("We don’t send marketing");
+    expect(text).toContain("Copies of the emails we’ve sent you, in our team’s Gmail");
+    expect(text).not.toContain("including the confirmation email you get when you sign up");
+  });
+
   // Since #94 the approved profile and its CV file are saved to the account (src/features/profile/server/profile-account.ts).
   it("says the approved profile and CV file are kept in the account, not that the file is discarded", () => {
     expect(text).toContain("we save it to your account, with the CV file you uploaded (PDF or Word) if there is one");
