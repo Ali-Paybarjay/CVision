@@ -281,7 +281,7 @@ describe("askModel and the daily limit", () => {
     await expect(askOk(undefined, sara)).resolves.toEqual({ ok: true });
     const refused = askOk(undefined, sara);
     await expect(refused).rejects.toBeInstanceOf(AskModelError);
-    await expect(refused).rejects.toMatchObject({ reason: "limit-reached", message: "You have reached today's limit. Try again tomorrow." });
+    await expect(refused).rejects.toMatchObject({ reason: "limit-reached", message: "You have used today's AI requests. Everything you have saved is still here, and you can try again tomorrow." });
     expect(create).toHaveBeenCalledTimes(1);
     expect(usage.store.delete).toHaveBeenCalledTimes(1);
     await expect(saraToday()).resolves.toBe(1);

@@ -1,4 +1,4 @@
-import { cvHeadings, otherLines, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
+import { cvHeadings, otherLines, type CvEntry, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
 import { CvPaper } from "@/shared/ui";
 
 /** Every line looks the same: no highlight for a tailored line and no bold inside it; only a screen reader hears which lines were tailored.
@@ -15,6 +15,31 @@ function Line({ line, as: Tag = "p" }: { line: CvLine; as?: "p" | "li" }) {
 
 function Heading({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 border-b border-cv-ink/20 pb-1 text-xs font-bold tracking-wider text-accent">{children}</h3>;
+}
+
+function Entries({ heading, items }: { heading: string; items: CvEntry[] }) {
+  if (items.length === 0) return null;
+  return (
+    <>
+      <Heading>{heading}</Heading>
+      {items.map((item, index) => (
+        <div key={index} className="mt-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+            <p className="font-semibold">{item.title}</p>
+            {item.dates && <p className="text-xs text-cv-ink/70">{item.dates}</p>}
+          </div>
+          {item.company && <p className="text-cv-ink/70">{item.company}</p>}
+          {item.lines.length > 0 && (
+            <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+              {item.lines.map((line, lineIndex) => (
+                <Line key={lineIndex} line={line} as="li" />
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </>
+  );
 }
 
 /** The tailored CV in the layout of the template, as the download will look: every line plain, tailored or not. */
@@ -52,25 +77,8 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
         </>
       )}
 
-      {cv.experience.length > 0 && (
-        <>
-          <Heading>{cvHeadings.experience}</Heading>
-          {cv.experience.map((job, index) => (
-            <div key={index} className="mt-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-                <p className="font-semibold">{job.title}</p>
-                {job.dates && <p className="text-xs text-cv-ink/70">{job.dates}</p>}
-              </div>
-              <p className="text-cv-ink/70">{job.company}</p>
-              <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-                {job.lines.map((line, lineIndex) => (
-                  <Line key={lineIndex} line={line} as="li" />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </>
-      )}
+      <Entries heading={cvHeadings.experience} items={cv.experience} />
+      <Entries heading={cvHeadings.projects} items={cv.projects} />
 
       {cv.education.length > 0 && (
         <>

@@ -3,9 +3,10 @@ import type { Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { writeZip, type ZipEntry } from "./zip";
 
-// Builds the four fictional Word CVs in sample-data/cvs from the personas, for testing the upload
-// and the profile-extract evals. Each uses a different layout that real CVs use, so extraction is
-// tested on more than one shape. To rebuild the files after a persona changes:
+// Builds the fictional Word CVs in sample-data/cvs from the personas, for testing the upload
+// and the profile-extract evals: one per persona, plus Emma's with volunteering, projects and languages (#227).
+// Each persona uses a different layout that real CVs use, so extraction is tested on more than one shape.
+// To rebuild the files after a persona changes:
 //   WRITE_SAMPLE_CVS=1 npx vitest run src/features/profile/server/sample-cvs.test.ts
 
 export const samplePersonaNames = ["sara", "reza", "emma", "daniel"] as const satisfies readonly PersonaName[];
@@ -29,13 +30,45 @@ const layouts: Record<(typeof samplePersonaNames)[number], Layout> = {
   daniel: { contactInHeader: true, wordBullets: false, skillsTable: false, datesOnTitleLine: true, months: "short" },
 };
 
+/**
+ * Emma with the three sections the personas don't have (#227), each with one item as sparse as a CV may give it:
+ * no dates, no organisation, no level. Her CV is sample-data/cvs/emma-more-sections.docx, in Emma's layout.
+ */
+export const emmaWithMoreSections: Profile = {
+  ...personas.emma.profile,
+  volunteering: [
+    {
+      role: "Volunteer digital helper",
+      organisation: "Ashcombe Community Library",
+      location: "Bristol",
+      startDate: "2022-09",
+      endDate: null,
+      details: ["Help older visitors set up email and video calls on their phones"],
+    },
+    { role: "Fun run marshal", details: ["Marshal the course for a children’s charity twice a year"] },
+  ],
+  projects: [
+    {
+      name: "Recipe finder",
+      startDate: "2024-10",
+      endDate: "2024-12",
+      details: ["Built a React app that suggests recipes from what is in the fridge", "Wrote tests for every component with Vitest"],
+      url: "https://example.com/emma-walsh/recipe-finder",
+    },
+    { name: "Accessible forms talk", organisation: "Code Harbour", details: ["Gave a ten-minute talk on labelling form fields"] },
+  ],
+  languages: [{ name: "English", level: "Native" }, { name: "Spanish", level: "B2" }, { name: "British Sign Language" }],
+};
+
+export const moreSectionsCvFileName = "emma-more-sections.docx";
+
 export function sampleCvFileName(name: PersonaName): string {
   return `${name}.docx`;
 }
 
-/** The Word file for one persona's CV. */
-export function buildSampleCv(name: (typeof samplePersonaNames)[number]): Uint8Array {
-  return buildCvDocx(personas[name].profile, layouts[name]);
+/** The Word file for one persona's CV, or for another fictional profile in that persona's layout. */
+export function buildSampleCv(name: (typeof samplePersonaNames)[number], profile: Profile = personas[name].profile): Uint8Array {
+  return buildCvDocx(profile, layouts[name]);
 }
 
 function buildCvDocx(profile: Profile, layout: Layout): Uint8Array {
@@ -79,17 +112,44 @@ function buildCvDocx(profile: Profile, layout: Layout): Uint8Array {
     }
   }
 
+  // Optional dates, as a course, a project or volunteering may have them: an end of null is still going, a missing one unknown.
+  const period = (start: string | undefined, end: string | null | undefined) => {
+    if (!start) return end ? `Completed ${month(end, layout)}` : "";
+    if (end === undefined) return month(start, layout);
+    return `${month(start, layout)} – ${end ? month(end, layout) : "Present"}`;
+  };
+
+  // The personas have no volunteering, projects or languages, so their CVs stay as they were (#227).
+  if (profile.volunteering?.length) {
+    body.push(heading("Volunteering"));
+    for (const role of profile.volunteering) {
+      const where = [role.organisation, role.location].filter(Boolean).join(", ");
+      body.push(paragraph(run(role.role, { bold: true }) + (where ? run(` – ${where}`) : ""), { before: 160, after: 0 }));
+      const dates = period(role.startDate, role.endDate);
+      if (dates) body.push(paragraph(run(dates, { italic: true })));
+      body.push(...role.details.map(bullet));
+    }
+  }
+
   body.push(heading("Education"));
   for (const course of profile.education) {
     const award = [course.qualification, course.subject].filter(Boolean).join(" ");
     const grade = course.grade ? ` (${course.grade})` : "";
-    const dates = course.startDate
-      ? `${month(course.startDate, layout)} – ${course.endDate ? month(course.endDate, layout) : "Present"}`
-      : course.endDate
-        ? `Completed ${month(course.endDate, layout)}`
-        : "";
+    const dates = period(course.startDate, course.endDate);
     body.push(paragraph(run(`${award}${grade}`, { bold: true }) + run(`, ${course.institution}`), { before: 120, after: 0 }));
     if (dates) body.push(paragraph(run(dates, { italic: true })));
+  }
+
+  if (profile.projects?.length) {
+    body.push(heading("Projects"));
+    for (const project of profile.projects) {
+      body.push(paragraph(run([project.name, project.organisation].filter(Boolean).join(", "), { bold: true }), { before: 120, after: 0 }));
+      const dates = period(project.startDate, project.endDate);
+      if (dates) body.push(paragraph(run(dates, { italic: true })));
+      body.push(...project.details.map(bullet));
+      // Written as CVs often write it, without https://, which the reading adds back.
+      if (project.url) body.push(paragraph(run(project.url.replace(/^https:\/\//, ""))));
+    }
   }
 
   if (profile.certifications.length > 0) {
@@ -99,6 +159,12 @@ function buildCvDocx(profile: Profile, layout: Layout): Uint8Array {
         bullet([certificate.name, certificate.issuer, certificate.year].filter(Boolean).join(", ")),
       ),
     );
+  }
+
+  if (profile.languages?.length) {
+    body.push(heading("Languages"));
+    const languages = profile.languages.map((language) => (language.level ? `${language.name} (${language.level})` : language.name));
+    body.push(paragraph(run(languages.join(", "))));
   }
 
   body.push(paragraph(run("References available on request.", { italic: true }), { before: 240 }));

@@ -17,6 +17,13 @@ test("the home page says what CVision does and leads to Tailor my CV to a job", 
   await expect(page.getByRole("heading", { level: 1, name: "Stop rewriting your CV for every job." })).toBeVisible();
   await expect(page.getByRole("main")).toContainText("You approve every change.");
 
+  // Plan A (#176): Sara's job ad beside her CV, then why every line changed, as a list on a phone.
+  await expect(page.getByRole("heading", { level: 2, name: "Sara’s CV, tailored for a Junior Data Analyst job" })).toBeVisible();
+  await expect(page.getByRole("article", { name: "Sara Khan’s CV" })).toContainText("Git and GitHub");
+  await expect(page.getByRole("heading", { level: 2, name: "See why every line changed." })).toBeVisible();
+  await expect(page.getByRole("table")).toBeHidden();
+  await expect(page.getByRole("main").getByRole("listitem").getByText("Your CV said: “Built Tableau dashboards for the regional sales team”")).toBeVisible();
+
   // The header has the same action under the same name; the hero's button is the page's one Coral button.
   await expect(page.getByRole("banner").getByRole("link", { name: "Tailor my CV to a job" })).toBeVisible();
   await expect(page.getByRole("main").getByRole("link", { name: "Check my CV in 2 minutes" })).toBeVisible();
@@ -37,12 +44,23 @@ test("step 1: upload a CV, check the details and save the Profile", async ({ pag
   await expect(page.getByRole("heading", { name: "Check your details" })).toBeVisible();
   await expect(page.getByText("Demo mode: this is Sara Khan’s sample profile, not your CV")).toBeVisible();
 
+  // #227: the user can add what the CV didn't have, such as a language, before approving.
+  await page.getByRole("button", { name: "Add a language" }).click();
+  await page.getByLabel("Language", { exact: true }).fill("Welsh");
+  await page.getByLabel("Level (optional)").fill("Fluent");
+
   // Nothing is saved until the user approves: one button at the end of the page checks every item and saves.
   await page.getByRole("button", { name: "Approve and save" }).click();
 
   await expect(page.getByText("Your profile is saved.")).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Sara Khan" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Paste a job ad" })).toHaveAttribute("href", "/jobs");
+
+  // The language was saved with the rest of the profile, and the summary counts it.
+  await expect(page.getByText("1 language", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check and edit your details" }).click();
+  await expect(page.getByLabel("Language", { exact: true })).toHaveValue("Welsh");
+  await expect(page.getByLabel("Level (optional)")).toHaveValue("Fluent");
 });
 
 test("step 2: paste a job ad, see the match and go on to tailoring", async ({ page }) => {

@@ -10,7 +10,7 @@ import { BackLink } from "./back-link";
 import { PreferencesForm } from "./preferences-form";
 import { consentToSend, ProfileBuilder } from "./profile-builder";
 import { deleteQuestion, ProfileOverview } from "./profile-overview";
-import { ReviewStep } from "./review-step";
+import { dutiesHint, ReviewStep } from "./review-step";
 import { SignInToStart } from "./sign-in-to-start";
 import { SignInNotice, UploadStep } from "./upload-step";
 
@@ -118,9 +118,25 @@ describe("profile screens", () => {
 
     expect(words).toContain("No CV to upload?");
     expect(html).toMatch(/<button type="button"[^>]*>Fill in my details<\/button>/);
-    expect(words.indexOf("No CV to upload?")).toBeGreaterThan(words.indexOf("Read my CV"));
+    // The card with the details stays after the upload, as the second choice.
+    expect(words.lastIndexOf("No CV to upload?")).toBeGreaterThan(words.indexOf("Read my CV"));
     // Read my CV stays the page's one main button.
     expect(html.match(/bg-cta/g)).toHaveLength(1);
+  });
+
+  // #204: on a phone the card is a long scroll away, so the way in for someone without a CV is under the heading too.
+  it("shows someone with no CV their way in right under the heading", () => {
+    const html = renderToStaticMarkup(
+      <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} onStartManual={noop} />,
+    );
+    const words = text(html);
+    const heading = words.indexOf("Upload your CV");
+    const shortcut = words.indexOf("No CV to upload? Fill in my details");
+
+    expect(shortcut).toBeGreaterThan(heading);
+    expect(shortcut).toBeLessThan(words.indexOf("Your CV"));
+    // Two ways in, one action: both are "Fill in my details", and neither is Coral.
+    expect(html.match(/>Fill in my details<\/button>/g)).toHaveLength(2);
   });
 
   it("offers no second choice when the page doesn't ask for one", () => {
@@ -176,6 +192,137 @@ describe("profile screens", () => {
     expect(html.match(/bg-cta/g)).toHaveLength(1);
     expect(words).toContain("Approve your profile");
     expect(words).toContain("Start again");
+  });
+
+  it("lists volunteering, projects and languages read from a CV, each next to the section most like it (#227)", () => {
+    const profile = {
+      ...personas.sara.profile,
+      volunteering: [{ role: "Volunteer maths tutor", organisation: "Ancoats Reading Club", startDate: "2023-01", endDate: null, details: [] }],
+      projects: [{ name: "Late buses dashboard", details: [], url: "https://example.com/sara/late-buses" }],
+      languages: [{ name: "French", level: "B1" }],
+    };
+    const html = renderToStaticMarkup(
+      <ReviewStep
+        draft={draftFromExtraction(extractionFromProfile(profile))}
+        base={profile}
+        source="cv"
+        storage="account"
+        demo={null}
+        truncated={false}
+        focusHeading={false}
+        onSave={noop}
+        onCancel={noop}
+      />,
+    );
+    const words = text(html);
+    const headings = ["Work history", "Volunteering", "Education", "Projects", "Certificates", "Languages", "Skills"];
+    const at = headings.map((heading) => html.indexOf(`>${heading}</h3>`));
+
+    expect(at).not.toContain(-1);
+    expect(at).toEqual([...at].sort((a, b) => a - b));
+    expect(words).toContain("Volunteer maths tutor at Ancoats Reading Club");
+    expect(words).toContain("I still do this");
+    expect(words).toContain("Late buses dashboard");
+    expect(html).toMatch(/<input[^>]*type="url"[^>]*value="https:\/\/example.com\/sara\/late-buses"/);
+    expect(words).toContain("Level (optional)");
+    expect(words).not.toMatch(/We didn’t find any (volunteering|projects|languages)/);
+  });
+
+  it("says when a CV has no volunteering, projects or languages, so the user can add them", () => {
+    const profile = personas.reza.profile;
+    const words = text(
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={draftFromExtraction(extractionFromProfile(profile))}
+          base={profile}
+          source="cv"
+          storage="account"
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      ),
+    );
+
+    expect(words).toContain("We didn’t find any volunteering in your CV.");
+    expect(words).toContain("We didn’t find any projects in your CV.");
+    expect(words).toContain("We didn’t find any languages in your CV.");
+    for (const label of ["Add a volunteering role", "Add a project", "Add a language"]) expect(words).toContain(label);
+  });
+
+  // #236: a pilot user saw "What you did" empty for two older jobs and thought we had dropped their lines.
+  it("says why “What you did” is empty for a job read from the CV, and only for that job", () => {
+    const daniel = personas.daniel.profile;
+    const [first, second] = daniel.experience;
+    const profile = {
+      ...daniel,
+      experience: [
+        first,
+        { ...second, duties: [], achievements: [] },
+        { ...second, title: "Stock assistant", duties: [], achievements: ["Cut stock loss from 2.1% to 1.3%"] },
+      ],
+    };
+    const fromCv = reviewReducer(draftFromExtraction(extractionFromProfile(profile)), {
+      type: "add",
+      section: "experience",
+      key: "new-experience-page-1",
+    });
+    const words = text(
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={fromCv}
+          base={profile}
+          source="cv"
+          storage="account"
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      ),
+    );
+    const hints = words.match(/What you did (Your CV has no lines|Your CV lists only results|One per line, as on your CV)/g);
+
+    // The job with lines, the job with none, the job with only results, then the job the user added.
+    expect(hints).toEqual([
+      "What you did One per line, as on your CV",
+      "What you did Your CV has no lines",
+      "What you did Your CV lists only results",
+      "What you did One per line, as on your CV",
+    ]);
+    expect(words).toContain("Your CV has no lines for this job. Add what you did if you want us to use it.");
+    expect(words).toContain(
+      "Your CV lists only results for this job, so they’re under Results and achievements. Add what you did if you want us to use it.",
+    );
+  });
+
+  it("gives the usual hint back as soon as the user writes what they did", () => {
+    const empty = { duties: "", achievements: "" };
+    const onlyResults = { ...empty, achievements: "Cut stock loss" };
+
+    expect(dutiesHint(empty, true, empty)).toMatch(/^Your CV has no lines/);
+    expect(dutiesHint(onlyResults, true, onlyResults)).toMatch(/^Your CV lists only results/);
+    expect(dutiesHint({ ...empty, duties: "R" }, true, empty)).toBe("One per line, as on your CV.");
+    expect(dutiesHint({ ...empty, duties: "  \n " }, true, empty)).toMatch(/^Your CV has no lines/);
+    // A job added by hand, and a profile typed in or edited later, keep their usual hints.
+    expect(dutiesHint(empty, true, null)).toBe("One per line, as on your CV.");
+    expect(dutiesHint(empty, false, null)).toBe("One per line.");
+  });
+
+  // #310: the hint says what the CV had, not what the boxes hold now.
+  it("speaks of what the CV had, whatever the user has deleted or typed since", () => {
+    const empty = { duties: "", achievements: "" };
+    const read = { duties: "Ran the tills", achievements: "Cut stock loss" };
+
+    // The CV had lines for this job, so clearing both boxes doesn't make the CV "have no lines".
+    expect(dutiesHint(empty, true, read)).toBe("One per line, as on your CV.");
+    // The CV had nothing for this job: a result the user types in doesn't make the CV "list only results".
+    expect(dutiesHint({ ...empty, achievements: "Won an award" }, true, empty)).toMatch(/^Your CV has no lines/);
+    // The CV had only results: clearing them still says so, as that is what the CV had.
+    expect(dutiesHint(empty, true, { ...empty, achievements: "Cut stock loss" })).toMatch(/^Your CV lists only results/);
   });
 
   it("asks for the changes to a saved profile to be approved once, or cancelled", () => {
@@ -280,9 +427,13 @@ describe("profile screens", () => {
 
     expect(words).toContain("Add your details");
     expect(words).toContain("Fill in each section that applies to you.");
-    expect(words).toContain("No jobs yet. Part-time work, volunteering and placements count too.");
+    // Volunteering has its own section now, so the Work history hint no longer sends it there (#253 review).
+    expect(words).toContain("No jobs yet. Part-time work and placements count too.");
     expect(words).toContain("No qualifications yet. GCSEs, A levels, degrees and training courses all count.");
     expect(words).toContain("No certificates yet.");
+    expect(words).toContain("No volunteering yet.");
+    expect(words).toContain("No projects yet. Course, personal and open-source projects all count.");
+    expect(words).toContain("No languages yet.");
     expect(words).toContain("A few sentences about you and the work you want, in your own words.");
     expect(words).not.toMatch(/in your CV|your CV’s|your CV doesn’t|as on your CV/i);
     // A single page, so no steps of the upload.
@@ -382,6 +533,22 @@ describe("profile screens", () => {
     expect(html).toContain("Download my data");
     expect(html).toContain("Delete my profile");
     expect(html).toContain("Paste a job ad");
+    // The personas have no volunteering, projects or languages, so their summary is as it was before #227.
+    expect(html).not.toMatch(/Volunteering|Projects|Languages/);
+  });
+
+  it("counts volunteering, projects and languages in the summary when the profile has them (#227)", () => {
+    const profile = {
+      ...personas.emma.profile,
+      volunteering: [{ role: "Volunteer digital helper", details: [] }],
+      projects: [{ name: "Recipe finder", details: [] }, { name: "Accessible forms talk", details: [] }],
+      languages: [{ name: "English", level: "Native" }, { name: "Spanish" }, { name: "British Sign Language" }],
+    };
+    const html = overview(fromBrowser({ ...stored("emma"), profile }), "browser");
+
+    expect(html).toContain("Volunteering 1 role");
+    expect(html).toContain("Projects 2 projects");
+    expect(html).toContain("Languages 3 languages");
   });
 
   it("says a browser profile is in this browser, with the day consent was given", () => {

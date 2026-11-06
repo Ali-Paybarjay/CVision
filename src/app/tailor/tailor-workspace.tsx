@@ -283,7 +283,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
             icon={<DownloadIcon />}
           >
             <DownloadBar jobId={job.id} changes={changes} letter={approvedLetter} onGoToLetter={() => goTo(4)} />
-            <ApplyPanel jobId={job.id} jobUrl={jobUrl} onApplied={() => setApplied(true)} />
+            <ApplyPanel jobId={job.id} jobUrl={jobUrl} coverLetter={approvedLetter?.approved ? approvedLetter.text : null} onApplied={() => setApplied(true)} />
           </TailorStep>
         </div>
     </Card>

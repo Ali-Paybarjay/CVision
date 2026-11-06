@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildTailoredCv, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
+import { cvLines } from "@/features/tailor/nothing-invented";
 import { personas } from "@/shared/sample-data";
 
 const profile = personas.sara.profile;
@@ -231,5 +232,41 @@ describe("the tailored CV for a job (#216)", () => {
   it("finds a driving licence the CV listed among its skills", () => {
     const cv = buildTailoredCv({ ...profile, skills: ["Full UK driving licence"], certifications: [] }, [], job);
     expect(otherLines(cv).map((line) => `${line.label} ${line.text}`)).toEqual(["Driving licence: Full UK"]);
+  });
+});
+
+describe("languages and projects on the tailored CV (#228)", () => {
+  const full = {
+    ...profile,
+    languages: [{ name: "Welsh", level: "Fluent" }, { name: "Farsi" }],
+    projects: [{ name: "Bus delay dashboard", organisation: "University of Manchester", startDate: "2024-01", endDate: "2024-06", details: ["Built a dashboard of bus delays"] }],
+    volunteering: [{ role: "Volunteer tutor", details: ["Taught maths to adults every week"] }],
+  };
+
+  it("shows them as the Profile has them, invents no level, and leaves volunteering off the CV", () => {
+    const cv = buildTailoredCv(full, []);
+    expect(cv.languages.map((line) => line.text)).toEqual(["Welsh (Fluent)", "Farsi"]);
+    expect(cv.projects).toEqual([{ title: "Bus delay dashboard", company: "University of Manchester", dates: "Jan 2024 – Jun 2024", lines: [{ text: "Built a dashboard of bus delays", tailored: false }] }]);
+    expect(JSON.stringify(cv)).not.toContain("Volunteer tutor");
+  });
+
+  it("lists languages in the last section, right under the certificates", () => {
+    const cv = buildTailoredCv({ ...full, skills: ["Excel"], certifications: [{ name: "PRINCE2 Foundation", year: 2023 }, { name: "Full UK driving licence" }] }, []);
+    expect(otherLines(cv).map((line) => `${line.label} ${line.text}`)).toEqual([
+      "Certificates: PRINCE2 Foundation (2023)",
+      "Languages: Welsh (Fluent), Farsi",
+      "Driving licence: Full UK",
+      "Tools: Excel",
+    ]);
+  });
+
+  it("leaves them empty for a Profile without them", () => {
+    const cv = buildTailoredCv(profile, []);
+    expect([cv.languages, cv.projects]).toEqual([[], []]);
+  });
+
+  it("counts languages and projects as evidence for Nothing invented", () => {
+    const lines = cvLines(full);
+    for (const line of ["Welsh", "Fluent", "Bus delay dashboard", "Built a dashboard of bus delays"]) expect(lines).toContain(line);
   });
 });

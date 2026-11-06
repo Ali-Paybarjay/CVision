@@ -93,6 +93,16 @@ export function UploadStep({
         {newCv ? "Upload a new CV" : "Upload your CV"}
       </h2>
 
+      {/* On a phone the card at the end is a long scroll away, so someone without a CV sees their way in here first (#204). */}
+      {onStartManual && (
+        <p className="-mt-3 flex flex-wrap items-center gap-x-2 text-text-muted">
+          No CV to upload?
+          <Button variant="quiet" className="min-h-11 px-0" onClick={onStartManual} disabled={pending}>
+            Fill in my details
+          </Button>
+        </p>
+      )}
+
       {demoMode && (
         <Notice tone="warning" title="Demo mode: your CV won’t become your profile yet">
           CVision isn’t connected to the AI yet. It checks that your file can be read, then shows a sample profile
@@ -164,8 +174,8 @@ export function UploadStep({
             No CV to upload?
           </h3>
           <p className="mt-2 text-text-muted">
-            Fill in your details yourself instead: your work history, education, certificates and skills. Nothing is
-            saved until you approve it.
+            Fill in your details yourself instead: your work history, volunteering, education, projects, certificates,
+            languages and skills. Nothing is saved until you approve it.
           </p>
           <Button className="mt-4" onClick={onStartManual} disabled={pending}>
             Fill in my details

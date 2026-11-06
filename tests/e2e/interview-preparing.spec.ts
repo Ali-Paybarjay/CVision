@@ -114,19 +114,22 @@ test("a stage that does not finish is tried once more, then says so plainly, kee
   expect(generateCalls).toBe(3);
 });
 
-test("a stage Try again cannot fix, as at the daily limit, says when to come back and offers neither Try again nor Start again (#281)", async ({ page }) => {
+test("at the daily limit a stage says once when to come back, and offers neither Try again nor Start again (#281, #313)", async ({ page }) => {
+  const limit = "You have used today's AI requests. Everything you have saved is still here, and you can try again tomorrow.";
   let generateCalls = 0;
   await page.route("**/interview/api", async (route) => {
     if (route.request().postDataJSON()?.step !== "generate") return route.continue();
     generateCalls += 1;
-    return route.fulfill({ status: 429, json: { error: "You have reached today's limit. Try again tomorrow.", final: true } });
+    return route.fulfill({ status: 429, json: { error: limit, final: true } });
   });
 
   await page.goto("/interview?job=sara-job-1");
   await page.getByRole("button", { name: "Start practice" }).click({ timeout: 120_000 });
 
-  await expect(page.getByText("You have reached today's limit. Try again tomorrow.", { exact: true })).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByText("The steps already done are kept. Open this page again later to carry on.")).toBeVisible();
+  await expect(page.getByText(limit, { exact: true })).toBeVisible({ timeout: 120_000 });
+  // The limit's own words say to come back tomorrow, so the page does not add "later" (#313).
+  await expect(page.getByText("The steps already done are kept.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Open this page again later", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Keep this page open", { exact: false })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
   // Start again would throw away the first stage and fail the same way.

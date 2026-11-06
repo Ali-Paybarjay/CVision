@@ -25,7 +25,7 @@ describe("recordApply", () => {
     recordApplication.mockResolvedValue({ ok: false, reason: "sample-job", message: "This is a sample job, so it is not added to your tracker." });
     const result = await recordApply("sara-job-1");
 
-    expect(result).toEqual({ recorded: false, message: "This is a sample job, so it is not added to your tracker." });
+    expect(result).toEqual({ recorded: false, message: "This is a sample job, so it is not added to your tracker.", saveFailed: false });
     expect(track).toHaveBeenCalledWith("tailor.apply_clicked", { recorded: false, reason: "sample-job" }, { userId: "user-1" });
   });
 

@@ -5,7 +5,7 @@ import { getAiProvider } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { extractProfile } from "./extract-profile";
 import { readCvText } from "./read-cv";
-import { sampleCvFileName, samplePersonaNames } from "./sample-cvs";
+import { emmaWithMoreSections, moreSectionsCvFileName, sampleCvFileName, samplePersonaNames } from "./sample-cvs";
 
 // Prompt evals for prompts/profile-extract.md: real requests to the model, so they cost money.
 // Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY).
@@ -77,5 +77,84 @@ describe.skipIf(!getAiProvider())("profile-extract on the sample CVs", () => {
       const { profile } = await result();
       expect(normalise(profile.summary)).toBe(normalise(expected.summary));
     });
+
+    it("adds no volunteering, project or language the CV doesn't have, not even English", async () => {
+      const { profile } = await result();
+      expect([profile.volunteering, profile.projects, profile.languages]).toEqual([[], [], []]);
+    });
+  });
+});
+
+// The personas have no volunteering, projects or languages, so this CV is Emma's with all three added (#227).
+describe.skipIf(!getAiProvider())("profile-extract on a CV with volunteering, projects and languages", () => {
+  const expected = emmaWithMoreSections;
+  /** An end date as the model gives it: null while still going, "" when the CV gives none. */
+  const end = (item: { current: boolean; endDate: string }) => (item.current ? null : item.endDate);
+  let reading: Promise<{ cvText: string; profile: Awaited<ReturnType<typeof extractProfile>> }> | undefined;
+  const result = () =>
+    (reading ??= (async () => {
+      const bytes = new Uint8Array(readFileSync(join(process.cwd(), "sample-data", "cvs", moreSectionsCvFileName)));
+      const cv = await readCvText({ name: moreSectionsCvFileName, bytes });
+      return { cvText: cv.text, profile: await extractProfile(cv.text) };
+    })());
+
+  it("reads every language, with a level only where the CV gives one", async () => {
+    const { profile } = await result();
+    const read = profile.languages.map((language) => [normalise(language.name), language.level && normalise(language.level)]);
+    expect(read).toEqual((expected.languages ?? []).map((language) => [normalise(language.name), language.level && normalise(language.level)]));
+  });
+
+  it("reads every project with its dates, details and link, adding https:// back", async () => {
+    const { profile } = await result();
+    const read = profile.projects.map((project) => [
+      normalise(project.name),
+      normalise(project.organisation ?? ""),
+      project.startDate,
+      end(project),
+      project.details.map(normalise),
+      project.url,
+    ]);
+    const right = (expected.projects ?? []).map((project) => [
+      normalise(project.name),
+      normalise(project.organisation ?? ""),
+      project.startDate ?? "",
+      project.endDate === null ? null : (project.endDate ?? ""),
+      project.details.map(normalise),
+      project.url,
+    ]);
+    expect(read).toEqual(right);
+  });
+
+  it("puts volunteering in its own section, and leaves the jobs as they are", async () => {
+    const { profile } = await result();
+    expect(profile.experience.map((job) => normalise(job.company))).toEqual(expected.experience.map((job) => normalise(job.company)));
+    const read = profile.volunteering.map((role) => [
+      normalise(role.role),
+      normalise(role.organisation ?? ""),
+      role.startDate,
+      end(role),
+      role.details.map(normalise),
+    ]);
+    const right = (expected.volunteering ?? []).map((role) => [
+      normalise(role.role),
+      normalise(role.organisation ?? ""),
+      role.startDate ?? "",
+      role.endDate === null ? null : (role.endDate ?? ""),
+      role.details.map(normalise),
+    ]);
+    expect(read).toEqual(right);
+  });
+
+  it("invents nothing: every language, level, project and role is in the CV", async () => {
+    const { cvText, profile } = await result();
+    const cv = normalise(cvText);
+    const claims = [
+      ...profile.languages.flatMap((language) => [language.name, language.level ?? ""]),
+      ...profile.projects.flatMap((project) => [project.name, project.organisation ?? ""]),
+      ...profile.volunteering.flatMap((role) => [role.role, role.organisation ?? ""]),
+    ].filter(Boolean);
+    for (const claim of claims) {
+      expect(cv, `"${claim}" is not in the CV`).toContain(normalise(claim));
+    }
   });
 });
