@@ -9,7 +9,7 @@ import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
-import { ButtonLink, Card, Notice, Page } from "@/shared/ui";
+import { ButtonLink, Card, Notice, Page, wideFrame } from "@/shared/ui";
 import { TailorWorkspace } from "./tailor-workspace";
 
 export const metadata: Metadata = { title: "Tailor your CV" };
@@ -102,7 +102,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   });
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-12">
+    <main className={`mx-auto flex w-full flex-col gap-6 px-4 py-8 sm:py-12 ${wideFrame}`}>
       {notice && <Notice tone="info">{notice}</Notice>}
       <TailorWorkspace
         job={job}
