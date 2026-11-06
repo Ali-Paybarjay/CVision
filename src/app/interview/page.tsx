@@ -19,6 +19,7 @@ import {
 } from "@/features/interview/server/session-store";
 import type { SampleAnswers } from "./_practice/flow";
 import { practisedOn } from "./_practice/ui";
+import { BackLink } from "@/features/profile/ui/back-link";
 import { InterviewPractice } from "./practice";
 
 export const metadata: Metadata = { title: "Interview practice" };
@@ -50,6 +51,8 @@ export default function InterviewPage({ searchParams }: PageProps<"/interview">)
 function Frame({ job, mock = false, wide = false, children }: { job?: Job; mock?: boolean; wide?: boolean; children: ReactNode }) {
   return (
     <>
+      {/* Back to wherever the user came from (Tailor, the dashboard, Jobs), as on Profile and Jobs (#297). */}
+      <BackLink href="/dashboard" />
       {job && (
         <nav aria-label="Breadcrumb" className="text-sm text-text-muted">
           <ol className="flex flex-wrap items-center gap-x-2">

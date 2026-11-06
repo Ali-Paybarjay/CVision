@@ -26,7 +26,10 @@ export type PracticeEnvelope = {
  * finish, and this is a second go, by itself or after Try again (#232, #266). `final`: Try again now would only fail the
  * same way, as at a daily limit, so the page offers none (#266).
  */
-export type JobState = { status: "running"; since?: number; retrying?: boolean } | { status: "failed"; message: string; final?: boolean };
+export type JobState =
+  | { status: "running"; since?: number; retrying?: boolean }
+  /** `limit`: the daily AI limit, whose own message already says nothing is lost and when to come back (#313). */
+  | { status: "failed"; message: string; final?: boolean; limit?: boolean };
 
 /**
  * Said after a failure that Try again cannot fix now (#281), as at a daily limit: the page offers no Try again, so it
@@ -35,8 +38,9 @@ export type JobState = { status: "running"; since?: number; retrying?: boolean }
 export const keptForLater = "Your practice is kept. Open this page again later to carry on.";
 
 /** A failed request's words, and with no Try again to offer, what happens next. */
-export function failureMessage(job: { message: string; final?: boolean }): string {
-  return job.final ? `${job.message} ${keptForLater}` : job.message;
+export function failureMessage(job: { message: string; final?: boolean; limit?: boolean }): string {
+  // The daily limit's own words already say nothing is lost and to come back tomorrow, so they are not said twice.
+  return job.final && !job.limit ? `${job.message} ${keptForLater}` : job.message;
 }
 
 /** What the user reads when a request fails without a message of its own from the API: plain words, never a status code. */
@@ -57,6 +61,8 @@ export class StepError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly final = false,
+    /** The daily AI limit (the API answers 429), not any other failure Try again cannot fix (#313). */
+    readonly limit = false,
   ) {
     super(message);
     this.name = "StepError";
@@ -200,6 +206,7 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
             status: "failed",
             message: error instanceof Error ? error.message : "Something went wrong.",
             ...(error instanceof StepError && error.final && { final: true }),
+            ...(error instanceof StepError && error.limit && { limit: true }),
           }),
       );
     },
@@ -252,7 +259,12 @@ export function createPracticeStore(storageKey: string, endpoint: string) {
         // Without a message of its own, the server or the platform in front of it failed (a 504, a crash page).
         const own = typeof data.error === "string";
         const final = own && data.final === true;
-        throw new StepError(own ? data.error : stepProblems.server, !final && (data.retryable === true || (!own && response.status >= 500)), final);
+        throw new StepError(
+          own ? data.error : stepProblems.server,
+          !final && (data.retryable === true || (!own && response.status >= 500)),
+          final,
+          final && response.status === 429,
+        );
       }
       return data as T;
     },

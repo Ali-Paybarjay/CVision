@@ -22,8 +22,8 @@ function running(stage: string, sinceSeconds: number, retrying = false): Record<
   return { [`${run}:${stage}`]: { status: "running", since: startedAtMs + sinceSeconds * 1000, retrying } };
 }
 
-function failed(stage: string, message: string, final = false): Record<string, JobState> {
-  return { [`${run}:${stage}`]: { status: "failed", message, ...(final && { final }) } };
+function failed(stage: string, message: string, final = false, limit = false): Record<string, JobState> {
+  return { [`${run}:${stage}`]: { status: "failed", message, ...(final && { final }), ...(limit && { limit }) } };
 }
 
 /** The card `seconds` after Start. */
@@ -217,15 +217,23 @@ describe("Preparing your interview", () => {
     expect(html).toContain(`role="status" class="sr-only">Failed: Writing 6 questions for this job. ${stepProblems.server}</p>`);
   });
 
-  it("offers no Try again when it would only fail the same way, as at the daily limit (#266)", () => {
-    const limit = "You have reached today's limit. Try again tomorrow.";
-    const html = render(analysed, 200, failed("generate", limit, true));
+  it("offers no Try again when it would only fail the same way, as when the AI service is off (#266)", () => {
+    const html = render(analysed, 200, failed("generate", "Interview practice isn’t available right now.", true));
 
-    expect(html).toContain("today&#x27;s limit");
     expect(html).not.toMatch(/<button[^>]*>Try again<\/button>/);
     // With no Try again, it says when to come back instead, not to keep the page open (#281).
     expect(html).toContain("The steps already done are kept. Open this page again later to carry on.");
     expect(html).not.toContain("Keep this page open");
+  });
+
+  it("at the daily limit, lets the limit's own words say when to come back, once (#313)", () => {
+    const limit = "You have used today's AI requests. Everything you have saved is still here, and you can try again tomorrow.";
+    const html = render(analysed, 200, failed("generate", limit, true, true));
+
+    expect(html).toContain("try again tomorrow");
+    expect(html).not.toMatch(/<button[^>]*>Try again<\/button>/);
+    expect(html).toContain("The steps already done are kept.");
+    expect(html).not.toContain("Open this page again later");
   });
 
   it("with no Try again, says what is kept and when to come back (#281)", () => {
@@ -233,6 +241,9 @@ describe("Preparing your interview", () => {
     expect(keptLine(2, false)).toBe("The steps already done are kept.");
     expect(keptLine(0, true)).toBe("Open this page again later to try again.");
     expect(keptLine(1, true)).toBe("The steps already done are kept. Open this page again later to carry on.");
+    // At the daily limit "later" today would only hit the limit again (#313).
+    expect(keptLine(1, true, true)).toBe("The steps already done are kept.");
+    expect(keptLine(0, true, true)).toBe("");
   });
 
   it("when the first stage fails, does not talk of steps already done", () => {
