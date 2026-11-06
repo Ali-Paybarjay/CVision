@@ -9,7 +9,14 @@ import PrivacyPage from "./page";
 // and a guard that fails when the app starts using a browser storage key this page does not list.
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
+  default: ({
+    href,
+    children,
+    ...props
+  }: {
+    href: string;
+    children: React.ReactNode;
+  }) => (
     <a href={href} {...props}>
       {children}
     </a>
@@ -20,14 +27,20 @@ const feedback = vi.hoisted(() => ({ feedbackFormUrl: null as string | null }));
 vi.mock("@/shared/feedback", () => feedback);
 
 const html = renderToStaticMarkup(<PrivacyPage />);
-const text = html.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+const text = html
+  .replace(/<[^>]+>/g, " ")
+  .replace(/&amp;/g, "&")
+  .replace(/\s+/g, " ");
 
 /** Every source file outside the tests and this page. */
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return path.endsWith(join("app", "privacy")) ? [] : sourceFiles(path);
-    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+    if (entry.isDirectory())
+      return path.endsWith(join("app", "privacy")) ? [] : sourceFiles(path);
+    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)
+      ? [path]
+      : [];
   });
 }
 
@@ -41,13 +54,22 @@ describe("privacy page", () => {
   });
 
   it("links every contents entry to a section on the page", () => {
-    const anchors = [...html.matchAll(/href="#([a-z-]+)"/g)].map((match) => match[1]);
+    const anchors = [...html.matchAll(/href="#([a-z-]+)"/g)].map(
+      (match) => match[1],
+    );
     expect(anchors.length).toBeGreaterThan(5);
     for (const id of anchors) expect(html, id).toContain(`id="${id}"`);
   });
 
   it("names every service that sees the data, and where the processing happens", () => {
-    for (const name of ["Supabase", "Vercel", "OpenRouter", "Anthropic", "Google Cloud", "Amazon Web Services"]) {
+    for (const name of [
+      "Supabase",
+      "Vercel",
+      "OpenRouter",
+      "Anthropic",
+      "Google Cloud",
+      "Amazon Web Services",
+    ]) {
       expect(text).toContain(name);
     }
     expect(text).toContain("London");
@@ -56,14 +78,27 @@ describe("privacy page", () => {
 
   // Since #94 the approved profile and its CV file are saved to the account (src/features/profile/server/profile-account.ts).
   it("says the approved profile and CV file are kept in the account, not that the file is discarded", () => {
-    expect(text).toContain("we save it to your account, with the CV file you uploaded (PDF or Word) if there is one");
+    expect(text).toContain(
+      "we save it to your account, with the CV file you uploaded (PDF or Word) if there is one",
+    );
     expect(text).not.toContain("We don’t keep your CV file");
     expect(text).not.toContain("saved in this browser only");
   });
 
   // Card #179: a profile typed in by hand sends nothing to the AI while typing, keeps no CV file, and needs its own consent.
+  it("says the gap questions are kept with each job and deleted with the account", () => {
+    expect(text).toContain(
+      "the questions we asked you about it (so we don’t ask them again)",
+    );
+    expect(text).toContain(
+      "matches, the questions we asked you, suggested CV changes",
+    );
+  });
+
   it("says what happens to a profile typed in without a CV", () => {
-    expect(text).toContain("Nothing is sent to the AI while you type, and nothing is saved until you approve your profile.");
+    expect(text).toContain(
+      "Nothing is sent to the AI while you type, and nothing is saved until you approve your profile.",
+    );
     expect(text).toContain("Then we save your profile, with no CV file.");
     expect(text).toContain("which you give when you approve your profile");
     // Such a profile has no CV file, so the page never says every profile comes with one.
@@ -73,11 +108,15 @@ describe("privacy page", () => {
   // The free CV check (#98, src/app/cv-check/api/route.ts) keeps no CV and no review, only cvcheck.completed and
   // askModel's ai_usage rows, both against getAnonymousKey()'s daily code even for a signed-in visitor.
   it("says what the free CV check sends to the AI and what it keeps", () => {
-    expect(text).toContain("If you use the free CV check, our server sends your CV text to the AI to review it.");
+    expect(text).toContain(
+      "If you use the free CV check, our server sends your CV text to the AI to review it.",
+    );
     expect(text).toContain(
       "We don’t save your CV or the review, only a usage record with the score and how many issues were found",
     );
-    expect(text).toContain("against the daily code, not your account, even if you’re signed in");
+    expect(text).toContain(
+      "against the daily code, not your account, even if you’re signed in",
+    );
   });
 
   it("lists every cookie and every browser storage key the app uses", () => {
@@ -88,9 +127,11 @@ describe("privacy page", () => {
     // This scans every owner's folders, so it also runs in teammates' PRs. Only Ali edits src/app/privacy (rule 2).
     const keys = new Set(
       sourceFiles(join(process.cwd(), "src")).flatMap((file) =>
-        [...readFileSync(file, "utf8").matchAll(/["'`](cvision\.[A-Za-z0-9._:-]*[A-Za-z0-9])/g)].map(
-          (match) => match[1],
-        ),
+        [
+          ...readFileSync(file, "utf8").matchAll(
+            /["'`](cvision\.[A-Za-z0-9._:-]*[A-Za-z0-9])/g,
+          ),
+        ].map((match) => match[1]),
       ),
     );
     expect(keys).toContain("cvision.profile");
@@ -115,7 +156,8 @@ describe("privacy page", () => {
   });
 
   it("never uses a banned phrase", () => {
-    for (const phrase of brand.bannedPhrases) expect(text.toLowerCase()).not.toContain(phrase.toLowerCase());
+    for (const phrase of brand.bannedPhrases)
+      expect(text.toLowerCase()).not.toContain(phrase.toLowerCase());
   });
 
   it("has no Feedback section until the form's link is set", () => {
@@ -134,7 +176,9 @@ describe("privacy page", () => {
     expect(withForm).toContain('id="feedback"');
     expect(words).toContain("isn’t linked to your CVision account");
     expect(words).toContain("We delete them by 30 November 2026");
-    expect(words).toContain("kept in Google Forms and in our team’s private Google Drive");
+    expect(words).toContain(
+      "kept in Google Forms and in our team’s private Google Drive",
+    );
     expect(words).toContain("may store the answers outside the UK");
     expect(words).toContain("Google (Forms and Drive)");
     expect(words).toContain("To have your answers deleted sooner, email us at");
