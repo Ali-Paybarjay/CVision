@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import type { Job } from "@/shared/contracts";
 import { getAiMode } from "@/shared/ai";
-import { ButtonLink, Card, cn, Notice } from "@/shared/ui";
+import { ButtonLink, Card, cn, Notice, wideFrame } from "@/shared/ui";
 import { getCurrentUser } from "@/features/account/current-user";
 import { defaultComposition } from "@/features/interview/config";
 import { withNext } from "@/features/account/safe-redirect";
@@ -30,7 +30,7 @@ const questionCount = defaultComposition.technical + defaultComposition.behaviou
 export default function InterviewPage({ searchParams }: PageProps<"/interview">) {
   // Wide, for design A's question page (docs/design/paper-desk); every other view keeps a readable measure inside it.
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">
+    <main className={`mx-auto w-full px-4 py-8 sm:py-12 ${wideFrame}`}>
       <Suspense
         fallback={
           <Frame>
