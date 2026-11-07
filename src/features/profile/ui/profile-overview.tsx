@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
+import { yourDataPath } from "@/features/account/data-rights-paths";
 import type { JobPreferences } from "@/shared/contracts";
 import { consentPurpose, type ProfileStorageKind } from "../consent";
 import { describePreferences, noteLines } from "../preferences";
@@ -70,7 +72,7 @@ export function ProfileOverview({
     <section aria-labelledby="overview-heading" className="flex flex-col gap-6">
       {storage === "browser" && !persistent && (
         <Notice tone="warning" title="This browser doesn’t keep saved data">
-          Your profile will be lost when you close this tab. Download your data to keep a copy.
+          Your profile will be lost when you close this tab. Download your profile to keep a copy.
         </Notice>
       )}
 
@@ -170,7 +172,7 @@ export function ProfileOverview({
         <h2 className="text-xl">Your data</h2>
         <p className="mt-2 text-text-muted">{whereItIs(saved, storage, persistent)}</p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button onClick={() => downloadJson(saved)}>Download my data</Button>
+          <Button onClick={() => downloadJson(saved)}>Download my profile</Button>
           {!confirmingDelete && (
             <Button variant="quiet" onClick={() => setConfirmingDelete(true)}>
               Delete my profile
@@ -182,7 +184,7 @@ export function ProfileOverview({
             <p id="delete-question" className="font-semibold">
               {deleteQuestion(saved, storage)}
             </p>
-            <p className="mt-1 text-sm text-text-muted">This can’t be undone. Download your data first to keep a copy.</p>
+            <p className="mt-1 text-sm text-text-muted">{deleteNote(storage)}</p>
             {deleteProblem && <p className="mt-2 text-sm text-error">{deleteProblem}</p>}
             <div className="mt-3 flex flex-wrap gap-3">
               <button
@@ -191,7 +193,7 @@ export function ProfileOverview({
                 disabled={deleting}
                 className="inline-flex min-h-11 items-center justify-center rounded-md border border-error px-5 text-sm font-semibold text-error hover:bg-canvas disabled:opacity-50"
               >
-                {deleting ? "Deleting…" : "Delete everything"}
+                {deleting ? "Deleting…" : "Delete my profile"}
               </button>
               {/* The safe choice gets focus first. */}
               <Button variant="quiet" onClick={() => setConfirmingDelete(false)} autoFocus disabled={deleting}>
@@ -199,6 +201,16 @@ export function ProfileOverview({
               </Button>
             </div>
           </div>
+        )}
+        {/* This card covers the profile only; the rest of the account is on Your data. A browser profile has no account. */}
+        {storage === "account" && (
+          <p className="mt-4 text-sm text-text-muted">
+            To download everything in your account, or to delete your account, go to{" "}
+            <Link href={yourDataPath} className="font-semibold text-accent hover:underline">
+              Your data
+            </Link>
+            .
+          </p>
         )}
       </Card>
     </section>
@@ -209,6 +221,12 @@ export function ProfileOverview({
 export function deleteQuestion(saved: SavedProfile, storage: ProfileStorageKind): string {
   if (storage === "browser") return "Delete your profile from this browser?";
   return saved.cvFormat ? "Delete your profile and your CV file from your account?" : "Delete your profile from your account?";
+}
+
+/** Under the question: deleting the profile is not deleting the account, so say what stays. */
+export function deleteNote(storage: ProfileStorageKind): string {
+  const noUndo = "This can’t be undone, so download your profile first if you want a copy.";
+  return storage === "account" ? `Your account, saved job ads, tailored CVs and applications stay. ${noUndo}` : noUndo;
 }
 
 /** One plain sentence on where the profile is kept and since when. */
