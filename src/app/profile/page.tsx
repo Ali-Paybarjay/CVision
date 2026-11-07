@@ -9,7 +9,7 @@ import { SignInToStart } from "@/features/profile/ui/sign-in-to-start";
 import { getAiMode } from "@/shared/ai";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
-import { Card, Page } from "@/shared/ui";
+import { Card, Page, PathSteps } from "@/shared/ui";
 
 export const metadata: Metadata = {
   title: "Your profile",
@@ -21,6 +21,7 @@ export default function ProfilePage() {
       title="Your profile"
       description="Upload your CV or fill in your details yourself, then check and approve them. Every tailored CV and cover letter is built only from what you approve here."
     >
+      <PathSteps current={1} />
       <Suspense
         fallback={
           <div className="flex flex-col gap-6">

@@ -36,9 +36,9 @@ const result: CvCheckResult = {
   ],
 };
 
-function render(signedIn: boolean) {
+function render(signedIn: boolean, file: File | null = null) {
   return renderToStaticMarkup(
-    <CvCheckReport result={result} truncated={false} signedIn={signedIn} demoMode={false} onCheckAnother={() => {}} />,
+    <CvCheckReport result={result} truncated={false} signedIn={signedIn} file={file} demoMode={false} onCheckAnother={() => {}} />,
   );
 }
 
@@ -64,5 +64,19 @@ describe("CvCheckReport", () => {
     expect(html).toContain('aria-label="Copy: Planned the weekly staff rota"');
     expect(html).not.toContain("Copy: Skills");
     expect(html.match(/aria-label="Copy: /g)).toHaveLength(1);
+  });
+});
+
+// A pilot had to upload the same CV again in Profile (#336).
+describe("CvCheckReport with an uploaded CV", () => {
+  const file = new File(["cv"], "sara.docx");
+
+  it("tells a signed-in user the checked CV comes with them to Profile", () => {
+    expect(render(true, file)).toContain("We’ll bring the CV you just checked");
+  });
+
+  it("promises nothing for a visitor, whose file would be lost on the way through sign-up, or for pasted text", () => {
+    expect(render(false, file)).not.toContain("We’ll bring the CV you just checked");
+    expect(render(true, null)).not.toContain("We’ll bring the CV you just checked");
   });
 });

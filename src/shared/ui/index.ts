@@ -10,6 +10,7 @@ export { CalendarIcon, CheckIcon, ErrorIcon, InfoIcon, WarningIcon } from "./ico
 export { MatchMarker } from "./match-marker";
 export { Notice } from "./notice";
 export { Page, wideFrame } from "./page";
+export { PathSteps } from "./path-steps";
 export { RequirementList, type Requirement, type RequirementGroup } from "./requirement-list";
 export { SectionLabel } from "./section-label";
 export { SiteFooter } from "./site-footer";
