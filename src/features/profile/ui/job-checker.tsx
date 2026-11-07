@@ -8,6 +8,8 @@ import { checkAdText, MAX_AD_CHARACTERS, parseAdUrl } from "../job-extraction";
 import { useStoredProfile } from "../profile-store";
 import { BackLink } from "./back-link";
 import { MatchReport } from "./match-report";
+import { SignInToStart } from "./sign-in-to-start";
+import { journeySteps, Steps } from "./steps";
 import { SignInNotice } from "./upload-step";
 
 type CheckJobSuccess = Extract<CheckJobResult, { ok: true }>;
@@ -73,8 +75,16 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
       />
     );
   } else if (source.kind === "signed-out" && !demoMode) {
-    // In the demo a signed-out visitor can try it with a sample profile; otherwise they sign in first.
-    content = <SignInNotice title="Sign in to check a job against your profile" next="/jobs" />;
+    // In the demo a signed-out visitor can try it with a sample profile; otherwise they sign in first, with the same
+    // card as the profile page and a Coral button, and come back here afterwards.
+    content = (
+      <SignInToStart
+        title="Sign in to check a job against your profile"
+        text="We compare each job ad with the profile in your CVision account, so the match only uses what you told us. You’ll come back to this page afterwards."
+        next="/jobs"
+        back={false}
+      />
+    );
   } else if (!profile && !demoMode) {
     content = <ProfileFirst />;
   } else {
@@ -239,7 +249,10 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
   );
 }
 
-/** Shown instead of the form when there is no profile to compare the ad with. */
+/**
+ * Shown instead of the form when there is no profile to compare the ad with. It shows the three steps with the profile
+ * as the one to do now, so the user sees why this page sends them back a step (#334).
+ */
 export function ProfileFirst() {
   return (
     <Card>
@@ -248,7 +261,8 @@ export function ProfileFirst() {
         We compare each job ad with the profile you approved, so the match only uses what you told us. Upload your CV
         or fill in your details to build it.
       </p>
-      <ButtonLink href="/profile" variant="primary" className="mt-4">
+      <Steps current={0} labels={journeySteps} label="Your three steps" className="mt-4" />
+      <ButtonLink href="/profile" variant="primary" className="mt-5">
         Build your profile
       </ButtonLink>
     </Card>

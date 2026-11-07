@@ -55,6 +55,8 @@ test("step 1: upload a CV, check the details and save the Profile", async ({ pag
   await expect(page.getByText("Your profile is saved.")).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Sara Khan" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Paste a job ad" })).toHaveAttribute("href", "/jobs");
+  // The next step is on the phone's first screen as soon as the profile is saved (#334).
+  await expect(page.getByRole("link", { name: "Paste a job ad" })).toBeInViewport();
 
   // The language was saved with the rest of the profile, and the summary counts it.
   await expect(page.getByText("1 language", { exact: true })).toBeVisible();

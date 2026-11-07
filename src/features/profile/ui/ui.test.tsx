@@ -562,6 +562,31 @@ describe("profile screens", () => {
     expect(html).not.toMatch(/Volunteering|Projects|Languages/);
   });
 
+  // A pilot who had just approved their profile asked what to do now (#334): the next step is on screen first.
+  it("puts the next step first on the saved profile, as its one Coral button, then the profile and both ways to change it", () => {
+    const html = renderToStaticMarkup(
+      <ProfileOverview
+        saved={fromBrowser(stored("sara"))}
+        storage="browser"
+        persistent
+        focusHeading={false}
+        onEdit={noop}
+        onUploadNew={noop}
+        onDelete={async () => null}
+        onSavePreferences={async () => null}
+      />,
+    );
+    const words = text(html);
+
+    expect(words.indexOf("Next: find a job to apply for")).toBeLessThan(words.indexOf("Sara Khan"));
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
+    expect(html).toMatch(/<a href="\/jobs" class="[^"]*bg-cta[^"]*">Paste a job ad<\/a>/);
+    expect(html).toContain('id="next-step-heading"');
+    // Editing and a new CV sit together in the profile's own card, before the preferences and the data card.
+    expect(words.indexOf("Check and edit your details")).toBeLessThan(words.indexOf("Upload a new CV"));
+    expect(words.indexOf("Upload a new CV")).toBeLessThan(words.indexOf("What you’re looking for"));
+  });
+
   it("counts volunteering, projects and languages in the summary when the profile has them (#227)", () => {
     const profile = {
       ...personas.emma.profile,
@@ -675,6 +700,10 @@ describe("profile screens", () => {
     expect(html).toContain('href="/sign-up?next=%2Fprofile"');
     expect(html).toContain('href="/sign-in?next=%2Fprofile"');
     expect(html).toMatch(/<a href="\/"[^>]*>.*?Back<\/a>/);
+    // The Coral button says what it does, and "free" is in the small line under it (docs/brand.md, Calls to action).
+    expect(html).toMatch(/bg-cta[^"]*">Create your account<\/a>/);
+    expect(text(html)).toContain("Free account. Start with your CV or your details.");
+    expect(text(html)).not.toContain("Create a free account");
   });
 
   it("starts from the saved account profile, without waiting for the browser", () => {

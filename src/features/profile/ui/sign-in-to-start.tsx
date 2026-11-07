@@ -1,28 +1,48 @@
 import Link from "next/link";
 import { withNext } from "@/features/account/safe-redirect";
+import { brand } from "@/shared/brand";
 import { ButtonLink, Card } from "@/shared/ui";
 import { BackLink } from "./back-link";
 
+type SignInToStartProps = {
+  /** What signing in is for. */
+  title?: string;
+  /** Why the page needs an account, in one or two sentences. */
+  text?: string;
+  /** The page both links bring the user back to. */
+  next?: string;
+  /** Back to the home page above the card; off where the page already shows its own Back. */
+  back?: boolean;
+};
+
 /**
- * Shown on the profile page to a signed-out visitor: the profile is saved to an account, so they sign in first.
- * Both links bring them back here afterwards.
+ * Shown to a signed-out visitor on a page that keeps their work in their account (Profile, Jobs): create an account
+ * or sign in, then come back to the same page. The Coral button says what it does, and "free" goes in the small line
+ * under it, as every call to action does (docs/brand.md, Calls to action).
  */
-export function SignInToStart() {
+export function SignInToStart({
+  title = "Sign in to build your profile",
+  text = "Your profile is saved to your CVision account, so every tailored CV and cover letter can use it. You can download or delete it at any time.",
+  next = "/profile",
+  back = true,
+}: SignInToStartProps) {
   return (
     <div className="flex flex-col gap-6">
-      <BackLink href="/" />
+      {back && <BackLink href="/" />}
       <Card>
-        <h2 className="text-xl">Sign in to build your profile</h2>
-        <p className="mt-2 max-w-[65ch] text-text-muted">
-          Your profile is saved to your CVision account, so every tailored CV and cover letter can use it. You can
-          download or delete it at any time. An account is free.
-        </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <ButtonLink href={withNext("/sign-up", "/profile")} variant="primary">
-            Create a free account
-          </ButtonLink>
+        <h2 className="text-xl">{title}</h2>
+        <p className="mt-2 max-w-[65ch] text-text-muted">{text}</p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start">
+          <div>
+            <ButtonLink href={withNext("/sign-up", next)} variant="primary" aria-describedby="sign-in-to-start-note">
+              Create your account
+            </ButtonLink>
+            <p id="sign-in-to-start-note" className="mt-2 text-sm text-text-muted">
+              {brand.cta.primaryNote}
+            </p>
+          </div>
           <Link
-            href={withNext("/sign-in", "/profile")}
+            href={withNext("/sign-in", next)}
             className="inline-flex min-h-11 items-center px-1 text-sm font-semibold text-accent hover:underline"
           >
             I already have an account
