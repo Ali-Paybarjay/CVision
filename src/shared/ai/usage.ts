@@ -8,7 +8,8 @@ export type Requester = { userId: string } | { anonymousKey: string };
 export function getDailyLimits() {
   return {
     perUser: Number(process.env.AI_DAILY_LIMIT_PER_USER ?? 40),
-    perAnonymousVisitor: Number(process.env.AI_DAILY_LIMIT_PER_ANONYMOUS ?? 3),
+    // Ten, not three (#331): the visitor key comes from the IP address, so everyone on one wifi shares these checks.
+    perAnonymousVisitor: Number(process.env.AI_DAILY_LIMIT_PER_ANONYMOUS ?? 10),
     allAnonymous: Number(process.env.AI_DAILY_LIMIT_ALL_ANONYMOUS ?? 300),
   };
 }

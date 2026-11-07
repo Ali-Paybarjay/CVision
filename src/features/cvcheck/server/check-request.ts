@@ -5,14 +5,18 @@ import { cleanCvText, CvFileError, cvFileMessages, MAX_CV_BYTES, MAX_CV_CHARACTE
 import { checkCv } from "./check-cv";
 
 /** What POST /cv-check/api answers. */
-export type CvCheckResponse =
+export type CvCheckResponse = (
   | {
       ok: true;
       result: CvCheckResult;
       /** True when only the start of a very long CV was checked. */
       truncated: boolean;
     }
-  | { ok: false; code: CvCheckErrorCode; message: string };
+  | { ok: false; code: CvCheckErrorCode; message: string }
+) & {
+  /** Set by the route: true when a signed-in user asked, so the page offers their profile, not sign-up (#331). */
+  signedIn?: boolean;
+};
 
 export type CvCheckErrorCode =
   | "missing"

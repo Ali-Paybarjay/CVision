@@ -91,13 +91,16 @@ describe("privacy page", () => {
   });
 
   // The free CV check (#98, src/app/cv-check/api/route.ts) keeps no CV and no review, only cvcheck.completed and
-  // askModel's ai_usage rows, both against getAnonymousKey()'s daily code even for a signed-in visitor.
+  // askModel's ai_usage rows: against getAnonymousKey()'s daily code for a visitor, and against the account for a
+  // signed-in user, whose checks count towards their own daily limit (#331).
   it("says what the free CV check sends to the AI and what it keeps", () => {
     expect(text).toContain("If you use the free CV check, our server sends your CV text to the AI to review it.");
     expect(text).toContain(
       "We don’t save your CV or the review, only a usage record with the score and how many issues were found",
     );
-    expect(text).toContain("against the daily code, not your account, even if you’re signed in");
+    expect(text).toContain("The free CV check keeps these records against the daily code.");
+    expect(text).toContain("If you’re signed in, it keeps them with your account instead");
+    expect(text).not.toContain("even if you’re signed in");
   });
 
   it("lists every cookie and every browser storage key the app uses", () => {

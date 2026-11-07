@@ -5,12 +5,21 @@ import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
+import { withNext } from "@/features/account/safe-redirect";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
 import type { CvCheckResponse } from "../server/check-request";
 
 type Source = "file" | "text";
-type Errors = { file?: string; text?: string; form?: string; limit?: string };
-type Checked = { result: CvCheckResult; truncated: boolean };
+type Errors = { file?: string; text?: string; form?: string; limit?: { message: string; signedIn: boolean } };
+type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean };
+
+/**
+ * Where "Tailor my CV to a job" leads: a signed-in user straight to their profile, a visitor to sign-up and then
+ * their profile. Sign-up would only tell a signed-in user that they are signed in already (#331).
+ */
+function tailorPath(signedIn: boolean): string {
+  return signedIn ? "/profile" : withNext("/sign-up", "/profile");
+}
 
 /** Shown under the button while the CV is checked. The check route stops at a minute (`maxDuration`). */
 const checkingCvNote = "Checking your CV. This can take up to a minute. Keep this page open.";
@@ -46,11 +55,12 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
     setPending(true);
     try {
       const response = await sendCv(form);
+      const signedIn = response.signedIn === true;
       if (response.ok) {
-        setChecked({ result: response.result, truncated: response.truncated });
+        setChecked({ result: response.result, truncated: response.truncated, signedIn });
         return;
       }
-      if (response.code === "limit-reached") setErrors({ limit: response.message });
+      if (response.code === "limit-reached") setErrors({ limit: { message: response.message, signedIn } });
       else if (source === "text" && (response.code === "too-short" || response.code === "too-long")) setErrors({ text: response.message });
       else if (source === "file" && response.code !== "ai-failed" && response.code !== "ai-busy" && response.code !== "ai-unavailable") {
         setErrors({ file: response.message });
@@ -138,16 +148,22 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
               {errors.form}
             </Notice>
           )}
-          {errors.limit && (
-            <Notice tone="info" title="No free checks left today">
-              {errors.limit}{" "}
-              <Link href="/sign-up" className="font-semibold text-accent hover:underline">
-                Create a free account
-              </Link>
-            </Notice>
-          )}
+          {/* A signed-in user has used their account's AI requests for today: an account is not the way on (#331). */}
+          {errors.limit &&
+            (errors.limit.signedIn ? (
+              <Notice tone="info" title="No checks left today">
+                {errors.limit.message}
+              </Notice>
+            ) : (
+              <Notice tone="info" title="No free checks left today">
+                {errors.limit.message}{" "}
+                <Link href={withNext("/sign-up", "/cv-check")} className="font-semibold text-accent hover:underline">
+                  Create a free account
+                </Link>
+              </Notice>
+            ))}
 
-          {/* Secondary on purpose: the sign-up button under the result (brand.cta.primary) is the page’s one Coral button. */}
+          {/* Secondary on purpose: the Tailor button under the result (brand.cta.primary) is the page’s one Coral button. */}
           <div>
             <Button type="submit" disabled={pending}>
               {pending ? "Checking your CV…" : "Check my CV"}
@@ -176,6 +192,7 @@ const severityLabels: Record<CvIssue["severity"], string> = {
 function CvCheckReport({
   result,
   truncated,
+  signedIn,
   demoMode,
   onCheckAnother,
 }: Checked & { demoMode: boolean; onCheckAnother: () => void }) {
@@ -255,7 +272,7 @@ function CvCheckReport({
         <p className="text-text-muted">
           Build your profile once, paste a job ad, and get a tailored CV and cover letter built only from what you’ve told us.
         </p>
-        <ButtonLink href="/sign-up" variant="primary">
+        <ButtonLink href={tailorPath(signedIn)} variant="primary">
           {brand.cta.primary}
         </ButtonLink>
       </Card>
