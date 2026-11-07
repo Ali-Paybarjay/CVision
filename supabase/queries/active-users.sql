@@ -41,7 +41,9 @@ with_first_day as (
   select user_id, day, min(day) over (partition by user_id) as first_day
   from active
 ),
--- Every CV check, by anyone not on the list. Checks are logged with anonymous_id today, so team checks still count.
+-- Every CV check, by anyone not on the list. Since 7 November 2026 (#331) a signed-in user's check is logged with
+-- user_id, so the team's signed-in checks drop out here. Checks made signed out, and every check before then, were
+-- logged with anonymous_id and still count.
 checks as (
   select
     e.id,

@@ -16,7 +16,8 @@ import {
 import { builtFromCv, fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import type { SaveReason } from "../server/save-request";
 import type { AccountProfile } from "../server/profile-account";
-import { Card, Notice } from "@/shared/ui";
+import { carriedCv, clearCarriedCv } from "@/shared/carried-cv";
+import { Button, Card, Notice } from "@/shared/ui";
 import { BackLink } from "./back-link";
 import { ProfileOverview } from "./profile-overview";
 import { ReviewStep, type ReviewSource } from "./review-step";
@@ -81,6 +82,12 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   // Focus moves to each new step's heading, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // The CV the user just checked in the CV check, if they came from there (#336). Read once, when the page opens.
+  const [carried, setCarried] = useState<File | null>(() => carriedCv());
+  const dropCarried = () => {
+    clearCarriedCv();
+    setCarried(null);
+  };
 
   const where: ProfileStorageKind = storage.kind;
   const saved: SavedProfile | null | undefined =
@@ -131,6 +138,8 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   };
 
   const handleExtracted = (result: ExtractSuccess, consent: ConsentRecord, file: File) => {
+    // The carried CV has been read now (or another file chosen instead), so it isn't offered again.
+    dropCarried();
     // A new CV keeps the earlier follow-up answers: they are still the user's own words.
     const base = newProfileBase(result.extraction, {
       id: crypto.randomUUID(),
@@ -247,31 +256,49 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
         // Only before there is a profile: a saved one is changed with "Check and edit your details".
         onStartManual={saved ? undefined : handleStartManual}
         onCancel={stepBack}
+        carriedFile={carried}
       />
     );
   } else {
     content = (
-      <ProfileOverview
-        saved={saved}
-        storage={where}
-        persistent={persistent}
-        focusHeading={navigated}
-        onEdit={() =>
-          go({
-            name: "review",
-            source: "saved",
-            draft: draftFromProfile(saved.profile),
-            base: saved.profile,
-            consent: saved.consent,
-            file: null,
-            demo: null,
-            truncated: false,
-          })
-        }
-        onUploadNew={() => go({ name: "upload" })}
-        onDelete={handleDelete}
-        onSavePreferences={handlePreferences}
-      />
+      <>
+        {/* Someone with a profile who comes from the CV check decides whether the CV they checked replaces it. */}
+        {carried && (
+          <Notice tone="info" title="Use the CV you just checked?">
+            <p>
+              You already have a profile. To build it again from <span className="wrap-anywhere">{carried.name}</span>,
+              use it as your new CV. Nothing changes until you check the new details and approve them.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button onClick={() => go({ name: "upload" })}>Use this CV</Button>
+              <Button variant="quiet" onClick={dropCarried}>
+                Keep my profile
+              </Button>
+            </div>
+          </Notice>
+        )}
+        <ProfileOverview
+          saved={saved}
+          storage={where}
+          persistent={persistent}
+          focusHeading={navigated}
+          onEdit={() =>
+            go({
+              name: "review",
+              source: "saved",
+              draft: draftFromProfile(saved.profile),
+              base: saved.profile,
+              consent: saved.consent,
+              file: null,
+              demo: null,
+              truncated: false,
+            })
+          }
+          onUploadNew={() => go({ name: "upload" })}
+          onDelete={handleDelete}
+          onSavePreferences={handlePreferences}
+        />
+      </>
     );
   }
 

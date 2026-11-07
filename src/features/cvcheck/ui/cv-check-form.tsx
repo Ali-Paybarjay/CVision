@@ -3,14 +3,26 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
+import { carryCv } from "@/shared/carried-cv";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
+import { withNext } from "@/features/account/safe-redirect";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
 import type { CvCheckResponse } from "../server/check-request";
+import { suggestedWordings } from "../suggested-wording";
 
 type Source = "file" | "text";
-type Errors = { file?: string; text?: string; form?: string; limit?: string };
-type Checked = { result: CvCheckResult; truncated: boolean };
+type Errors = { file?: string; text?: string; form?: string; limit?: { message: string; signedIn: boolean } };
+/** `file` is the CV file that was checked, if one was uploaded rather than pasted: Profile can use it (#336). */
+type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; file: File | null };
+
+/**
+ * Where "Tailor my CV to a job" leads: a signed-in user straight to their profile, a visitor to sign-up and then
+ * their profile. Sign-up would only tell a signed-in user that they are signed in already (#331).
+ */
+function tailorPath(signedIn: boolean): string {
+  return signedIn ? "/profile" : withNext("/sign-up", "/profile");
+}
 
 /** Shown under the button while the CV is checked. The check route stops at a minute (`maxDuration`). */
 const checkingCvNote = "Checking your CV. This can take up to a minute. Keep this page open.";
@@ -46,11 +58,14 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
     setPending(true);
     try {
       const response = await sendCv(form);
+      const signedIn = response.signedIn === true;
       if (response.ok) {
-        setChecked({ result: response.result, truncated: response.truncated });
+        const uploaded = source === "file" ? form.get("cv") : null;
+        const file = uploaded instanceof File ? uploaded : null;
+        setChecked({ result: response.result, truncated: response.truncated, signedIn, file });
         return;
       }
-      if (response.code === "limit-reached") setErrors({ limit: response.message });
+      if (response.code === "limit-reached") setErrors({ limit: { message: response.message, signedIn } });
       else if (source === "text" && (response.code === "too-short" || response.code === "too-long")) setErrors({ text: response.message });
       else if (source === "file" && response.code !== "ai-failed" && response.code !== "ai-busy" && response.code !== "ai-unavailable") {
         setErrors({ file: response.message });
@@ -138,16 +153,22 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
               {errors.form}
             </Notice>
           )}
-          {errors.limit && (
-            <Notice tone="info" title="No free checks left today">
-              {errors.limit}{" "}
-              <Link href="/sign-up" className="font-semibold text-accent hover:underline">
-                Create a free account
-              </Link>
-            </Notice>
-          )}
+          {/* A signed-in user has used their account's AI requests for today: an account is not the way on (#331). */}
+          {errors.limit &&
+            (errors.limit.signedIn ? (
+              <Notice tone="info" title="No checks left today">
+                {errors.limit.message}
+              </Notice>
+            ) : (
+              <Notice tone="info" title="No free checks left today">
+                {errors.limit.message}{" "}
+                <Link href={withNext("/sign-up", "/cv-check")} className="font-semibold text-accent hover:underline">
+                  Create a free account
+                </Link>
+              </Notice>
+            ))}
 
-          {/* Secondary on purpose: the sign-up button under the result (brand.cta.primary) is the page’s one Coral button. */}
+          {/* Secondary on purpose: the Tailor button under the result (brand.cta.primary) is the page’s one Coral button. */}
           <div>
             <Button type="submit" disabled={pending}>
               {pending ? "Checking your CV…" : "Check my CV"}
@@ -173,9 +194,12 @@ const severityLabels: Record<CvIssue["severity"], string> = {
   low: "Polish",
 };
 
-function CvCheckReport({
+/** The result of a check. Exported for its render tests. */
+export function CvCheckReport({
   result,
   truncated,
+  signedIn,
+  file,
   demoMode,
   onCheckAnother,
 }: Checked & { demoMode: boolean; onCheckAnother: () => void }) {
@@ -243,6 +267,7 @@ function CvCheckReport({
                     <span className="font-semibold">How to fix it: </span>
                     {issue.fix}
                   </p>
+                  <SuggestedWording fix={issue.fix} />
                 </Card>
               </li>
             ))}
@@ -250,14 +275,27 @@ function CvCheckReport({
         </section>
       )}
 
+      {/* A pilot wanted CVision to make these fixes and ask about what's missing, not knowing Tailor does (#333). */}
       <Card className="flex flex-col items-start gap-3">
-        <h3 className="text-xl">Next: make it fit each job</h3>
+        <h3 className="text-xl">Next: let CVision make these fixes</h3>
         <p className="text-text-muted">
-          Build your profile once, paste a job ad, and get a tailored CV and cover letter built only from what you’ve told us.
+          Tailor asks you about anything that’s missing, rewrites your CV for the job you want and lets you approve every
+          change. You’ll also get a cover letter, built only from what you’ve told us.
         </p>
-        <ButtonLink href="/sign-up" variant="primary">
+        {/* A signed-in user's checked file goes with them to Profile, so they don't upload it twice (#336). It stays in this
+            page's memory only; a visitor's would be lost on the way through sign-up, so it isn't offered. */}
+        <ButtonLink
+          href={tailorPath(signedIn)}
+          variant="primary"
+          onClick={() => {
+            if (signedIn && file) carryCv(file);
+          }}
+        >
           {brand.cta.primary}
         </ButtonLink>
+        {signedIn && file && (
+          <p className="text-sm text-text-muted">We’ll bring the CV you just checked, so you don’t need to upload it again.</p>
+        )}
       </Card>
 
       <div>
@@ -266,6 +304,50 @@ function CvCheckReport({
         </Button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The new wording a fix suggests, each with a button that copies it (#335), so the user doesn't retype it. The wording
+ * only rewords what the CV already says (the prompt's rule), and the user decides where it goes.
+ */
+function SuggestedWording({ fix }: { fix: string }) {
+  const wordings = suggestedWordings(fix);
+  if (wordings.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-2" aria-label="Suggested wording">
+      {wordings.map((wording) => (
+        <li key={wording} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-fit px-3 py-2">
+          <span className="min-w-0 flex-1">{wording}</span>
+          <CopyButton text={wording} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setState("copied");
+    } catch {
+      // Some browsers block the clipboard; the wording is still on screen to select by hand.
+      setState("failed");
+    }
+  }
+
+  return (
+    <>
+      <Button variant="quiet" size="compact" onClick={copy} aria-label={`Copy: ${text}`}>
+        {state === "copied" ? "Copied" : "Copy"}
+      </Button>
+      <span className="sr-only" aria-live="polite">
+        {state === "copied" ? "Copied to the clipboard." : state === "failed" ? "Couldn’t copy. Select the text instead." : ""}
+      </span>
+    </>
   );
 }
 

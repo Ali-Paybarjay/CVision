@@ -9,10 +9,18 @@ import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
-import { ButtonLink, Card, Notice, Page } from "@/shared/ui";
+import { ButtonLink, Card, Notice, Page, PathSteps, WaitNote, wideFrame } from "@/shared/ui";
 import { TailorWorkspace } from "./tailor-workspace";
 
 export const metadata: Metadata = { title: "Tailor your CV" };
+
+/**
+ * Shown while the page is built. The first time a job is opened the model writes its gap questions, which a pilot
+ * took for a frozen page when all it said was "Loading your CV…" (#332). After that the questions are kept (#318),
+ * so the note is only on screen for a moment, and it has to read well for that too.
+ */
+const tailorLoadingNote =
+  "Getting your CV ready for this job. The first time, we also write a few questions about it, which can take up to 30 seconds.";
 
 // /tailor?job=<id>: the user's CV for one job, with a question per gap and every change approved by them.
 export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
@@ -20,7 +28,7 @@ export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
     <Suspense
       fallback={
         <Frame>
-          <p className="text-text-muted">Loading your CV…</p>
+          <WaitNote>{tailorLoadingNote}</WaitNote>
         </Frame>
       }
     >
@@ -32,6 +40,7 @@ export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
 function Frame({ children }: { children: React.ReactNode }) {
   return (
     <Page title="Tailor your CV" description="Answer a few questions about what the job asks for, approve each change, then download and apply.">
+      <PathSteps current={3} />
       {children}
     </Page>
   );
@@ -102,7 +111,8 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   });
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:py-12">
+    <main className={`mx-auto flex w-full flex-col gap-6 px-4 py-8 sm:py-12 ${wideFrame}`}>
+      <PathSteps current={3} />
       {notice && <Notice tone="info">{notice}</Notice>}
       <TailorWorkspace
         job={job}

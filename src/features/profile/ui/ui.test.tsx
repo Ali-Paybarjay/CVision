@@ -497,6 +497,31 @@ describe("profile screens", () => {
     expect(html).toContain("Check your details");
   });
 
+  // A pilot on this step asked what to do next (#334).
+  it("says what comes after approving and links to Approve, but not when a saved profile is edited", () => {
+    const profile = personas.emma.profile;
+    const review = (source: "cv" | "saved") =>
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={draftFromProfile(profile)}
+          base={profile}
+          source={source}
+          storage="account"
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      );
+
+    const fromCv = review("cv");
+    expect(text(fromCv)).toContain("Once your profile is approved, you’ll paste a job ad and tailor your CV to it.");
+    expect(fromCv).toContain('href="#approve-heading"');
+    expect(fromCv).toContain('id="approve-heading"');
+    expect(review("saved")).not.toContain("Go to Approve");
+  });
+
   it("builds a profile in two steps: upload, then check and approve", () => {
     const html = text(
       renderToStaticMarkup(<UploadStep replacing={false} demoMode={false} storage="browser" focusHeading={false} onExtracted={noop} />),

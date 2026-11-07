@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "6 November 2026";
+const lastUpdated = "7 November 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -106,12 +106,20 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
   {
     title: "Jobs and interview practice",
     body: (
-      <p>
-        When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
-        match result, the questions we asked you about it (so we don’t ask them again), the CV changes suggested for
-        it, the tailored CV and cover letter you last downloaded or sent with Apply, as they were, and your interview
-        practice for it. Interview practice is also saved in this browser, so you can pick up where you left off.
-      </p>
+      <>
+        <p>
+          When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
+          match result, the questions we asked you about it (so we don’t ask them again), the CV changes suggested for
+          it, the tailored CV and cover letter you last downloaded or sent with Apply, as they were, and your interview
+          practice for it. Interview practice is also saved in this browser, so you can pick up where you left off.
+        </p>
+        <p>
+          If you give us the link to a job ad instead, our server opens that one page for you and puts its text in the
+          job ad box. The job site sees a request from our server, not from your browser. Nothing goes to the AI until
+          you check the text and ask for your match; then the ad goes to the AI just as pasted text would. We keep the
+          link with the job, so Apply can take you back to the ad.
+        </p>
+      </>
     ),
   },
   {
@@ -121,7 +129,8 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
         <p>
           A short record when you do certain things, such as pressing the Tailor my CV to a job button, changing an
           application’s status or finishing an interview practice (with its scores, how many questions you answered
-          and how long it took). These records never include your CV, your answers, the job ad or your contact details.
+          and how long it took). These records never include your CV, your answers, the job ad or its link, or your
+          contact details.
         </p>
         <p>We use them to see how CVision is used and to make it better.</p>
       </>
@@ -351,8 +360,9 @@ export default function PrivacyPage() {
             <p>
               If you use the free CV check, our server sends your CV text to the AI to review it. We don’t save your CV
               or the review, only a usage record with the score and how many issues were found, and an AI use record for
-              each request to the AI. The free CV check keeps these records against the daily code, not your account,
-              even if you’re signed in.
+              each request to the AI. The free CV check keeps these records against the daily code. If you’re signed in,
+              it keeps them with your account instead, so they count towards your own daily limit and are deleted with
+              your account.
             </p>
           </div>
         </div>

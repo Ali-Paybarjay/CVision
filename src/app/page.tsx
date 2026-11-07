@@ -1,12 +1,12 @@
 import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { trackHomeCtaClick } from "@/shared/analytics/actions";
 import { brand } from "@/shared/brand";
-import { CheckIcon, CvPaper, FitLine, MatchMarker, RequirementList, SectionLabel, StatusChip, TrackedButtonLink } from "@/shared/ui";
+import { CheckIcon, CvPaper, FitLine, MatchMarker, RequirementList, SectionLabel, StatusChip, TrackedButtonLink, wideFrame } from "@/shared/ui";
 import { ad, cv, example, matchRows, requirementGroups, type Evidence } from "./_home/sara-example";
 
 // Plan A's home page (docs/design/paper-desk/home.html): the job ad beside Sara's CV, the three steps, the match table
 // that says why every line changed, and the Honest CV Promise. Sara and her job are fictional sample data.
-const container = "mx-auto w-full max-w-6xl px-4";
+const container = `mx-auto w-full px-4 ${wideFrame}`;
 
 export default function HomePage() {
   return (
@@ -14,7 +14,7 @@ export default function HomePage() {
       <section className={`${container} grid gap-12 pt-12 pb-16 sm:pt-20 sm:pb-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)] xl:gap-16`}>
         <div className="lg:pt-10">
           <SectionLabel size="large">{brand.hero.label}</SectionLabel>
-          <h1 className="mt-4 text-5xl leading-[1.02] tracking-[-0.035em] sm:text-6xl xl:text-7xl">{brand.hero.headline}</h1>
+          <h1 className="mt-4 text-5xl leading-[1.02] tracking-[-0.035em] sm:text-6xl xl:text-7xl 2xl:text-[5.25rem]">{brand.hero.headline}</h1>
           <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.hero.subline}</p>
           <div className="mt-8">
             <TrackedButtonLink
