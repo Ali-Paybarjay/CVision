@@ -106,12 +106,20 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
   {
     title: "Jobs and interview practice",
     body: (
-      <p>
-        When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
-        match result, the questions we asked you about it (so we don’t ask them again), the CV changes suggested for
-        it, the tailored CV and cover letter you last downloaded or sent with Apply, as they were, and your interview
-        practice for it. Interview practice is also saved in this browser, so you can pick up where you left off.
-      </p>
+      <>
+        <p>
+          When you check a job ad while signed in, we keep the ad as you pasted it with your account, together with its
+          match result, the questions we asked you about it (so we don’t ask them again), the CV changes suggested for
+          it, the tailored CV and cover letter you last downloaded or sent with Apply, as they were, and your interview
+          practice for it. Interview practice is also saved in this browser, so you can pick up where you left off.
+        </p>
+        <p>
+          If you give us the link to a job ad instead, our server opens that one page for you and puts its text in the
+          job ad box. The job site sees a request from our server, not from your browser. Nothing goes to the AI until
+          you check the text and ask for your match; then the ad goes to the AI just as pasted text would. We keep the
+          link with the job, so Apply can take you back to the ad.
+        </p>
+      </>
     ),
   },
   {
@@ -121,7 +129,8 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
         <p>
           A short record when you do certain things, such as pressing the Tailor my CV to a job button, changing an
           application’s status or finishing an interview practice (with its scores, how many questions you answered
-          and how long it took). These records never include your CV, your answers, the job ad or your contact details.
+          and how long it took). These records never include your CV, your answers, the job ad or its link, or your
+          contact details.
         </p>
         <p>We use them to see how CVision is used and to make it better.</p>
       </>

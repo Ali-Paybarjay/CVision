@@ -103,6 +103,16 @@ describe("privacy page", () => {
     expect(text).not.toContain("even if you’re signed in");
   });
 
+  // A job ad from its link (#278, #330): the server opens the page with fetchPublicPage and puts the text in the ad
+  // box; nothing reaches the AI until the user asks for the match, and jobs.link_read never records the link.
+  it("says what happens when a job ad comes from its link", () => {
+    expect(text).toContain("If you give us the link to a job ad instead, our server opens that one page for you");
+    expect(text).toContain("The job site sees a request from our server, not from your browser.");
+    expect(text).toContain("Nothing goes to the AI until you check the text and ask for your match");
+    expect(text).toContain("We keep the link with the job");
+    expect(text).toContain("never include your CV, your answers, the job ad or its link, or your contact details");
+  });
+
   it("lists every cookie and every browser storage key the app uses", () => {
     expect(text).toContain("sb-…-auth-token");
     expect(text).toContain("code-verifier");
