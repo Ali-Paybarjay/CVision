@@ -9,7 +9,7 @@ import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
-import { ButtonLink, Card, Notice, Page, WaitNote, wideFrame } from "@/shared/ui";
+import { ButtonLink, Card, Notice, Page, PathSteps, WaitNote, wideFrame } from "@/shared/ui";
 import { TailorWorkspace } from "./tailor-workspace";
 
 export const metadata: Metadata = { title: "Tailor your CV" };
@@ -40,6 +40,7 @@ export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
 function Frame({ children }: { children: React.ReactNode }) {
   return (
     <Page title="Tailor your CV" description="Answer a few questions about what the job asks for, approve each change, then download and apply.">
+      <PathSteps current={3} />
       {children}
     </Page>
   );
@@ -111,6 +112,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
 
   return (
     <main className={`mx-auto flex w-full flex-col gap-6 px-4 py-8 sm:py-12 ${wideFrame}`}>
+      <PathSteps current={3} />
       {notice && <Notice tone="info">{notice}</Notice>}
       <TailorWorkspace
         job={job}

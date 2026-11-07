@@ -8,7 +8,7 @@ import { JobChecker } from "@/features/profile/ui/job-checker";
 import { getAiMode } from "@/shared/ai";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
-import { Card, Page } from "@/shared/ui";
+import { Card, Page, PathSteps } from "@/shared/ui";
 
 export const metadata: Metadata = {
   title: "Check a job ad",
@@ -23,6 +23,7 @@ export default function JobsPage() {
       title="Check a job ad"
       description="Paste a job ad. We find what the employer is asking for, and where your experience already matches."
     >
+      <PathSteps current={2} />
       <Suspense
         fallback={
           <div className="flex flex-col gap-6">

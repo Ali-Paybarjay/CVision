@@ -11,6 +11,7 @@ import {
   MatchMarker,
   Notice,
   Page,
+  PathSteps,
   type Requirement,
   RequirementList,
   SectionLabel,
@@ -125,6 +126,19 @@ export default function UiKitPage() {
         <div className="mt-4">
           <Button disabled>Checking your CV…</Button>
           <WaitNote className="mt-3">Checking your CV. This can take up to a minute. Keep this page open.</WaitNote>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-xl">Where the user is on the main path</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          At the top of Profile, Jobs and Tailor (#238): the step they are on, in bold and in words, and what comes next.
+          A step before the current one links back to its page.
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <PathSteps current={1} />
+          <PathSteps current={2} />
+          <PathSteps current={3} />
         </div>
       </Card>
 
