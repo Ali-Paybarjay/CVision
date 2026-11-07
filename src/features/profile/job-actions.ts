@@ -8,13 +8,15 @@ import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
-import { checkAdText, parseAdUrl } from "./job-extraction";
+import { checkAdText, MAX_AD_CHARACTERS, parseAdUrl } from "./job-extraction";
+import { adLinkFailureMessage, jobSite, siteLabel } from "./job-link";
 import { modelAccessFor } from "./server/access";
 import { matchJob, parseJob, sampleJobFor } from "./server/check-job";
 import { describeAiError, type AiErrorCode } from "./server/extract-request";
 import { saveJobAndMatch } from "./server/job-store";
 import { loadAccountProfile } from "./server/profile-account";
 import { readProfileInput } from "./server/profile-input";
+import { readAdLink } from "./server/read-ad-link";
 
 /**
  * Whether the job and its match were kept: in the user's account, or not because they are signed out,
@@ -124,6 +126,46 @@ export async function checkJobAction(input: { ad: unknown; url: unknown; profile
     saved,
     demo: mode === "mock" ? { sampleProfile: profile ? null : matchedProfile.fullName } : null,
   };
+}
+
+export type ReadAdLinkResult =
+  | {
+      ok: true;
+      /** The ad's text, for the user to check in the ad box before the match. */
+      text: string;
+      /** Where it came from, as people write it: "reed.co.uk". */
+      site: string;
+      /** More text than an ad has: the page around it came too, so the user trims it before the check. */
+      tooLong: boolean;
+    }
+  | { ok: false; code: "sign-in" | "url" | "unreadable"; message: string };
+
+/**
+ * Opens the link to a job ad on the server and returns the ad's text (#330). Nothing goes to the AI here: the text goes
+ * into the ad box, and the user checks it and asks for the match themselves (#278).
+ */
+export async function readAdLinkAction(input: { url: unknown }): Promise<ReadAdLinkResult> {
+  const mode = getAiMode();
+  const user = await getCurrentUser();
+  // The same rule as the check: in live mode only a signed-in user may have our server open a link.
+  if (!modelAccessFor(user, mode).allowed) {
+    return { ok: false, code: "sign-in", message: "Sign in to check a job against your profile." };
+  }
+
+  const url = parseAdUrl(input?.url);
+  if (!url.ok) return { ok: false, code: "url", message: url.message };
+  const link = url.url;
+  if (link === null) return { ok: false, code: "url", message: "Paste the link to the ad first." };
+
+  // The link is kept with the job as the user gave it; the page it led to names the site.
+  const read = await readAdLink(link);
+  const actor: EventActor | undefined = user ? { userId: user.id } : undefined;
+  // The site's name from our list, never the address: a company's own careers page would name the employer.
+  const site = jobSite(read.url)?.name ?? "other";
+  after(() => track("jobs.link_read", { outcome: read.ok ? "read" : read.reason, site, demo: mode === "mock" }, actor));
+
+  if (!read.ok) return { ok: false, code: "unreadable", message: adLinkFailureMessage(read.reason, read.url) };
+  return { ok: true, text: read.text, site: siteLabel(read.url), tooLong: read.truncated || read.text.length > MAX_AD_CHARACTERS };
 }
 
 async function save(user: CurrentUser | null, job: Job, match: MatchResult): Promise<SaveState> {

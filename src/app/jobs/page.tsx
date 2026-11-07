@@ -21,7 +21,7 @@ export default function JobsPage() {
   return (
     <Page
       title="Check a job ad"
-      description="Paste a job ad. We find what the employer is asking for, and where your experience already matches."
+      description="Paste a job ad’s link or its text. We find what the employer is asking for, and where your experience already matches."
     >
       <Suspense
         fallback={

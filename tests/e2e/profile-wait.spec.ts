@@ -54,6 +54,8 @@ test("the job check says on screen that it is running, and again after a minute"
   });
 
   await page.goto("/jobs");
+  // The link comes first (#330); a pasted ad is the other choice.
+  await page.getByRole("radio", { name: "Paste the text" }).check();
   await page.getByLabel("The job ad", { exact: true }).fill(job.description);
   await page.getByRole("button", { name: "Check my fit" }).click();
   await expect.poll(() => checking, { timeout: 120_000 }).toBe(true);
