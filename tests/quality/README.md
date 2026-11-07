@@ -122,7 +122,8 @@
 
 - [ ] بدون ورود به حساب، «Upload a file» را با `sara.docx` امتحان کن و «Check my CV» را بزن. امتیاز آمادگی و «How to fix it» در کمتر از دو دقیقه می‌آید.
 - [ ] یک بار هم متن رزومه را بچسبان. نتیجه همان‌قدر روشن است.
-- [ ] در کارت «Next: make it fit each job»، «Tailor my CV to a job» به ثبت‌نام می‌رسد.
+- [ ] در کارت «Next: let CVision make these fixes»، «Tailor my CV to a job» مهمان را به ثبت‌نام و بعد Profile، و کاربر واردشده را مستقیم به Profile می‌برد.
+- [ ] زیر هر ایرادی که متن پیشنهادی دو کلمه‌ای یا بیشتر دارد، دکمهٔ «Copy» همان متن را کپی می‌کند.
 
 ### دادهٔ من (`/dashboard/your-data`): آخر از همه
 
