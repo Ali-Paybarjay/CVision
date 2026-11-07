@@ -87,7 +87,7 @@
 ### قدم ۲ · آگهی و تطابق (`/jobs`)
 
 - [ ] **با لینک (#330):** «Paste the link» از پیش انتخاب شده است. لینک یک آگهی باز از Reed یا NHS Jobs را در «Link to the ad» بگذار و «Get the ad» را بزن. زیر دکمه «Opening the page and copying the ad.» می‌آید، بعد «We copied the text from …» و متن آگهی در «The job ad». منو یا متن اضافه‌ای اگر هست پاک کن و «Check my fit» را بزن. زیر دکمه جملهٔ «Reading the ad and checking your fit.» می‌آید و بعد گزارش تطابق (#235).
-- [ ] **سایتی که آگهی را نشان نمی‌دهد (#330):** لینک یک آگهی LinkedIn یا Indeed را بده و «Get the ad» را بزن. فوراً «We couldn’t read the ad from this link» با نام همان سایت می‌آید و زیرش کادر خالی «The job ad». متن آگهی را از همان سایت کپی کن، بچسبان و «Check my fit» را بزن. در گزارش، «Open the original ad» همان لینک را باز می‌کند.
+- [ ] **سایتی که آگهی را نشان نمی‌دهد (#330):** راهنمای زیر «Link to the ad» از پیش می‌گوید «Indeed and LinkedIn don’t let other websites open their job ads, so paste the text for those.» لینک یک آگهی LinkedIn یا Indeed را بده و «Get the ad» را بزن. فوراً «We couldn’t read the ad from this link» با نام همان سایت می‌آید و زیرش کادر خالی «The job ad». متن آگهی را از همان سایت کپی کن، بچسبان و «Check my fit» را بزن. در گزارش، «Open the original ad» همان لینک را باز می‌کند.
 - [ ] **لینک تازه:** بعد از «Get the ad»، لینک را با لینک آگهی دیگری عوض کن. کادر آگهی می‌رود و تا «Get the ad» دوباره نیاید، متن آگهی قبلی هیچ‌جا نمی‌ماند.
 - [ ] **با متن:** «Paste the text» را بزن؛ کادر لینک می‌رود. متن آگهی را در «The job ad» بچسبان و «Check my fit» را بزن.
 - [ ] هر مورد جور، شاهدش را از خود رزومه نشان می‌دهد، و کمبودها جدا آمده‌اند.

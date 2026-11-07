@@ -323,7 +323,7 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
             <div className="flex flex-col gap-3">
               <Field
                 label="Link to the ad"
-                hint="We copy the ad from the page, and you check it before we compare it with your profile."
+                hint="We copy the ad from the page, and you check it before we compare it with your profile. Indeed and LinkedIn don’t let other websites open their job ads, so paste the text for those."
                 error={errors.url}
               >
                 {(props) => (
