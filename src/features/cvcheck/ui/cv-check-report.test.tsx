@@ -49,12 +49,14 @@ describe("CvCheckReport", () => {
     expect(render(false)).toContain('href="/sign-up?next=%2Fprofile"');
   });
 
-  // A pilot wanted CVision to make the fixes, not knowing Tailor does (#333).
-  it("says Tailor makes these fixes, asks about what's missing and lets the user approve each change", () => {
+  // A pilot wanted CVision to ask about what's missing and rewrite the CV, not knowing Tailor does (#333). The card
+  // doesn't promise to make these fixes: Tailor works from the job, not from this check.
+  it("says Tailor asks about what's missing, rewrites the CV for a job and lets the user approve each change", () => {
     const html = render(true);
-    expect(html).toContain("Next: let CVision make these fixes");
-    expect(html).toContain("Tailor asks you about anything that’s missing, rewrites your CV for the job you want");
-    expect(html).toContain("lets you approve every");
+    expect(html).toContain("Next: let CVision rewrite your CV for a job");
+    expect(html).toContain("Tailor asks you about anything the job needs that your CV doesn’t show yet");
+    expect(html).toContain("lets you approve every change");
+    expect(html).not.toContain("make these fixes");
   });
 
   // A pilot asked which exact words to write (#335).

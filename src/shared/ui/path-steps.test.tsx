@@ -12,20 +12,31 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+const text = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;| /g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 describe("PathSteps", () => {
-  it("names all three steps in order, as one list in a labelled nav", () => {
+  it("says which step of three in words, and names all three in order, in a labelled nav", () => {
     const html = renderToStaticMarkup(<PathSteps current={1} />);
-    expect(html).toContain('<nav aria-label="Your progress">');
-    expect(text(html)).toMatch(/1 Your profile.*2 Job ad.*3 Tailored CV/);
+    expect(html).toContain('aria-label="Your progress"');
+    expect(text(html)).toMatch(/^Step 1 of 3 Profile .*Job ad .*Tailored CV/);
   });
 
-  it("marks the current step in words for screen readers and says which comes next", () => {
+  // The pages' own steps (Profile's two, Tailor's five) use aria-current="step"; each step here is a page.
+  it("marks the current step as the current page, once, and says which comes next", () => {
     const html = renderToStaticMarkup(<PathSteps current={2} />);
-    expect(html).toMatch(/aria-current="step"[^>]*>.*?Job ad/);
+    expect(html).toMatch(/aria-current="page"[^>]*>Job ad/);
+    expect(html.match(/aria-current=/g)).toHaveLength(1);
+    expect(html).not.toContain('aria-current="step"');
     expect(text(html)).toContain("Tailored CV (next)");
-    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
+  });
+
+  it("has no numbered circles that could be taken for the pages' own steps", () => {
+    expect(renderToStaticMarkup(<PathSteps current={1} />)).not.toContain("rounded-full");
   });
 
   it("links back only to the steps before the current one", () => {

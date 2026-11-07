@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
-import { carryCv } from "@/shared/carried-cv";
+import { carryCv, clearCarriedCv } from "@/shared/carried-cv";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { withNext } from "@/features/account/safe-redirect";
@@ -275,12 +275,13 @@ export function CvCheckReport({
         </section>
       )}
 
-      {/* A pilot wanted CVision to make these fixes and ask about what's missing, not knowing Tailor does (#333). */}
+      {/* A pilot wanted CVision to ask about what's missing and rewrite the CV, not knowing Tailor does (#333). It
+          doesn't promise these fixes: Tailor works from the job's requirements, not from this check. */}
       <Card className="flex flex-col items-start gap-3">
-        <h3 className="text-xl">Next: let CVision make these fixes</h3>
+        <h3 className="text-xl">Next: let CVision rewrite your CV for a job</h3>
         <p className="text-text-muted">
-          Tailor asks you about anything that’s missing, rewrites your CV for the job you want and lets you approve every
-          change. You’ll also get a cover letter, built only from what you’ve told us.
+          Tailor asks you about anything the job needs that your CV doesn’t show yet, rewrites your CV for that job and
+          lets you approve every change. You’ll also get a cover letter, built only from what you’ve told us.
         </p>
         {/* A signed-in user's checked file goes with them to Profile, so they don't upload it twice (#336). It stays in this
             page's memory only; a visitor's would be lost on the way through sign-up, so it isn't offered. */}
@@ -288,7 +289,9 @@ export function CvCheckReport({
           href={tailorPath(signedIn)}
           variant="primary"
           onClick={() => {
+            // Pasted text, or a visitor: no file goes, and none from an earlier check is left to be offered instead.
             if (signedIn && file) carryCv(file);
+            else clearCarriedCv();
           }}
         >
           {brand.cta.primary}

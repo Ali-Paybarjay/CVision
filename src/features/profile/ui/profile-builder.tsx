@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JobPreferences, Profile } from "@/shared/contracts";
 import { deleteMyProfileAction } from "../actions";
 import type { ConsentRecord, ProfileStorageKind } from "../consent";
@@ -84,6 +84,8 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   const [message, setMessage] = useState<string | null>(null);
   // The CV the user just checked in the CV check, if they came from there (#336). Read once, when the page opens.
   const [carried, setCarried] = useState<File | null>(() => carriedCv());
+  // Taken, not only read: once this page has the file, a later visit to /profile in this tab doesn't offer it again.
+  useEffect(() => clearCarriedCv(), []);
   const dropCarried = () => {
     clearCarriedCv();
     setCarried(null);
@@ -151,6 +153,8 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
 
   /** No CV to upload: the review page starts empty, or from what the user typed before going back. */
   const handleStartManual = () => {
+    // Typing the details in instead: the CV carried from the CV check isn't offered again afterwards.
+    dropCarried();
     // Nothing is read from a CV, so the job preferences start empty and follow the location the user types.
     const base = newProfileBase(
       { contact: {} },

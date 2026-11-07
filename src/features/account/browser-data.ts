@@ -1,6 +1,7 @@
 // CVision's data in the browser: the profile (cvision.profile), interview practice (cvision.interview.v1:<job id>),
 // the lab's practice and the storage check. Every key starts with "cvision.", so one prefix finds them all.
 import { brand } from "@/shared/brand";
+import { clearCarriedCv } from "@/shared/carried-cv";
 
 export const browserDataPrefix = "cvision.";
 
@@ -12,10 +13,12 @@ type ReadableStorage = Pick<Storage, "length" | "key" | "getItem">;
 
 /**
  * Removes every CVision key from this browser's localStorage, on sign-out (issue #35) and after deleting the
- * account (issue #43), so the next person on this browser sees none of it. Other sites' keys stay.
+ * account (issue #43), so the next person on this browser sees none of it. Other sites' keys stay. It also forgets a
+ * CV carried from the CV check in this tab's memory (#336), which a sign-out doesn't reload away.
  * Returns how many keys it removed, or null when the browser blocks storage (then nothing was saved either).
  */
 export function clearBrowserData(storage?: StorageLike): number | null {
+  clearCarriedCv();
   try {
     const target = storage ?? window.localStorage;
     const keys = cvisionKeys(target);
