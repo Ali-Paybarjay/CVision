@@ -16,6 +16,8 @@ export type CvCheckResponse = (
 ) & {
   /** Set by the route: true when a signed-in user asked, so the page offers their profile, not sign-up (#331). */
   signedIn?: boolean;
+  /** Set by the route for a signed-in user: their account id, so a CV carried to Profile is only theirs (#336). */
+  account?: string;
 };
 
 export type CvCheckErrorCode =

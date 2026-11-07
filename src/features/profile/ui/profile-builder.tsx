@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import type { JobPreferences, Profile } from "@/shared/contracts";
 import { deleteMyProfileAction } from "../actions";
 import type { ConsentRecord, ProfileStorageKind } from "../consent";
@@ -16,7 +16,7 @@ import {
 import { builtFromCv, fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import type { SaveReason } from "../server/save-request";
 import type { AccountProfile } from "../server/profile-account";
-import { carriedCv, clearCarriedCv } from "@/shared/carried-cv";
+import { carriedCvFor, clearCarriedCv, subscribeCarriedCv } from "@/shared/carried-cv";
 import { Button, Card, Notice } from "@/shared/ui";
 import { BackLink } from "./back-link";
 import { ProfileOverview } from "./profile-overview";
@@ -28,7 +28,8 @@ import { UploadStep, type ExtractSuccess } from "./upload-step";
  * Where this page keeps the approved profile: in the signed-in user's account (loaded on the server),
  * or in this browser when accounts are not switched on.
  */
-export type ProfileStorage = { kind: "browser" } | { kind: "account"; initial: AccountProfile | null };
+/** `account` is the signed-in user's id, so only a CV this account checked is carried in from the CV check (#336). */
+export type ProfileStorage = { kind: "browser" } | { kind: "account"; initial: AccountProfile | null; account?: string };
 
 type View =
   /** The saved profile, or the upload step when there is none. */
@@ -82,12 +83,13 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   // Focus moves to each new step's heading, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  // The CV the user just checked in the CV check, if they came from there (#336). Read once, when the page opens.
-  const [carried, setCarried] = useState<File | null>(() => carriedCv());
-  const dropCarried = () => {
-    clearCarriedCv();
-    setCarried(null);
-  };
+  // The CV this account just checked in the CV check, if they came from there (#336). Subscribed to, so a page Next
+  // keeps alive (cacheComponents) shows the latest file, and one cleared elsewhere goes at once. Another account's
+  // file is never returned. On the server it is always null: only a click in the browser carries a file.
+  const accountId = storage.kind === "account" ? storage.account : undefined;
+  const carriedNow = () => (accountId ? carriedCvFor(accountId) : null);
+  const carried = useSyncExternalStore(subscribeCarriedCv, carriedNow, carriedNow);
+  const dropCarried = () => clearCarriedCv();
 
   const where: ProfileStorageKind = storage.kind;
   const saved: SavedProfile | null | undefined =
@@ -151,6 +153,8 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
 
   /** No CV to upload: the review page starts empty, or from what the user typed before going back. */
   const handleStartManual = () => {
+    // Typing the details in instead: the CV carried from the CV check isn't offered again afterwards.
+    dropCarried();
     // Nothing is read from a CV, so the job preferences start empty and follow the location the user types.
     const base = newProfileBase(
       { contact: {} },
