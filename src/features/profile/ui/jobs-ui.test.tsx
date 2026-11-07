@@ -132,6 +132,8 @@ describe("JobForm", () => {
     expect(html).toMatch(/<input(?=[^>]*value="text")(?![^>]*checked)[^>]*>/);
     expect(html).toMatch(/<input(?=[^>]*name="url")(?=[^>]*type="url")[^>]*>/);
     expect(text(html)).toContain("Link to the ad");
+    // Most links come from these two, which never show an ad to another website, so the hint says so first.
+    expect(text(html)).toContain("Indeed and LinkedIn don’t let other websites open their job ads, so paste the text for those.");
     expect(html).toMatch(/<button type="submit"[^>]*bg-cta[^>]*>Get the ad<\/button>/);
     // No ad box and no check until the ad is in.
     expect(html).not.toMatch(/<textarea/);
