@@ -14,7 +14,8 @@
 -- (estimateCostUsd in src/shared/ai/usage.ts). Each feature falls in one group:
 -- - one-time: building the Profile from the CV, once per user (profile-extract, profile-follow-up)
 -- - per-job: everything done for each job ad (profile-job, profile-match, tailor-*, interview-*)
--- - cv-check: the free CV check, which is anonymous, so it never counts as an account
+-- - cv-check: the free CV check. A visitor's checks are anonymous; since 7 November 2026 (#331) a signed-in user's
+--   checks count as their account, so accounts can be more than 0 here
 -- - other: any feature not listed here yet
 -- Rows: each feature with its group, then the group's total (feature 'total'), then the window's total (group and
 -- feature 'total'), which is always there, with zeros when the window has no request. accounts counts the signed-in
