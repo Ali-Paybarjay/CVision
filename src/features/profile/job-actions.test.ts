@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AskModelError } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { MAX_PROFILE_CHARACTERS } from "./cv-limits";
-import { checkJobAction } from "./job-actions";
+import { checkJobAction, readAdLinkAction } from "./job-actions";
+import { MAX_AD_CHARACTERS } from "./job-extraction";
 import { matchJob, parseJob } from "./server/check-job";
 import { saveJobAndMatch } from "./server/job-store";
 import { loadAccountProfile } from "./server/profile-account";
+import { readAdLink } from "./server/read-ad-link";
 
 const { getCurrentUser, track, isSupabaseConfigured, createSupabaseServerClient } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -24,6 +26,8 @@ vi.mock("./server/check-job", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./server/check-job")>();
   return { ...actual, parseJob: vi.fn(actual.parseJob), matchJob: vi.fn(actual.matchJob) };
 });
+// Opening a link is the network: each test says what the page gave (server/read-ad-link.test.ts reads real HTML).
+vi.mock("./server/read-ad-link", () => ({ readAdLink: vi.fn() }));
 
 const sara = personas.sara;
 const ad = sara.jobs[0].description;
@@ -202,5 +206,92 @@ describe("checkJobAction", () => {
     if (!result.ok) return;
     expect(result.job.id).not.toBe(sara.jobs[0].id);
     expect(saveJobAndMatch).toHaveBeenCalledWith({}, result.job, result.match);
+  });
+});
+
+describe("readAdLinkAction", () => {
+  const link = "https://www.reed.co.uk/jobs/junior-data-analyst/55512345";
+
+  it("returns the ad's text and where it came from, for the user to check before the match (#330)", async () => {
+    vi.mocked(readAdLink).mockResolvedValue({ ok: true, url: link, text: ad, truncated: false });
+
+    expect(await readAdLinkAction({ url: link })).toEqual({ ok: true, text: ad, site: "reed.co.uk", tooLong: false });
+    expect(readAdLink).toHaveBeenCalledWith(link);
+    // Nothing goes to the AI until the user asks for the check.
+    expect(parseJob).not.toHaveBeenCalled();
+  });
+
+  it("adds https:// to a link given without it", async () => {
+    vi.mocked(readAdLink).mockResolvedValue({ ok: true, url: link, text: ad, truncated: false });
+
+    await readAdLinkAction({ url: "www.reed.co.uk/jobs/junior-data-analyst/55512345" });
+
+    expect(readAdLink).toHaveBeenCalledWith(link);
+  });
+
+  it("says when the page gave more than an ad, so the user trims it before the check", async () => {
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: true, url: link, text: "x".repeat(MAX_AD_CHARACTERS + 1), truncated: false });
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: true, url: link, text: ad, truncated: true });
+
+    expect(await readAdLinkAction({ url: link })).toMatchObject({ ok: true, tooLong: true });
+    expect(await readAdLinkAction({ url: link })).toMatchObject({ ok: true, tooLong: true });
+  });
+
+  it("says why a link can't be read, and asks for the ad's text instead", async () => {
+    vi.mocked(readAdLink).mockResolvedValue({ ok: false, reason: "text-only-site", url: "https://uk.linkedin.com/jobs/view/4012345678" });
+
+    expect(await readAdLinkAction({ url: "https://uk.linkedin.com/jobs/view/4012345678" })).toEqual({
+      ok: false,
+      code: "unreadable",
+      message: "LinkedIn doesn’t let other websites open its job ads. Copy the ad from the page and paste it below.",
+    });
+  });
+
+  it("names the site the link led to, and keeps the link the user gave for the job", async () => {
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: true, url: "https://job-boards.greenhouse.io/pennine/jobs/42", text: ad, truncated: false });
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: false, reason: "text-only-site", url: "https://uk.linkedin.com/jobs/view/4012345678" });
+
+    expect(await readAdLinkAction({ url: "https://boards.greenhouse.io/pennine/jobs/42" })).toMatchObject({ site: "job-boards.greenhouse.io" });
+    expect(await readAdLinkAction({ url: "https://bit.ly/3pennine" })).toMatchObject({
+      message: expect.stringMatching(/^LinkedIn doesn’t let other websites open its job ads\./),
+    });
+    expect(track).toHaveBeenCalledWith("jobs.link_read", { outcome: "read", site: "Greenhouse", demo: true }, { userId: "user-1" });
+    expect(track).toHaveBeenCalledWith("jobs.link_read", { outcome: "text-only-site", site: "LinkedIn", demo: true }, { userId: "user-1" });
+  });
+
+  it("refuses an empty link or one that isn't a web address, before opening anything", async () => {
+    expect(await readAdLinkAction({ url: "  " })).toEqual({ ok: false, code: "url", message: "Paste the link to the ad first." });
+    expect(await readAdLinkAction({ url: "javascript:alert(1)" })).toMatchObject({ ok: false, code: "url" });
+    expect(await readAdLinkAction({ url: 42 })).toMatchObject({ ok: false, code: "url" });
+    expect(readAdLink).not.toHaveBeenCalled();
+  });
+
+  it("asks a signed-out visitor to sign in when the AI is live, before opening anything", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    getCurrentUser.mockResolvedValue(null);
+
+    expect(await readAdLinkAction({ url: link })).toEqual({ ok: false, code: "sign-in", message: "Sign in to check a job against your profile." });
+    expect(readAdLink).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  it("keeps the demo open to signed-out visitors", async () => {
+    getCurrentUser.mockResolvedValue(null);
+    vi.mocked(readAdLink).mockResolvedValue({ ok: true, url: link, text: ad, truncated: false });
+
+    expect(await readAdLinkAction({ url: link })).toMatchObject({ ok: true });
+  });
+
+  it("records the outcome and the site's name, never the link, the employer or the ad", async () => {
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: true, url: link, text: ad, truncated: false });
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: false, reason: "blocked", url: "https://careers.pennine-health.co.uk/jobs/42" });
+
+    await readAdLinkAction({ url: link });
+    await readAdLinkAction({ url: "https://careers.pennine-health.co.uk/jobs/42" });
+
+    expect(track).toHaveBeenCalledWith("jobs.link_read", { outcome: "read", site: "Reed", demo: true }, { userId: "user-1" });
+    expect(track).toHaveBeenCalledWith("jobs.link_read", { outcome: "blocked", site: "other", demo: true }, { userId: "user-1" });
+    const sent = JSON.stringify(track.mock.calls);
+    for (const text of ["reed.co.uk", "pennine", "55512345", ad.slice(0, 40)]) expect(sent.toLowerCase()).not.toContain(text.toLowerCase());
   });
 });
