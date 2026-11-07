@@ -693,13 +693,13 @@ describe("profile screens", () => {
     expect(overview(fromBrowser(stored("sara")), "account", false)).not.toContain("This browser doesn’t keep saved data");
   });
 
-  it("asks a signed-out visitor to sign in before building a profile, with Back to the home page", () => {
+  it("asks a signed-out visitor to sign in before building a profile, with no Back above the card", () => {
     const html = renderToStaticMarkup(<SignInToStart />);
 
     expect(text(html)).toContain("Sign in to build your profile");
     expect(html).toContain('href="/sign-up?next=%2Fprofile"');
     expect(html).toContain('href="/sign-in?next=%2Fprofile"');
-    expect(html).toMatch(/<a href="\/"[^>]*>.*?Back<\/a>/);
+    expect(html).not.toContain(">Back<");
     // The Coral button says what it does, and "free" is in the small line under it (docs/brand.md, Calls to action).
     expect(html).toMatch(/bg-cta[^"]*">Create your account<\/a>/);
     expect(text(html)).toContain("Free account. Start with your CV or your details.");
@@ -731,10 +731,10 @@ describe("profile screens", () => {
   it.each([
     ["the saved profile", { profile: personas.daniel.profile, savedAt: "2026-10-21T10:00:00.000Z", cvFormat: null }],
     ["the first upload", null],
-  ] as const)("puts Back first on %s, leading out of the page", (_, initial) => {
+  ] as const)("has no Back out of the page on %s: the steps bar and the menu lead out", (_, initial) => {
     const html = renderToStaticMarkup(<ProfileBuilder demoMode={false} storage={{ kind: "account", initial }} />);
 
-    expect(html).toMatch(/^<div[^>]*><a href="\/dashboard"[^>]*>.*?Back<\/a>/);
+    expect(html).not.toContain(">Back<");
   });
 });
 
@@ -743,13 +743,6 @@ describe("BackLink", () => {
     const html = renderToStaticMarkup(<BackLink href="/dashboard" />);
 
     expect(html).toMatch(/^<a href="\/dashboard"[^>]*><svg[^>]*aria-hidden="true"/);
-    expect(text(html).trim()).toBe("Back");
-  });
-
-  it("is a button inside the page, for the step before", () => {
-    const html = renderToStaticMarkup(<BackLink onClick={noop} />);
-
-    expect(html).toMatch(/^<button type="button"/);
     expect(text(html).trim()).toBe("Back");
   });
 });

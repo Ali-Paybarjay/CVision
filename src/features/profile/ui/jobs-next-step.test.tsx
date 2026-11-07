@@ -28,15 +28,15 @@ describe("Jobs before the form", () => {
     expect(html).toMatch(/<a href="\/profile" class="[^"]*bg-cta[^"]*">Build your profile<\/a>/);
   });
 
-  it("asks a signed-out visitor to create an account or sign in, coming back to Jobs, with one Back", () => {
+  it("asks a signed-out visitor to create an account or sign in, coming back to Jobs, with no Back", () => {
     const html = renderToStaticMarkup(<JobChecker demoMode={false} source={{ kind: "signed-out" }} />);
 
     expect(text(html)).toContain("Sign in to check a job against your profile");
     expect(html).toMatch(/<a href="\/sign-up\?next=%2Fjobs" class="[^"]*bg-cta[^"]*">Create your account<\/a>/);
     expect(html).toContain('href="/sign-in?next=%2Fjobs"');
     expect(text(html)).toContain("Free account. Start with your CV or your details.");
-    // The page's own Back stays the only one: the card's Back to the home page is for the profile page.
-    expect(html.match(/>Back<\/a>/g)).toHaveLength(1);
+    // No Back out of the page: the steps bar and the menu at the top lead everywhere else.
+    expect(html).not.toContain(">Back<");
     expect(html.match(/bg-cta/g)).toHaveLength(1);
   });
 });

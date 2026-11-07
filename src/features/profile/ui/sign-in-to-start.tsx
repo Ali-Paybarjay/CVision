@@ -2,7 +2,6 @@ import Link from "next/link";
 import { withNext } from "@/features/account/safe-redirect";
 import { brand } from "@/shared/brand";
 import { ButtonLink, Card } from "@/shared/ui";
-import { BackLink } from "./back-link";
 
 type SignInToStartProps = {
   /** What signing in is for. */
@@ -11,24 +10,21 @@ type SignInToStartProps = {
   text?: string;
   /** The page both links bring the user back to. */
   next?: string;
-  /** Back to the home page above the card; off where the page already shows its own Back. */
-  back?: boolean;
 };
 
 /**
  * Shown to a signed-out visitor on a page that keeps their work in their account (Profile, Jobs): create an account
  * or sign in, then come back to the same page. The Coral button says what it does, and "free" goes in the small line
- * under it, as every call to action does (docs/brand.md, Calls to action).
+ * under it, as every call to action does (docs/brand.md, Calls to action). No Back above it: the steps bar and the
+ * menu at the top of the page lead everywhere else.
  */
 export function SignInToStart({
   title = "Sign in to build your profile",
   text = "Your profile is saved to your CVision account, so every tailored CV and cover letter can use it. You can download or delete it at any time.",
   next = "/profile",
-  back = true,
 }: SignInToStartProps) {
   return (
     <div className="flex flex-col gap-6">
-      {back && <BackLink href="/" />}
       <Card>
         <h2 className="text-xl">{title}</h2>
         <p className="mt-2 max-w-[65ch] text-text-muted">{text}</p>

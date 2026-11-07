@@ -122,8 +122,6 @@ describe("MatchReport", () => {
 });
 
 describe("JobForm", () => {
-  const pasted = { source: "text", ad: "", url: "" } as const;
-
   it("asks for the ad's link first, and gets the ad from it before any check (#330)", () => {
     const html = renderToStaticMarkup(<JobForm profile={personas.reza.profile} demoMode={false} focusAd={false} onChecked={noop} />);
 
@@ -143,7 +141,7 @@ describe("JobForm", () => {
 
   it("with text, asks for the whole ad, and names the profile it compares with", () => {
     const html = renderToStaticMarkup(
-      <JobForm profile={personas.reza.profile} demoMode={false} initial={pasted} focusAd={false} onChecked={noop} />,
+      <JobForm profile={personas.reza.profile} demoMode={false} initialSource="text" focusAd={false} onChecked={noop} />,
     );
 
     expect(html).toMatch(/<input(?=[^>]*value="text")(?=[^>]*checked="")[^>]*>/);
@@ -158,7 +156,7 @@ describe("JobForm", () => {
   it("keeps an empty live region under each button, where the wait shows on screen (issue #235)", () => {
     const link = renderToStaticMarkup(<JobForm profile={personas.reza.profile} demoMode={false} focusAd={false} onChecked={noop} />);
     const pastedAd = renderToStaticMarkup(
-      <JobForm profile={personas.reza.profile} demoMode={false} initial={pasted} focusAd={false} onChecked={noop} />,
+      <JobForm profile={personas.reza.profile} demoMode={false} initialSource="text" focusAd={false} onChecked={noop} />,
     );
 
     expect(link).toMatch(/>Get the ad<\/button><div aria-live="polite"><\/div><\/div>/);
@@ -171,41 +169,6 @@ describe("JobForm", () => {
 
     expect(html).toContain("Demo mode: the match uses sample data");
     expect(html).toContain("the match uses the sample person’s profile");
-  });
-
-  it("shows the ad and its link again after Back from the report, with the check as the one main button", () => {
-    const html = renderToStaticMarkup(
-      <JobForm
-        profile={personas.reza.profile}
-        demoMode={false}
-        initial={{ source: "link", ad: "Maths Teacher at Riverside Academy", url: "https://example.com/jobs/42" }}
-        focusAd={false}
-        onChecked={noop}
-      />,
-    );
-
-    expect(html).toMatch(/<textarea[^>]*name="ad"[^>]*>Maths Teacher at Riverside Academy<\/textarea>/);
-    expect(html).toMatch(/<input(?=[^>]*name="url")(?=[^>]*value="https:\/\/example.com\/jobs\/42")[^>]*>/);
-    expect(text(html)).toContain("Check it’s the job ad, and all of it");
-    expect(text(html)).toContain("If the ad isn’t there, copy it from the page and paste it here instead.");
-    expect(html).toMatch(/<button type="button"[^>]*>Get the ad<\/button>/);
-    expect(html).toMatch(/<button type="submit"[^>]*bg-cta[^>]*>Check my fit<\/button>/);
-    expect(html.match(/bg-cta/g)).toHaveLength(1);
-  });
-
-  it("shows a pasted ad again after Back, without a link", () => {
-    const html = renderToStaticMarkup(
-      <JobForm
-        profile={personas.reza.profile}
-        demoMode={false}
-        initial={{ source: "text", ad: "Maths Teacher at Riverside Academy", url: "" }}
-        focusAd={false}
-        onChecked={noop}
-      />,
-    );
-
-    expect(html).toMatch(/<textarea[^>]*name="ad"[^>]*>Maths Teacher at Riverside Academy<\/textarea>/);
-    expect(html).not.toMatch(/name="url"/);
   });
 });
 
@@ -225,10 +188,10 @@ describe("JobChecker", () => {
     ["the ad form", { kind: "account", profile: personas.emma.profile }],
     ["the profile-first message", { kind: "account", profile: null }],
     ["the sign-in message", { kind: "signed-out" }],
-  ] as const)("puts Back first on %s, leading out of the page", (_, source) => {
+  ] as const)("has no Back out of the page on %s: the steps bar and the menu lead out", (_, source) => {
     const html = renderToStaticMarkup(<JobChecker demoMode={false} source={source} />);
 
-    expect(html).toMatch(/^<div[^>]*><a href="\/profile"[^>]*>.*?Back<\/a>/);
+    expect(html).not.toContain(">Back<");
   });
 
   it("asks an account with no profile yet to build one first", () => {

@@ -27,14 +27,18 @@ test("asks for the link first, then for the ad's text when the site won't show i
   // The link stays with the job, so the ad can be opened when the user applies.
   await expect(page.getByRole("link", { name: /^Open the original ad/ })).toHaveAttribute("href", linkedIn);
 
-  // Back shows the ad as the user gave it: the link, then the text.
-  await page.getByRole("button", { name: "Back" }).click();
+  // The page has no Back: "Check another job" starts again from an empty link.
+  await expect(page.getByRole("main").getByRole("button", { name: "Back", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Check another job" }).click();
   await expect(page.getByRole("radio", { name: "Paste the link" })).toBeChecked();
-  await expect(page.getByLabel("Link to the ad", { exact: true })).toHaveValue(linkedIn);
-  await expect(page.getByLabel("The job ad", { exact: true })).toHaveValue(job.description);
+  await expect(page.getByLabel("Link to the ad", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("The job ad", { exact: true })).toHaveCount(0);
 
-  // A new link hides that ad, and when the new link can't be read either, the box comes back empty, not with the
-  // old job's ad, which would go to the check with the new job's link.
+  // A new link hides the ad pasted for the old one, and when the new link can't be read either, the box comes back
+  // empty, not with the old job's ad, which would go to the check with the new job's link.
+  await page.getByLabel("Link to the ad", { exact: true }).fill(linkedIn);
+  await page.getByRole("button", { name: "Get the ad" }).click();
+  await page.getByLabel("The job ad", { exact: true }).fill(job.description);
   await page.getByLabel("Link to the ad", { exact: true }).fill("https://uk.indeed.com/viewjob?jk=0123456789abcdef");
   await expect(page.getByLabel("The job ad", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Get the ad" }).click();
