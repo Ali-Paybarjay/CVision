@@ -1,6 +1,7 @@
 import { after } from "next/server";
-import { getAnonymousKey } from "@/shared/ai";
+import { getAnonymousKey, type Requester } from "@/shared/ai";
 import { track } from "@/shared/analytics/track";
+import { getCurrentUser } from "@/features/account/current-user";
 import { cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
 import { handleCvCheckRequest, statusFor, type CvCheckResponse } from "@/features/cvcheck/server/check-request";
 
@@ -29,15 +30,19 @@ export async function POST(request: Request) {
     return reply({ ok: false, code: "missing", message: cvFileMessages.missing });
   }
 
-  // A daily key from the visitor's IP address, never stored as the address itself, so the free limit applies.
-  const requester = await getAnonymousKey();
+  // A signed-in user's checks count towards their own daily limit, like everything else they do (#331), so an
+  // account really does give more checks. A visitor gets a daily key from their IP address, never stored as the
+  // address itself, so the free limit applies.
+  const user = await getCurrentUser();
+  const requester: Requester = user ? { userId: user.id } : await getAnonymousKey();
   const response = await handleCvCheckRequest(form, { requester });
   if (response.ok) {
     const { score, issues } = response.result;
     // The score and the number of issues only: never CV text.
     after(() => track("cvcheck.completed", { score, issues: issues.length }, requester));
   }
-  return reply(response);
+  // The page sends a signed-in user on to their profile, not to sign-up (#331).
+  return reply({ ...response, signedIn: user !== null });
 }
 
 function reply(body: CvCheckResponse) {

@@ -22,6 +22,10 @@ vi.mock("@/shared/ai", async (importOriginal) => {
   };
 });
 
+// Nobody is signed in unless a test says so (#331).
+const signedInUser = vi.hoisted(() => ({ value: null as null | { id: string; email: string | null } }));
+vi.mock("@/features/account/current-user", () => ({ getCurrentUser: async () => signedInUser.value }));
+
 const deferred = vi.hoisted(() => [] as (() => unknown)[]);
 vi.mock("next/server", async (importOriginal) => ({ ...(await importOriginal<object>()), after: (work: () => unknown) => deferred.push(work) }));
 
@@ -72,6 +76,7 @@ afterEach(() => {
   tracked.length = 0;
   deferred.length = 0;
   failWith.value = null;
+  signedInUser.value = null;
 });
 
 describe("POST /cv-check/api", () => {
@@ -80,11 +85,34 @@ describe("POST /cv-check/api", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toMatchObject({ ok: true, truncated: false, result: { readiness: "nearly-ready", score: 68 } });
+    expect(body).toMatchObject({ ok: true, truncated: false, signedIn: false, result: { readiness: "nearly-ready", score: 68 } });
     expect(asked).toHaveLength(1);
     expect(asked[0]).toMatchObject({ feature: "cv-check", requester: anonymousKey });
     // The model sees the CV's text, inside the prompt's <cv> tags.
     expect(asked[0].prompt).toMatch(/<cv>\n[\s\S]*Sara Khan[\s\S]*\n<\/cv>/);
+  });
+
+  // A pilot who was signed in hit the visitor's limit and was told to create an account (#331).
+  it("counts a signed-in user's check against their own daily limit and says they are signed in", async () => {
+    signedInUser.value = { id: "user-1", email: null };
+
+    const response = await POST(request(withText(pastedCv)));
+    await runDeferred();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, signedIn: true });
+    expect(asked[0]).toMatchObject({ feature: "cv-check", requester: { userId: "user-1" } });
+    expect(tracked).toEqual([{ name: "cvcheck.completed", properties: { score: 68, issues: 4 }, actor: { userId: "user-1" } }]);
+  });
+
+  it("tells the page a signed-in user is signed in when their daily limit is reached", async () => {
+    signedInUser.value = { id: "user-1", email: null };
+    failWith.value = "limit-reached";
+
+    const response = await POST(request(withText(pastedCv)));
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ ok: false, code: "limit-reached", signedIn: true });
   });
 
   it("checks pasted text", async () => {

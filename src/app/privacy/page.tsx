@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "6 November 2026";
+const lastUpdated = "7 November 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -351,8 +351,9 @@ export default function PrivacyPage() {
             <p>
               If you use the free CV check, our server sends your CV text to the AI to review it. We don’t save your CV
               or the review, only a usage record with the score and how many issues were found, and an AI use record for
-              each request to the AI. The free CV check keeps these records against the daily code, not your account,
-              even if you’re signed in.
+              each request to the AI. The free CV check keeps these records against the daily code. If you’re signed in,
+              it keeps them with your account instead, so they count towards your own daily limit and are deleted with
+              your account.
             </p>
           </div>
         </div>
