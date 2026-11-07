@@ -27,3 +27,17 @@ test("says on screen that the CV is being checked, and how long it can take", as
   await expect(page.getByRole("button", { name: "Check another CV" })).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText("Checking your CV. This can take up to a minute.")).toHaveCount(0);
 });
+
+// Pilot, 7 Nov (#333): the check found the problems but she didn't know Tailor fixes them, so the card under the result
+// says what happens after the button.
+test("the card under the result says Tailor makes these fixes, and leads to it", async ({ page }) => {
+  await page.goto("/cv-check");
+  await page.getByLabel("Your CV", { exact: true }).setInputFiles("sample-data/cvs/sara.docx");
+  await page.getByRole("button", { name: "Check my CV" }).click();
+  await expect(page.getByRole("button", { name: "Check another CV" })).toBeVisible({ timeout: 120_000 });
+
+  const card = page.getByRole("heading", { name: "Next: make it fit each job" }).locator("..");
+  await expect(card).toContainText("Want CVision to make these fixes for you?");
+  await expect(card).toContainText("Tailor asks about anything missing, rewrites your CV for a job and lets you approve every change.");
+  await expect(card.getByRole("link", { name: "Tailor my CV to a job" })).toBeVisible();
+});

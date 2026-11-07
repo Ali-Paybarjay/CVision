@@ -270,7 +270,8 @@ function CvCheckReport({
       <Card className="flex flex-col items-start gap-3">
         <h3 className="text-xl">Next: make it fit each job</h3>
         <p className="text-text-muted">
-          Build your profile once, paste a job ad, and get a tailored CV and cover letter built only from what you’ve told us.
+          Want CVision to make these fixes for you? Tailor asks about anything missing, rewrites your CV for a job and lets
+          you approve every change.
         </p>
         <ButtonLink href={tailorPath(signedIn)} variant="primary">
           {brand.cta.primary}
