@@ -62,12 +62,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("with no account (Supabase not connected, or signed out)", () => {
   it.each([
     ["Supabase is not connected", () => createSupabaseServerClient.mockResolvedValue(null)],
-    ["nobody is signed in", () => {
+    ["nobody is signed in to the demo (mock AI)", () => {
       createSupabaseServerClient.mockResolvedValue(fakeSupabase({}).client);
       getCurrentUser.mockResolvedValue(null);
     }],
@@ -77,8 +78,30 @@ describe("with no account (Supabase not connected, or signed out)", () => {
     expect(await getMyDataSource()).toBe("sample");
     expect(await getMyProfile()).toBe(personas.sara.profile);
     expect(await listMyJobs()).toEqual(personas.sara.jobs);
-    expect(await getMyJob("anything")).toBe(personas.sara.jobs[0]);
-    expect(await getMyMatch("anything")).toBe(personas.sara.match);
+    expect(await getMyJob("sara-job-1")).toBe(personas.sara.jobs[0]);
+    expect(await getMyMatch("sara-job-1")).toBe(personas.sara.match);
+  });
+
+  it("gives a signed-out visitor on the live site nothing, never a sample persona's profile and jobs as their own", async () => {
+    vi.stubEnv("AI_MODE", "live");
+    createSupabaseServerClient.mockResolvedValue(fakeSupabase({}).client);
+    getCurrentUser.mockResolvedValue(null);
+
+    expect(await getMyDataSource()).toBe("none");
+    expect(await getMyProfile()).toBeNull();
+    expect(await getMyProfile({ jobId: "sara-job-1" })).toBeNull();
+    expect(await listMyJobs()).toEqual([]);
+    expect(await getMyJob("sara-job-1")).toBeNull();
+    expect(await getMyMatch("sara-job-1")).toBeNull();
+  });
+
+  it("answers null for a job id that no sample job has, so a wrong link says the job can't be found (#93)", async () => {
+    createSupabaseServerClient.mockResolvedValue(null);
+
+    expect(await getMyJob("anything")).toBeNull();
+    expect(await getMyMatch("anything")).toBeNull();
+    // The page still has a profile for its "not found" message and its list of sample jobs.
+    expect(await getMyProfile({ jobId: "anything" })).toBe(personas.sara.profile);
   });
 
   it("keeps the profile, job and match of one sample persona together", async () => {

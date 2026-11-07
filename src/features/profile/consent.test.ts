@@ -25,7 +25,9 @@ describe("consent", () => {
   it("names every time a typed-in profile goes to the AI, and promises no more than the Privacy page", () => {
     const [, ai] = manualConsentPoints("account");
 
-    expect(ai).toContain("When you check a job ad, get a tailored CV and cover letter or practise for an interview");
+    // "practice" as a noun only, as everywhere else in the app (#248).
+    expect(ai).toContain("When you check a job ad, get a tailored CV and cover letter or use interview practice");
+    expect(manualConsentPoints("account").join(" ")).not.toMatch(/practis/i);
     expect(ai).toContain("delete it once the answer is ready, apart from the few exceptions our Privacy page sets out");
     expect(ai).not.toContain("None of them keeps it");
   });

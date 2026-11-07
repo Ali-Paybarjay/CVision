@@ -20,7 +20,7 @@ export const cvConsent = {
  * The version starts with "manual-", so a stored consent shows which of the two was given.
  */
 export const manualConsent = {
-  version: "manual-2026-10-25",
+  version: "manual-2026-11-07",
   label: "I agree that CVision saves these details as my profile.",
 } as const;
 
@@ -47,7 +47,7 @@ export function consentPoints(storage: ProfileStorageKind): string[] {
 export function manualConsentPoints(storage: ProfileStorageKind): string[] {
   return [
     "We keep only what you type here, and nothing is saved until you approve it.",
-    "When you check a job ad, get a tailored CV and cover letter or practise for an interview, we send what that task needs from your profile to Claude, an AI model by Anthropic, through OpenRouter on Google Cloud or Amazon Web Services. These services delete it once the answer is ready, apart from the few exceptions our Privacy page sets out.",
+    "When you check a job ad, get a tailored CV and cover letter or use interview practice, we send what that task needs from your profile to Claude, an AI model by Anthropic, through OpenRouter on Google Cloud or Amazon Web Services. These services delete it once the answer is ready, apart from the few exceptions our Privacy page sets out.",
     storage === "account"
       ? "When you approve your profile, we save it to your CVision account. You can download or delete it at any time."
       : "Your profile is saved in this browser only, and you can download or delete it at any time.",

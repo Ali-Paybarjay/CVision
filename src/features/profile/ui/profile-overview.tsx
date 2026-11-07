@@ -74,8 +74,23 @@ export function ProfileOverview({
         </Notice>
       )}
 
+      {/* The next step comes first, so it is on screen as soon as the profile is saved: a pilot who had just approved
+          their profile asked what to do now (#334). Focus moves to its heading, one Tab before "Paste a job ad". */}
+      <Card aria-labelledby="next-step-heading">
+        <h2 id="next-step-heading" ref={headingRef} tabIndex={-1} className="text-xl">
+          Next: find a job to apply for
+        </h2>
+        <p className="mt-2 text-text-muted">
+          Paste a job ad and see where your experience already matches. Your tailored CV only uses what you approved
+          here.
+        </p>
+        <ButtonLink href="/jobs" variant="primary" className="mt-4">
+          Paste a job ad
+        </ButtonLink>
+      </Card>
+
       <Card>
-        <h2 id="overview-heading" ref={headingRef} tabIndex={-1} className="text-2xl">
+        <h2 id="overview-heading" className="text-2xl">
           {profile.fullName}
         </h2>
         {latestJob && (
@@ -93,9 +108,13 @@ export function ProfileOverview({
           {profile.projects?.length ? <Fact label="Projects" value={count(profile.projects.length, "project")} /> : null}
           {profile.languages?.length ? <Fact label="Languages" value={count(profile.languages.length, "language")} /> : null}
         </dl>
-        <Button className="mt-6" onClick={onEdit}>
-          Check and edit your details
-        </Button>
+        {/* Both ways to change the profile sit together: edit what is there, or start again from a CV. */}
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Button onClick={onEdit}>Check and edit your details</Button>
+          <Button variant="quiet" onClick={onUploadNew}>
+            {builtFromCv(saved) ? "Upload a new CV" : "Upload your CV"}
+          </Button>
+        </div>
       </Card>
 
       <Card>
@@ -148,24 +167,10 @@ export function ProfileOverview({
       </Card>
 
       <Card>
-        <h2 className="text-xl">Next: find a job to apply for</h2>
-        <p className="mt-2 text-text-muted">
-          Paste a job ad and see where your experience already matches. Your tailored CV only uses what you approved
-          here.
-        </p>
-        <ButtonLink href="/jobs" variant="primary" className="mt-4">
-          Paste a job ad
-        </ButtonLink>
-      </Card>
-
-      <Card>
         <h2 className="text-xl">Your data</h2>
         <p className="mt-2 text-text-muted">{whereItIs(saved, storage, persistent)}</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Button onClick={() => downloadJson(saved)}>Download my data</Button>
-          <Button variant="quiet" onClick={onUploadNew}>
-            {builtFromCv(saved) ? "Upload a new CV" : "Upload your CV"}
-          </Button>
           {!confirmingDelete && (
             <Button variant="quiet" onClick={() => setConfirmingDelete(true)}>
               Delete my profile
