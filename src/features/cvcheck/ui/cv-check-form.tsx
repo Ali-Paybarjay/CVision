@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
+import { carryCv } from "@/shared/carried-cv";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { withNext } from "@/features/account/safe-redirect";
@@ -12,7 +13,8 @@ import { suggestedWordings } from "../suggested-wording";
 
 type Source = "file" | "text";
 type Errors = { file?: string; text?: string; form?: string; limit?: { message: string; signedIn: boolean } };
-type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean };
+/** `file` is the CV file that was checked, if one was uploaded rather than pasted: Profile can use it (#336). */
+type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; file: File | null };
 
 /**
  * Where "Tailor my CV to a job" leads: a signed-in user straight to their profile, a visitor to sign-up and then
@@ -58,7 +60,9 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
       const response = await sendCv(form);
       const signedIn = response.signedIn === true;
       if (response.ok) {
-        setChecked({ result: response.result, truncated: response.truncated, signedIn });
+        const uploaded = source === "file" ? form.get("cv") : null;
+        const file = uploaded instanceof File ? uploaded : null;
+        setChecked({ result: response.result, truncated: response.truncated, signedIn, file });
         return;
       }
       if (response.code === "limit-reached") setErrors({ limit: { message: response.message, signedIn } });
@@ -195,6 +199,7 @@ export function CvCheckReport({
   result,
   truncated,
   signedIn,
+  file,
   demoMode,
   onCheckAnother,
 }: Checked & { demoMode: boolean; onCheckAnother: () => void }) {
@@ -277,9 +282,20 @@ export function CvCheckReport({
           Tailor asks you about anything that’s missing, rewrites your CV for the job you want and lets you approve every
           change. You’ll also get a cover letter, built only from what you’ve told us.
         </p>
-        <ButtonLink href={tailorPath(signedIn)} variant="primary">
+        {/* A signed-in user's checked file goes with them to Profile, so they don't upload it twice (#336). It stays in this
+            page's memory only; a visitor's would be lost on the way through sign-up, so it isn't offered. */}
+        <ButtonLink
+          href={tailorPath(signedIn)}
+          variant="primary"
+          onClick={() => {
+            if (signedIn && file) carryCv(file);
+          }}
+        >
           {brand.cta.primary}
         </ButtonLink>
+        {signedIn && file && (
+          <p className="text-sm text-text-muted">We’ll bring the CV you just checked, so you don’t need to upload it again.</p>
+        )}
       </Card>
 
       <div>

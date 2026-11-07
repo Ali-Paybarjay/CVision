@@ -31,6 +31,8 @@ type UploadStepProps = {
   /** Offers to type the details in by hand instead, for someone with no CV to upload. */
   onStartManual?: () => void;
   onCancel?: () => void;
+  /** The CV the user just checked in the CV check (#336): put in the file field, so they don't upload it again. */
+  carriedFile?: File | null;
 };
 
 type Errors = { file?: string; consent?: string; form?: string; signIn?: boolean };
@@ -44,8 +46,22 @@ export function UploadStep({
   onExtracted,
   onStartManual,
   onCancel,
+  carriedFile = null,
 }: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // The carried CV goes into the file field once, when the field appears; the user can still choose another file.
+  const attached = useRef(false);
+  const attachCarried = (input: HTMLInputElement | null) => {
+    if (!input || !carriedFile || attached.current) return;
+    attached.current = true;
+    try {
+      const files = new DataTransfer();
+      files.items.add(carriedFile);
+      input.files = files.files;
+    } catch {
+      // A browser without DataTransfer: the field stays empty and the user chooses the file as usual.
+    }
+  };
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
   const [slow, setSlow] = useState(false);
@@ -110,6 +126,13 @@ export function UploadStep({
         </Notice>
       )}
 
+      {carriedFile && (
+        <Notice tone="info" title="We’ve added the CV you just checked">
+          <span className="wrap-anywhere">{carriedFile.name}</span> is ready below, so you don’t need to upload it
+          again. Read the points, tick the box, then press Read my CV. You can choose another file instead.
+        </Notice>
+      )}
+
       {replacing && (
         <Notice tone="info" title="This replaces your current profile">
           Nothing changes until you check the new details and approve them.
@@ -122,6 +145,7 @@ export function UploadStep({
             {(props) => (
               <input
                 {...props}
+                ref={attachCarried}
                 type="file"
                 name="cv"
                 accept={ACCEPTED_CV_FILES}
