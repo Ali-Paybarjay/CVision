@@ -4,21 +4,45 @@
  * and a reload, a new tab or closing the tab forgets it. The user still ticks Profile's own consent box before the file
  * is read for their profile.
  *
+ * The file is kept with the id of the account that checked it, and only that account's Profile gets it. Signing out
+ * in another tab, or a session that ends, doesn't reload this one, so without the id the next account to open Profile
+ * here would be offered someone else's CV. Sign-out in this tab also clears it (clearBrowserData).
+ *
+ * A small store that Profile subscribes to (useSyncExternalStore), so a page Next keeps alive (cacheComponents) shows
+ * the latest file, and a cleared file goes from the page at once.
+ *
  * Shared because two features meet here: the CV check carries the file, and Profile takes it.
  */
-let carried: File | null = null;
+let carried: { file: File; account: string } | null = null;
+const listeners = new Set<() => void>();
 
-/** Keeps the checked file for Profile, replacing any file kept before. */
-export function carryCv(file: File): void {
-  carried = file;
+function set(next: typeof carried): void {
+  carried = next;
+  for (const listener of listeners) listener();
 }
 
-/** The file the CV check kept, or null. Reading it does not clear it, so a component rendered twice still sees it. */
-export function carriedCv(): File | null {
-  return carried;
+/**
+ * Keeps the checked file for this account's Profile. With no file (pasted text) or no account (a visitor, whose file
+ * would be lost on the way through sign-up), it forgets any file kept before instead, so that one isn't offered.
+ */
+export function carryCheckedCv(file: File | null, account: string | null): void {
+  set(file && account ? { file, account } : null);
 }
 
-/** Forgets the file: once Profile has read it, or the user has chosen to keep their current profile. */
+/** The file kept for this account, or null, including when another account checked it. Reading changes nothing. */
+export function carriedCvFor(account: string): File | null {
+  return carried && carried.account === account ? carried.file : null;
+}
+
+/** Forgets the file: once it is read, on sign-out, or when the user keeps their profile or types it in instead. */
 export function clearCarriedCv(): void {
-  carried = null;
+  if (carried) set(null);
+}
+
+/** For useSyncExternalStore: calls `listener` whenever the carried file changes. */
+export function subscribeCarriedCv(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

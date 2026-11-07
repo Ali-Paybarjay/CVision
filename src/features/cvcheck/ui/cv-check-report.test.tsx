@@ -38,7 +38,15 @@ const result: CvCheckResult = {
 
 function render(signedIn: boolean, file: File | null = null) {
   return renderToStaticMarkup(
-    <CvCheckReport result={result} truncated={false} signedIn={signedIn} file={file} demoMode={false} onCheckAnother={() => {}} />,
+    <CvCheckReport
+      result={result}
+      truncated={false}
+      signedIn={signedIn}
+      file={file}
+      account={signedIn ? "account-a" : null}
+      demoMode={false}
+      onCheckAnother={() => {}}
+    />,
   );
 }
 
@@ -51,12 +59,13 @@ describe("CvCheckReport", () => {
 
   // A pilot wanted CVision to ask about what's missing and rewrite the CV, not knowing Tailor does (#333). The card
   // doesn't promise to make these fixes: Tailor works from the job, not from this check.
-  it("says Tailor asks about what's missing, rewrites the CV for a job and lets the user approve each change", () => {
+  it("says Tailor asks about what's missing, suggests changes for a job and lets the user approve each one", () => {
     const html = render(true);
-    expect(html).toContain("Next: let CVision rewrite your CV for a job");
-    expect(html).toContain("Tailor asks you about anything the job needs that your CV doesn’t show yet");
-    expect(html).toContain("lets you approve every change");
+    expect(html).toContain("Next: tailor your CV to a job");
+    expect(html).toContain("Tailor asks about the skills and experience the job wants that your CV doesn’t show yet");
+    expect(html).toContain("lets you approve every one");
     expect(html).not.toContain("make these fixes");
+    expect(html).not.toContain("rewrites your CV");
   });
 
   // A pilot asked which exact words to write (#335).

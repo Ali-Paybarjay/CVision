@@ -52,5 +52,5 @@ async function ProfileForVisitor({ demoMode }: { demoMode: boolean }) {
   if (!user || !supabase) return <SignInToStart />;
 
   const initial = await loadAccountProfile(supabase);
-  return <ProfileBuilder demoMode={demoMode} storage={{ kind: "account", initial }} />;
+  return <ProfileBuilder demoMode={demoMode} storage={{ kind: "account", initial, account: user.id }} />;
 }

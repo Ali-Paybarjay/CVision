@@ -86,6 +86,8 @@ describe("POST /cv-check/api", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toMatchObject({ ok: true, truncated: false, signedIn: false, result: { readiness: "nearly-ready", score: 68 } });
+    // A visitor's browser gets no account id: there is no account to carry a file for (#336).
+    expect(body).not.toHaveProperty("account");
     expect(asked).toHaveLength(1);
     expect(asked[0]).toMatchObject({ feature: "cv-check", requester: anonymousKey });
     // The model sees the CV's text, inside the prompt's <cv> tags.
@@ -100,7 +102,7 @@ describe("POST /cv-check/api", () => {
     await runDeferred();
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true, signedIn: true });
+    expect(await response.json()).toMatchObject({ ok: true, signedIn: true, account: "user-1" });
     expect(asked[0]).toMatchObject({ feature: "cv-check", requester: { userId: "user-1" } });
     expect(tracked).toEqual([{ name: "cvcheck.completed", properties: { score: 68, issues: 4 }, actor: { userId: "user-1" } }]);
   });

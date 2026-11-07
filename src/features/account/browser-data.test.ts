@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carriedCv, carryCv } from "@/shared/carried-cv";
+import { carriedCvFor, carryCheckedCv } from "@/shared/carried-cv";
 import { browserDataFile, clearBrowserData, readBrowserData } from "./browser-data";
 
 /** Just enough of localStorage: keys in the order they were set, like a browser. */
@@ -57,9 +57,9 @@ describe("clearBrowserData", () => {
 
   // Signing out navigates without a reload, so a CV carried from the CV check would wait for the next account (#336).
   it("also forgets a CV carried from the CV check, even when the browser blocks storage", () => {
-    carryCv(new File(["cv"], "someone-else.pdf"));
+    carryCheckedCv(new File(["cv"], "someone-else.pdf"), "account-a");
     expect(clearBrowserData(blocked)).toBeNull();
-    expect(carriedCv()).toBeNull();
+    expect(carriedCvFor("account-a")).toBeNull();
   });
 });
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
-import { carryCv, clearCarriedCv } from "@/shared/carried-cv";
+import { carryCheckedCv } from "@/shared/carried-cv";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { withNext } from "@/features/account/safe-redirect";
@@ -14,7 +14,7 @@ import { suggestedWordings } from "../suggested-wording";
 type Source = "file" | "text";
 type Errors = { file?: string; text?: string; form?: string; limit?: { message: string; signedIn: boolean } };
 /** `file` is the CV file that was checked, if one was uploaded rather than pasted: Profile can use it (#336). */
-type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; file: File | null };
+type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; file: File | null; account: string | null };
 
 /**
  * Where "Tailor my CV to a job" leads: a signed-in user straight to their profile, a visitor to sign-up and then
@@ -62,7 +62,8 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
       if (response.ok) {
         const uploaded = source === "file" ? form.get("cv") : null;
         const file = uploaded instanceof File ? uploaded : null;
-        setChecked({ result: response.result, truncated: response.truncated, signedIn, file });
+        const account = signedIn ? (response.account ?? null) : null;
+        setChecked({ result: response.result, truncated: response.truncated, signedIn, file, account });
         return;
       }
       if (response.code === "limit-reached") setErrors({ limit: { message: response.message, signedIn } });
@@ -200,6 +201,7 @@ export function CvCheckReport({
   truncated,
   signedIn,
   file,
+  account,
   demoMode,
   onCheckAnother,
 }: Checked & { demoMode: boolean; onCheckAnother: () => void }) {
@@ -278,10 +280,11 @@ export function CvCheckReport({
       {/* A pilot wanted CVision to ask about what's missing and rewrite the CV, not knowing Tailor does (#333). It
           doesn't promise these fixes: Tailor works from the job's requirements, not from this check. */}
       <Card className="flex flex-col items-start gap-3">
-        <h3 className="text-xl">Next: let CVision rewrite your CV for a job</h3>
+        <h3 className="text-xl">Next: tailor your CV to a job</h3>
         <p className="text-text-muted">
-          Tailor asks you about anything the job needs that your CV doesn’t show yet, rewrites your CV for that job and
-          lets you approve every change. You’ll also get a cover letter, built only from what you’ve told us.
+          Tailor asks about the skills and experience the job wants that your CV doesn’t show yet, suggests changes to
+          your CV for that job and lets you approve every one. You’ll also get a cover letter, built only from what
+          you’ve told us.
         </p>
         {/* A signed-in user's checked file goes with them to Profile, so they don't upload it twice (#336). It stays in this
             page's memory only; a visitor's would be lost on the way through sign-up, so it isn't offered. */}
@@ -289,14 +292,13 @@ export function CvCheckReport({
           href={tailorPath(signedIn)}
           variant="primary"
           onClick={() => {
-            // Pasted text, or a visitor: no file goes, and none from an earlier check is left to be offered instead.
-            if (signedIn && file) carryCv(file);
-            else clearCarriedCv();
+            // Kept for this account only. Pasted text, or a visitor: no file goes, and none from an earlier check stays.
+            carryCheckedCv(signedIn ? file : null, account);
           }}
         >
           {brand.cta.primary}
         </ButtonLink>
-        {signedIn && file && (
+        {signedIn && file && account && (
           <p className="text-sm text-text-muted">We’ll bring the CV you just checked, so you don’t need to upload it again.</p>
         )}
       </Card>

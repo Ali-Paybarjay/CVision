@@ -41,8 +41,9 @@ export async function POST(request: Request) {
     // The score and the number of issues only: never CV text.
     after(() => track("cvcheck.completed", { score, issues: issues.length }, requester));
   }
-  // The page sends a signed-in user on to their profile, not to sign-up (#331).
-  return reply({ ...response, signedIn: user !== null });
+  // The page sends a signed-in user on to their profile, not to sign-up (#331), and carries a checked file only to
+  // this account's Profile (#336). The id goes back only to the user's own browser.
+  return reply({ ...response, signedIn: user !== null, ...(user ? { account: user.id } : {}) });
 }
 
 function reply(body: CvCheckResponse) {

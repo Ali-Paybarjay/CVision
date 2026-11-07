@@ -13,18 +13,16 @@ const pathSteps = [
 
 /**
  * Where the user is on the main path, at the top of Profile, Jobs and Tailor (#238). A pilot asked "what should I do
- * now?" on these pages: this says which step of three they are on and what comes next, in words ("Step 2 of 3"),
- * with the current step in bold. It is one short line with no numbered circles, so on a phone it fits on one line
- * and it doesn't look like the pages' own steps below it (Profile's two, Tailor's five). Each step is a page, so the
- * current one carries aria-current="page", not "step", which those inner steps use. It shows order, not progress: a
- * step before the current one is not marked done, since the page can't always know it is.
+ * now?" on these pages: this shows the three pages in order, the current one in bold, and the next one after it.
+ * It is one short line with no numbers or circles, so on a phone it fits on one line and it doesn't echo the pages'
+ * own numbered steps below it (Profile's two, Tailor's five). Each step is a page, so the current one carries
+ * aria-current="page", not "step", which those inner steps use. A step before the current one is a link, underlined
+ * as well as coloured, so it doesn't rely on colour alone. It shows order, not progress: a step before the current
+ * one is not marked done, since the page can't always know it is.
  */
 export function PathSteps({ current }: { current: 1 | 2 | 3 }) {
   return (
-    <nav aria-label="Your progress" className="flex flex-wrap items-center gap-x-3 text-sm">
-      <p className="font-semibold text-text-muted">
-        Step {current} of {pathSteps.length}
-      </p>
+    <nav aria-label="Your progress" className="text-sm">
       <ol className="flex flex-wrap items-center gap-x-1.5">
         {pathSteps.map((step, index) => {
           const number = index + 1;
@@ -37,7 +35,10 @@ export function PathSteps({ current }: { current: 1 | 2 | 3 }) {
                 </span>
               )}
               {number < current && step.href ? (
-                <Link href={step.href} className="inline-flex min-h-11 items-center text-accent underline-offset-4 hover:underline">
+                <Link
+                  href={step.href}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-accent underline underline-offset-4"
+                >
                   {step.label}
                 </Link>
               ) : (

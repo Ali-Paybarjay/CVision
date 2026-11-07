@@ -20,10 +20,11 @@ const text = (html: string) =>
     .trim();
 
 describe("PathSteps", () => {
-  it("says which step of three in words, and names all three in order, in a labelled nav", () => {
+  it("names all three steps in order, in a labelled nav, with no step number to echo the pages' own steps", () => {
     const html = renderToStaticMarkup(<PathSteps current={1} />);
     expect(html).toContain('aria-label="Your progress"');
-    expect(text(html)).toMatch(/^Step 1 of 3 Profile .*Job ad .*Tailored CV/);
+    expect(text(html)).toMatch(/^Profile .*Job ad .*Tailored CV/);
+    expect(text(html)).not.toMatch(/Step \d/);
   });
 
   // The pages' own steps (Profile's two, Tailor's five) use aria-current="step"; each step here is a page.
@@ -37,6 +38,14 @@ describe("PathSteps", () => {
 
   it("has no numbered circles that could be taken for the pages' own steps", () => {
     expect(renderToStaticMarkup(<PathSteps current={1} />)).not.toContain("rounded-full");
+  });
+
+  // Colour alone doesn't tell a link from plain text (end-of-batch review).
+  it("underlines the links back, and gives them a 44px target", () => {
+    const html = renderToStaticMarkup(<PathSteps current={3} />);
+    const profileLink = html.match(/<a href="\/profile" class="([^"]*)"/)?.[1] ?? "";
+    expect(profileLink.split(" ")).toEqual(expect.arrayContaining(["underline", "min-w-11", "min-h-11"]));
+    expect(profileLink).not.toContain("hover:underline");
   });
 
   it("links back only to the steps before the current one", () => {
