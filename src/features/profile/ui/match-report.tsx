@@ -116,6 +116,14 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         </Notice>
       )}
 
+      {/* A pilot tailored for a job far from his field and found the questions no use (#338): say so before Tailor. */}
+      {canTailor && hasRequirements && fitLabel(match.score) === "Several gaps" && (
+        <Notice tone="info" title="This job is a long way from your profile">
+          It asks for a lot your profile doesn’t show yet. Tailoring only rewords what you’ve told us, so it can’t fill
+          those gaps. You can still tailor your CV for it, or check a job closer to your experience.
+        </Notice>
+      )}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         {canTailor && (
           <ButtonLink href={`/tailor?job=${encodeURIComponent(job.id)}`} variant="primary">
