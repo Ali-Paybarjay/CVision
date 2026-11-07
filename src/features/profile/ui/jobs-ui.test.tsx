@@ -17,7 +17,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("../job-actions", () => ({ checkJobAction: vi.fn() }));
+vi.mock("../job-actions", () => ({ checkJobAction: vi.fn(), readAdLinkAction: vi.fn() }));
 
 const noop = () => {};
 const text = (html: string) =>
@@ -122,22 +122,46 @@ describe("MatchReport", () => {
 });
 
 describe("JobForm", () => {
-  it("asks for the ad and an optional link, and names the profile it compares with", () => {
+  const pasted = { source: "text", ad: "", url: "" } as const;
+
+  it("asks for the ad's link first, and gets the ad from it before any check (#330)", () => {
     const html = renderToStaticMarkup(<JobForm profile={personas.reza.profile} demoMode={false} focusAd={false} onChecked={noop} />);
 
-    expect(html).toMatch(/<textarea[^>]*name="ad"/);
+    expect(text(html)).toContain("How do you want to share the ad?");
+    expect(html).toMatch(/<input(?=[^>]*value="link")(?=[^>]*checked="")[^>]*>/);
+    expect(html).toMatch(/<input(?=[^>]*value="text")(?![^>]*checked)[^>]*>/);
     expect(html).toMatch(/<input(?=[^>]*name="url")(?=[^>]*type="url")[^>]*>/);
-    expect(text(html)).toContain("Link to the ad (optional)");
-    expect(text(html)).toContain("the profile you approved for Reza Karimi");
-    expect(text(html)).toContain("Check my fit");
+    expect(text(html)).toContain("Link to the ad");
+    expect(html).toMatch(/<button type="submit"[^>]*bg-cta[^>]*>Get the ad<\/button>/);
+    // No ad box and no check until the ad is in.
+    expect(html).not.toMatch(/<textarea/);
+    expect(text(html)).not.toContain("Check my fit");
     expect(text(html)).not.toContain("Demo mode");
   });
 
-  it("keeps an empty live region under the button, where the wait shows on screen (issue #235)", () => {
-    const html = renderToStaticMarkup(<JobForm profile={personas.reza.profile} demoMode={false} focusAd={false} onChecked={noop} />);
+  it("with text, asks for the whole ad, and names the profile it compares with", () => {
+    const html = renderToStaticMarkup(
+      <JobForm profile={personas.reza.profile} demoMode={false} initial={pasted} focusAd={false} onChecked={noop} />,
+    );
 
-    expect(html).toMatch(/<\/button><div aria-live="polite"><\/div><\/div><\/form>/);
-    expect(html).not.toContain("sr-only");
+    expect(html).toMatch(/<input(?=[^>]*value="text")(?=[^>]*checked="")[^>]*>/);
+    expect(html).toMatch(/<textarea[^>]*name="ad"/);
+    expect(text(html)).toContain("Paste the whole ad");
+    expect(html).not.toMatch(/name="url"/);
+    expect(text(html)).not.toContain("Get the ad");
+    expect(text(html)).toContain("the profile you approved for Reza Karimi");
+    expect(text(html)).toContain("Check my fit");
+  });
+
+  it("keeps an empty live region under each button, where the wait shows on screen (issue #235)", () => {
+    const link = renderToStaticMarkup(<JobForm profile={personas.reza.profile} demoMode={false} focusAd={false} onChecked={noop} />);
+    const pastedAd = renderToStaticMarkup(
+      <JobForm profile={personas.reza.profile} demoMode={false} initial={pasted} focusAd={false} onChecked={noop} />,
+    );
+
+    expect(link).toMatch(/>Get the ad<\/button><div aria-live="polite"><\/div><\/div>/);
+    expect(pastedAd).toMatch(/<\/button><div aria-live="polite"><\/div><\/div><\/form>/);
+    expect(link + pastedAd).not.toContain("sr-only");
   });
 
   it("warns in demo mode, and says when the sample profile will be used", () => {
@@ -147,12 +171,12 @@ describe("JobForm", () => {
     expect(html).toContain("the match uses the sample person’s profile");
   });
 
-  it("shows the ad and its link again after Back from the report", () => {
+  it("shows the ad and its link again after Back from the report, with the check as the one main button", () => {
     const html = renderToStaticMarkup(
       <JobForm
         profile={personas.reza.profile}
         demoMode={false}
-        initial={{ ad: "Maths Teacher at Riverside Academy", url: "https://example.com/jobs/42" }}
+        initial={{ source: "link", ad: "Maths Teacher at Riverside Academy", url: "https://example.com/jobs/42" }}
         focusAd={false}
         onChecked={noop}
       />,
@@ -160,6 +184,26 @@ describe("JobForm", () => {
 
     expect(html).toMatch(/<textarea[^>]*name="ad"[^>]*>Maths Teacher at Riverside Academy<\/textarea>/);
     expect(html).toMatch(/<input(?=[^>]*name="url")(?=[^>]*value="https:\/\/example.com\/jobs\/42")[^>]*>/);
+    expect(text(html)).toContain("Check it’s the job ad, and all of it");
+    expect(text(html)).toContain("If the ad isn’t there, copy it from the page and paste it here instead.");
+    expect(html).toMatch(/<button type="button"[^>]*>Get the ad<\/button>/);
+    expect(html).toMatch(/<button type="submit"[^>]*bg-cta[^>]*>Check my fit<\/button>/);
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
+  });
+
+  it("shows a pasted ad again after Back, without a link", () => {
+    const html = renderToStaticMarkup(
+      <JobForm
+        profile={personas.reza.profile}
+        demoMode={false}
+        initial={{ source: "text", ad: "Maths Teacher at Riverside Academy", url: "" }}
+        focusAd={false}
+        onChecked={noop}
+      />,
+    );
+
+    expect(html).toMatch(/<textarea[^>]*name="ad"[^>]*>Maths Teacher at Riverside Academy<\/textarea>/);
+    expect(html).not.toMatch(/name="url"/);
   });
 });
 
