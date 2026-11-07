@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CvCheckResult } from "@/shared/contracts";
 import { CvCheckReport } from "./cv-check-form";
 
-// Render checks for the result of a CV check: where its main button leads, what the next step says, and the
-// copy buttons for suggested wording. Clicking is tried in a browser.
+// Render checks for the result of a CV check: where its main button leads and what the next step says.
 
 vi.mock("next/link", () => ({
   default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
@@ -38,7 +37,15 @@ const result: CvCheckResult = {
 
 function render(signedIn: boolean, file: File | null = null) {
   return renderToStaticMarkup(
-    <CvCheckReport result={result} truncated={false} signedIn={signedIn} file={file} demoMode={false} onCheckAnother={() => {}} />,
+    <CvCheckReport
+      result={result}
+      truncated={false}
+      signedIn={signedIn}
+      file={file}
+      account={signedIn ? "account-a" : null}
+      demoMode={false}
+      onCheckAnother={() => {}}
+    />,
   );
 }
 
@@ -49,22 +56,17 @@ describe("CvCheckReport", () => {
     expect(render(false)).toContain('href="/sign-up?next=%2Fprofile"');
   });
 
-  // A pilot wanted CVision to make the fixes, not knowing Tailor does (#333).
-  it("says Tailor makes these fixes, asks about what's missing and lets the user approve each change", () => {
+  // A pilot wanted CVision to ask about what's missing and rewrite the CV, not knowing Tailor does (#333). The card
+  // doesn't promise to make these fixes: Tailor works from the job, not from this check.
+  it("says Tailor asks about what's missing, suggests changes for a job and lets the user approve each one", () => {
     const html = render(true);
-    expect(html).toContain("Next: let CVision make these fixes");
-    expect(html).toContain("Tailor asks you about anything that’s missing, rewrites your CV for the job you want");
-    expect(html).toContain("lets you approve every");
+    expect(html).toContain("Next: tailor your CV to a job");
+    expect(html).toContain("Tailor asks about the skills and experience the job wants that your CV doesn’t show yet");
+    expect(html).toContain("lets you approve every one");
+    expect(html).not.toContain("make these fixes");
+    expect(html).not.toContain("rewrites your CV");
   });
 
-  // A pilot asked which exact words to write (#335).
-  it("offers to copy suggested wording of two words or more, and nothing for a single word", () => {
-    const html = render(true);
-    expect(html).toContain("Planned the weekly staff rota");
-    expect(html).toContain('aria-label="Copy: Planned the weekly staff rota"');
-    expect(html).not.toContain("Copy: Skills");
-    expect(html.match(/aria-label="Copy: /g)).toHaveLength(1);
-  });
 });
 
 // A pilot had to upload the same CV again in Profile (#336).

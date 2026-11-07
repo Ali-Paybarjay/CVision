@@ -86,7 +86,10 @@
 
 ### قدم ۲ · آگهی و تطابق (`/jobs`)
 
-- [ ] متن آگهی را در «The job ad» بچسبان و «Check my fit» را بزن. زیر دکمه جملهٔ «Reading the ad and checking your fit.» می‌آید و بعد گزارش تطابق (#235).
+- [ ] **با لینک (#330):** «Paste the link» از پیش انتخاب شده است. لینک یک آگهی باز از Reed یا NHS Jobs را در «Link to the ad» بگذار و «Get the ad» را بزن. زیر دکمه «Opening the page and copying the ad.» می‌آید، بعد «We copied the text from …» و متن آگهی در «The job ad». منو یا متن اضافه‌ای اگر هست پاک کن و «Check my fit» را بزن. زیر دکمه جملهٔ «Reading the ad and checking your fit.» می‌آید و بعد گزارش تطابق (#235).
+- [ ] **سایتی که آگهی را نشان نمی‌دهد (#330):** لینک یک آگهی LinkedIn یا Indeed را بده و «Get the ad» را بزن. فوراً «We couldn’t read the ad from this link» با نام همان سایت می‌آید و زیرش کادر خالی «The job ad». متن آگهی را از همان سایت کپی کن، بچسبان و «Check my fit» را بزن. در گزارش، «Open the original ad» همان لینک را باز می‌کند.
+- [ ] **لینک تازه:** بعد از «Get the ad»، لینک را با لینک آگهی دیگری عوض کن. کادر آگهی می‌رود و تا «Get the ad» دوباره نیاید، متن آگهی قبلی هیچ‌جا نمی‌ماند.
+- [ ] **با متن:** «Paste the text» را بزن؛ کادر لینک می‌رود. متن آگهی را در «The job ad» بچسبان و «Check my fit» را بزن.
 - [ ] هر مورد جور، شاهدش را از خود رزومه نشان می‌دهد، و کمبودها جدا آمده‌اند.
 - [ ] آگهی کوتاه‌تر از ۲۰۰ نویسه، یا فیلد خالی، پیام روشن می‌گیرد.
 - [ ] «Tailor my CV for this job» به `/tailor` برای همین آگهی می‌رود.
@@ -103,7 +106,7 @@
 
 ### Apply و پیگیری (`/tailor` و `/dashboard`)
 
-- [ ] آگهی‌ای که در `/jobs` بدون «Link to the ad (optional)» چسبانده شده، در قدم Download به‌جای دکمهٔ Apply پیام «This job ad has no link» می‌گیرد. یک بار هم آگهی را با یک لینک (مثلاً `https://example.com/jobs/1`) بچسبان: دکمهٔ «Open the ad on …» نام سایتی را می‌گوید که لینک واقعاً باز می‌کند (اینجا example.com، نه نام شرکت؛ #240)، همان لینک را در تب تازه باز می‌کند و «Added to your applications» می‌آید. اپ هرگز به‌جای کاربر درخواست نمی‌فرستد و خودش هم می‌گوید: «We never apply for you.»
+- [ ] آگهی‌ای که در `/jobs` با «Paste the text» داده شده لینکی ندارد، پس در قدم Download به‌جای دکمهٔ Apply پیام «This job ad has no link» می‌گیرد. یک بار هم آگهی را با «Paste the link» بده (مثلاً لینک یک آگهی Reed): دکمهٔ «Open the ad on …» نام سایتی را می‌گوید که لینک واقعاً باز می‌کند (اینجا reed.co.uk، نه نام شرکت؛ #240)، همان لینک را در تب تازه باز می‌کند و «Added to your applications» می‌آید. اپ هرگز به‌جای کاربر درخواست نمی‌فرستد و خودش هم می‌گوید: «We never apply for you.»
 - [ ] درخواست در «Your applications» در `/dashboard` آمده است، و لینک «Job ad» متن کامل آگهی را نشان می‌دهد.
 - [ ] «Add a next step» را بزن، «Status» را «Interview» کن، در «Next step» یک قدم بنویس، از «When» یک روز انتخاب کن و «Save» را بزن. «Saved» می‌آید و بعد از reload همه سر جایشان هستند.
 - [ ] حالا «Start interview practice» دیده می‌شود و به تمرین مصاحبهٔ همین آگهی می‌رود. همین دکمه در قدم Download تیلور هم هست (#289).
@@ -122,8 +125,7 @@
 
 - [ ] بدون ورود به حساب، «Upload a file» را با `sara.docx` امتحان کن و «Check my CV» را بزن. امتیاز آمادگی و «How to fix it» در کمتر از دو دقیقه می‌آید.
 - [ ] یک بار هم متن رزومه را بچسبان. نتیجه همان‌قدر روشن است.
-- [ ] در کارت «Next: let CVision make these fixes»، «Tailor my CV to a job» مهمان را به ثبت‌نام و بعد Profile، و کاربر واردشده را مستقیم به Profile می‌برد.
-- [ ] زیر هر ایرادی که متن پیشنهادی دو کلمه‌ای یا بیشتر دارد، دکمهٔ «Copy» همان متن را کپی می‌کند.
+- [ ] در کارت «Next: tailor your CV to a job»، «Tailor my CV to a job» مهمان را به ثبت‌نام و بعد Profile، و کاربر واردشده را مستقیم به Profile می‌برد.
 
 ### دادهٔ من (`/dashboard/your-data`): آخر از همه
 

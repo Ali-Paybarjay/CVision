@@ -3,18 +3,17 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
-import { carryCv } from "@/shared/carried-cv";
+import { carryFromCheck } from "@/shared/carried-cv";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { withNext } from "@/features/account/safe-redirect";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
 import type { CvCheckResponse } from "../server/check-request";
-import { suggestedWordings } from "../suggested-wording";
 
 type Source = "file" | "text";
 type Errors = { file?: string; text?: string; form?: string; limit?: { message: string; signedIn: boolean } };
 /** `file` is the CV file that was checked, if one was uploaded rather than pasted: Profile can use it (#336). */
-type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; file: File | null };
+type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; file: File | null; account: string | null };
 
 /**
  * Where "Tailor my CV to a job" leads: a signed-in user straight to their profile, a visitor to sign-up and then
@@ -62,7 +61,8 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
       if (response.ok) {
         const uploaded = source === "file" ? form.get("cv") : null;
         const file = uploaded instanceof File ? uploaded : null;
-        setChecked({ result: response.result, truncated: response.truncated, signedIn, file });
+        const account = signedIn ? (response.account ?? null) : null;
+        setChecked({ result: response.result, truncated: response.truncated, signedIn, file, account });
         return;
       }
       if (response.code === "limit-reached") setErrors({ limit: { message: response.message, signedIn } });
@@ -200,6 +200,7 @@ export function CvCheckReport({
   truncated,
   signedIn,
   file,
+  account,
   demoMode,
   onCheckAnother,
 }: Checked & { demoMode: boolean; onCheckAnother: () => void }) {
@@ -267,7 +268,6 @@ export function CvCheckReport({
                     <span className="font-semibold">How to fix it: </span>
                     {issue.fix}
                   </p>
-                  <SuggestedWording fix={issue.fix} />
                 </Card>
               </li>
             ))}
@@ -275,12 +275,14 @@ export function CvCheckReport({
         </section>
       )}
 
-      {/* A pilot wanted CVision to make these fixes and ask about what's missing, not knowing Tailor does (#333). */}
+      {/* A pilot wanted CVision to ask about what's missing and rewrite the CV, not knowing Tailor does (#333). It
+          doesn't promise these fixes: Tailor works from the job's requirements, not from this check. */}
       <Card className="flex flex-col items-start gap-3">
-        <h3 className="text-xl">Next: let CVision make these fixes</h3>
+        <h3 className="text-xl">Next: tailor your CV to a job</h3>
         <p className="text-text-muted">
-          Tailor asks you about anything that’s missing, rewrites your CV for the job you want and lets you approve every
-          change. You’ll also get a cover letter, built only from what you’ve told us.
+          Tailor asks about the skills and experience the job wants that your CV doesn’t show yet, suggests changes to
+          your CV for that job and lets you approve every one. You’ll also get a cover letter, built only from what
+          you’ve told us.
         </p>
         {/* A signed-in user's checked file goes with them to Profile, so they don't upload it twice (#336). It stays in this
             page's memory only; a visitor's would be lost on the way through sign-up, so it isn't offered. */}
@@ -288,12 +290,13 @@ export function CvCheckReport({
           href={tailorPath(signedIn)}
           variant="primary"
           onClick={() => {
-            if (signedIn && file) carryCv(file);
+            // Kept for this account only. Pasted text, or a visitor: no file goes, and none from an earlier check stays.
+            carryFromCheck({ signedIn, file, account });
           }}
         >
           {brand.cta.primary}
         </ButtonLink>
-        {signedIn && file && (
+        {signedIn && file && account && (
           <p className="text-sm text-text-muted">We’ll bring the CV you just checked, so you don’t need to upload it again.</p>
         )}
       </Card>
@@ -304,50 +307,6 @@ export function CvCheckReport({
         </Button>
       </div>
     </section>
-  );
-}
-
-/**
- * The new wording a fix suggests, each with a button that copies it (#335), so the user doesn't retype it. The wording
- * only rewords what the CV already says (the prompt's rule), and the user decides where it goes.
- */
-function SuggestedWording({ fix }: { fix: string }) {
-  const wordings = suggestedWordings(fix);
-  if (wordings.length === 0) return null;
-  return (
-    <ul className="flex flex-col gap-2" aria-label="Suggested wording">
-      {wordings.map((wording) => (
-        <li key={wording} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-fit px-3 py-2">
-          <span className="min-w-0 flex-1">{wording}</span>
-          <CopyButton text={wording} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setState("copied");
-    } catch {
-      // Some browsers block the clipboard; the wording is still on screen to select by hand.
-      setState("failed");
-    }
-  }
-
-  return (
-    <>
-      <Button variant="quiet" size="compact" onClick={copy} aria-label={`Copy: ${text}`}>
-        {state === "copied" ? "Copied" : "Copy"}
-      </Button>
-      <span className="sr-only" aria-live="polite">
-        {state === "copied" ? "Copied to the clipboard." : state === "failed" ? "Couldn’t copy. Select the text instead." : ""}
-      </span>
-    </>
   );
 }
 

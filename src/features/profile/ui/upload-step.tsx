@@ -49,11 +49,19 @@ export function UploadStep({
   carriedFile = null,
 }: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
-  // The carried CV goes into the file field once, when the field appears; the user can still choose another file.
-  const attached = useRef(false);
+  // Each carried CV goes into the file field once; the user can still choose another file. A newer carried CV (the
+  // page kept alive since an earlier one) replaces it, and one no longer carried (a later check of pasted text) is
+  // taken out again, so the field never holds a CV the page no longer explains. A file the user chose stays.
+  const attached = useRef<File | null>(null);
   const attachCarried = (input: HTMLInputElement | null) => {
-    if (!input || !carriedFile || attached.current) return;
-    attached.current = true;
+    if (!input) return;
+    if (!carriedFile) {
+      if (attached.current && input.files?.[0] === attached.current) input.value = "";
+      attached.current = null;
+      return;
+    }
+    if (attached.current === carriedFile) return;
+    attached.current = carriedFile;
     try {
       const files = new DataTransfer();
       files.items.add(carriedFile);

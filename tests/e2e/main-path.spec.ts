@@ -71,6 +71,8 @@ test("step 2: paste a job ad, see the match and go on to tailoring", async ({ pa
   const [job] = sampleJobs("sara");
 
   await page.goto("/jobs");
+  // The link comes first (#330); a pasted ad is the other choice.
+  await page.getByRole("radio", { name: "Paste the text" }).check();
   await page.getByLabel("The job ad", { exact: true }).fill(job.description);
   await page.getByRole("button", { name: "Check my fit" }).click();
 
