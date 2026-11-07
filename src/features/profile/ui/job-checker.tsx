@@ -28,9 +28,6 @@ type LinkOutcome = { kind: "read"; site: string; tooLong: boolean } | { kind: "u
 
 type View = { name: "form"; input: AdInput | null } | { name: "report"; result: CheckJobSuccess; input: AdInput };
 
-/** Where Back goes from this page when the page before it isn't on this site: the profile, the step before. */
-const PAGE_BACK = "/profile";
-
 /** The check can take up to two minutes (the page's maxDuration), so after a minute the wait says so. */
 const SLOW_AFTER_MS = 60_000;
 
@@ -42,7 +39,8 @@ export type JobProfileSource = { kind: "account"; profile: Profile | null } | { 
 
 /**
  * The jobs page: give the ad's link or paste its text, then see the match report.
- * The ad is compared with the profile the user approved on /profile. Back on the report returns to the ad as given.
+ * The ad is compared with the profile the user approved on /profile. Back on the report returns to the ad as given;
+ * there is no Back out of the page, since the steps bar and the menu at the top lead everywhere else.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before the check.
  */
 export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMode: boolean; source?: JobProfileSource }) {
@@ -61,7 +59,7 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
   else if (source.kind === "signed-out") profile = null;
   else profile = stored === undefined ? undefined : (stored?.profile ?? null);
 
-  let back = <BackLink href={PAGE_BACK} />;
+  let back: React.ReactNode = null;
   let content: React.ReactNode;
   if (profile === undefined) {
     content = (
@@ -91,7 +89,6 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
         title="Sign in to check a job against your profile"
         text="We compare each job ad with the profile in your CVision account, so the match only uses what you told us. You’ll come back to this page afterwards."
         next="/jobs"
-        back={false}
       />
     );
   } else if (!profile && !demoMode) {

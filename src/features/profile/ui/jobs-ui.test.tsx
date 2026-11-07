@@ -225,10 +225,10 @@ describe("JobChecker", () => {
     ["the ad form", { kind: "account", profile: personas.emma.profile }],
     ["the profile-first message", { kind: "account", profile: null }],
     ["the sign-in message", { kind: "signed-out" }],
-  ] as const)("puts Back first on %s, leading out of the page", (_, source) => {
+  ] as const)("has no Back out of the page on %s: the steps bar and the menu lead out", (_, source) => {
     const html = renderToStaticMarkup(<JobChecker demoMode={false} source={source} />);
 
-    expect(html).toMatch(/^<div[^>]*><a href="\/profile"[^>]*>.*?Back<\/a>/);
+    expect(html).not.toContain(">Back<");
   });
 
   it("asks an account with no profile yet to build one first", () => {

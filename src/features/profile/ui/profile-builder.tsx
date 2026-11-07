@@ -52,9 +52,6 @@ type View =
       truncated: boolean;
     };
 
-/** Where Back goes from this page when the page before it isn't on this site. */
-const PAGE_BACK = "/dashboard";
-
 /**
  * The consent an approved profile takes to the account: the one just given, with a new CV or for a profile typed in
  * by hand. An edit sends none, so it isn't recorded as a new consent.
@@ -66,7 +63,8 @@ export function consentToSend(source: ReviewSource, consent: ConsentRecord | nul
 /**
  * The profile page: upload a CV (with consent), or type the details in by hand when there is no CV, check them and
  * approve them all at once, then see and manage the saved profile. Nothing is saved before the user approves it
- * (You approve everything). Back goes to the step before, or from the first step to the page before.
+ * (You approve everything). Back goes to the step before; there is none on the first step, since the steps bar and the
+ * menu at the top lead out of the page.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before an upload.
  */
 export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { demoMode: boolean; storage?: ProfileStorage }) {
@@ -212,16 +210,13 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
 
   if (saved === undefined) {
     return (
-      <div className="flex flex-col gap-6">
-        <BackLink href={PAGE_BACK} />
-        <Card aria-busy="true">
-          <p className="text-text-muted">Loading your profile…</p>
-        </Card>
-      </div>
+      <Card aria-busy="true">
+        <p className="text-text-muted">Loading your profile…</p>
+      </Card>
     );
   }
 
-  // The step before this one, if the page has one; otherwise Back leaves the page.
+  // The step before this one, if the page has one.
   let stepBack: (() => void) | undefined;
   let content: React.ReactNode;
   if (view.name === "review") {
@@ -308,7 +303,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
 
   return (
     <div className="flex flex-col gap-6">
-      {stepBack ? <BackLink onClick={stepBack} /> : <BackLink href={PAGE_BACK} />}
+      {stepBack && <BackLink onClick={stepBack} />}
       {message && <Notice tone="success">{message}</Notice>}
       {content}
     </div>
