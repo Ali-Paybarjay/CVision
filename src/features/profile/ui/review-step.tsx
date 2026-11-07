@@ -157,6 +157,15 @@ export function ReviewStep({
         <p className="mt-2 text-text-muted">
           {intro[source]} Then approve it all at the end of the page. Nothing is saved until you do.
         </p>
+        {/* A pilot on this step asked what to do next (#334): the way to approve and what comes after it. */}
+        {source !== "saved" && (
+          <p className="mt-2">
+            Once your profile is approved, you’ll paste a job ad and tailor your CV to it.{" "}
+            <a href="#approve-heading" className="font-semibold text-accent underline-offset-4 hover:underline">
+              Go to Approve
+            </a>
+          </p>
+        )}
       </div>
 
       {demo && (
@@ -387,7 +396,7 @@ export function ReviewStep({
       </ReviewSection>
 
       <Card aria-labelledby="approve-heading">
-        <h3 id="approve-heading" className="text-xl">
+        <h3 id="approve-heading" className="scroll-mt-24 text-xl">
           {source === "saved" ? "Approve your changes" : "Approve your profile"}
         </h3>
         <p className="mt-2 text-text-muted">
