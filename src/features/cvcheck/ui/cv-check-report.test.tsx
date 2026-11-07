@@ -3,8 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CvCheckResult } from "@/shared/contracts";
 import { CvCheckReport } from "./cv-check-form";
 
-// Render checks for the result of a CV check: where its main button leads, what the next step says, and the
-// copy buttons for suggested wording. Clicking is tried in a browser.
+// Render checks for the result of a CV check: where its main button leads and what the next step says.
 
 vi.mock("next/link", () => ({
   default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
@@ -68,14 +67,6 @@ describe("CvCheckReport", () => {
     expect(html).not.toContain("rewrites your CV");
   });
 
-  // A pilot asked which exact words to write (#335).
-  it("offers to copy suggested wording of two words or more, and nothing for a single word", () => {
-    const html = render(true);
-    expect(html).toContain("Planned the weekly staff rota");
-    expect(html).toContain('aria-label="Copy: Planned the weekly staff rota"');
-    expect(html).not.toContain("Copy: Skills");
-    expect(html.match(/aria-label="Copy: /g)).toHaveLength(1);
-  });
 });
 
 // A pilot had to upload the same CV again in Profile (#336).

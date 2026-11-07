@@ -9,7 +9,6 @@ import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from 
 import { withNext } from "@/features/account/safe-redirect";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
 import type { CvCheckResponse } from "../server/check-request";
-import { suggestedWordings } from "../suggested-wording";
 
 type Source = "file" | "text";
 type Errors = { file?: string; text?: string; form?: string; limit?: { message: string; signedIn: boolean } };
@@ -269,7 +268,6 @@ export function CvCheckReport({
                     <span className="font-semibold">How to fix it: </span>
                     {issue.fix}
                   </p>
-                  <SuggestedWording fix={issue.fix} />
                 </Card>
               </li>
             ))}
@@ -309,50 +307,6 @@ export function CvCheckReport({
         </Button>
       </div>
     </section>
-  );
-}
-
-/**
- * The new wording a fix suggests, each with a button that copies it (#335), so the user doesn't retype it. The wording
- * only rewords what the CV already says (the prompt's rule), and the user decides where it goes.
- */
-function SuggestedWording({ fix }: { fix: string }) {
-  const wordings = suggestedWordings(fix);
-  if (wordings.length === 0) return null;
-  return (
-    <ul className="flex flex-col gap-2" aria-label="Suggested wording">
-      {wordings.map((wording) => (
-        <li key={wording} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-fit px-3 py-2">
-          <span className="min-w-0 flex-1">{wording}</span>
-          <CopyButton text={wording} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setState("copied");
-    } catch {
-      // Some browsers block the clipboard; the wording is still on screen to select by hand.
-      setState("failed");
-    }
-  }
-
-  return (
-    <>
-      <Button variant="quiet" size="compact" onClick={copy} aria-label={`Copy: ${text}`}>
-        {state === "copied" ? "Copied" : "Copy"}
-      </Button>
-      <span className="sr-only" aria-live="polite">
-        {state === "copied" ? "Copied to the clipboard." : state === "failed" ? "Couldn’t copy. Select the text instead." : ""}
-      </span>
-    </>
   );
 }
 
