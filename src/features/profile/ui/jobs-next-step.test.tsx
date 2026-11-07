@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { JobChecker, ProfileFirst } from "./job-checker";
 
-// The jobs page's two "not yet" states (#334): someone with no profile sees the three steps with the profile as the
+// The jobs page's two "not yet" states (#334): someone with no profile is told the profile is step 1, the
 // one to do now, and a signed-out visitor gets the profile page's sign-in card, with a Coral button. Its own file, so
 // it doesn't meet the changes to jobs-ui.test.tsx in #342.
 
@@ -19,12 +19,12 @@ vi.mock("../job-actions", () => ({ checkJobAction: vi.fn() }));
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
 describe("Jobs before the form", () => {
-  it("shows the three steps with the profile first, and leads to it", () => {
+  it("names the profile as step 1, the step before Jobs in the bar at the top of the page, and leads to it", () => {
     const html = renderToStaticMarkup(<ProfileFirst />);
 
-    expect(html).toContain('aria-label="Your three steps"');
-    expect(text(html)).toContain("1 Build your profile 2 Paste a job ad 3 Get a tailored CV and cover letter");
-    expect(html).toMatch(/<li aria-current="step"[^>]*>.*?Build your profile<\/li>/);
+    expect(text(html)).toContain("Your profile is step 1.");
+    // One step indicator per page: the bar at the top (#347), not a second list in the card.
+    expect(html).not.toContain('aria-current="step"');
     expect(html).toMatch(/<a href="\/profile" class="[^"]*bg-cta[^"]*">Build your profile<\/a>/);
   });
 

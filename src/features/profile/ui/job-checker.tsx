@@ -9,7 +9,6 @@ import { useStoredProfile } from "../profile-store";
 import { BackLink } from "./back-link";
 import { MatchReport } from "./match-report";
 import { SignInToStart } from "./sign-in-to-start";
-import { journeySteps, Steps } from "./steps";
 import { SignInNotice } from "./upload-step";
 
 type CheckJobSuccess = Extract<CheckJobResult, { ok: true }>;
@@ -250,19 +249,18 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
 }
 
 /**
- * Shown instead of the form when there is no profile to compare the ad with. It shows the three steps with the profile
- * as the one to do now, so the user sees why this page sends them back a step (#334).
+ * Shown instead of the form when there is no profile to compare the ad with. It names the profile as step 1, the step
+ * before this one in the bar at the top of the page (#334, #347), so the user sees why they are sent back.
  */
 export function ProfileFirst() {
   return (
     <Card>
       <h2 className="text-xl">Your profile comes first</h2>
       <p className="mt-2 max-w-[65ch] text-text-muted">
-        We compare each job ad with the profile you approved, so the match only uses what you told us. Upload your CV
-        or fill in your details to build it.
+        Your profile is step 1. We compare each job ad with the profile you approved, so the match only uses what you
+        told us. Upload your CV or fill in your details to build it.
       </p>
-      <Steps current={0} labels={journeySteps} label="Your three steps" className="mt-4" />
-      <ButtonLink href="/profile" variant="primary" className="mt-5">
+      <ButtonLink href="/profile" variant="primary" className="mt-4">
         Build your profile
       </ButtonLink>
     </Card>
