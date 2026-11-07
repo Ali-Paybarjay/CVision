@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { carriedCvFor, carryCheckedCv, clearCarriedCv, subscribeCarriedCv } from "./carried-cv";
+import { carriedCvFor, carryCheckedCv, carryFromCheck, clearCarriedCv, subscribeCarriedCv } from "./carried-cv";
 
 afterEach(() => clearCarriedCv());
 
@@ -35,6 +35,23 @@ describe("carried CV", () => {
     carryCheckedCv(second, "account-a");
     expect(carriedCvFor("account-a")).toBe(second);
     clearCarriedCv();
+    expect(carriedCvFor("account-a")).toBeNull();
+  });
+
+  // The CV check's Tailor button: a review found no test failed when this decision was changed.
+  it("carries an uploaded file for a signed-in account, and forgets an earlier one for pasted text or a visitor", () => {
+    const uploaded = cv("checked.pdf");
+    carryFromCheck({ signedIn: true, file: uploaded, account: "account-a" });
+    expect(carriedCvFor("account-a")).toBe(uploaded);
+
+    carryFromCheck({ signedIn: true, file: null, account: "account-a" });
+    expect(carriedCvFor("account-a")).toBeNull();
+
+    carryFromCheck({ signedIn: true, file: uploaded, account: "account-a" });
+    carryFromCheck({ signedIn: false, file: cv("visitor.pdf"), account: null });
+    expect(carriedCvFor("account-a")).toBeNull();
+
+    carryFromCheck({ signedIn: true, file: uploaded, account: null });
     expect(carriedCvFor("account-a")).toBeNull();
   });
 

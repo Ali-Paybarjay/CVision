@@ -23,14 +23,14 @@ describe("PathSteps", () => {
   it("names all three steps in order, in a labelled nav, with no step number to echo the pages' own steps", () => {
     const html = renderToStaticMarkup(<PathSteps current={1} />);
     expect(html).toContain('aria-label="Your progress"');
-    expect(text(html)).toMatch(/^Profile .*Job ad .*Tailored CV/);
+    expect(text(html)).toBe("Profile › Check a job (next) › Tailored CV");
     expect(text(html)).not.toMatch(/Step \d/);
   });
 
   // The pages' own steps (Profile's two, Tailor's five) use aria-current="step"; each step here is a page.
   it("marks the current step as the current page, once, and says which comes next", () => {
     const html = renderToStaticMarkup(<PathSteps current={2} />);
-    expect(html).toMatch(/aria-current="page"[^>]*>Job ad/);
+    expect(html).toMatch(/aria-current="page"[^>]*>Check a job/);
     expect(html.match(/aria-current=/g)).toHaveLength(1);
     expect(html).not.toContain('aria-current="step"');
     expect(text(html)).toContain("Tailored CV (next)");
@@ -44,7 +44,7 @@ describe("PathSteps", () => {
   it("underlines the links back, and gives them a 44px target", () => {
     const html = renderToStaticMarkup(<PathSteps current={3} />);
     const profileLink = html.match(/<a href="\/profile" class="([^"]*)"/)?.[1] ?? "";
-    expect(profileLink.split(" ")).toEqual(expect.arrayContaining(["underline", "min-w-11", "min-h-11"]));
+    expect(profileLink.split(" ")).toEqual(expect.arrayContaining(["underline", "decoration-dotted", "min-w-11", "min-h-11"]));
     expect(profileLink).not.toContain("hover:underline");
   });
 

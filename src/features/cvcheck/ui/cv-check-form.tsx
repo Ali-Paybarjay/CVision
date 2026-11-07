@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
-import { carryCheckedCv } from "@/shared/carried-cv";
+import { carryFromCheck } from "@/shared/carried-cv";
 import type { CvCheckResult, CvIssue } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { withNext } from "@/features/account/safe-redirect";
@@ -293,7 +293,7 @@ export function CvCheckReport({
           variant="primary"
           onClick={() => {
             // Kept for this account only. Pasted text, or a visitor: no file goes, and none from an earlier check stays.
-            carryCheckedCv(signedIn ? file : null, account);
+            carryFromCheck({ signedIn, file, account });
           }}
         >
           {brand.cta.primary}

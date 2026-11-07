@@ -7,7 +7,7 @@ import { cn } from "./cn";
  */
 const pathSteps = [
   { label: "Profile", href: "/profile" },
-  { label: "Job ad", href: "/jobs" },
+  { label: "Check a job", href: "/jobs" },
   { label: "Tailored CV", href: null },
 ] as const;
 
@@ -16,9 +16,11 @@ const pathSteps = [
  * now?" on these pages: this shows the three pages in order, the current one in bold, and the next one after it.
  * It is one short line with no numbers or circles, so on a phone it fits on one line and it doesn't echo the pages'
  * own numbered steps below it (Profile's two, Tailor's five). Each step is a page, so the current one carries
- * aria-current="page", not "step", which those inner steps use. A step before the current one is a link, underlined
- * as well as coloured, so it doesn't rely on colour alone. It shows order, not progress: a step before the current
- * one is not marked done, since the page can't always know it is.
+ * aria-current="page", not "step", which those inner steps use. A step before the current one is a link with a dotted
+ * underline as well as colour, so it doesn't rely on colour alone and isn't mistaken for the header's solid underline
+ * under the current page. "Check a job" is the Jobs page's own name, and differs from Tailor's inner "Job" step. The
+ * "›" ends each step but the last, so a line that wraps at large text sizes starts with a step, not a separator. It
+ * shows order, not progress: a step before the current one is not marked done, since the page can't always know.
  */
 export function PathSteps({ current }: { current: 1 | 2 | 3 }) {
   return (
@@ -29,15 +31,10 @@ export function PathSteps({ current }: { current: 1 | 2 | 3 }) {
           const here = number === current;
           return (
             <li key={step.label} className="flex items-center gap-x-1.5">
-              {index > 0 && (
-                <span aria-hidden="true" className="text-text-muted">
-                  ›
-                </span>
-              )}
               {number < current && step.href ? (
                 <Link
                   href={step.href}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-accent underline underline-offset-4"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center text-accent underline decoration-dotted underline-offset-4"
                 >
                   {step.label}
                 </Link>
@@ -48,6 +45,11 @@ export function PathSteps({ current }: { current: 1 | 2 | 3 }) {
                 >
                   {step.label}
                   {number === current + 1 && <span className="sr-only">&nbsp;(next)</span>}
+                </span>
+              )}
+              {index < pathSteps.length - 1 && (
+                <span aria-hidden="true" className="text-text-muted">
+                  ›
                 </span>
               )}
             </li>

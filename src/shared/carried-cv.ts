@@ -29,6 +29,14 @@ export function carryCheckedCv(file: File | null, account: string | null): void 
   set(file && account ? { file, account } : null);
 }
 
+/**
+ * What the CV check's Tailor button does (#336): carries the checked file for a signed-in account, or, for pasted text
+ * or a visitor, forgets any file an earlier check kept. A function of its own so the decision can be tested.
+ */
+export function carryFromCheck(check: { signedIn: boolean; file: File | null; account: string | null }): void {
+  carryCheckedCv(check.signedIn ? check.file : null, check.signedIn ? check.account : null);
+}
+
 /** The file kept for this account, or null, including when another account checked it. Reading changes nothing. */
 export function carriedCvFor(account: string): File | null {
   return carried && carried.account === account ? carried.file : null;

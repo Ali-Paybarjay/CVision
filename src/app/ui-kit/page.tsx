@@ -133,7 +133,7 @@ export default function UiKitPage() {
         <h2 className="text-xl">Where the user is on the main path</h2>
         <p className="mt-1 text-sm text-text-muted">
           At the top of Profile, Jobs and Tailor (#238): the three pages in order, the current one in bold, and the next
-          one after it. A step before the current one is an underlined link back to its page.
+          one after it. A step before the current one is a link back to its page, with a dotted underline.
         </p>
         <div className="mt-4 flex flex-col gap-2">
           <PathSteps current={1} />

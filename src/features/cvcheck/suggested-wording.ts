@@ -1,92 +1,66 @@
 /**
  * The new wording a CV check fix suggests, so the page can offer to copy it (#335). The prompt puts new wording in
- * single quotes and the CV's own words in double quotes (prompts/cvcheck-review.md), so only single-quoted text
- * outside double quotes counts. Curly quotes (‘…’) count too, each kind closing only its own kind.
+ * single quotes and the CV's own words in double quotes (prompts/cvcheck-review.md).
  *
- * A single quote is also an apostrophe ("don't", "employers' first question"), so the text is scanned: an opening
- * quote comes after the start, a space or punctuation and before a letter or digit; a closing quote comes after a
- * character and before the end, a space or punctuation. Each opening quote takes the FIRST closing quote after it.
- * When another closing quote follows in the same clause, before any punctuation or a new suggestion, it can't tell
- * which one closes the wording ("the Smiths' account'", "rock 'n' roll"), so it offers nothing for that one: the fix
- * is still on screen, and the page never offers wording it isn't sure of.
- *
- * Left out too: wording of one word ('Skills', 'colours'), which is quicker to type than to copy, and wording the
- * fix says not to write ("Don't add 'Power BI'", "Remove 'References available on request'").
+ * The fix is prose the model wrote, and a single quote is also an apostrophe ("4 years' experience", "the '90s",
+ * "don't"), so no reading of it is right every time. The rule here is the other way round: offer wording only when it
+ * can't be misread, and offer nothing otherwise. The fix stays on screen either way, so a missed offer costs a few
+ * seconds of typing, while wrong text in the Copy box could end up in someone's CV. Wording is offered only when:
+ * - its opening quote comes straight after a word that introduces new wording: "to", "write", "use", "add", "try",
+ *   "with", "for", "as", "say", "e.g." or "example" (so not the CV's own words after "Change", "Replace" or "Swap");
+ * - nothing in the same sentence before it says not to write it ("don't", "never", "avoid", "remove", "not"…);
+ * - the next quote mark of any kind closes it, and is followed by the end, a space or punctuation, so wording with an
+ *   apostrophe inside ("the team's rota") is never cut short: it isn't offered;
+ * - no other quote mark follows in the rest of the sentence, so a possessive after it can't be the real end;
+ * - it is two words or more ('Skills' and 'colours' are quicker to type than to copy), and not a whole sentence.
  */
 export function suggestedWordings(fix: string): string[] {
-  const text = withoutDoubleQuoted(fix);
   const found: string[] = [];
-  let from = 0;
-  while (from < text.length) {
-    const open = nextOpening(text, from);
-    if (open === -1) break;
-    const closer = text[open] === "‘" ? "’" : "'";
-    const close = nextClosing(text, open + 1, closer);
-    if (close === -1) {
-      from = open + 1;
-      continue;
+  for (const sentence of sentences(fix)) {
+    const { text, start: offset } = sentence;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] !== "'" && text[i] !== "‘") continue;
+      const before = text.slice(0, i);
+      if (!INTRODUCES_WORDING.test(before) || SAYS_NOT_TO.test(before) || !/\S/.test(text[i + 1] ?? "")) continue;
+
+      const close = nextQuote(text, i + 1);
+      if (close === -1 || !/\S/.test(text[close - 1]) || !AFTER_CLOSING.test(text[close + 1] ?? " ")) continue;
+      if (nextQuote(text, close + 1) !== -1) break; // another quote later in this sentence: can't be sure where it ends
+
+      const wording = fix.slice(offset + i + 1, offset + close).trim();
+      if (wording.split(/\s+/).length >= 2 && !/[.!?]\s/.test(wording) && !found.includes(wording)) found.push(wording);
+      i = close;
     }
-    const another = closingLaterInClause(text, close + 1, closer);
-    if (another !== -1) {
-      from = another + 1;
-      continue;
-    }
-    // Cut from the fix itself, so double-quoted words inside the wording stay in it.
-    const wording = fix.slice(open + 1, close).trim();
-    if (wording.split(/\s+/).length >= 2 && !saysNotToWrite(fix.slice(0, open)) && !found.includes(wording)) {
-      found.push(wording);
-    }
-    from = close + 1;
   }
   return found;
 }
 
-/** What may come just before an opening single quote. */
-const BEFORE_OPENING = /[\s(\[“"/—–,:;…→]/;
-/** What may come just after an opening single quote: the wording's first character. */
-const OPENS_WORDING = /[\p{L}\p{N}(“"‘'£$€]/u;
-/** What may come just after a closing single quote. */
-const AFTER_CLOSING = /[\s.,;:!?)\]”"/—–…*»-]/;
-/** Where a clause ends, for telling whether a later quote could still close the same wording. */
-const CLAUSE_BREAK = /[.,;:!?)\]/—–…]/;
+/** The last word before an opening quote, when it introduces new wording. */
+const INTRODUCES_WORDING = /(?:^|[\s(“"])(?:to|write|use|add|try|with|for|as|say|e·g·|example)[:,]?\s*$/i;
+/** Anything earlier in the sentence that says not to write what follows. */
+const SAYS_NOT_TO = /\b(?:don['’]t|do not|never|avoid|remove|delete|drop|cut|take out|leave out|no need|not)\b/i;
+/** What may come just after a closing quote. */
+const AFTER_CLOSING = /[\s.,;:!?)\]”"…—–/]/;
 
-function isOpening(text: string, i: number): boolean {
-  const char = text[i];
-  if (char !== "'" && char !== "‘") return false;
-  return (i === 0 || BEFORE_OPENING.test(text[i - 1])) && OPENS_WORDING.test(text[i + 1] ?? "");
-}
-
-function isClosing(text: string, k: number, closer: string): boolean {
-  if (text[k] !== closer || !/\S/.test(text[k - 1] ?? "")) return false;
-  const after = text[k + 1];
-  return after === undefined || AFTER_CLOSING.test(after);
-}
-
-function nextOpening(text: string, from: number): number {
-  for (let i = from; i < text.length; i++) if (isOpening(text, i)) return i;
+function nextQuote(text: string, from: number): number {
+  for (let k = from; k < text.length; k++) if ("'‘’".includes(text[k])) return k;
   return -1;
 }
 
-function nextClosing(text: string, from: number, closer: string): number {
-  for (let k = from; k < text.length; k++) if (isClosing(text, k, closer)) return k;
-  return -1;
-}
-
-/** Another quote that could close the same wording, before the clause ends or a new suggestion starts, or -1. */
-function closingLaterInClause(text: string, from: number, closer: string): number {
-  for (let k = from; k < text.length; k++) {
-    if (CLAUSE_BREAK.test(text[k]) || isOpening(text, k)) return -1;
-    if (isClosing(text, k, closer)) return k;
+/**
+ * The fix cut into sentences, each with where it starts in the fix. A sentence ends at . ! ? or ; before a space or
+ * the end, but not in "e.g." or "i.e.", so "Avoid phrases, e.g. 'team player'" stays one sentence.
+ */
+function sentences(fix: string): { text: string; start: number }[] {
+  const guarded = fix.replace(/\b(?:e\.g|i\.e)\./gi, (abbreviation) => abbreviation.replace(/\./g, "·"));
+  const result: { text: string; start: number }[] = [];
+  let start = 0;
+  for (let k = 0; k < guarded.length; k++) {
+    if (/[.!?;]/.test(guarded[k]) && (k + 1 === guarded.length || /\s/.test(guarded[k + 1]))) {
+      result.push({ text: guarded.slice(start, k + 1), start });
+      start = k + 1;
+    }
   }
-  return -1;
-}
-
-/** True when the words just before a quote say not to write it: "Don't add", "Remove", "instead of", "not". */
-function saysNotToWrite(before: string): boolean {
-  return /(?:\b(?:don['’]t|do not|never)\s+\w+|\b(?:avoid|remove|delete|drop|instead of|rather than|replace|not))\s*$/i.test(before);
-}
-
-/** The fix with the CV's own double-quoted words blanked out (same length), so quotes inside them don't count. */
-function withoutDoubleQuoted(fix: string): string {
-  return fix.replace(/“[^”]*”|"[^"]*"/g, (quoted) => " ".repeat(quoted.length));
+  if (start < guarded.length) result.push({ text: guarded.slice(start), start });
+  return result;
 }

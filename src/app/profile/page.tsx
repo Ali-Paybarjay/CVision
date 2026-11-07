@@ -52,5 +52,7 @@ async function ProfileForVisitor({ demoMode }: { demoMode: boolean }) {
   if (!user || !supabase) return <SignInToStart />;
 
   const initial = await loadAccountProfile(supabase);
-  return <ProfileBuilder demoMode={demoMode} storage={{ kind: "account", initial, account: user.id }} />;
+  // Keyed by account: Next keeps recent pages alive (cacheComponents), and without the key another account signing in
+  // in this tab would get this one's state, including its saved profile and a CV in the file field (#336 review).
+  return <ProfileBuilder key={user.id} demoMode={demoMode} storage={{ kind: "account", initial, account: user.id }} />;
 }
