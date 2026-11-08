@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
-import { carryFromCheck } from "@/shared/carried-cv";
+import { carryFromCheck, clearCarriedCv } from "@/shared/carried-cv";
 import type { CvCheckResult } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { withNext } from "@/features/account/safe-redirect";
@@ -22,6 +22,16 @@ type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; f
  */
 function tailorPath(signedIn: boolean): string {
   return signedIn ? "/profile" : withNext("/sign-up", "/profile");
+}
+
+/**
+ * A check came back, and it replaces the one before. A file an earlier Tailor click kept for Profile isn't "the CV you
+ * just checked" any more, so it goes: Profile offers only the file of the check the user last sent on with Tailor
+ * (#385, found by Shayan). Exported for its test.
+ */
+export function newCheck(checked: Checked): Checked {
+  clearCarriedCv();
+  return checked;
 }
 
 /** Shown under the button while the CV is checked. The check route stops at a minute (`maxDuration`). */
@@ -63,7 +73,7 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
         const uploaded = source === "file" ? form.get("cv") : null;
         const file = uploaded instanceof File ? uploaded : null;
         const account = signedIn ? (response.account ?? null) : null;
-        setChecked({ result: response.result, truncated: response.truncated, signedIn, file, account });
+        setChecked(newCheck({ result: response.result, truncated: response.truncated, signedIn, file, account }));
         return;
       }
       if (response.code === "limit-reached") setErrors({ limit: { message: response.message, signedIn } });
