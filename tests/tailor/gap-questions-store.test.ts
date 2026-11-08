@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { gapQuestionsKey, keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
+import { gapQuestionsPrompt, skillGaps } from "@/features/tailor";
 import type { GapQuestion } from "@/features/tailor/types";
 import { personas } from "@/shared/sample-data";
 
@@ -48,7 +50,7 @@ describe("gap questions asked once per job (#304)", () => {
     expect(ask).toHaveBeenCalledTimes(1);
     const [row, options] = db.upsert.mock.calls[0];
     expect(options).toEqual({ onConflict: "job_id,user_id" });
-    expect(row).toEqual({ job_id: jobId, data: { key: gapQuestionsKey(input), questions } });
+    expect(row).toEqual({ job_id: jobId, data: { key: await gapQuestionsKey(input), questions } });
   });
 
   it("shares one request between renders that start at the same moment", async () => {
@@ -73,8 +75,27 @@ describe("gap questions asked once per job (#304)", () => {
     expect(ask).toHaveBeenCalledTimes(3);
   });
 
-  it("gives the same key whatever the Profile's id, so a re-saved Profile keeps its questions", () => {
-    expect(gapQuestionsKey({ ...input, profile: { ...profile, id: "another-id" } })).toBe(gapQuestionsKey(input));
+  it("gives the same key whatever the Profile's id, so a re-saved Profile keeps its questions", async () => {
+    expect(await gapQuestionsKey({ ...input, profile: { ...profile, id: "another-id" } })).toBe(await gapQuestionsKey(input));
+  });
+
+  it("keys the questions on the request text the model gets, so a new prompt gives a new key (#416)", async () => {
+    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps) });
+    expect(await gapQuestionsKey(input)).toBe(createHash("sha256").update(prompt).digest("hex"));
+  });
+
+  it("asks again for a job whose questions were kept under the old key, before the prompt counted (#416)", async () => {
+    const oldSource = {
+      profile: { ...profile, id: undefined },
+      job: { title: job.title, company: job.company, description: job.description, requirements: job.requirements },
+      gaps: skillGaps(input.match.gaps),
+    };
+    const oldKey = createHash("sha256").update(JSON.stringify(oldSource)).digest("hex");
+    db.row = { data: { key: oldKey, questions: [{ gapId: match.gaps[0].id, question: "An old, general question?" }] } };
+    const ask = vi.fn(async () => questions);
+
+    expect(await keptGapQuestions(input, ask)).toEqual(questions);
+    expect(ask).toHaveBeenCalledTimes(1);
   });
 
   it("keeps nothing when the model fails, so the next render asks again", async () => {
@@ -108,7 +129,7 @@ describe("gap questions asked once per job (#304)", () => {
   });
 
   it("ignores a stored row that does not match its shape", async () => {
-    db.row = { data: { key: gapQuestionsKey(input), questions: [{ gapId: "x" }] } };
+    db.row = { data: { key: await gapQuestionsKey(input), questions: [{ gapId: "x" }] } };
     const ask = vi.fn(async () => questions);
 
     expect(await keptGapQuestions(input, ask)).toEqual(questions);
