@@ -2,31 +2,22 @@
 
 import Link from "next/link";
 
-type BackLinkProps =
-  /** A step inside the page: goes back to the step before it. */
-  | { onClick: () => void }
+type BackLinkProps = {
   /**
-   * The page itself: goes back to the page before, as the browser's Back button does, when that page is on this
-   * site. Otherwise (a new tab, or a link from somewhere else) it opens `href`.
+   * Goes back to the page before, as the browser's Back button does, when that page is on this site. Otherwise (a new
+   * tab, or a link from somewhere else) it opens `href`.
    */
-  | { href: string };
+  href: string;
+};
 
 const style =
   "inline-flex min-h-11 items-center gap-1.5 self-start text-sm font-semibold text-accent underline-offset-4 hover:underline";
 
-/** "Back" with an arrow, at the top of each page and step, so the user can always go back. */
-export function BackLink(props: BackLinkProps) {
-  if ("onClick" in props) {
-    return (
-      <button type="button" onClick={props.onClick} className={style}>
-        <ArrowIcon />
-        Back
-      </button>
-    );
-  }
+/** "Back" with an arrow, at the top of a page. Profile and Jobs have none: their steps bar and the menu lead out. */
+export function BackLink({ href }: BackLinkProps) {
   return (
     <Link
-      href={props.href}
+      href={href}
       className={style}
       onNavigate={(event) => {
         if (!previousPageIsOnThisSite()) return;
