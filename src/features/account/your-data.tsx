@@ -120,7 +120,9 @@ export function DataRightsView({
       </Card>
 
       <Card aria-labelledby="delete-title">
-        <DeleteAccountForm account={account} />
+        {/* Keyed by account: Next keeps this page alive (cacheComponents), so without the key a page rebuilt for another
+            account would keep the open form and the typed DELETE from the first one (#389). */}
+        <DeleteAccountForm key={account} account={account} />
       </Card>
     </>
   );

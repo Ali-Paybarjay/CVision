@@ -167,6 +167,17 @@ describe("deleteMyAccount", () => {
     nothingWasDeleted();
   });
 
+  it("doesn't say nothing was deleted when an earlier try already deleted some files", async () => {
+    const formData = typed("DELETE");
+    formData.set("account", reza);
+    const afterSomeFiles: DeleteAccountState = { status: "failed", title: "Your account was not deleted", message: "", partial: true };
+
+    const state = await deleteMyAccount(afterSomeFiles, formData);
+
+    expect(state).toMatchObject({ status: "failed", partial: true, message: expect.stringContaining("so nothing more was deleted") });
+    nothingWasDeleted();
+  });
+
   it("deletes the account when the page was built for it", async () => {
     const formData = typed("DELETE");
     formData.set("account", sara);
