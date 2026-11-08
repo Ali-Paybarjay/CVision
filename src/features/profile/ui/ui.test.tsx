@@ -165,7 +165,7 @@ describe("profile screens", () => {
     expect(text(html)).toContain("you’ll come back to this page");
   });
 
-  it.each(names)("lists every item of %s's CV for review, with one approval at the end of the page", (name) => {
+  it.each(names)("lists every item of %s's CV for review, with one approval for the whole page", (name) => {
     const profile = personas[name].profile;
     const html = renderToStaticMarkup(
       <ReviewStep
@@ -530,8 +530,8 @@ describe("profile screens", () => {
     expect(html).toContain("Check your details");
   });
 
-  // A pilot on this step asked what to do next (#334).
-  it("says what comes after approving and links to Approve, but not when a saved profile is edited", () => {
+  // A pilot on this step asked what to do next (#334); the Approve bar stays on screen, so no link to it is needed.
+  it("says what comes after approving, but not when a saved profile is edited, and keeps Approve in a bar on screen", () => {
     const profile = personas.emma.profile;
     const review = (source: "cv" | "saved") =>
       renderToStaticMarkup(
@@ -549,10 +549,14 @@ describe("profile screens", () => {
       );
 
     const fromCv = review("cv");
+    const saved = review("saved");
     expect(text(fromCv)).toContain("Once your profile is approved, you’ll paste a job ad and tailor your CV to it.");
-    expect(fromCv).toContain('href="#approve-heading"');
-    expect(fromCv).toContain('id="approve-heading"');
-    expect(review("saved")).not.toContain("Go to Approve");
+    expect(text(saved)).not.toContain("Once your profile is approved");
+    expect(text(fromCv)).toContain("Then approve it all. Nothing is saved until you do.");
+    expect(text(fromCv)).not.toContain("end of the page");
+    // The bar is the page's last part: both buttons, and nothing after them.
+    const bar = saved.slice(saved.lastIndexOf("<div", saved.indexOf("sticky bottom-0")));
+    expect(text(bar).trim()).toBe("Approve and save Cancel");
   });
 
   it("builds a profile in two steps: upload, then check and approve", () => {

@@ -52,7 +52,7 @@ type ReviewStepProps = {
   onDraftChange?: (draft: ReviewDraft) => void;
 };
 
-/** The first words under the heading, before "Then approve it all at the end of the page." */
+/** The first words under the heading, before "Then approve it all." */
 const intro: Record<ReviewSource, string> = {
   cv: "Compare each section with your CV and correct anything that’s wrong.",
   manual: "Fill in each section that applies to you.",
@@ -156,17 +156,10 @@ export function ReviewStep({
           {source === "manual" ? "Add your details" : "Check your details"}
         </h2>
         <p className="mt-2 text-text-muted">
-          {intro[source]} Then approve it all at the end of the page. Nothing is saved until you do.
+          {intro[source]} Then approve it all. Nothing is saved until you do.
         </p>
-        {/* A pilot on this step asked what to do next (#334): the way to approve and what comes after it. */}
-        {source !== "saved" && (
-          <p className="mt-2">
-            Once your profile is approved, you’ll paste a job ad and tailor your CV to it.{" "}
-            <a href="#approve-heading" className="font-semibold text-accent underline-offset-4 hover:underline">
-              Go to Approve
-            </a>
-          </p>
-        )}
+        {/* A pilot on this step asked what to do next (#334): what comes after approving. The Approve bar is always in sight. */}
+        {source !== "saved" && <p className="mt-2">Once your profile is approved, you’ll paste a job ad and tailor your CV to it.</p>}
       </div>
 
       {demo && (
@@ -397,13 +390,13 @@ export function ReviewStep({
       </ReviewSection>
 
       <Card aria-labelledby="approve-heading">
-        <h3 id="approve-heading" className="scroll-mt-24 text-xl">
+        <h3 id="approve-heading" className="text-xl">
           {source === "saved" ? "Approve your changes" : "Approve your profile"}
         </h3>
         <p className="mt-2 text-text-muted">
           {source === "saved"
-            ? "Approving saves everything above to your profile."
-            : "Approving saves everything above as your profile. You can change it at any time."}
+            ? "Approving saves everything on this page to your profile."
+            : "Approving saves everything on this page as your profile. You can change it at any time."}
         </p>
         {asksConsent && (
           <div className="mt-5">
@@ -424,21 +417,36 @@ export function ReviewStep({
             />
           </div>
         )}
+      </Card>
+
+      {/*
+        The one Approve button stays on screen while the details scroll under it, so a small change, such as a new
+        phone number, is approved where it's made. At the end of the page the bar settles under the last card. The
+        page's scroll padding stops a field that gets focus (by Tab, or after a failed approval) from hiding under it.
+      */}
+      <div className="sticky bottom-0 z-10 -mt-4 border-t border-line bg-canvas py-3 [:root:has(&)]:scroll-pb-28">
         {saveError && (
-          <p role="alert" className="mt-3 flex items-center gap-1.5 text-sm text-error">
+          <p role="alert" className="mb-3 flex items-center gap-1.5 text-sm text-error">
             <ErrorIcon className="size-4 shrink-0" />
             {saveError}
           </p>
         )}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Button variant="primary" onClick={() => void approve()} disabled={saving} aria-busy={saving}>
+        {/* One row even on a 360px phone: the second button's words wrap inside it, so the bar stays short. */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="primary"
+            onClick={() => void approve()}
+            disabled={saving}
+            aria-busy={saving}
+            className="shrink-0"
+          >
             {saving ? "Saving…" : "Approve and save"}
           </Button>
           <Button variant="quiet" onClick={onCancel} disabled={saving}>
             {cancelLabel[source]}
           </Button>
         </div>
-      </Card>
+      </div>
     </section>
   );
 }
