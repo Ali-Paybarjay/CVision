@@ -85,7 +85,7 @@ const application: Application = {
 };
 
 /** Sara's first job without the two new fields. */
-const job = JobSchema.omit({ deadline: true, eligibility: true }).parse((readJson("sara", "jobs.json") as unknown[])[0]);
+const job = JobSchema.omit({ deadline: true, eligibility: true, role: true }).parse((readJson("sara", "jobs.json") as unknown[])[0]);
 
 const change: TailoringChange = {
   id: "c1",
@@ -222,6 +222,15 @@ describe("Job", () => {
     for (const deadline of ["13 November 2026", "ASAP", ""]) {
       expect(JobSchema.safeParse({ ...job, deadline }).success, deadline).toBe(false);
     }
+  });
+
+  it("is valid without a role, and with an empty or a full role (#398)", () => {
+    expect(JobSchema.parse(job)).not.toHaveProperty("role");
+    const empty = { discipline: "", specialty: "", level: "", registration: "" };
+    expect(JobSchema.parse({ ...job, role: empty }).role).toEqual(empty);
+    const full = { discipline: "Nursing", specialty: "Acute medicine", level: "Band 6", registration: "NMC" };
+    expect(JobSchema.parse({ ...job, role: full }).role).toEqual(full);
+    expect(JobSchema.safeParse({ ...job, role: { discipline: "Nursing" } }).success).toBe(false);
   });
 
   it("is valid without eligibility, and with what the ad says or does not say", () => {

@@ -79,7 +79,10 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     const read = [...job.requirements.essential, ...job.requirements.desirable];
     const criteria = [...expected.requirements.essential, ...expected.requirements.desirable];
     const kept = criteria.filter((criterion) => found(criterion, read));
-    console.log(`Job reader kept ${read.length} items, covering ${kept.length} of ${criteria.length} criteria`);
+    console.log(`Job reader kept ${read.length} items, covering ${kept.length} of ${criteria.length} criteria; role ${JSON.stringify(job.role)}`);
+    // The role the ad describes, read once for every feature (#398).
+    expect(job.role?.registration).toMatch(/NMC/);
+    expect(job.role?.level).toMatch(/Band 6/i);
 
     expect(kept.length, `missing: ${criteria.filter((criterion) => !kept.includes(criterion)).join("; ")}`).toBeGreaterThanOrEqual(18);
     for (const criterion of ["Understanding of clinical governance and incident reporting", "Knowledge of safeguarding adults and children procedures"]) {

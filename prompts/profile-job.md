@@ -19,6 +19,11 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 - `workMode`: "remote", "hybrid" or "on-site" ("office-based" is "on-site"). null if the ad doesn't say.
 - `requirements.essential`: what a candidate must already have: skills, tools, experience, qualifications and licences. Items under headings such as "Essential", "Requirements", "Must have", "You will have" or "About you" belong here. If the ad doesn't separate essential from desirable, put every requirement here.
 - `requirements.desirable`: what the ad calls desirable, preferred, a bonus or nice to have.
+- `role`: what kind of role the ad describes, from the ad's own words only, never guessed from the title or the employer. Each part is an empty string when the ad doesn't say:
+  - `discipline`: the profession, for example "Nursing", "Software engineering" or "Management accounting";
+  - `specialty`: the specialty or setting, for example "Acute medicine", "Neonatal intensive care" or "Front-end web";
+  - `level`: the level as the ad writes it, for example "Band 6", "Senior" or "Graduate";
+  - `registration`: the body the ad requires the person to be registered with, for example "NMC", "GMC" or "HCPC".
 
 ## Writing the requirements
 
