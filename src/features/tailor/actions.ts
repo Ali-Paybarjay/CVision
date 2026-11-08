@@ -22,7 +22,7 @@ import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
 import { savedCvLayout } from "./saved-cv";
 import { getMyTailoredCv, saveTailoredCv } from "./server/tailored-cvs";
 import { buildTailoredCv, fitsCv } from "./tailored-cv";
-import type { GapAnswer, NextStep } from "./types";
+import { MAX_ANSWERS, MAX_CHANGES, type GapAnswer, type NextStep } from "./types";
 
 // Anyone can call a Server Action, so every input is checked before use.
 const EarlierAnswerSchema = z.object({
@@ -44,7 +44,7 @@ const AnswerGapSchema = z.object({
   /** True when `chosen` is what the user wrote, not an option they tapped. */
   typed: z.boolean().optional(),
   /** The user's answers to the job's other gaps, so a "no" there still counts here (Nothing invented). */
-  earlierAnswers: z.array(EarlierAnswerSchema).max(30).optional(),
+  earlierAnswers: z.array(EarlierAnswerSchema).max(MAX_ANSWERS).optional(),
 });
 export type AnswerGapInput = z.infer<typeof AnswerGapSchema>;
 
@@ -266,10 +266,10 @@ export async function decideChange(change: TailoringChange, options: { replaced?
 
 const CoverLetterRequestSchema = z.object({
   jobId: z.string().min(1).max(100),
-  changes: z.array(TailoringChangeSchema).max(50),
+  changes: z.array(TailoringChangeSchema).max(MAX_CHANGES),
   answers: z
     .array(z.object({ gapId: z.string().min(1).max(100), question: z.string().max(500), answer: z.string().max(2000), hasExperience: z.boolean() }))
-    .max(30),
+    .max(MAX_ANSWERS),
 });
 export type CoverLetterRequest = z.infer<typeof CoverLetterRequestSchema>;
 
@@ -369,7 +369,7 @@ const ExportRequestSchema = z.object({
   jobId: z.string().min(1).max(100),
   document: z.enum(["cv", "cover-letter"]),
   format: z.enum(["pdf", "docx"]),
-  changes: z.array(TailoringChangeSchema).max(50),
+  changes: z.array(TailoringChangeSchema).max(MAX_CHANGES),
   /** The cover letter exactly as the user approved it; only used for the cover letter. */
   letter: z.string().max(10000).nullable(),
 });

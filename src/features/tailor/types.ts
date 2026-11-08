@@ -63,3 +63,16 @@ export type TailoringProposal = {
   nextSteps: NextStep[];
   removed: RejectedChange[];
 };
+
+/**
+ * How many answers one job can have: one per gap, and the job reader keeps up to 24 + 12 requirements (#397).
+ * Above the reader's caps, so a long NHS person specification never makes an answer or a cover letter fail.
+ */
+export const MAX_ANSWERS = 60;
+/** How many approved changes the cover letter and the download take. The page sends only the approved ones. */
+export const MAX_CHANGES = 200;
+
+/** The changes the user approved: all the server ever uses for the letter and the files. */
+export function approvedOnly<T extends { status: string }>(changes: T[]): T[] {
+  return changes.filter((change) => change.status === "approved");
+}

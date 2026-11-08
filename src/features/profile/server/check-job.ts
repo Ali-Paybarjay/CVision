@@ -51,8 +51,9 @@ export async function matchJob(
     schema: MatchAssessmentSchema,
     sample: assessByRules(profile, job),
     requester: options.requester,
-    // A dozen short verdicts and a few sentences. Haiku thinks first and that counts too.
-    maxTokens: 6000,
+    // Up to 36 short verdicts and a few sentences, and Haiku thinks first, which counts too: 23 criteria took 3,174
+    // tokens on a real NHS ad (#410 review), so there is room for a whole person specification.
+    maxTokens: 10000,
   });
 
   return buildMatchResult(job, profile, assessment);

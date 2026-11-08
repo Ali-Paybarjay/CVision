@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { createCoverLetter } from "@/features/tailor/actions";
 import { findBrandProblems } from "@/features/tailor/brand-check";
 import { letterBasis, letterHead, type LetterHead, type LetterState } from "@/features/tailor/letter-state";
-import type { GapAnswer } from "@/features/tailor/types";
+import { approvedOnly, type GapAnswer } from "@/features/tailor/types";
 import type { Profile, TailoringChange } from "@/shared/contracts";
 import { Button, CvPaper, Field, Notice, Textarea } from "@/shared/ui";
 import { unreachableMessage } from "./messages";
@@ -46,7 +46,8 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
   const write = () =>
     startTransition(async () => {
       try {
-        const result = await createCoverLetter({ jobId, changes, answers });
+        // Only the approved changes, as the letter uses nothing else.
+        const result = await createCoverLetter({ jobId, changes: approvedOnly(changes), answers });
         setLetter(result.ok ? { text: result.text, approved: false } : { text: letter?.text ?? "", approved: false, error: result.message });
       } catch {
         setLetter({ text: letter?.text ?? "", approved: false, error: unreachableMessage });
