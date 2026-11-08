@@ -7,11 +7,8 @@ import { askGapQuestions } from "@/features/tailor";
 import { getAiProvider } from "@/shared/ai";
 import { clinicalFixtures } from "./clinical-fixture";
 
-/**
- * Turn on once #397 is on main: the job reader then keeps the whole person specification (up to 20 + 10).
- * Until then it keeps at most 10 + 6, so the count is only printed and this eval stays green on main.
- */
-const JOB_READER_KEEPS_WHOLE_PERSON_SPEC = false;
+/** On since #397: the job reader keeps the whole person specification (up to 20 + 10). */
+const JOB_READER_KEEPS_WHOLE_PERSON_SPEC = true;
 
 /** For each specialist gap, words from the ad that a question someone in the role understands would use. */
 const specialistWords: Record<string, string[]> = {

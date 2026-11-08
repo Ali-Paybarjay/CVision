@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { getAiProvider } from "@/shared/ai";
 import { brand } from "@/shared/brand";
-import type { Job, MatchResult, Profile } from "@/shared/contracts";
+import { JobSchema, type Job, type MatchResult, type Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
+import clinicalJob from "../../../../sample-data/clinical/job.json";
 import { matchJob, parseJob } from "./check-job";
 
 // Prompt evals for prompts/profile-job.md and prompts/profile-match.md: real requests to the model, so they cost money.
@@ -67,6 +68,22 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     }
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
     expectOnBrand(match);
+  });
+
+  it("keeps every criterion of a long NHS person specification (#397)", async () => {
+    // Nazanin's fictional Band 6 ad (#402): 11,000 characters, 20 criteria in seven groups.
+    const expected = JobSchema.parse(clinicalJob);
+    const job = await parseJob(expected.description, { url: null });
+
+    const read = [...job.requirements.essential, ...job.requirements.desirable];
+    const criteria = [...expected.requirements.essential, ...expected.requirements.desirable];
+    const kept = criteria.filter((criterion) => found(criterion, read));
+    console.log(`Job reader kept ${read.length} items, covering ${kept.length} of ${criteria.length} criteria`);
+
+    expect(kept.length, `missing: ${criteria.filter((criterion) => !kept.includes(criterion)).join("; ")}`).toBeGreaterThanOrEqual(18);
+    for (const criterion of ["Understanding of clinical governance and incident reporting", "Knowledge of safeguarding adults and children procedures"]) {
+      expect(found(criterion, read), `knowledge criterion "${criterion}"`).toBe(true);
+    }
   });
 
   it("reads an ad as data, not instructions", async () => {
