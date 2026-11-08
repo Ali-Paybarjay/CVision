@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { CvCheckResult } from "@/shared/contracts";
-import { CvCheckReport } from "./cv-check-form";
+import { carriedCvFor, carryFromCheck } from "@/shared/carried-cv";
+import { CvCheckReport, newCheck } from "./cv-check-form";
 
 // Render checks for the result of a CV check: where its main button leads and what the next step says.
 
@@ -98,5 +99,29 @@ describe("CvCheckReport download", () => {
     expect(html).toContain(">Download this result</button>");
     expect(html.indexOf("Download this result")).toBeGreaterThan(html.indexOf("Next: tailor your CV to a job"));
     expect(html.match(/bg-cta/g)).toHaveLength(1);
+  });
+});
+
+// Found by Shayan (#385): after a second check, the menu's Profile still offered the first check's file as "the CV
+// you just checked", until Tailor was pressed again.
+describe("a new check", () => {
+  const first = new File(["first"], "first.docx");
+  const second = new File(["second"], "second.docx");
+
+  it("forgets the file an earlier Tailor click kept, when the new check was pasted text", () => {
+    carryFromCheck({ signedIn: true, file: first, account: "account-a" });
+    expect(carriedCvFor("account-a")).toBe(first);
+
+    newCheck({ result, truncated: false, signedIn: true, file: null, account: "account-a" });
+    expect(carriedCvFor("account-a")).toBeNull();
+  });
+
+  it("forgets it too when the new check was another file, which goes to Profile only with its own Tailor click", () => {
+    carryFromCheck({ signedIn: true, file: first, account: "account-a" });
+    const checked = newCheck({ result, truncated: false, signedIn: true, file: second, account: "account-a" });
+    expect(carriedCvFor("account-a")).toBeNull();
+
+    carryFromCheck(checked);
+    expect(carriedCvFor("account-a")).toBe(second);
   });
 });
