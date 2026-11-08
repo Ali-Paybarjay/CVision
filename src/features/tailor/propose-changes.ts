@@ -73,7 +73,8 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
   // Main skills the CV lists and this ad asks for count towards the six. Its tools, and listed skills this ad does not need, do not.
   const room = Math.max(0, bigSixTarget - listedSkillsTheAdAsksFor(profile, job).length);
   const prompt = await loadPrompt("tailor-suggest", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
+    // The whole ad, once per job, so a rewrite knows the setting and the ad's words for the same work (#403).
+    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
     strengths: JSON.stringify(match.strengths, null, 2),
     missing: JSON.stringify(match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement), null, 2),
     lines: JSON.stringify(Object.fromEntries(sections.map((section) => [section, sectionLines(profile, section)])), null, 2),
