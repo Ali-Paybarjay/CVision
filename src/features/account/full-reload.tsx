@@ -48,14 +48,35 @@ export function useFullReloadAction<State extends { go?: string }>(
  * session cookies, so Next rebuilds the page in the same response, and the form is gone from the new page (Sign in
  * becomes "You're already signed in", the header's Sign out goes). An effect in it would never run, which the batch
  * review of #366 found (#387).
+ *
+ * Once it loads, the action stays pending until the new page replaces this one: React holds back the page rebuilt in
+ * the same response while the action runs, so the button keeps saying "Signing in…" rather than flashing "You're
+ * already signed in" with live buttons on a slow phone. States without `go` (a wrong password, "check your email")
+ * come back as usual.
  */
 export function withFullReload<State extends { go?: string }>(
   act: (state: State, formData: FormData) => Promise<State>,
-  load: (path: string) => void = (path) => window.location.assign(path),
+  load: (path: string) => void = loadAfresh,
 ): (state: State, formData: FormData) => Promise<State> {
   return async (state, formData) => {
     const next = await act(state, formData);
-    if (next.go) load(next.go);
-    return next;
+    if (!next.go) return next;
+    load(next.go);
+    return new Promise<State>(() => {});
   };
+}
+
+/**
+ * Loads `path` as a new page. If the browser later brings this page back from its back-forward cache, with the action
+ * still pending, it is loaded afresh too rather than left waiting.
+ */
+function loadAfresh(path: string): void {
+  window.addEventListener(
+    "pageshow",
+    (event) => {
+      if (event.persisted) window.location.reload();
+    },
+    { once: true },
+  );
+  window.location.assign(path);
 }

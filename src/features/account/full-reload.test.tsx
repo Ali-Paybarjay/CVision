@@ -9,15 +9,27 @@ import { FullReloadField, useFullReloadAction, withFullReload } from "./full-rel
 type State = { go?: string; error?: string };
 
 describe("withFullReload", () => {
-  it("loads the page the action names, after the action has finished, and still returns its state", async () => {
+  it("loads the page the action names, after the action has finished", async () => {
     const load = vi.fn();
     const act = vi.fn(async () => ({ go: "/profile" }));
 
-    const state = await withFullReload<State>(act, load)({}, new FormData());
+    void withFullReload<State>(act, load)({}, new FormData());
+    await vi.waitFor(() => expect(load).toHaveBeenCalledWith("/profile"));
 
     expect(act).toHaveBeenCalledTimes(1);
-    expect(load).toHaveBeenCalledWith("/profile");
-    expect(state).toEqual({ go: "/profile" });
+  });
+
+  // Found before merging: settling at once let React show the page rebuilt in between, "You're already signed in" with
+  // live buttons, until the new page arrived.
+  it("stays pending once it has started loading, so the form keeps saying it is signing in", async () => {
+    const load = vi.fn();
+    let settled = false;
+
+    void withFullReload<State>(async () => ({ go: "/profile" }), load)({}, new FormData()).then(() => (settled = true));
+    await vi.waitFor(() => expect(load).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(settled).toBe(false);
   });
 
   it("loads nothing when the action names no page, such as a wrong password", async () => {
