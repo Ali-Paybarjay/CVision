@@ -26,4 +26,9 @@ test("says on screen that the CV is being checked, and how long it can take", as
   release();
   await expect(page.getByRole("button", { name: "Check another CV" })).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText("Checking your CV. This can take up to a minute.")).toHaveCount(0);
+
+  // The result can be kept as a file, made in the browser (#375).
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download this result" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^cvision-cv-check-\d{4}-\d{2}-\d{2}\.txt$/);
 });
