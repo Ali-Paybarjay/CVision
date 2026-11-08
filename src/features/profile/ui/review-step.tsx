@@ -4,6 +4,7 @@ import { useEffect, useId, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
 import { manualConsent, manualConsentPoints, type ConsentRecord, type ProfileStorageKind } from "../consent";
+import { mistypedLines } from "../mistyped";
 import {
   approvalFor,
   reviewReducer,
@@ -21,7 +22,6 @@ import {
   type VolunteeringDraft,
 } from "../review-draft";
 import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
-import { mistypedLines } from "../mistyped";
 import { ConsentBox } from "./consent-box";
 import { useFocusHeading } from "./focus-heading";
 import { MonthYearField } from "./month-year-field";
