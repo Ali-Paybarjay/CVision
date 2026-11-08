@@ -82,8 +82,8 @@ describe("jobFromExtraction", () => {
       { id: "j", adText: "ad", url: null },
     );
 
-    expect(job.requirements.essential).toHaveLength(12);
-    expect(job.requirements.desirable).toHaveLength(8);
+    expect(job.requirements.essential).toHaveLength(24);
+    expect(job.requirements.desirable).toHaveLength(12);
   });
 });
 

@@ -27,8 +27,9 @@ export async function parseJob(adText: string, options: { url: string | null; re
     // Pure data extraction: the brand voice would only invite rewording.
     voice: false,
     requester: options.requester,
-    effort: "low",
-    maxTokens: 4000,
+    // Every criterion of a person specification is kept, so the reading matters more than its speed (#397).
+    effort: "medium",
+    maxTokens: 6000,
   });
 
   return jobFromExtraction(extraction, { id: randomUUID(), adText, url: options.url });

@@ -11,9 +11,12 @@ export const MIN_AD_CHARACTERS = 200;
 export const MAX_AD_CHARACTERS = 20_000;
 const MAX_URL_CHARACTERS = 2_000;
 
-/** Caps that keep the gap questions on the tailor page to a sensible number. The prompt asks for fewer. */
-const MAX_ESSENTIAL = 12;
-const MAX_DESIRABLE = 8;
+/**
+ * A safety cap, a little above the prompt's 20 + 10, so a whole NHS person specification (often 15 to 25 criteria) is
+ * kept (#397). The tailor page still asks only five questions one by one; the rest wait under "More ways…".
+ */
+const MAX_ESSENTIAL = 24;
+const MAX_DESIRABLE = 12;
 
 /** Pay as the model reads it. Only pounds are kept, so the currency is added in code. */
 const ExtractedSalarySchema = z.object({

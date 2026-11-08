@@ -10,7 +10,7 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 
 ## Fields
 
-- `title`: the job title, as written.
+- `title`: the job title, as written. If the ad never states it as a title but names the role in its text (for example "our graduate engineers join a two-year programme"), use that role in the ad's words as a title, such as "Graduate Engineer". An empty string only if the ad names no role at all.
 - `company`: the employer's name, as written. If a recruitment agency posted the ad and doesn't name the employer, use an empty string.
 - `location`: the town, city or region, as written (for example "Manchester" or "Remote (UK)"). An empty string if the ad doesn't say.
 - `salary`: the pay in pounds. `min` and `max` are plain numbers: £29,000 is 29000 and £30k is 30000. A single figure goes in both. `period` is "year", "day" or "hour". Use null if the ad gives no figure ("competitive" is not a figure) or the pay is not in pounds.
@@ -23,7 +23,10 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 ## Writing the requirements
 
 - One requirement per item, as a short phrase in the ad's words, for example "Strong SQL", "Full UK driving licence" or "Experience managing a team".
-- At most 10 essential and 6 desirable. Merge items that ask for the same thing, and keep the ones the ad stresses most.
+- At most 20 essential and 10 desirable. Merge two items only when they ask for exactly the same thing, such as "Strong SQL" and "SQL skills". Two different criteria under the same heading stay two items.
+- When the ad has a person specification, read every group of it (for example Qualifications, Experience, Skills and Abilities, Knowledge, Communication and Specific requirements) and make each of its criteria one item in the ad's own words.
+- Keep criteria about knowledge or understanding, such as "Understanding of clinical governance" or "Knowledge of safeguarding procedures": they are requirements, not general traits.
+- Only if the ad has more criteria than the limits, keep the ones the ad stresses most.
 - A duty ("you will build dashboards") is not a requirement unless the ad says the candidate must already be able to do it.
 - Leave out general traits such as "enthusiastic" or "team player" unless the ad lists them as requirements.
 
