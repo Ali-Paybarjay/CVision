@@ -18,7 +18,7 @@ export default function ProfilePage() {
   return (
     <Page
       title="Your profile"
-      description="Upload your CV or fill in your details yourself, then check and approve them. Every tailored CV and cover letter is built only from what you approve here."
+      description="Every tailored CV and cover letter is built only from the details you approve here."
     >
       <PathSteps current={1} />
       <Suspense

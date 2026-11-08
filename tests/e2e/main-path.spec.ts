@@ -49,7 +49,7 @@ test("step 1: upload a CV, check the details and save the Profile", async ({ pag
   await page.getByLabel("Language", { exact: true }).fill("Welsh");
   await page.getByLabel("Level (optional)").fill("Fluent");
 
-  // Nothing is saved until the user approves: one button at the end of the page checks every item and saves.
+  // Nothing is saved until the user approves: one button, in the bar at the bottom of the screen, checks every item and saves.
   await page.getByRole("button", { name: "Approve and save" }).click();
 
   await expect(page.getByText("Your profile is saved.")).toBeVisible();
