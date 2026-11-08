@@ -2,7 +2,7 @@
 // word for word to the CV or to the user's own answers.
 // Pure code with no model call, so unit tests and the live evals share it.
 import { cleanModelText } from "@/shared/clean-text";
-import type { Gap, Profile } from "@/shared/contracts";
+import type { Gap, JobRole, Profile } from "@/shared/contracts";
 import { isBigSix } from "./big-six";
 import type { GapAnswer, ProposedChange, RejectedChange } from "./types";
 
@@ -10,6 +10,8 @@ export type EvidenceSources = {
   profile: Profile;
   gaps: Gap[];
   answers: GapAnswer[];
+  /** What the ad says about the role (#398). Its registration and its Band or grade are claims only the user can make. */
+  role?: JobRole;
 };
 
 /**
@@ -68,6 +70,38 @@ function namedIn(skill: string, evidence: string): boolean {
   return new RegExp(`(?<![a-z0-9])${name}(?![a-z0-9])`).test(normalise(evidence));
 }
 
+/** A level that is a claim when a CV line states it: a Band or a grade with a number, e.g. "Band 6", not "Senior". */
+const numberedLevel = /\b(band|grade)\s*\d/i;
+
+/** "A Band 6 role", "the Senior Staff Nurse (Band 6) post": the term names the job wanted, not one held. */
+function withoutJobsWanted(text: string, term: string): string {
+  const name = normalise(term).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wanted = new RegExp(`\\b(a|an|the|this|next)\\s+(?:[a-z-]+\\s+){0,3}\\(?${name}\\)?\\s+(role|post|position|job|vacancy)\\b`, "g");
+  return normalise(text).replace(wanted, " ");
+}
+
+/**
+ * The ad's registration (e.g. "NMC") or numbered level (e.g. "Band 6") that the change claims and nothing the user
+ * gave supports: not the line it rewrites, no CV line but the summary, and no answer where they said yes (#422).
+ * The summary does not count, as "Looking for a Band 6 role" there is a wish, not a claim.
+ */
+export function roleClaimAdded(change: ProposedChange, sources: EvidenceSources): string | null {
+  const role = sources.role;
+  if (!role) return null;
+  const terms = [role.registration, numberedLevel.test(role.level) ? role.level : ""].map((term) => term.trim()).filter((term) => term.length >= 2);
+  const supported = [
+    change.before ?? "",
+    ...cvLines({ ...sources.profile, summary: "" }),
+    ...sources.profile.followUpAnswers.map((item) => item.answer),
+    ...sources.answers.filter((answer) => answer.hasExperience).map((answer) => answer.answer),
+  ];
+  return (
+    terms.find(
+      (term) => namedIn(term, withoutJobsWanted(change.after, term)) && !supported.some((line) => namedIn(term, line)),
+    ) ?? null
+  );
+}
+
 /** Why a change breaks Nothing invented, or null when it is supported. */
 export function unsupportedReason(change: ProposedChange, sources: EvidenceSources): string | null {
   const lines = change.evidenceSource === "cv" ? cvLines(sources.profile) : answerLines(sources);
@@ -97,6 +131,11 @@ export function unsupportedReason(change: ProposedChange, sources: EvidenceSourc
     if (added) {
       return `It adds "${added}", which the user said they have not done.`;
     }
+  }
+
+  const claim = roleClaimAdded(change, sources);
+  if (claim) {
+    return `It adds "${claim}", which only the job ad says.`;
   }
 
   return null;

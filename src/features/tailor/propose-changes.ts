@@ -68,7 +68,7 @@ export type SuggestInput = {
 /**
  * Suggested changes made from the CV alone, before the user answers anything: lines of their CV rewritten for the
  * job, and the main skills (such as Communication, never a tool) its lines show, up to six in all. Every change quotes a CV line
- * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap counted as not confirmed, so nothing the job asks for can slip in before the user says yes.
+ * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap counted as not confirmed. That check removes a change that adds a missing gap's requirement, or the ad's registration or Band (#422); the rest of the ad is kept out by the prompt and the evals.
  */
 export async function suggestFromCv({ profile, job, match, sample, requester }: SuggestInput): Promise<TailoringProposal> {
   // Main skills the CV lists and this ad asks for count towards the six. Its tools, and listed skills this ad does not need, do not.
@@ -100,6 +100,7 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
     answers: match.gaps
       .filter((gap) => gap.kind === "missing")
       .map((gap) => ({ gapId: gap.id, question: "", answer: "Not confirmed yet.", hasExperience: false })),
+    role: job.role,
   });
 
   // The cap comes after the check, so a skill the check refuses never takes the place of one it keeps.
@@ -123,6 +124,7 @@ export async function proposeChanges(input: ProposeInput): Promise<TailoringProp
     profile: input.profile,
     gaps: [...input.match.gaps, ...(input.context?.gaps ?? [])],
     answers: [...input.answers, ...(input.context?.answers ?? [])],
+    role: input.job.role,
   });
 
   return {
