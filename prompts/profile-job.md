@@ -16,7 +16,7 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 - `salary`: the pay in pounds. `min` and `max` are plain numbers: £29,000 is 29000 and £30k is 30000. A single figure goes in both. `period` is "year", "day" or "hour". Use null if the ad gives no figure ("competitive" is not a figure) or the pay is not in pounds.
 - `contractType`: "permanent", "fixed-term", "contract" or "temporary". null if the ad doesn't say.
 - `hours`: "full-time" or "part-time". null if the ad doesn't say.
-- `workMode`: "remote", "hybrid" or "on-site" ("office-based" is "on-site"). null if the ad doesn't say.
+- `workMode`: "remote", "hybrid" or "on-site" ("office-based" is "on-site"). null if the ad doesn't say which. Travelling between sites or visiting customers is not a work mode, so it alone gives null.
 - `requirements.essential`: what a candidate must already have: skills, tools, experience, qualifications and licences. Items under headings such as "Essential", "Requirements", "Must have", "You will have" or "About you" belong here. If the ad doesn't separate essential from desirable, put every requirement here.
 - `requirements.desirable`: what the ad calls desirable, preferred, a bonus or nice to have.
 - `role`: what kind of role the ad describes, from the ad's own words only, never guessed from the title or the employer. Each part is an empty string when the ad doesn't say:
@@ -32,6 +32,8 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 - When the ad has a person specification, read every group of it (for example Qualifications, Experience, Skills and Abilities, Knowledge, Communication and Specific requirements) and make each of its criteria one item in the ad's own words.
 - Keep criteria about knowledge or understanding, such as "Understanding of clinical governance" or "Knowledge of safeguarding procedures": they are requirements, not general traits.
 - Only if the ad has more criteria than the limits, keep the ones the ad stresses most.
+- Write a criterion the ad puts in capitals in sentence case: "PROBITY" is "Probity", "ABILITY TO WORK UNDER PRESSURE" is "Ability to work under pressure". Keep abbreviations such as NMC, GMC or ALS in capitals.
+- A note about who can apply, outside the criteria (for example "UK Registration: applicants must have current UK professional registration"), is not a criterion of its own when a criterion already asks for the same thing. Never let such a note take the place of a criterion.
 - A duty ("you will build dashboards") is not a requirement unless the ad says the candidate must already be able to do it.
 - Leave out general traits such as "enthusiastic" or "team player" unless the ad lists them as requirements.
 

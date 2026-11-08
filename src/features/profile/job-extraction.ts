@@ -17,6 +17,8 @@ const MAX_URL_CHARACTERS = 2_000;
  */
 const MAX_ESSENTIAL = 24;
 const MAX_DESIRABLE = 12;
+/** The most requirements, so the most gaps, one Job can have. Tailor's answer limit stays above it. */
+export const MAX_REQUIREMENTS = MAX_ESSENTIAL + MAX_DESIRABLE;
 
 /** Pay as the model reads it. Only pounds are kept, so the currency is added in code. */
 const ExtractedSalarySchema = z.object({
