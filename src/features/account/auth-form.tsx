@@ -66,23 +66,22 @@ export function AuthForm({
               name="password"
               type={showPassword ? "text" : "password"}
               autoComplete={mode === "sign-up" ? "new-password" : "current-password"}
+              // While it is shown the field is plain text, so a phone keyboard would capitalise or correct the
+              // password. These do nothing while it is hidden.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               minLength={8}
               required
               disabled={disabled}
               className="min-w-0 flex-1"
             />
-            {/* The name stays "Show password"; aria-pressed says whether it is shown, as the pattern for a toggle asks. */}
-            <Button
-              type="button"
-              size="compact"
-              aria-label="Show password"
-              aria-pressed={showPassword}
-              aria-controls={props.id}
-              onClick={() => setShowPassword((shown) => !shown)}
+            <ShowPasswordButton
+              shown={showPassword}
+              controls={props.id}
+              onToggle={() => setShowPassword((shown) => !shown)}
               disabled={disabled}
-            >
-              {showPassword ? "Hide" : "Show"}
-            </Button>
+            />
           </div>
         )}
       </Field>
@@ -96,5 +95,34 @@ export function AuthForm({
         </Link>
       </p>
     </form>
+  );
+}
+
+/**
+ * Shows or hides the password. The button says what it will do ("Show", "Hide") and its name says the same with the
+ * field's name, so a voice-control user can say the word they see (WCAG 2.5.3, Label in Name). Exported for its test.
+ */
+export function ShowPasswordButton({
+  shown,
+  controls,
+  onToggle,
+  disabled,
+}: {
+  shown: boolean;
+  controls: string;
+  onToggle: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Button
+      type="button"
+      size="compact"
+      aria-label={shown ? "Hide password" : "Show password"}
+      aria-controls={controls}
+      onClick={onToggle}
+      disabled={disabled}
+    >
+      {shown ? "Hide" : "Show"}
+    </Button>
   );
 }

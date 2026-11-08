@@ -5,8 +5,8 @@ import type { Job } from "@/shared/contracts";
 import { getAiMode } from "@/shared/ai";
 import { ButtonLink, Card, cn, Notice, wideFrame } from "@/shared/ui";
 import { getCurrentUser } from "@/features/account/current-user";
+import { SignInCard } from "@/features/account/sign-in-card";
 import { defaultComposition } from "@/features/interview/config";
-import { withNext } from "@/features/account/safe-redirect";
 import { isCvTooThin, profileToCvText } from "@/features/interview/engine/text";
 import { fixtureForJob } from "@/features/interview/fixtures";
 import { getMyJob, getMyProfile, listMyJobs } from "@/features/interview/server/my-data";
@@ -58,7 +58,7 @@ function Frame({ job, mock = false, wide = false, children }: { job?: Job; mock?
           <ol className="flex flex-wrap items-center gap-x-2">
             <li>
               <Link href="/jobs" className="text-accent underline underline-offset-2 hover:text-text">
-                Jobs
+                Check a job
               </Link>
             </li>
             <li aria-hidden="true">/</li>
@@ -103,12 +103,11 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     const here = jobId ? `/interview?${new URLSearchParams({ job: jobId })}` : "/interview";
     return (
       <Frame>
-        <Notice tone="info" title="Sign in for interview practice">
-          Practice uses AI on your profile and answers, so it needs an account.
-        </Notice>
-        <ButtonLink href={withNext("/sign-in", here)} variant="primary" className="self-start">
-          Sign in
-        </ButtonLink>
+        <SignInCard
+          title="Sign in for interview practice"
+          text="Practice uses AI on your profile and answers, so it needs an account."
+          next={here}
+        />
       </Frame>
     );
   }
@@ -196,7 +195,7 @@ function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeResult[]
   if (jobs.length === 0) {
     return (
       <Notice tone="info" title="No jobs yet">
-        Paste a job ad on the Jobs page, then come back here for interview practice.
+        Add a job ad on the Check a job page, then come back here for interview practice.
       </Notice>
     );
   }

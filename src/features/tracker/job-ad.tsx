@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/features/account/current-user";
-import { withNext } from "@/features/account/safe-redirect";
+import { SignInCard } from "@/features/account/sign-in-card";
 import { getMyJob } from "@/features/profile/my-data";
 import type { Job } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
-import { ButtonLink, Card, Page } from "@/shared/ui";
+import { Card, Page } from "@/shared/ui";
 import { jobAdPath } from "./model";
 
 const backLink = "inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent underline underline-offset-4";
@@ -54,11 +54,9 @@ function JobAdView({ job, note }: { job: Job; note: string }) {
 
 function JobAdSignedOut({ jobId }: { jobId: string }) {
   return (
-    <Page title="Sign in to see this job ad" description="Your job ads are kept in your account.">
-      {/* Brings them back to this ad once they have signed in. */}
-      <ButtonLink href={withNext("/sign-in", jobAdPath(jobId))} variant="primary" className="self-start">
-        Sign in
-      </ButtonLink>
+    <Page title="Job ad">
+      {/* Brings them back to this ad once they have signed in or created their account. */}
+      <SignInCard title="Sign in to see this job ad" text="Your job ads are kept in your account." next={jobAdPath(jobId)} />
     </Page>
   );
 }

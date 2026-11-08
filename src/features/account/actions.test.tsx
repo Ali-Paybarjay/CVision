@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signIn, signOut, signUp } from "./actions";
-import { AuthForm } from "./auth-form";
+import { AuthForm, ShowPasswordButton } from "./auth-form";
 
 const { createSupabaseServerClient, redirect, auth } = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
@@ -121,8 +121,30 @@ describe("full page load after signing in (#350)", () => {
   it("offers a Show password toggle that starts hidden and points at the password field", () => {
     const html = renderToStaticMarkup(<AuthForm mode="sign-in" />);
     const input = html.match(/<input[^>]*name="password"[^>]*>/)?.[0] ?? "";
+    const button = html.match(/<button[^>]*aria-controls="[^"]+"[^>]*>Show<\/button>/)?.[0] ?? "";
     expect(input).toContain('type="password"');
-    expect(html).toMatch(/<button[^>]*aria-label="Show password"[^>]*aria-pressed="false"[^>]*aria-controls="[^"]+"[^>]*>Show<\/button>/);
+    expect(button).toContain('aria-label="Show password"');
+    // The button points at this field, not just any id.
+    const inputId = input.match(/ id="([^"]+)"/)?.[1];
+    expect(inputId).toBeTruthy();
+    expect(button).toContain(`aria-controls="${inputId}"`);
+  });
+
+  // Found in the batch review: shown, the field is plain text, which a phone keyboard would capitalise or correct.
+  it("keeps a phone keyboard from capitalising or correcting the password while it is shown", () => {
+    const input = renderToStaticMarkup(<AuthForm mode="sign-up" />).match(/<input[^>]*name="password"[^>]*>/)?.[0] ?? "";
+    expect(input).toContain('autoCapitalize="none"');
+    expect(input).toContain('autoCorrect="off"');
+    expect(input).toContain('spellCheck="false"');
+  });
+
+  // WCAG 2.5.3, Label in Name: the word on the button is in its name, so "click Hide" works with voice control.
+  it("names the toggle by what it will do, with the word the user sees", () => {
+    const hidden = renderToStaticMarkup(<ShowPasswordButton shown={false} controls="pw" onToggle={() => {}} />);
+    const shown = renderToStaticMarkup(<ShowPasswordButton shown controls="pw" onToggle={() => {}} />);
+    expect(hidden).toMatch(/aria-label="Show password"[^>]*>Show<\/button>/);
+    expect(shown).toMatch(/aria-label="Hide password"[^>]*>Hide<\/button>/);
+    expect(shown).not.toContain("aria-pressed");
   });
 
   it("asks for the full load only once JavaScript runs: the server-rendered form has no such field", () => {

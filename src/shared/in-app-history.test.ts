@@ -29,4 +29,13 @@ describe("in-app history", () => {
     expect(pages).toEqual(["/", "/cv-check", "/profile"]);
     expect(cameFromThisApp(pages)).toBe(true);
   });
+
+  // Found in the batch review: a long press on the browser's Back jumps several pages in one go.
+  it("treats a jump several pages back as going back, so Back on the first page can't leave the app", () => {
+    const pages: string[] = [];
+    for (const path of ["/interview", "/dashboard", "/profile", "/jobs"]) recordInAppPage(path, pages);
+    recordInAppPage("/interview", pages);
+    expect(pages).toEqual(["/interview"]);
+    expect(cameFromThisApp(pages)).toBe(false);
+  });
 });

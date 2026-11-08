@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/features/account/current-user";
-import { withNext } from "@/features/account/safe-redirect";
+import { SignInCard } from "@/features/account/sign-in-card";
 import { savedCvLayout } from "@/features/tailor/saved-cv";
 import { getMyJob } from "@/features/tailor/server/my-data";
 import { getMyTailoredCv } from "@/features/tailor/server/tailored-cvs";
@@ -36,12 +35,7 @@ async function SavedView({ searchParams }: Pick<PageProps<"/tailor/saved">, "sea
 
   if (!(await getCurrentUser())) {
     return (
-      <Notice tone="info" title="Sign in to see what you sent">
-        We keep the CV and cover letter you send in your account.{" "}
-        <Link href={withNext("/sign-in", here)} className="text-accent underline">
-          Sign in
-        </Link>
-      </Notice>
+      <SignInCard title="Sign in to see what you sent" text="We keep the CV and cover letter you send in your account." next={here} />
     );
   }
 

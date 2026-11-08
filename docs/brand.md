@@ -379,7 +379,8 @@ In Tailwind, point each colour at its variable (for example `canvas: 'var(--colo
 ### Calls to action
 *One direct button, repeated on every page.*
 
-- **Direct:** “Tailor my CV to a job”, with the small line “Free account. Start with your CV or your details.” One action has one name: the header, the home page, the dashboard and the end of the CV check all use it.
+- **Direct:** “Tailor my CV to a job”, with the small line “Free account. Start with your CV or your details.” One action has one name: the header, the home page and the end of the CV check all use it.
+- **Sign in to carry on:** a page that needs an account (Profile, Check a job, Tailor, Interview, the dashboard, a saved job ad, what was sent) shows the one sign-in card: a heading that says what signing in is for, “Create your account” with the same small line, and “I already have an account”. Both come back to the same page. It names a different action from the direct button: it carries on with this page rather than starting the main path.
 - **Transitional:** “Check my CV in 2 minutes”, with the small line “No sign-up. Nothing is saved.” It answers “Is your CV ready for UK employers?” The feature itself is the free 2-minute CV check.
 - **Free:** stays out of the button labels and goes in the small line under them. The app is free in the first stage; the wording can be revisited when pricing is added.
 

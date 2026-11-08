@@ -67,8 +67,10 @@ describe("the job ad page", () => {
 
     const html = renderToStaticMarkup(await JobAd({ jobId: personas.sara.jobs[0].id }));
 
-    expect(html).toMatch(/<h1[^>]*>Sign in to see this job ad<\/h1>/);
+    expect(html).toMatch(/<h2[^>]*>Sign in to see this job ad<\/h2>/);
+    // Both choices, each coming back to this ad (#367).
     expect(html).toContain(`href="/sign-in?next=%2Fdashboard%2Fjobs%2F${personas.sara.jobs[0].id}"`);
+    expect(html).toContain(`href="/sign-up?next=%2Fdashboard%2Fjobs%2F${personas.sara.jobs[0].id}"`);
     expect(html).not.toContain(personas.sara.jobs[0].company);
     expect(getMyJob).not.toHaveBeenCalled();
   });

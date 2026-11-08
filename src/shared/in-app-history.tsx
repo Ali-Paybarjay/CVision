@@ -12,12 +12,14 @@ import { useEffect } from "react";
 const visited: string[] = [];
 
 /**
- * Notes that the tab is now on `path`. Going to the page before the last one counts as going back, so the list stays
- * the way back rather than every page ever opened.
+ * Notes that the tab is now on `path`. Going to a page already in the list counts as going back to it, however many
+ * pages back (a long press on the browser's Back can jump several at once, which the batch review found): the list
+ * is cut back to it, so it stays the way back rather than every page ever opened. A link forward to a page opened
+ * earlier is cut back too, which only makes Back follow its fixed link instead: it can never leave the app.
  */
 export function recordInAppPage(path: string, pages: string[] = visited): void {
-  if (pages.at(-1) === path) return;
-  if (pages.at(-2) === path) pages.pop();
+  const earlier = pages.lastIndexOf(path);
+  if (earlier >= 0) pages.splice(earlier + 1);
   else pages.push(path);
 }
 
