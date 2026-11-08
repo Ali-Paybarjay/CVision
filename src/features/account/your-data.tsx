@@ -20,7 +20,11 @@ const tableLabels: Record<UserTable, { label: string; detail: string }> = {
   interview_sessions: { label: "Interview practice", detail: "The questions, your answers and the feedback." },
   applications: { label: "Applications", detail: "Your tracker: the status and next step for each job." },
   events: { label: "Usage records", detail: "Which features you used, such as finishing a practice interview. Never your CV or answers." },
-  ai_usage: { label: "AI usage records", detail: "One per AI request, for daily limits: which feature, and how much text. Never the text itself." },
+  ai_usage: {
+    label: "AI usage records",
+    detail:
+      "One per AI request, and one each time we open a job ad’s link for you, for daily limits: which feature, and how much text. Never the text or the link itself.",
+  },
 };
 
 /**

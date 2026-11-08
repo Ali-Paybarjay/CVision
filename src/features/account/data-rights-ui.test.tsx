@@ -65,6 +65,11 @@ describe("the Your data page", () => {
     expect(text(html)).toContain("sara@example.com");
   });
 
+  it("says the AI usage records also count each job ad link we open, never the link itself (#430)", () => {
+    expect(text(html)).toContain("one each time we open a job ad’s link for you");
+    expect(text(html)).toContain("Never the text or the link itself.");
+  });
+
   it("offers Download my data before Delete my account, as the page's one main button", () => {
     expect(text(html).indexOf("Download my data")).toBeLessThan(text(html).indexOf("Delete my account"));
     expect(html).toContain('action="/dashboard/your-data/download" method="post"');
