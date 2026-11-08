@@ -262,23 +262,43 @@ const blockEnds = /<\/(p|div|li|ul|ol|dd|dt|h[1-6]|tr|section|article|header|foo
 const maxJsonLdBlocks = 10;
 /** JobPosting sits at the top of JSON-LD or in its @graph; deeper is not a job board's data. */
 const maxJsonLdDepth = 4;
+/** The page's own content, as the page marks it: the first <main>, without the cookie banner and menus around it. */
+const mainBlock = /<main\b[^<>]*>([\s\S]*?)(?:<\/main\s*>|$)/i;
+/** Less text than the shortest ad is a page shell or a mistake, so the whole page is read instead. */
+const minMainLength = 200;
+/** Every link and button, so the ones that only lead back can go. */
+const linksAndButtons = /<(a|button)\b[^<>]*>([\s\S]*?)(?:<\/\1\s*>|$)/gi;
+/** "Go back", "Back" or "Back to search results": the page's way out, never part of the ad (NHS Jobs, #382). */
+const backWords = /^(?:go )?back(?: to\b.*)?$/i;
 
 /**
  * The page's title and readable text. Most job boards also describe the ad as schema.org JobPosting data for search
  * engines. When that has a description, it is the ad itself, so the text is the posting alone: the page around it
- * repeats the same ad among menus and cookie banners. Without one, the page's own text follows the posting's title.
+ * repeats the same ad among menus and cookie banners. Without one, the page's own text follows the posting's title:
+ * its <main> when it marks one, as NHS Jobs does (#382), otherwise the whole page.
  */
 export function readablePage(html: string): { title: string | null; text: string; truncated: boolean } {
   const head = html.replace(/<svg\b[^<>]*>[\s\S]*?(?:<\/svg\s*>|$)/gi, " ");
   const pageTitle = textOf(head.match(/<title\b[^<>]*>([\s\S]*?)(?:<\/title\s*>|$)/i)?.[1] ?? "");
   const posting = jobPosting(html);
-  const full = posting?.description
-    ? posting.text
-    : [posting?.text ?? "", htmlToText(html.replace(hiddenBlocks, " "))].filter(Boolean).join("\n\n");
+  const full = posting?.description ? posting.text : [posting?.text ?? "", pageText(html)].filter(Boolean).join("\n\n");
   // Page text is untrusted: invisible and direction-changing characters go before anyone uses it (#68).
   const text = cleanModelText(wellFormed(full.slice(0, maxTextLength))).text.trim();
   const title = pageTitle ? cleanModelText(wellFormed(pageTitle.slice(0, maxTitleLength))).text : null;
   return { title, text, truncated: full.length > maxTextLength };
+}
+
+/**
+ * The visible text of the page's <main>, or of the whole page when <main> is missing or too short to be the ad, without
+ * the links back.
+ */
+function pageText(html: string): string {
+  // Hidden blocks go first, so a <main> in a comment or a "</main>" in a script doesn't count.
+  const visible = html
+    .replace(hiddenBlocks, " ")
+    .replace(linksAndButtons, (whole, _tag: string, inside: string) => (backWords.test(textOf(inside)) ? " " : whole));
+  const main = htmlToText(visible.match(mainBlock)?.[1] ?? "");
+  return main.length >= minMainLength ? main : htmlToText(visible);
 }
 
 /** HTML as plain text, a line per block. */
