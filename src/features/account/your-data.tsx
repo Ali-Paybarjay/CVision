@@ -46,11 +46,22 @@ export async function YourData({ downloadFailed }: { downloadFailed: boolean }) 
     );
   }
 
-  return <DataRightsView email={user.email} summary={result.summary} downloadFailed={downloadFailed} />;
+  return <DataRightsView email={user.email} account={user.id} summary={result.summary} downloadFailed={downloadFailed} />;
 }
 
 /** The page once the summary is in: what we hold, Download my data, Delete my account. */
-export function DataRightsView({ email, summary, downloadFailed }: { email: string | null; summary: DataSummary; downloadFailed: boolean }) {
+export function DataRightsView({
+  email,
+  account,
+  summary,
+  downloadFailed,
+}: {
+  email: string | null;
+  /** The account this page was built for, sent with Delete my account so a page left open can't delete another (#389). */
+  account?: string;
+  summary: DataSummary;
+  downloadFailed: boolean;
+}) {
   return (
     <>
       {downloadFailed && (
@@ -109,7 +120,7 @@ export function DataRightsView({ email, summary, downloadFailed }: { email: stri
       </Card>
 
       <Card aria-labelledby="delete-title">
-        <DeleteAccountForm />
+        <DeleteAccountForm account={account} />
       </Card>
     </>
   );

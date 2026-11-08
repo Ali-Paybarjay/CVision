@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { brand } from "@/shared/brand";
 import { Button, Field, Input, Notice } from "@/shared/ui";
+import { pageAccountField } from "@/features/profile/server/same-account";
 import { deleteMyAccount, type DeleteAccountState } from "./data-rights-actions";
 
 const idle: DeleteAccountState = { status: "idle" };
@@ -24,7 +25,7 @@ function cancelledHere(partial: boolean): DeleteAccountState {
  * "Delete my account" with two confirmations: the button opens the form, then only typing DELETE deletes.
  * Anything else, or Cancel, says "Nothing was deleted". After a deletion the action moves to the confirmation page.
  */
-export function DeleteAccountForm() {
+export function DeleteAccountForm({ account }: { account?: string } = {}) {
   const [state, action, pending] = useActionState(deleteMyAccount, idle);
   const [open, setOpen] = useState(false);
   // The answer from the server stays in state; hide it once the user has moved on (opened or cancelled again).
@@ -67,6 +68,8 @@ export function DeleteAccountForm() {
 
       {open ? (
         <form action={action} className="flex flex-col gap-4">
+          {/* The account this page shows, so the server refuses if someone else has signed in since (#389). */}
+          {account && <input type="hidden" name={pageAccountField} value={account} />}
           <Field label="Type DELETE to confirm" hint="In capital letters. Anything else cancels and deletes nothing.">
             {(props) => (
               <Input

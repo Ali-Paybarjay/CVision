@@ -154,6 +154,27 @@ describe("deleteMyAccount", () => {
     expect(data.files.has(`${reza}/cv.pdf`)).toBe(true);
   });
 
+  // Found in the batch review (#389): a Your data page left open for Reza, after Sara signed in in another tab.
+  it("deletes nothing from a page built for another account than the one signed in now", async () => {
+    const formData = typed("DELETE");
+    formData.set("account", reza);
+
+    expect(await deleteMyAccount(idle, formData)).toMatchObject({
+      status: "failed",
+      title: "Nothing was deleted",
+      message: expect.stringContaining("You’re now signed in to a different account in this browser"),
+    });
+    nothingWasDeleted();
+  });
+
+  it("deletes the account when the page was built for it", async () => {
+    const formData = typed("DELETE");
+    formData.set("account", sara);
+
+    await expect(deleteMyAccount(idle, formData)).rejects.toThrow("NEXT_REDIRECT /dashboard/your-data/deleted");
+    expect(admin.calls.deleteUser).toEqual([sara]);
+  });
+
   it("deletes nothing when Supabase Auth does not confirm the sign-in, as for a session signed out elsewhere", async () => {
     getVerifiedUser.mockResolvedValue(null);
 
