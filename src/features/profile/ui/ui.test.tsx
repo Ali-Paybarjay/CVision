@@ -194,6 +194,39 @@ describe("profile screens", () => {
     expect(words).toContain("Start again");
   });
 
+  it("points at a line that looks mistyped under its box, without stopping approval", () => {
+    const sara = personas.sara.profile;
+    const job = sara.experience[0];
+    const typo = "Cut preparation\\xsaxasxsax ژشسزشسزشسز time from 4 hours to 30 minutes";
+    const profile = { ...sara, experience: [{ ...job, achievements: [...job.achievements, typo] }, ...sara.experience.slice(1)] };
+    const render = (draft: ReviewDraft) =>
+      renderToStaticMarkup(
+        <ReviewStep
+          draft={draft}
+          base={profile}
+          source="saved"
+          storage="account"
+          demo={null}
+          truncated={false}
+          focusHeading={false}
+          onSave={noop}
+          onCancel={noop}
+        />,
+      );
+
+    const html = render(draftFromProfile(profile));
+    const words = text(html);
+
+    expect(words.match(/This line looks mistyped/g)).toHaveLength(1);
+    expect(words).toContain(typo);
+    expect(words).toContain("Check it before you approve. If it’s right as it is, leave it.");
+    // Screen readers hear it with the box, and the box isn't marked as an error.
+    const noteId = /<div id="([^"]+)"><div role="status"/.exec(html)?.[1];
+    expect(html).toMatch(new RegExp(`<textarea[^>]*aria-describedby="[^"]*${noteId}"`));
+    expect(html).not.toMatch(new RegExp(`<textarea[^>]*aria-describedby="[^"]*${noteId}"[^>]*aria-invalid`));
+    expect(text(render(draftFromProfile(sara)))).not.toContain("looks mistyped");
+  });
+
   it("lists volunteering, projects and languages read from a CV, each next to the section most like it (#227)", () => {
     const profile = {
       ...personas.sara.profile,
