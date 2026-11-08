@@ -58,7 +58,7 @@ function Frame({ job, mock = false, wide = false, children }: { job?: Job; mock?
           <ol className="flex flex-wrap items-center gap-x-2">
             <li>
               <Link href="/jobs" className="text-accent underline underline-offset-2 hover:text-text">
-                Jobs
+                Check a job
               </Link>
             </li>
             <li aria-hidden="true">/</li>
@@ -195,7 +195,7 @@ function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeResult[]
   if (jobs.length === 0) {
     return (
       <Notice tone="info" title="No jobs yet">
-        Paste a job ad on the Jobs page, then come back here for interview practice.
+        Add a job ad on the Check a job page, then come back here for interview practice.
       </Notice>
     );
   }

@@ -5,12 +5,12 @@ import { askGapQuestions, defaultGapQuestion, skillGaps } from "@/features/tailo
 import { keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
 import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
 import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
-import { SignInCard } from "@/features/account/sign-in-card";
 import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { ButtonLink, Card, Notice, Page, PathSteps, WaitNote, wideFrame } from "@/shared/ui";
+import { TailorSignIn, tailorStart } from "./tailor-sign-in";
 import { TailorWorkspace } from "./tailor-workspace";
 
 export const metadata: Metadata = { title: "Tailor your CV" };
@@ -52,17 +52,12 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   const jobId = typeof requested === "string" ? requested : null;
 
   const profile = await getMyProfile(jobId ? { jobId } : {});
-  // Signed out on the live site: there is no profile to tailor, and "Build your profile first" sent a pilot round in
-  // a circle (#367). Both links bring them back to this job.
-  if (!profile && (await getMyDataSource()) === "none") {
-    const here = jobId ? `/tailor?${new URLSearchParams({ job: jobId })}` : "/tailor";
+  // Only a missing profile needs to know where the data comes from (#367).
+  const start = tailorStart(profile, profile ? "account" : await getMyDataSource());
+  if (start === "sign-in") {
     return (
       <Frame>
-        <SignInCard
-          title="Sign in to tailor your CV"
-          text="Tailoring starts from the profile saved in your account, and every change you approve is kept with it."
-          next={here}
-        />
+        <TailorSignIn jobId={jobId} />
       </Frame>
     );
   }
