@@ -25,7 +25,7 @@ function loadingMarkup(): string {
 
 describe("Tailor while it loads", () => {
   it("says what is happening and how long it can take", () => {
-    expect(loadingMarkup()).toContain("can take up to 30 seconds");
+    expect(loadingMarkup()).toContain("can take up to 20 seconds");
   });
 
   it("sits in the same wide frame as the workspace, with the path steps first and no page title", () => {
@@ -33,6 +33,6 @@ describe("Tailor while it loads", () => {
     for (const name of wideFrame.split(" ")) expect(html).toContain(name);
     expect(html).not.toContain("max-w-3xl");
     expect(html).not.toContain("<h1");
-    expect(html.indexOf('aria-label="Your progress"')).toBeLessThan(html.indexOf("can take up to 30 seconds"));
+    expect(html.indexOf('aria-label="Your progress"')).toBeLessThan(html.indexOf("can take up to 20 seconds"));
   });
 });

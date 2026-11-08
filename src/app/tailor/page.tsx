@@ -19,10 +19,11 @@ export const metadata: Metadata = { title: "Tailor your CV" };
  * Shown while the page is built. The first time a job is opened the model writes its gap questions, which a pilot
  * took for a frozen page when all it said was "Loading your CV…" (#332). After that the questions are kept (#318),
  * so the note is only on screen for a moment, and it has to read well for that too. It sits in the job's own wide
- * frame, so the path steps don't jump when the workspace arrives (#393).
+ * frame, so the path steps don't jump when the workspace arrives (#393). "20 seconds" is measured on the live site
+ * (6 to 8 November): the slowest first visit took 9.1 seconds, and askModel may ask once more after a broken answer.
  */
 const tailorLoadingNote =
-  "Getting your CV ready for this job. The first time, we also write a few questions about it, which can take up to 30 seconds.";
+  "Getting your CV ready for this job. The first time, we also write a few questions about it, which can take up to 20 seconds.";
 
 // /tailor?job=<id>: the user's CV for one job, with a question per gap and every change approved by them.
 export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
