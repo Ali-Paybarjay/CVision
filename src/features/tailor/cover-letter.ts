@@ -3,6 +3,7 @@
 import { z } from "zod";
 import type { Gap, Job, Profile, TailoringChange } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
+import { jobForPrompt } from "./job-for-prompt";
 import { cvLines, normalise, requirementTerms } from "./nothing-invented";
 import { buildTailoredCv } from "./tailored-cv";
 import type { GapAnswer } from "./types";
@@ -126,7 +127,7 @@ export function withoutSentencesNaming(letter: CoverLetter, terms: string[]): Co
 export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLetter> {
   const { profile, job, changes, answers } = input;
   const prompt = await loadPrompt("tailor-cover-letter", {
-    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
+    job: jobForPrompt(job, { withAd: true }),
     cv: JSON.stringify(
       {
         fullName: profile.fullName,

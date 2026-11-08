@@ -18,6 +18,22 @@ export const JobEligibilitySchema = z.object({
 });
 export type JobEligibility = z.infer<typeof JobEligibilitySchema>;
 
+/**
+ * What kind of role the ad describes, read from the ad only (#398). Each part is empty when the ad does not say.
+ * Written by profile-job (Shayan's job reader); read by Tailor (#404), and later Interview and Supporting information.
+ */
+export const JobRoleSchema = z.object({
+  /** The profession, e.g. "Nursing", "Software engineering", "Management accounting". */
+  discipline: z.string(),
+  /** The specialty or setting, e.g. "Neonatal intensive care", "Front-end web". */
+  specialty: z.string(),
+  /** The level in the ad's own words, e.g. "Band 6", "Senior", "Graduate". */
+  level: z.string(),
+  /** The registration or licensing body the ad requires, e.g. "NMC", "GMC", "HCPC". */
+  registration: z.string(),
+});
+export type JobRole = z.infer<typeof JobRoleSchema>;
+
 /** A job ad turned into data (Shayan builds it from the pasted text). */
 export const JobSchema = z.object({
   id: IdSchema,
@@ -46,5 +62,7 @@ export const JobSchema = z.object({
   deadline: DateSchema.nullable().optional(),
   /** What the ad says about visa sponsorship, UK nationals only and security vetting. Missing on ads read before it. */
   eligibility: JobEligibilitySchema.optional(),
+  /** What kind of role the ad describes. Missing on jobs read before this field existed, or when the ad says nothing. */
+  role: JobRoleSchema.optional(),
 });
 export type Job = z.infer<typeof JobSchema>;

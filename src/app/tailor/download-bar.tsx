@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { exportDocument } from "@/features/tailor/actions";
+import { approvedOnly } from "@/features/tailor/types";
 import type { ExportDocument, ExportFormat } from "@/features/tailor/export";
 import type { TailoringChange } from "@/shared/contracts";
 import { Button, Notice } from "@/shared/ui";
@@ -41,7 +42,8 @@ export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBa
     setWarning(null);
     startTransition(async () => {
       try {
-        const result = await exportDocument({ jobId, document: kind, format, changes, letter: approvedLetter });
+        // Only the approved changes: the file uses nothing else, and a long list of rejected ones went over the limit.
+        const result = await exportDocument({ jobId, document: kind, format, changes: approvedOnly(changes), letter: approvedLetter });
         if (result.ok) {
           saveFile(result.base64, result.mimeType, result.fileName);
           setWarning(result.warning);

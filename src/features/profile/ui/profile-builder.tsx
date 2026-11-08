@@ -183,7 +183,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     if (where === "account") {
       let result: Awaited<ReturnType<typeof deleteMyProfileAction>>;
       try {
-        result = await deleteMyProfileAction();
+        result = await deleteMyProfileAction(accountId);
       } catch {
         result = { ok: false, message: "We couldn’t reach CVision. Check your connection and try again." };
       }

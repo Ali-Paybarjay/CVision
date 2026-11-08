@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ContractTypeSchema, HoursSchema, JobSchema, WorkModeSchema, type Job, type Salary } from "@/shared/contracts";
+import { ContractTypeSchema, HoursSchema, JobRoleSchema, JobSchema, WorkModeSchema, type Job, type JobRole, type Salary } from "@/shared/contracts";
 import { uniqueLines } from "./cv-extraction";
 
 // A pasted job ad becomes a Job in two parts: the model reads the facts (title, pay, requirements…),
@@ -11,9 +11,14 @@ export const MIN_AD_CHARACTERS = 200;
 export const MAX_AD_CHARACTERS = 20_000;
 const MAX_URL_CHARACTERS = 2_000;
 
-/** Caps that keep the gap questions on the tailor page to a sensible number. The prompt asks for fewer. */
-const MAX_ESSENTIAL = 12;
-const MAX_DESIRABLE = 8;
+/**
+ * A safety cap, a little above the prompt's 20 + 10, so a whole NHS person specification (often 15 to 25 criteria) is
+ * kept (#397). The tailor page still asks only five questions one by one; the rest wait under "More ways…".
+ */
+const MAX_ESSENTIAL = 24;
+const MAX_DESIRABLE = 12;
+/** The most requirements, so the most gaps, one Job can have. Tailor's answer limit stays above it. */
+export const MAX_REQUIREMENTS = MAX_ESSENTIAL + MAX_DESIRABLE;
 
 /** Pay as the model reads it. Only pounds are kept, so the currency is added in code. */
 const ExtractedSalarySchema = z.object({
@@ -36,6 +41,8 @@ export const JobExtractionSchema = z.object({
     essential: z.array(z.string()),
     desirable: z.array(z.string()),
   }),
+  /** Each part empty when the ad does not say (#398). */
+  role: JobRoleSchema,
 });
 export type JobExtraction = z.infer<typeof JobExtractionSchema>;
 
@@ -63,7 +70,21 @@ export function jobFromExtraction(
     requirements: { essential, desirable },
     url: details.url,
     source: "pasted",
+    ...roleFrom(extraction.role),
   });
+}
+
+const noRole: JobRole = { discipline: "", specialty: "", level: "", registration: "" };
+
+/** The role, trimmed, or nothing when the ad says nothing about it: a Job without `role` means "not known". */
+function roleFrom(role: JobRole): { role?: JobRole } {
+  const trimmed = {
+    discipline: role.discipline.trim(),
+    specialty: role.specialty.trim(),
+    level: role.level.trim(),
+    registration: role.registration.trim(),
+  };
+  return Object.values(trimmed).some(Boolean) ? { role: trimmed } : {};
 }
 
 /** The facts of a Job in the model's format: the mock answer for a sample ad. */
@@ -77,6 +98,7 @@ export function extractionFromJob(job: Job): JobExtraction {
     hours: job.hours,
     workMode: job.workMode,
     requirements: job.requirements,
+    role: job.role ?? noRole,
   };
 }
 

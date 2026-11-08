@@ -303,7 +303,72 @@ function pageText(html: string): string {
 
 /** HTML as plain text, a line per block. */
 function htmlToText(html: string): string {
-  return textOf(html.replace(blockEnds, "\n"));
+  return withoutRepeats(textOf(html.replace(blockEnds, "\n")));
+}
+
+/**
+ * A shorter copy stays, unless it is a whole block of three or more lines: a short line such as "Essential" belongs to
+ * every row of a person specification's table.
+ */
+const minRepeatLength = 200;
+
+/**
+ * The text without a block printed twice in a row. NHS Jobs prints each section of an ad twice, once for wide screens
+ * and once for phones, so the job description and the person specification came twice (#411). Only whole copies go:
+ * lines that repeat, line for line, the block just before them, with at most one line between a single copy and its
+ * block, such as the heading the phone copy opens with. A copy goes once it reaches minRepeatLength characters, or at
+ * any length when it is a whole block of three or more lines straight after the first. Lines after a copy that only
+ * begin like it, such as the next group's Essential heading, stay. So does text repeated further away, so a criterion
+ * listed twice keeps its own heading; NHS Jobs' Details block (band, pay, contract) comes near the top and again near
+ * the bottom, so it stays twice. Blank lines are skipped when comparing and go with the copy. One pass, with a Map of
+ * where each line last came.
+ */
+function withoutRepeats(text: string): string {
+  const lines = text.split("\n");
+  /** Where each line that isn't blank sits in `lines`, in order: stretches are measured in these positions. */
+  const filled: number[] = [];
+  lines.forEach((line, index) => {
+    if (line !== "") filled.push(index);
+  });
+  const lastSeen = new Map<string, number>();
+  const drop = new Array<boolean>(lines.length).fill(false);
+  let start = -1;
+  let period = 0;
+  let length = 0;
+  const endStretch = (end: number) => {
+    if (start >= 0) {
+      const count = end - start;
+      // Whole copies only, and a single copy one line short of its period is whole: one line sat between it and its block.
+      const cut = count + 1 === period ? end : start + Math.floor(count / period) * period;
+      for (let position = cut; position < end; position++) length -= lines[filled[position]].length;
+      const copied = cut - start;
+      if ((length >= minRepeatLength && copied > 0 && copied >= period - 1) || (period >= 3 && copied >= period)) {
+        drop.fill(true, filled[start], cut < filled.length ? filled[cut] : lines.length);
+      }
+    }
+    start = -1;
+    length = 0;
+  };
+  filled.forEach((index, position) => {
+    const line = lines[index];
+    const previous = lastSeen.get(line);
+    lastSeen.set(line, position);
+    if (start >= 0 && lines[filled[position - period]] === line) {
+      length += line.length;
+      return;
+    }
+    endStretch(position);
+    if (previous === undefined) return;
+    start = position;
+    period = position - previous;
+    length = line.length;
+  });
+  endStretch(filled.length);
+  return lines
+    .filter((_, index) => !drop[index])
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 type Posting = { text: string; description: boolean };

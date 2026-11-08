@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/features/account/current-user";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
-import { skillGaps } from "../gap-questions";
+import { gapQuestionsPrompt, skillGaps } from "../gap-questions";
 import { GapQuestionSchema, type GapQuestion } from "../types";
 
 type Input = { profile: Profile; job: Job; match: MatchResult };
@@ -12,17 +12,14 @@ type Input = { profile: Profile; job: Job; match: MatchResult };
 const StoredSchema = z.object({ key: z.string().min(1), questions: z.array(GapQuestionSchema) });
 
 /**
- * A hash of what the questions are written from: the Profile, the job ad and the gaps. When any of them changes,
- * the stored questions no longer fit and new ones are asked for.
+ * A hash of the request text the model gets for these questions: the prompt file, the ad as jobForPrompt gives it,
+ * the CV and the gaps (#416). When any of them changes, a new prompt included, the stored questions no longer fit
+ * and new ones are asked for. The Profile's id and contact details are not in that text, so a re-saved Profile
+ * keeps its questions.
  */
-export function gapQuestionsKey({ profile, job, match }: Input): string {
-  const source = {
-    // Not the id: a re-saved Profile with the same content keeps its questions.
-    profile: { ...profile, id: undefined },
-    job: { title: job.title, company: job.company, description: job.description, requirements: job.requirements },
-    gaps: skillGaps(match.gaps),
-  };
-  return createHash("sha256").update(JSON.stringify(source)).digest("hex");
+export async function gapQuestionsKey({ profile, job, match }: Input): Promise<string> {
+  const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps) });
+  return createHash("sha256").update(prompt).digest("hex");
 }
 
 /** Signed in with Supabase connected, for a real job (a uuid). Sample jobs and visitors keep nothing. */
@@ -62,12 +59,13 @@ const inFlight = new Map<string, Promise<GapQuestion[]>>();
 /**
  * The gap questions for one job, asked of the model once (#304). The Tailor page is rebuilt on the server after
  * many of its actions, and asking again each time used up the user's daily limit in under a minute. So the
- * questions are kept in gap_questions and read back while the Profile, the ad and the gaps stay the same.
+ * questions are kept in gap_questions and read back while the request text stays the same: the Profile, the ad,
+ * the gaps and the prompt itself. A job opened before a prompt change is asked again once, with the new prompt.
  * `ask` is only called when nothing fits; if it throws, nothing is kept and the error reaches the caller.
  * Keeping or reading them never stops the page: on a database error the questions are simply asked again.
  */
 export async function keptGapQuestions(input: Input & { userId?: string }, ask: () => Promise<GapQuestion[]>): Promise<GapQuestion[]> {
-  const key = gapQuestionsKey(input);
+  const key = await gapQuestionsKey(input);
   const jobId = input.job.id;
   const stored = await readStored(jobId, key).catch(() => null);
   if (stored) return stored;

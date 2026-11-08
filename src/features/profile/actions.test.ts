@@ -31,6 +31,26 @@ describe("deleteMyProfileAction", () => {
     expect(deleteAccountProfile).not.toHaveBeenCalled();
   });
 
+  // Found in the batch review (#389): a Profile page left open for another account, after someone else signed in.
+  it("deletes nothing from a page built for another account than the one signed in now", async () => {
+    createSupabaseServerClient.mockResolvedValue({});
+    getCurrentUser.mockResolvedValue({ id: "user-2", email: null });
+
+    expect(await deleteMyProfileAction("user-1")).toEqual({
+      ok: false,
+      message: "You’re now signed in to a different account in this browser. Reload the page to see that account’s profile.",
+    });
+    expect(deleteAccountProfile).not.toHaveBeenCalled();
+  });
+
+  it("deletes the profile when the page was built for the account signed in now", async () => {
+    createSupabaseServerClient.mockResolvedValue({});
+    getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
+
+    expect(await deleteMyProfileAction("user-1")).toEqual({ ok: true });
+    expect(deleteAccountProfile).toHaveBeenCalledWith({}, "user-1");
+  });
+
   it("says so when the account couldn't delete it", async () => {
     createSupabaseServerClient.mockResolvedValue({});
     getCurrentUser.mockResolvedValue({ id: "user-1", email: null });

@@ -1,0 +1,96 @@
+{
+  "id": "clinical-profile",
+  "fullName": "Leah Morrow",
+  "contact": {
+    "email": "leah.morrow@example.com",
+    "phone": "07700 900404",
+    "location": "Wendlecombe"
+  },
+  "summary": "Registered adult nurse with three years' experience on a busy acute medical unit and a respiratory ward. Confident with IV therapy and caring for acutely unwell patients. Looking for a Band 6 role in acute medicine.",
+  "skills": [
+    "IV therapy",
+    "Peripheral cannulation",
+    "NEWS2 observations",
+    "Patient assessment",
+    "Electronic patient records",
+    "Medicines administration"
+  ],
+  "experience": [
+    {
+      "title": "Staff Nurse (Band 5), Acute Medical Unit",
+      "company": "Wendlecombe Hospitals NHS Trust",
+      "location": "Wendlecombe",
+      "startDate": "2023-09",
+      "endDate": null,
+      "duties": [
+        "Care for up to eight acutely unwell patients on a 32-bed acute medical unit",
+        "Give IV medicines and fluids and look after peripheral cannulas",
+        "Record observations and escalate patients with a rising NEWS2 score to the medical team",
+        "Admit patients from the emergency department and the GP assessment area",
+        "Support the nurse in charge with bed management on late shifts"
+      ],
+      "achievements": [
+        "Completed the trust's IV therapy and cannulation competencies in my first six months on the unit"
+      ]
+    },
+    {
+      "title": "Staff Nurse (Band 5, preceptorship), Respiratory Ward",
+      "company": "Wendlecombe Hospitals NHS Trust",
+      "location": "Wendlecombe",
+      "startDate": "2022-09",
+      "endDate": "2023-08",
+      "duties": [
+        "Cared for patients with COPD, pneumonia and asthma on a 28-bed respiratory ward",
+        "Completed the trust's 12-month preceptorship programme for newly qualified nurses"
+      ],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Wendlecombe",
+      "qualification": "BSc (Hons)",
+      "subject": "Adult Nursing",
+      "startDate": "2019-09",
+      "endDate": "2022-07",
+      "grade": "2:1"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "Registered Nurse (Adult), NMC registered",
+      "issuer": "Nursing and Midwifery Council"
+    },
+    {
+      "name": "Immediate Life Support (ILS)",
+      "issuer": "Resuscitation Council UK",
+      "year": 2025
+    }
+  ],
+  "languages": [
+    {
+      "name": "English",
+      "level": "Native"
+    }
+  ],
+  "preferences": {
+    "salary": {
+      "min": 37000,
+      "max": 45000,
+      "currency": "GBP",
+      "period": "year",
+      "isEstimate": false
+    },
+    "location": "Castlefold",
+    "workModes": [
+      "on-site"
+    ],
+    "contractTypes": [
+      "permanent"
+    ],
+    "hours": [
+      "full-time"
+    ]
+  },
+  "followUpAnswers": []
+}

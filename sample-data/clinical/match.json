@@ -1,0 +1,141 @@
+{
+  "jobId": "clinical-job-1",
+  "score": 55,
+  "strengths": [
+    {
+      "requirement": "Registered Nurse (Adult) with current NMC registration",
+      "evidence": "Registered Nurse (Adult), NMC registered"
+    },
+    {
+      "requirement": "Degree in nursing or equivalent experience",
+      "evidence": "BSc (Hons) Adult Nursing, University of Wendlecombe"
+    },
+    {
+      "requirement": "Post-registration experience at Band 5 in an acute medical setting",
+      "evidence": "Staff Nurse (Band 5), Acute Medical Unit"
+    },
+    {
+      "requirement": "IV therapy and cannulation competence",
+      "evidence": "Completed the trust's IV therapy and cannulation competencies in my first six months on the unit"
+    },
+    {
+      "requirement": "Recognising and escalating the deteriorating patient using NEWS2",
+      "evidence": "Record observations and escalate patients with a rising NEWS2 score to the medical team"
+    }
+  ],
+  "uncoveredRequirements": [
+    "Practice supervisor or practice assessor preparation",
+    "Experience of supervising and teaching students and junior staff",
+    "Knowledge of safeguarding adults and children procedures",
+    "Understanding of clinical governance and incident reporting",
+    "Evidence of continuing professional development and NMC revalidation",
+    "Enhanced DBS check",
+    "Right to work in the UK",
+    "Advanced Life Support (ALS) certificate",
+    "Registered independent prescriber (V300) with a full licence to practise",
+    "Experience in clinical audit or quality improvement",
+    "Venepuncture and arterial blood gas sampling",
+    "Knowledge of the Mental Capacity Act 2005"
+  ],
+  "gaps": [
+    {
+      "id": "clinical-gap-1",
+      "requirement": "Practice supervisor or practice assessor preparation",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Your CV does not show practice supervisor or assessor preparation."
+    },
+    {
+      "id": "clinical-gap-2",
+      "requirement": "Experience coordinating a ward or unit shift in the absence of the nurse in charge",
+      "importance": "essential",
+      "kind": "unclear",
+      "detail": "Your CV shows you supported the nurse in charge, but not that you coordinated a shift yourself."
+    },
+    {
+      "id": "clinical-gap-3",
+      "requirement": "Experience of supervising and teaching students and junior staff",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Your CV does not show supervising or teaching students."
+    },
+    {
+      "id": "clinical-gap-4",
+      "requirement": "Ability to triage and prioritise admissions under pressure",
+      "importance": "essential",
+      "kind": "unclear",
+      "detail": "Your CV shows you admitted patients, but not how you triaged or prioritised them."
+    },
+    {
+      "id": "clinical-gap-5",
+      "requirement": "Knowledge of safeguarding adults and children procedures",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Your CV does not mention safeguarding."
+    },
+    {
+      "id": "clinical-gap-6",
+      "requirement": "Understanding of clinical governance and incident reporting",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Your CV does not mention clinical governance or incident reporting."
+    },
+    {
+      "id": "clinical-gap-7",
+      "requirement": "Evidence of continuing professional development and NMC revalidation",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Your CV does not show your CPD or revalidation."
+    },
+    {
+      "id": "clinical-gap-8",
+      "requirement": "Enhanced DBS check",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Your CV does not mention a DBS check."
+    },
+    {
+      "id": "clinical-gap-9",
+      "requirement": "Right to work in the UK",
+      "importance": "essential",
+      "kind": "missing",
+      "detail": "Your CV does not say."
+    },
+    {
+      "id": "clinical-gap-10",
+      "requirement": "Advanced Life Support (ALS) certificate",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "Your CV shows ILS, not ALS."
+    },
+    {
+      "id": "clinical-gap-11",
+      "requirement": "Registered independent prescriber (V300) with a full licence to practise",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "Your CV does not show a prescribing qualification."
+    },
+    {
+      "id": "clinical-gap-12",
+      "requirement": "Experience in clinical audit or quality improvement",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "Your CV does not mention audit or quality improvement."
+    },
+    {
+      "id": "clinical-gap-13",
+      "requirement": "Venepuncture and arterial blood gas sampling",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "Your CV does not mention venepuncture or blood gases."
+    },
+    {
+      "id": "clinical-gap-14",
+      "requirement": "Knowledge of the Mental Capacity Act 2005",
+      "importance": "desirable",
+      "kind": "missing",
+      "detail": "Your CV does not mention the Mental Capacity Act."
+    }
+  ],
+  "reasoning": "You clearly meet the registration, degree, Band 5 acute medical experience, IV therapy and NEWS2 essentials. The main gaps are practice assessor preparation, teaching students, coordinating a shift and safeguarding."
+}

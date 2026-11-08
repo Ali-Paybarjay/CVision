@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { actionVerbs, bigSixSkills, bigSixTarget, isBigSix } from "./big-six";
+import { jobForPrompt } from "./job-for-prompt";
 import { enforceNothingInvented } from "./nothing-invented";
 import { fitsCv, sectionLines, listedSkillsTheAdAsksFor } from "./tailored-cv";
 import { ProposalSchema, type GapAnswer, type Proposal, type TailoringProposal } from "./types";
@@ -27,7 +28,7 @@ const sections = ["summary", "skills", "experience", "education", "certification
 /** The model's raw proposal, before the Nothing invented check. The live evals test this directly. */
 export async function askForProposal({ profile, job, match, answers, sample, requester }: ProposeInput): Promise<Proposal> {
   const prompt = await loadPrompt("tailor-propose", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
+    job: jobForPrompt(job, { withAd: false }),
     cv: JSON.stringify(
       {
         summary: profile.summary,
@@ -67,13 +68,14 @@ export type SuggestInput = {
 /**
  * Suggested changes made from the CV alone, before the user answers anything: lines of their CV rewritten for the
  * job, and the main skills (such as Communication, never a tool) its lines show, up to six in all. Every change quotes a CV line
- * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap counted as not confirmed, so nothing the job asks for can slip in before the user says yes.
+ * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap counted as not confirmed. That check removes a change that adds a missing gap's requirement, or the ad's registration or Band (#422); the rest of the ad is kept out by the prompt and the evals.
  */
 export async function suggestFromCv({ profile, job, match, sample, requester }: SuggestInput): Promise<TailoringProposal> {
   // Main skills the CV lists and this ad asks for count towards the six. Its tools, and listed skills this ad does not need, do not.
   const room = Math.max(0, bigSixTarget - listedSkillsTheAdAsksFor(profile, job).length);
   const prompt = await loadPrompt("tailor-suggest", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
+    // The whole ad, once per job, so a rewrite knows the setting and the ad's words for the same work (#403).
+    job: jobForPrompt(job, { withAd: true }),
     strengths: JSON.stringify(match.strengths, null, 2),
     missing: JSON.stringify(match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement), null, 2),
     lines: JSON.stringify(Object.fromEntries(sections.map((section) => [section, sectionLines(profile, section)])), null, 2),
@@ -98,6 +100,7 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
     answers: match.gaps
       .filter((gap) => gap.kind === "missing")
       .map((gap) => ({ gapId: gap.id, question: "", answer: "Not confirmed yet.", hasExperience: false })),
+    role: job.role,
   });
 
   // The cap comes after the check, so a skill the check refuses never takes the place of one it keeps.
@@ -121,6 +124,7 @@ export async function proposeChanges(input: ProposeInput): Promise<TailoringProp
     profile: input.profile,
     gaps: [...input.match.gaps, ...(input.context?.gaps ?? [])],
     answers: [...input.answers, ...(input.context?.answers ?? [])],
+    role: input.job.role,
   });
 
   return {

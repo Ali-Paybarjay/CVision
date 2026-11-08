@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { deleteAccount, totalRows, type DeleteAccountResult } from "./data-rights";
 import { accountDeletedPath } from "./data-rights-paths";
 import { markAccountDeleted } from "./deleted-flag";
+import { builtForAnotherAccount } from "@/features/profile/server/same-account";
 import { getVerifiedUser } from "./verified-user";
 
 export type DeleteAccountState =
@@ -20,6 +21,10 @@ export type DeleteAccountState =
 const confirmationWord = "DELETE";
 
 const stillHere = "Your account and the rest of your data are still here.";
+
+/** When the page was built for another account than the one signed in now (#389). After an earlier try deleted some CV files, "nothing" would not be true. */
+const otherAccountHere = (partial: boolean) =>
+  `You’re now signed in to a different account in this browser, so nothing ${partial ? "more " : ""}was deleted. Reload the page to see that account’s data.`;
 
 /**
  * "Delete my account" (issue #43): deletes the signed-in user's CV files, account and every row linked to it,
@@ -40,6 +45,11 @@ export async function deleteMyAccount(previous: DeleteAccountState, formData: Fo
   const user = await getVerifiedUser();
   if (!user) {
     return { status: "failed", title: nothing, message: "We could not confirm that you are signed in. Sign in again, then try once more.", partial };
+  }
+
+  // A page left open while someone else signed in in this browser: never delete the account signed in now (#389).
+  if (builtForAnotherAccount(formData, user.id)) {
+    return { status: "failed", title: nothing, message: otherAccountHere(partial), partial };
   }
 
   const result = await deleteAccount(user.id);

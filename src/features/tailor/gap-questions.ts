@@ -1,5 +1,6 @@
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
+import { jobForPrompt } from "./job-for-prompt";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
 /**
@@ -9,8 +10,8 @@ import { GapQuestionListSchema, type GapQuestion } from "./types";
  */
 const notAboutSkills = new RegExp(
   [
+    // Only a driving licence: "Full licence to practise" or "Gas Safe licence" is a qualification to ask about (#401).
     "driv(ing|er'?s?) licen[cs]e",
-    "full (uk )?licen[cs]e",
     "own (car|vehicle|transport)",
     "^right to work$",
     "right to work in\\b",
@@ -54,11 +55,7 @@ export async function askGapQuestions(input: {
   const gaps = skillGaps(match.gaps);
   if (gaps.length === 0) return [];
 
-  const prompt = await loadPrompt("tailor-gap-questions", {
-    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
-    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience, education: profile.education, certifications: profile.certifications, languages: profile.languages, projects: profile.projects }, null, 2),
-    gaps: JSON.stringify(gaps, null, 2),
-  });
+  const prompt = await gapQuestionsPrompt({ profile, job, gaps });
 
   const { questions } = await askModel({
     feature: "tailor-gap-questions",
@@ -71,4 +68,14 @@ export async function askGapQuestions(input: {
 
   // In the match's order, at most one per gap. A gap the model left out is one the CV already covers or that gives no CV line.
   return gaps.flatMap((gap) => questions.find((item) => item.gapId === gap.id) ?? []);
+}
+
+/** The request text for the gap questions: the whole ad, the CV without contact details, and the gaps to ask about. */
+export function gapQuestionsPrompt(input: { profile: Profile; job: Job; gaps: Gap[] }): Promise<string> {
+  const { profile, job, gaps } = input;
+  return loadPrompt("tailor-gap-questions", {
+    job: jobForPrompt(job, { withAd: true }),
+    cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience, education: profile.education, certifications: profile.certifications, languages: profile.languages, projects: profile.projects }, null, 2),
+    gaps: JSON.stringify(gaps, null, 2),
+  });
 }
