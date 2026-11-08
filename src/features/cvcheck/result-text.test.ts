@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CvCheckResult } from "@/shared/contracts";
-import { resultAsText, resultFileName } from "./result-text";
+import { longCvNote, resultAsText, resultFileName } from "./result-text";
 
 // The CV check's result as a text file the user keeps (#375): a pilot lost it on leaving the page.
 
@@ -47,6 +47,23 @@ describe("resultAsText", () => {
 
     expect(text).toContain("Ready for UK employers: 88 out of 100");
     expect(text).not.toContain("What to fix");
+  });
+
+  // Found in the batch review: the file must not read as a real check when the page says it isn't one.
+  it("keeps the page's demo and long-CV notes, so the file never says more than the page", () => {
+    const plain = resultAsText(result, checkedOn);
+    expect(plain).not.toContain("Demo mode");
+    expect(plain).not.toContain("we read only the first part");
+
+    const noted = resultAsText(result, checkedOn, { demoMode: true, truncated: true });
+    expect(noted).toContain("Demo mode: this is a sample result. The AI isn’t connected yet, so this is not a check of your CV.");
+    expect(noted).toContain("Your CV is very long, so we read only the first part.");
+    expect(noted.indexOf("Demo mode")).toBeLessThan(noted.indexOf("Nearly ready: 72 out of 100"));
+  });
+
+  it("doesn't tell a clinical or academic CV that two pages is the most", () => {
+    expect(longCvNote).toContain("clinical and academic CVs can be longer");
+    expect(longCvNote).not.toContain("expect two pages at most");
   });
 
   it("names the file after the day in the UK, so a later check doesn't replace it", () => {

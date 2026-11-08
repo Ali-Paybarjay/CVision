@@ -18,14 +18,28 @@ export const severityLabels: Record<CvIssue["severity"], string> = {
   low: "Polish",
 };
 
+/**
+ * Under "We checked the start of your CV". Clinical and academic CVs are often longer in the UK, as the check's
+ * prompt now says (#375), so the note doesn't tell them two pages is the most.
+ */
+export const longCvNote =
+  "Your CV is very long, so we read only the first part. Most UK CVs are two pages; clinical and academic CVs can be longer.";
+
+/** The notes the page shows above the result, which the file keeps too, so it never says more than the page does. */
+export type ResultNotes = { demoMode?: boolean; truncated?: boolean };
+
+const demoNote = "Demo mode: this is a sample result. The AI isn’t connected yet, so this is not a check of your CV.";
+
 const checkedDate = (date: Date) =>
   new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" }).format(date);
 
 /** The file's text: the verdict, the score, the summary, then each issue with how to fix it, in the page's order. */
-export function resultAsText(result: CvCheckResult, checkedOn: Date): string {
+export function resultAsText(result: CvCheckResult, checkedOn: Date, notes: ResultNotes = {}): string {
   const lines = [
     `${brand.name}: ${brand.cta.cvCheck}`,
     `Checked on ${checkedDate(checkedOn)}`,
+    ...(notes.demoMode ? ["", demoNote] : []),
+    ...(notes.truncated ? ["", longCvNote] : []),
     "",
     `${readinessLabels[result.readiness]}: ${result.score} out of 100`,
     "",
