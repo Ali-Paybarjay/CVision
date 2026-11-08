@@ -5,8 +5,8 @@ import type { Job } from "@/shared/contracts";
 import { getAiMode } from "@/shared/ai";
 import { ButtonLink, Card, cn, Notice, wideFrame } from "@/shared/ui";
 import { getCurrentUser } from "@/features/account/current-user";
+import { SignInCard } from "@/features/account/sign-in-card";
 import { defaultComposition } from "@/features/interview/config";
-import { withNext } from "@/features/account/safe-redirect";
 import { isCvTooThin, profileToCvText } from "@/features/interview/engine/text";
 import { fixtureForJob } from "@/features/interview/fixtures";
 import { getMyJob, getMyProfile, listMyJobs } from "@/features/interview/server/my-data";
@@ -103,12 +103,11 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
     const here = jobId ? `/interview?${new URLSearchParams({ job: jobId })}` : "/interview";
     return (
       <Frame>
-        <Notice tone="info" title="Sign in for interview practice">
-          Practice uses AI on your profile and answers, so it needs an account.
-        </Notice>
-        <ButtonLink href={withNext("/sign-in", here)} variant="primary" className="self-start">
-          Sign in
-        </ButtonLink>
+        <SignInCard
+          title="Sign in for interview practice"
+          text="Practice uses AI on your profile and answers, so it needs an account."
+          next={here}
+        />
       </Frame>
     );
   }

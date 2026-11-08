@@ -1,7 +1,7 @@
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { ButtonLink, Card, Notice } from "@/shared/ui";
-import { brand } from "@/shared/brand";
 import { getCurrentUser } from "./current-user";
+import { SignInCard } from "./sign-in-card";
 import { SignOutButton } from "./sign-out-button";
 
 export const accountsOffNotice = (
@@ -18,18 +18,11 @@ export async function AccountPanel() {
 
   if (!user) {
     return (
-      <Card>
-        <h2 className="text-xl">Sign in to see your applications</h2>
-        <p className="mt-1 text-text-muted">Your tailored CVs, cover letters and next steps, in one place.</p>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <ButtonLink href="/sign-up" variant="primary">
-            {brand.cta.primary}
-          </ButtonLink>
-          <ButtonLink href="/sign-in" variant="quiet">
-            Sign in
-          </ButtonLink>
-        </div>
-      </Card>
+      <SignInCard
+        title="Sign in to see your applications"
+        text="Your tailored CVs, cover letters and next steps, in one place."
+        next="/dashboard"
+      />
     );
   }
 
