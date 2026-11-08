@@ -14,7 +14,7 @@ const JOB_READER_KEEPS_WHOLE_PERSON_SPEC = true;
 const specialistWords: Record<string, string[]> = {
   "clinical-gap-1": ["practice supervisor", "practice assessor", "assessor", "supervisor"],
   "clinical-gap-2": ["shift", "nurse in charge", "in charge", "coordinat"],
-  "clinical-gap-3": ["student"],
+  "clinical-gap-3": ["student", "junior staff", "teach", "taught", "supervis"],
   "clinical-gap-4": ["triage", "prioriti"],
   "clinical-gap-5": ["safeguarding"],
   "clinical-gap-6": ["clinical governance", "incident"],
