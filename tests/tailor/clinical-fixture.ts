@@ -13,3 +13,30 @@ export const clinicalFixtures = {
   /** Hand-written, so the gap questions eval does not depend on the match step. */
   match: MatchResultSchema.parse(match),
 };
+
+const nmcGap = {
+  id: "clinical-gap-nmc",
+  requirement: "Registered Nurse (Adult) with current NMC registration",
+  importance: "essential" as const,
+  kind: "missing" as const,
+  detail: "Your CV does not show NMC registration.",
+};
+
+/**
+ * The same nurse without NMC registration (#422): no NMC line, no "Registered" in the summary, and a "No, not yet."
+ * to the registration gap, so any NMC or Band 6 claim in a suggestion is one only the ad makes.
+ */
+export const unregisteredFixtures = {
+  profile: ProfileSchema.parse({
+    ...profile,
+    summary: profile.summary.replace("Registered adult nurse", "Adult nurse"),
+    certifications: profile.certifications.filter((item) => !item.name.includes("NMC")),
+  }),
+  job: JobSchema.parse(job),
+  match: MatchResultSchema.parse({
+    ...match,
+    strengths: match.strengths.filter((item) => !item.requirement.includes("NMC registration")),
+    gaps: [nmcGap, ...match.gaps],
+  }),
+  answers: [{ gapId: nmcGap.id, question: "Do you hold current NMC registration?", answer: "No, not yet.", hasExperience: false }],
+};
