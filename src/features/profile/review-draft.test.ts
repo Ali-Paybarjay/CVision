@@ -51,7 +51,7 @@ function apply(draft: ReviewDraft, ...actions: ReviewAction[]): ReviewDraft {
   return actions.reduce(reviewReducer, draft);
 }
 
-/** What the one Approve button at the end of the page does first: checks every item. */
+/** What the one Approve button does first: checks every item. */
 function approve(draft: ReviewDraft): ReviewDraft {
   return apply(draft, { type: "check" });
 }
