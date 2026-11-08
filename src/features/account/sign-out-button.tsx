@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/shared/ui";
 import { signOut, type SignOutState } from "./actions";
 import { clearBrowserData } from "./browser-data";
-import { FullReloadField, useFullReload } from "./full-reload";
+import { FullReloadField, useFullReloadAction } from "./full-reload";
 
 /**
  * Sign out, clearing CVision's data from this browser on the way (issue #35), so the next person on it sees none
@@ -12,8 +12,7 @@ import { FullReloadField, useFullReload } from "./full-reload";
  * form still posts to the signOut action without JavaScript, and the server's redirect is a full load there.
  */
 export function SignOutButton({ appearance = "button" }: { appearance?: "button" | "link" } = {}) {
-  const [state, action, pending] = useActionState<SignOutState, FormData>(signOut, {});
-  useFullReload(state.go);
+  const [, action, pending] = useActionState<SignOutState, FormData>(useFullReloadAction(signOut), {});
   return <SignOutForm action={action} pending={pending} appearance={appearance} />;
 }
 
