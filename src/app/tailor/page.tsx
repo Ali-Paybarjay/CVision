@@ -18,7 +18,8 @@ export const metadata: Metadata = { title: "Tailor your CV" };
 /**
  * Shown while the page is built. The first time a job is opened the model writes its gap questions, which a pilot
  * took for a frozen page when all it said was "Loading your CV…" (#332). After that the questions are kept (#318),
- * so the note is only on screen for a moment, and it has to read well for that too.
+ * so the note is only on screen for a moment, and it has to read well for that too. It sits in the job's own wide
+ * frame, so the path steps don't jump when the workspace arrives (#393).
  */
 const tailorLoadingNote =
   "Getting your CV ready for this job. The first time, we also write a few questions about it, which can take up to 30 seconds.";
@@ -28,9 +29,9 @@ export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
   return (
     <Suspense
       fallback={
-        <Frame>
+        <WorkspaceFrame>
           <WaitNote>{tailorLoadingNote}</WaitNote>
-        </Frame>
+        </WorkspaceFrame>
       }
     >
       <TailorView searchParams={searchParams} />
@@ -44,6 +45,16 @@ function Frame({ children }: { children: React.ReactNode }) {
       <PathSteps current={3} />
       {children}
     </Page>
+  );
+}
+
+/** The wide frame of one job's workspace, shared by the note while it loads and the workspace itself (#393). */
+function WorkspaceFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <main className={`mx-auto flex w-full flex-col gap-6 px-4 py-8 sm:py-12 ${wideFrame}`}>
+      <PathSteps current={3} />
+      {children}
+    </main>
   );
 }
 
@@ -121,8 +132,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   });
 
   return (
-    <main className={`mx-auto flex w-full flex-col gap-6 px-4 py-8 sm:py-12 ${wideFrame}`}>
-      <PathSteps current={3} />
+    <WorkspaceFrame>
       {notice && <Notice tone="info">{notice}</Notice>}
       <TailorWorkspace
         job={job}
@@ -132,7 +142,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
         prompts={prompts}
         savedChanges={savedChanges}
       />
-    </main>
+    </WorkspaceFrame>
   );
 }
 
