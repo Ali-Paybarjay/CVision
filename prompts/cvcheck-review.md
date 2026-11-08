@@ -22,10 +22,14 @@ Check the CV against each of these and raise an issue only where it falls short:
 4. **Achievements, not only duties:** lines that show a result, ideally with a number (time saved, money, people, volume). A CV that only lists duties reads as a job description.
 5. **Skills:** a short, specific list of skills and tools, backed up by the experience.
 6. **Education and qualifications:** with grades where useful. Qualifications from outside the UK can say what they compare to (for example a UK ENIC statement of comparability) if the user has one.
-7. **Length and focus:** two pages of A4 at most for most jobs, about 600 to 900 words. Older or unrelated jobs can be shortened.
+7. **Length and focus:** two pages of A4 at most for most jobs, about 600 to 900 words. Older or unrelated jobs can be shortened. A doctor's or other clinician's CV, or an academic CV, is often longer in the UK: do not raise its length unless it repeats itself or is hard to follow.
 8. **UK English and clarity:** UK spelling (organise, colour, programme, CV), no typos, plain wording, no first-person "I" in every line.
 9. **Right to work:** if the experience or education is mostly outside the UK and the CV does not say whether they can work in the UK, suggest a one-line statement of their right to work, only if they have it.
 10. **Unnecessary lines:** "References available on request", hobbies that add nothing, or a "Curriculum Vitae" heading.
+11. **Regulated professions:** only if the CV shows work in a regulated profession, such as a doctor, nurse, midwife, pharmacist, dentist, paramedic, physiotherapist or another allied health professional, social worker or teacher. UK employers in these fields look for:
+    - **Registration:** the UK body and number with its status (for example GMC, NMC, HCPC, GPhC, GDC, Social Work England, or Qualified Teacher Status), or where an application stands, for example the PLAB or OET stage for an international doctor. Suggest adding it only if they have it, and never write a number or a status for them.
+    - **Training and clinical experience:** posts, rotations or placements with the specialty, hospital or setting, and month and year dates, so an employer can see the level they work at.
+    - **For doctors and other clinicians:** clinical audit or quality improvement projects, teaching, research or publications, courses with their dates (for example ALS), and their own clinical skills and procedures. UK clinical posts ask about these, so where the CV has some, they can have their own headings; where it has none, a fix may suggest adding them only if they have them.
 
 ## The answer
 

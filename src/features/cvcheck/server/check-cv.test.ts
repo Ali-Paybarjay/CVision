@@ -39,6 +39,29 @@ describe("toCvCheckResult", () => {
     const answer: CvCheckAnswer = { score: 30, summary: "Not ready.", issues: Array.from({ length: 11 }, (_, i) => issue(`${i}`, "medium")) };
     expect(toCvCheckResult(answer).issues).toHaveLength(8);
   });
+
+  // Seen in an eval (#375): the user would have read a backslash before the closing quote.
+  it("drops a backslash the model left before a quote", () => {
+    const answer: CvCheckAnswer = {
+      score: 60,
+      summary: 'Add your registration under \\"MBBS, 2021\\".',
+      issues: [{ ...issue("a", "high"), fix: 'Change \\"MBBS, 2021\\" to \\\'MBBS, University of Jordan, 2021\\\'.' }],
+    };
+    const result = toCvCheckResult(answer);
+    expect(result.summary).toBe('Add your registration under "MBBS, 2021".');
+    expect(result.issues[0].fix).toBe(`Change "MBBS, 2021" to 'MBBS, University of Jordan, 2021'.`);
+  });
+});
+
+// Regulated professions (#375): what UK clinical posts ask, and never a registration the user didn't give.
+describe("prompts/cvcheck-review.md for regulated professions", () => {
+  it("checks registration only if the user has it, and never writes a number for them", async () => {
+    const prompt = await loadPrompt("cvcheck-review", { cv: "" });
+    expect(prompt).toMatch(/Regulated professions/);
+    expect(prompt).toMatch(/GMC, NMC, HCPC/);
+    expect(prompt).toMatch(/Suggest adding it only if they have it, and never write a number or a status for them/);
+    expect(prompt).toMatch(/clinical audit or quality improvement/);
+  });
 });
 
 describe("checkCv in mock mode", () => {

@@ -81,4 +81,22 @@ describe("CvCheckReport with an uploaded CV", () => {
     expect(render(false, file)).not.toContain("We’ll bring the CV you just checked");
     expect(render(true, null)).not.toContain("We’ll bring the CV you just checked");
   });
+
+  // Said plainly, so the second upload after sign-up isn't a surprise (#375).
+  it("tells a visitor who uploaded a file that they'll upload it once more after creating their account", () => {
+    expect(render(false, file)).toContain("You’ll upload your CV once more after you create your account");
+    expect(render(true, file)).not.toContain("You’ll upload your CV once more");
+    expect(render(false, null)).not.toContain("You’ll upload your CV once more");
+  });
+});
+
+// A pilot lost the result on leaving the page (#375).
+describe("CvCheckReport download", () => {
+  it("offers the result as a file, beside Check another CV and below the one Coral button", () => {
+    const html = render(false);
+
+    expect(html).toContain(">Download this result</button>");
+    expect(html.indexOf("Download this result")).toBeGreaterThan(html.indexOf("Next: tailor your CV to a job"));
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
+  });
 });
