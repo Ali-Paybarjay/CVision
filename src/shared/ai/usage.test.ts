@@ -7,6 +7,7 @@ import {
   releaseReservation,
   type Requester,
   reserveWithinDailyLimit,
+  reserveWithinFeatureLimit,
   startOfUtcDay,
   type UsageStore,
 } from "./usage";
@@ -152,6 +153,61 @@ describe("daily limits", () => {
 
     await expect(releaseReservation(await use(store, { userId: "sara" }), store)).resolves.toBeUndefined();
     expect(consoleError).toHaveBeenCalledWith("askModel: could not take back a usage reservation", failure);
+  });
+});
+
+describe("a feature's own daily limit", () => {
+  const sara = { userId: "sara" };
+  const readLink = (store: UsageStore, requester: Requester = sara, limit = 2) =>
+    reserveWithinFeatureLimit({ requester, feature: "profile-link" }, limit, store);
+
+  it("stops a requester at the feature's limit, and takes back the refused row", async () => {
+    const store = createMemoryUsageStore();
+
+    await expect(readLink(store)).resolves.toEqual(expect.any(Number));
+    await expect(readLink(store)).resolves.toEqual(expect.any(Number));
+    await expect(readLink(store)).resolves.toBeNull();
+    await expect(store.countSince({ ...sara, feature: "profile-link" }, today())).resolves.toBe(2);
+    await expect(readLink(store, { userId: "reza" })).resolves.toEqual(expect.any(Number));
+    await expect(readLink(store, { anonymousKey: "a" })).resolves.toEqual(expect.any(Number));
+  });
+
+  it("never counts its rows as model requests, nor model requests against it (#391)", async () => {
+    vi.stubEnv("AI_DAILY_LIMIT_PER_USER", "1");
+    vi.stubEnv("AI_DAILY_LIMIT_ALL_ANONYMOUS", "1");
+    const store = createMemoryUsageStore();
+
+    await readLink(store);
+    await readLink(store, { anonymousKey: "a" });
+    await expect(use(store, sara)).resolves.toEqual(expect.any(Number));
+    await expect(use(store, { anonymousKey: "a" })).resolves.toEqual(expect.any(Number));
+    await expect(readLink(store, sara, 2)).resolves.toEqual(expect.any(Number));
+    await expect(store.countSince(sara, today())).resolves.toBe(1);
+  });
+
+  it("holds the limit when many requests arrive at once", async () => {
+    const store = withLatency(createMemoryUsageStore());
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, async (_, index) => {
+        await turns(index);
+        return readLink(store, sara, 3);
+      }),
+    );
+
+    const allowed = results.filter((id) => id !== null).length;
+    expect(allowed).toBeGreaterThan(0);
+    expect(allowed).toBeLessThanOrEqual(3);
+    await expect(store.countSince({ ...sara, feature: "profile-link" }, today())).resolves.toBe(allowed);
+  });
+
+  it("takes back the row when the day's count fails, and passes the failure on", async () => {
+    const store = createMemoryUsageStore();
+    const failure = new Error("count failed");
+    vi.spyOn(store, "countSince").mockRejectedValueOnce(failure);
+
+    await expect(readLink(store)).rejects.toBe(failure);
+    await expect(store.countSince({ ...sara, feature: "profile-link" }, today())).resolves.toBe(0);
   });
 });
 
@@ -318,7 +374,7 @@ describe("the Supabase usage log", () => {
     const query: Record<string, unknown> = {
       then: (resolve: (value: object) => void) => resolve(answer),
     };
-    for (const method of ["insert", "select", "single", "update", "delete", "eq", "gte", "is"]) {
+    for (const method of ["insert", "select", "single", "update", "delete", "eq", "neq", "gte", "is"]) {
       query[method] = (...args: unknown[]) => {
         calls.push([method, ...args]);
         return query;
@@ -400,11 +456,28 @@ describe("the Supabase usage log", () => {
       ["select", "id", { count: "exact", head: true }],
       ["gte", "created_at", "2026-10-23T00:00:00.000Z"],
       ["eq", "anonymous_key", "a"],
+      ["neq", "model", "none"],
     ]);
 
     supabase.answerWith({ count: 5, error: null, status: 200 });
     await expect(store.countSince({ allAnonymous: true }, "2026-10-23T00:00:00.000Z")).resolves.toBe(5);
-    expect(supabase.calls.at(-1)).toEqual(["is", "user_id", null]);
+    expect(supabase.calls).toContainEqual(["is", "user_id", null]);
+    expect(supabase.calls.at(-1)).toEqual(["neq", "model", "none"]);
+  });
+
+  it("counts only a feature's own rows for a limit of its own", async () => {
+    const supabase = fakeSupabase();
+    const { store } = await storeOn(supabase);
+
+    supabase.answerWith({ count: 3, error: null, status: 200 });
+    await expect(store.countSince({ userId: "sara", feature: "profile-link" }, "2026-10-23T00:00:00.000Z")).resolves.toBe(3);
+    expect(supabase.calls).toEqual([
+      ["from", "ai_usage"],
+      ["select", "id", { count: "exact", head: true }],
+      ["gte", "created_at", "2026-10-23T00:00:00.000Z"],
+      ["eq", "user_id", "sara"],
+      ["eq", "feature", "profile-link"],
+    ]);
   });
 
   it("counts from the start of the day the database saved the reservation on, not this server's day", async () => {
