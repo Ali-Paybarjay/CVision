@@ -79,7 +79,10 @@ export type Volunteering = z.infer<typeof VolunteeringSchema>;
 /** What kind of work the user is looking for. */
 export const JobPreferencesSchema = z.object({
   salary: SalarySchema.nullable(),
-  /** A city or a postcode. */
+  /**
+   * Where the user wants to work: a city or a postcode. Empty means where they live (`contact.location`), not
+   * "anywhere"; Profile shows it as their town or city (#363).
+   */
   location: z.string(),
   workModes: z.array(WorkModeSchema),
   contractTypes: z.array(ContractTypeSchema),
