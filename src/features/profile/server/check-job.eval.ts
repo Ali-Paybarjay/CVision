@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getAiProvider } from "@/shared/ai";
 import { brand } from "@/shared/brand";
-import { JobSchema, type Job, type MatchResult, type Profile } from "@/shared/contracts";
+import { JobSchema, ProfileSchema, type Job, type MatchResult, type Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import clinicalJob from "../../../../sample-data/clinical/job.json";
+import clinicalProfile from "../../../../sample-data/clinical/profile.json";
 import { matchJob, parseJob } from "./check-job";
 
 // Prompt evals for prompts/profile-job.md and prompts/profile-match.md: real requests to the model, so they cost money.
@@ -83,6 +84,20 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     expect(kept.length, `missing: ${criteria.filter((criterion) => !kept.includes(criterion)).join("; ")}`).toBeGreaterThanOrEqual(18);
     for (const criterion of ["Understanding of clinical governance and incident reporting", "Knowledge of safeguarding adults and children procedures"]) {
       expect(found(criterion, read), `knowledge criterion "${criterion}"`).toBe(true);
+    }
+  });
+
+  it("counts a nurse's Band 5 acute medical role as evidence of acute experience (#399)", async () => {
+    const job = JobSchema.parse(clinicalJob);
+    const { match, unsupported } = await matchJob(ProfileSchema.parse(clinicalProfile), job);
+
+    expect(unsupported, "strengths with no profile line behind them").toEqual([]);
+    const acute = "Post-registration experience at Band 5 in an acute medical setting";
+    const gap = match.gaps.find((item) => item.requirement === acute);
+    expect(gap?.kind, `"${acute}" is ${gap ? gap.kind : "met"}`).not.toBe("missing");
+    // A role line is never evidence of a named skill the CV does not show.
+    for (const lacking of [/V300|prescrib/i, /arterial blood gas/i, /advanced life support/i]) {
+      expect(match.strengths.map((item) => item.requirement).join("\n")).not.toMatch(lacking);
     }
   });
 
