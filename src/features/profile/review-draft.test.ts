@@ -362,6 +362,16 @@ describe("a draft from a CV just read (#33)", () => {
       preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] },
     });
   });
+
+  it("keeps the earlier job preferences for a new CV, as a CV holds none (#371)", () => {
+    const preferences = { ...sara.preferences, location: "", notes: "No night shifts" };
+
+    expect(newProfileBase({ id: "new-id", followUpAnswers: [], preferences })).toEqual({
+      id: "new-id",
+      followUpAnswers: [],
+      preferences,
+    });
+  });
 });
 
 describe("a profile typed in by hand, with no CV", () => {

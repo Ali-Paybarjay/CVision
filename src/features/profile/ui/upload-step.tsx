@@ -147,7 +147,7 @@ export function UploadStep({
 
       {replacing && (
         <Notice tone="info" title="This replaces your current profile">
-          Nothing changes until you check the new details and approve them.
+          Nothing changes until you check the new details and approve them. What you’re looking for stays as it is.
         </Notice>
       )}
 

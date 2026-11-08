@@ -13,6 +13,7 @@ import {
   type ProfileBase,
   type ReviewDraft,
 } from "../review-draft";
+import { withPlaceFollowingTown } from "../preferences";
 import { builtFromCv, fromAccount, fromBrowser, type SavedProfile } from "../saved-profile";
 import type { SaveReason } from "../server/save-request";
 import type { AccountProfile } from "../server/profile-account";
@@ -118,20 +119,22 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     next: Pick<SavedProfile, "profile" | "consent">,
     options: { reason: SaveReason; cv?: File | null; consentVersion?: string },
   ): Promise<string | null> => {
+    // Saved as it is read: a place to work that only repeats the town or city is empty, so it follows a move (#369).
+    const saving = { ...next, profile: withPlaceFollowingTown(next.profile) };
     if (where === "browser") {
-      if (!next.consent) return "Upload your CV again to save your profile.";
-      getBrowserProfileStore().save({ version: 1, ...next, consent: next.consent, savedAt: new Date().toISOString() });
+      if (!saving.consent) return "Upload your CV again to save your profile.";
+      getBrowserProfileStore().save({ version: 1, ...saving, consent: saving.consent, savedAt: new Date().toISOString() });
       return null;
     }
 
-    const result = await saveProfileToAccount(next.profile, {
+    const result = await saveProfileToAccount(saving.profile, {
       reason: options.reason,
       cv: options.cv ?? undefined,
       consentVersion: options.consentVersion,
       account: accountId,
     });
     if (!result.ok) return result.message;
-    updateAccount({ ...next, savedAt: result.savedAt, cvFormat: result.cvFormat });
+    updateAccount({ ...saving, savedAt: result.savedAt, cvFormat: result.cvFormat });
     // An older copy from before accounts were switched on is no longer needed in this browser.
     if (getBrowserProfileStore().read()) getBrowserProfileStore().clear();
     return null;
@@ -140,8 +143,12 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   const handleExtracted = (result: ExtractSuccess, consent: ConsentRecord, file: File) => {
     // The carried CV has been read now (or another file chosen instead), so it isn't offered again.
     dropCarried();
-    // A new CV keeps the earlier follow-up answers: they are still the user's own words.
-    const base = newProfileBase({ id: crypto.randomUUID(), followUpAnswers: saved?.profile.followUpAnswers ?? [] });
+    // A new CV keeps the earlier follow-up answers and job preferences: they are still the user's own words (#371).
+    const base = newProfileBase({
+      id: crypto.randomUUID(),
+      followUpAnswers: saved?.profile.followUpAnswers ?? [],
+      preferences: saved?.profile.preferences,
+    });
     const draft = draftFromExtraction(result.extraction);
     go({ name: "review", source: "cv", draft, base, consent, file, demo: result.demo, truncated: result.truncated });
   };

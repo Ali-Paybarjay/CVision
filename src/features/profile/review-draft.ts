@@ -295,12 +295,17 @@ export function readCvMonth(text: string, side: "start" | "end"): { month: strin
 export type ProfileBase = Pick<Profile, "id" | "preferences" | "followUpAnswers">;
 
 /**
- * The base for a new profile: a new id, empty job preferences and earlier answers. The place to work starts empty,
- * which the profile page shows as the user's town or city, so a later move never rewrites where they want to work.
+ * The base for a new profile: a new id, and the earlier job preferences and answers, as a CV holds neither (#371).
+ * A first profile starts its preferences empty. An empty place to work is shown as the user's town or city, so a later
+ * move never rewrites where they want to work.
  */
-export function newProfileBase(details: { id: string; followUpAnswers: Profile["followUpAnswers"] }): ProfileBase {
-  const preferences: JobPreferences = { salary: null, location: "", workModes: [], contractTypes: [], hours: [] };
-  return { id: details.id, preferences, followUpAnswers: details.followUpAnswers };
+export function newProfileBase(details: {
+  id: string;
+  followUpAnswers: Profile["followUpAnswers"];
+  preferences?: JobPreferences;
+}): ProfileBase {
+  const empty: JobPreferences = { salary: null, location: "", workModes: [], contractTypes: [], hours: [] };
+  return { id: details.id, preferences: details.preferences ?? empty, followUpAnswers: details.followUpAnswers };
 }
 
 export function reviewReducer(draft: ReviewDraft, action: ReviewAction): ReviewDraft {

@@ -3,6 +3,7 @@ import {
   type ContractType,
   type Hours,
   type JobPreferences,
+  type Profile,
   type Salary,
   type WorkMode,
 } from "@/shared/contracts";
@@ -124,6 +125,17 @@ export function readPounds(text: string): number | null {
   if (!match) return null;
   const amount = Number(`${match[1].replace(/,/g, "")}${match[2] ?? ""}`) * (match[3] ? 1000 : 1);
   return amount > 0 && amount <= 1_000_000 ? amount : null;
+}
+
+/**
+ * The profile with a place to work that only repeats the town or city made empty, so the place follows the town or
+ * city and is shown as such. Profiles saved before #363 copied the town or city there, and the copy stayed behind
+ * when the user moved (#369). A place that differs from the town or city is the user's own choice and is kept.
+ */
+export function withPlaceFollowingTown(profile: Profile): Profile {
+  const place = profile.preferences.location.trim().toLowerCase();
+  if (place === "" || place !== profile.contact.location?.trim().toLowerCase()) return profile;
+  return { ...profile, preferences: { ...profile.preferences, location: "" } };
 }
 
 /**
