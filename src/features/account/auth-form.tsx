@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button, Field, Input, Notice } from "@/shared/ui";
 import { signIn, signUp, type AuthFormState } from "./actions";
 import { FullReloadField, useFullReload } from "./full-reload";
@@ -24,6 +24,8 @@ export function AuthForm({
 }) {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(mode === "sign-up" ? signUp : signIn, {});
   const text = copy[mode];
+  // A pilot asked to see the password while typing it (8 November).
+  const [showPassword, setShowPassword] = useState(false);
   // Signed in: load the next page afresh, so no page kept from before (another account's, perhaps) survives (#350).
   useFullReload(state.go);
 
@@ -58,15 +60,30 @@ export function AuthForm({
         error={state.fieldErrors?.password}
       >
         {(props) => (
-          <Input
-            {...props}
-            name="password"
-            type="password"
-            autoComplete={mode === "sign-up" ? "new-password" : "current-password"}
-            minLength={8}
-            required
-            disabled={disabled}
-          />
+          <div className="flex items-stretch gap-2">
+            <Input
+              {...props}
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete={mode === "sign-up" ? "new-password" : "current-password"}
+              minLength={8}
+              required
+              disabled={disabled}
+              className="min-w-0 flex-1"
+            />
+            {/* The name stays "Show password"; aria-pressed says whether it is shown, as the pattern for a toggle asks. */}
+            <Button
+              type="button"
+              size="compact"
+              aria-label="Show password"
+              aria-pressed={showPassword}
+              aria-controls={props.id}
+              onClick={() => setShowPassword((shown) => !shown)}
+              disabled={disabled}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </Button>
+          </div>
         )}
       </Field>
       <Button type="submit" variant="primary" disabled={disabled || pending}>

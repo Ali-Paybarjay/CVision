@@ -117,6 +117,14 @@ describe("full page load after signing in (#350)", () => {
     expect(await signUp({}, form({ next: "/profile", reload: "1" }))).toEqual({ go: "/profile" });
   });
 
+  // A pilot asked to see the password while typing it (8 November).
+  it("offers a Show password toggle that starts hidden and points at the password field", () => {
+    const html = renderToStaticMarkup(<AuthForm mode="sign-in" />);
+    const input = html.match(/<input[^>]*name="password"[^>]*>/)?.[0] ?? "";
+    expect(input).toContain('type="password"');
+    expect(html).toMatch(/<button[^>]*aria-label="Show password"[^>]*aria-pressed="false"[^>]*aria-controls="[^"]+"[^>]*>Show<\/button>/);
+  });
+
   it("asks for the full load only once JavaScript runs: the server-rendered form has no such field", () => {
     expect(renderToStaticMarkup(<AuthForm mode="sign-in" />)).not.toContain('name="reload"');
   });
