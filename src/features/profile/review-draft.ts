@@ -292,21 +292,15 @@ export function readCvMonth(text: string, side: "start" | "end"): { month: strin
 }
 
 /** What a saved profile keeps that the review doesn't show: its id, the job preferences and the follow-up answers. */
-export type ProfileBase = Pick<Profile, "id" | "preferences" | "followUpAnswers"> & {
-  contact: Pick<Profile["contact"], "location">;
-};
+export type ProfileBase = Pick<Profile, "id" | "preferences" | "followUpAnswers">;
 
 /**
- * The base for a new profile: a new id, preferences starting from the CV's location, and earlier answers.
- * A profile typed in by hand passes `{ contact: {} }`, so its preferences start empty.
+ * The base for a new profile: a new id, empty job preferences and earlier answers. The place to work starts empty,
+ * which the profile page shows as the user's town or city, so a later move never rewrites where they want to work.
  */
-export function newProfileBase(
-  extraction: Pick<CvExtraction, "contact">,
-  details: { id: string; followUpAnswers: Profile["followUpAnswers"] },
-): ProfileBase {
-  const location = extraction.contact.location?.trim() ?? "";
-  const preferences: JobPreferences = { salary: null, location, workModes: [], contractTypes: [], hours: [] };
-  return { id: details.id, preferences, followUpAnswers: details.followUpAnswers, contact: { location: location || undefined } };
+export function newProfileBase(details: { id: string; followUpAnswers: Profile["followUpAnswers"] }): ProfileBase {
+  const preferences: JobPreferences = { salary: null, location: "", workModes: [], contractTypes: [], hours: [] };
+  return { id: details.id, preferences, followUpAnswers: details.followUpAnswers };
 }
 
 export function reviewReducer(draft: ReviewDraft, action: ReviewAction): ReviewDraft {
@@ -384,10 +378,6 @@ export function itemsWithProblems(draft: ReviewDraft): string[] {
  */
 export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile {
   const contact = draft.contact.value;
-  const location = optional(contact.location);
-  // Job preferences start from the CV's location (empty for a profile typed in by hand); keep them in step unless
-  // the user has set them apart.
-  const preferencesFollowContact = base.preferences.location === (base.contact.location ?? "");
 
   const experience: WorkExperience[] = draft.experience.map(({ value }) => ({
     title: value.title.trim(),
@@ -406,7 +396,7 @@ export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile
     contact: {
       email: optional(contact.email),
       phone: optional(tidyPhone(contact.phone)),
-      location,
+      location: optional(contact.location),
       linkedIn: normaliseLink(contact.linkedIn),
     },
     summary: draft.summary.value.text.trim(),
@@ -446,7 +436,7 @@ export function profileFromDraft(draft: ReviewDraft, base: ProfileBase): Profile
       })),
     ),
     languages: unlessEmpty(draft.languages.map(({ value }) => ({ name: value.name.trim(), level: optional(value.level) }))),
-    preferences: preferencesFollowContact ? { ...base.preferences, location: location ?? "" } : base.preferences,
+    preferences: base.preferences,
   });
 }
 

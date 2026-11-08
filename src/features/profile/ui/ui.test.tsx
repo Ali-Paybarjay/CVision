@@ -667,12 +667,42 @@ describe("profile screens", () => {
   });
 
   it("invites the user to add preferences when there are none", () => {
-    const profile = { ...personas.reza.profile, preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] } };
+    const profile = {
+      ...personas.reza.profile,
+      contact: { ...personas.reza.profile.contact, location: undefined },
+      preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] },
+    };
 
     const html = overview({ ...fromBrowser(stored("reza")), profile }, "browser");
 
     expect(html).toContain("Not set yet.");
     expect(html).toContain("Add what you’re looking for");
+  });
+
+  // A pilot in London looking in Manchester: the place to work is its own, and the town or city only fills an empty one.
+  it("shows the town or city as the place to work only when none is set, and says so", () => {
+    const withPlace = (location: string) => ({
+      ...personas.reza.profile,
+      contact: { ...personas.reza.profile.contact, location: "London" },
+      preferences: { salary: null, location, workModes: [], contractTypes: [], hours: [] },
+    });
+    const html = (location: string) => overview({ ...fromBrowser(stored("reza")), profile: withPlace(location) }, "browser");
+
+    expect(html("")).toContain("London (your town or city)");
+    expect(html("Manchester")).toContain("Manchester");
+    expect(html("Manchester")).not.toContain("London");
+  });
+
+  it("says in the preferences form that an empty place means the town or city", () => {
+    const form = (townOrCity?: string) =>
+      text(
+        renderToStaticMarkup(
+          <PreferencesForm preferences={personas.sara.profile.preferences} townOrCity={townOrCity} onSave={async () => null} onCancel={noop} />,
+        ),
+      );
+
+    expect(form("London")).toContain("A town, city or postcode. Leave it empty to use your town or city, London.");
+    expect(form()).not.toContain("Leave it empty");
   });
 
   it("lists must-haves and deal-breakers on their own, even when nothing else is set", () => {

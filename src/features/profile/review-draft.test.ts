@@ -275,13 +275,17 @@ describe("review draft", () => {
     }
   });
 
-  it("keeps the job search location in step with the contact location, unless the user set it apart", () => {
+  // Where the user lives and where they want to work are kept apart: a pilot in London looking in Manchester.
+  it("never changes where the user wants to work when they change their town or city", () => {
     const moved = apply(draftFromProfile(sara), { type: "edit-contact", change: { location: "Leeds" } });
-    expect(profileFromDraft(approve(moved), sara).preferences.location).toBe("Leeds");
+    const saved = profileFromDraft(approve(moved), sara);
 
-    const setApart: Profile = { ...sara, preferences: { ...sara.preferences, location: "Remote" } };
-    const movedAgain = apply(draftFromProfile(setApart), { type: "edit-contact", change: { location: "Leeds" } });
-    expect(profileFromDraft(approve(movedAgain), setApart).preferences.location).toBe("Remote");
+    expect(saved.contact.location).toBe("Leeds");
+    expect(saved.preferences).toEqual(sara.preferences);
+
+    const notSet: Profile = { ...sara, preferences: { ...sara.preferences, location: "" } };
+    const movedAgain = apply(draftFromProfile(notSet), { type: "edit-contact", change: { location: "Leeds" } });
+    expect(profileFromDraft(approve(movedAgain), notSet).preferences.location).toBe("");
   });
 });
 
@@ -349,15 +353,13 @@ describe("a draft from a CV just read (#33)", () => {
     expect(draft.projects[0].value).toMatchObject({ startDate: "2025-01", endDate: "2025-12", startGuessed: true, endGuessed: true });
   });
 
-  it("starts the job preferences from the CV's location, with a new id and the earlier answers", () => {
+  it("starts the job preferences empty, not from the CV's location, with a new id and the earlier answers", () => {
     const answers = sara.followUpAnswers;
-    const base = newProfileBase(read(), { id: "new-id", followUpAnswers: answers });
 
-    expect(base).toEqual({
+    expect(newProfileBase({ id: "new-id", followUpAnswers: answers })).toEqual({
       id: "new-id",
       followUpAnswers: answers,
-      preferences: { salary: null, location: "Manchester", workModes: [], contractTypes: [], hours: [] },
-      contact: { location: "Manchester" },
+      preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] },
     });
   });
 });
@@ -376,7 +378,7 @@ describe("a profile typed in by hand, with no CV", () => {
     expect(draft.contact.errors).toEqual({ fullName: "Add your full name." });
   });
 
-  it("saves exactly what the user typed, with job preferences that follow the location they gave", () => {
+  it("saves exactly what the user typed, with the job preferences left empty", () => {
     const draft = approve(
       apply(
         emptyDraft(),
@@ -390,7 +392,7 @@ describe("a profile typed in by hand, with no CV", () => {
         { type: "edit-skills", list: ["React", "TypeScript"] },
       ),
     );
-    const base = newProfileBase({ contact: {} }, { id: "new-id", followUpAnswers: [] });
+    const base = newProfileBase({ id: "new-id", followUpAnswers: [] });
 
     expect(itemsWithProblems(draft)).toEqual([]);
     expect(profileFromDraft(draft, base)).toEqual({
@@ -402,23 +404,14 @@ describe("a profile typed in by hand, with no CV", () => {
       experience: [{ title: job.title, company: job.company, startDate: job.startDate, endDate: null, duties: job.duties, achievements: [] }],
       education: [],
       certifications: [],
-      preferences: { salary: null, location: emma.contact.location, workModes: [], contractTypes: [], hours: [] },
-      followUpAnswers: [],
-    });
-  });
-
-  it("starts the job preferences empty, since there is no CV to read a location from", () => {
-    expect(newProfileBase({ contact: {} }, { id: "new-id", followUpAnswers: [] })).toEqual({
-      id: "new-id",
-      followUpAnswers: [],
       preferences: { salary: null, location: "", workModes: [], contractTypes: [], hours: [] },
-      contact: { location: undefined },
+      followUpAnswers: [],
     });
   });
 });
 
 describe("approvalFor", () => {
-  const base = newProfileBase({ contact: {} }, { id: "new-id", followUpAnswers: [] });
+  const base = newProfileBase({ id: "new-id", followUpAnswers: [] });
   const named = approve(apply(emptyDraft(), { type: "edit-contact", change: { fullName: sara.fullName } }));
 
   it("saves nothing typed in by hand until the box is ticked, and sends focus to the box", () => {

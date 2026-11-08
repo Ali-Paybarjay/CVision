@@ -140,10 +140,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     // The carried CV has been read now (or another file chosen instead), so it isn't offered again.
     dropCarried();
     // A new CV keeps the earlier follow-up answers: they are still the user's own words.
-    const base = newProfileBase(result.extraction, {
-      id: crypto.randomUUID(),
-      followUpAnswers: saved?.profile.followUpAnswers ?? [],
-    });
+    const base = newProfileBase({ id: crypto.randomUUID(), followUpAnswers: saved?.profile.followUpAnswers ?? [] });
     const draft = draftFromExtraction(result.extraction);
     go({ name: "review", source: "cv", draft, base, consent, file, demo: result.demo, truncated: result.truncated });
   };
@@ -152,11 +149,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
   const handleStartManual = () => {
     // Typing the details in instead: the CV carried from the CV check isn't offered again afterwards.
     dropCarried();
-    // Nothing is read from a CV, so the job preferences start empty and follow the location the user types.
-    const base = newProfileBase(
-      { contact: {} },
-      { id: crypto.randomUUID(), followUpAnswers: saved?.profile.followUpAnswers ?? [] },
-    );
+    const base = newProfileBase({ id: crypto.randomUUID(), followUpAnswers: saved?.profile.followUpAnswers ?? [] });
     const draft = typed.current ?? emptyDraft();
     go({ name: "review", source: "manual", draft, base, consent: null, file: null, demo: null, truncated: false });
   };
