@@ -21,7 +21,7 @@ import {
   type ReviewDraft,
   type VolunteeringDraft,
 } from "../review-draft";
-import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea } from "@/shared/ui";
+import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea, WarningIcon } from "@/shared/ui";
 import { ConsentBox } from "./consent-box";
 import { useFocusHeading } from "./focus-heading";
 import { MonthYearField } from "./month-year-field";
@@ -521,6 +521,8 @@ type JobLines = Pick<ExperienceDraft, "duties" | "achievements">;
 /**
  * A box of lines that become evidence (the summary, what you did, results). Under it, any line that looks mistyped
  * (mistyped.ts), because the match quotes such a line word for word and Tailor builds on it. It never stops approval.
+ * The warning looks like a Notice but isn't one: a Notice is a live region, and this one quotes the line being typed,
+ * so a screen reader would read it all again at every key (#368). Only its title is live; the box describes the lines.
  */
 function LinesBox({ value, ...props }: React.ComponentProps<typeof Textarea> & { value: string }) {
   const noteId = useId();
@@ -530,23 +532,29 @@ function LinesBox({ value, ...props }: React.ComponentProps<typeof Textarea> & {
     <>
       <Textarea {...props} value={value} aria-describedby={describedBy} />
       {lines.length > 0 && (
-        <div id={noteId}>
-          <Notice tone="warning" title={lines.length === 1 ? "This line looks mistyped" : "These lines look mistyped"}>
-            <ul className="flex flex-col gap-1">
-              {lines.map((line, index) => (
-                <li key={index}>
-                  <q dir="auto" className="break-words">
-                    {line}
-                  </q>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1">
-              {lines.length === 1
-                ? "Check it before you approve. If it’s right as it is, leave it."
-                : "Check them before you approve. If a line is right as it is, leave it."}
+        <div id={noteId} className="flex gap-3 rounded-md border border-warning bg-warning-bg px-4 py-3 text-sm text-warning">
+          <WarningIcon className="mt-px size-5 shrink-0" />
+          <div className="flex flex-col gap-1">
+            <p role="status" className="font-semibold">
+              {lines.length === 1 ? "This line looks mistyped" : "These lines look mistyped"}
             </p>
-          </Notice>
+            <div>
+              <ul className="flex flex-col gap-1">
+                {lines.map((line, index) => (
+                  <li key={index}>
+                    <q dir="auto" className="break-words">
+                      {line}
+                    </q>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1">
+                {lines.length === 1
+                  ? "Check it before you approve. If it’s right as it is, leave it."
+                  : "Check them before you approve. If a line is right as it is, leave it."}
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </>

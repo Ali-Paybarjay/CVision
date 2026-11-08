@@ -13,6 +13,7 @@ test("a mistyped line gets a warning under its box, and the profile can still be
   await expect(page.getByRole("heading", { name: "Check your details" })).toBeVisible({ timeout: 120_000 });
 
   const results = page.getByLabel("Results and achievements").first();
+  // Only the warning's title is live: the line it quotes changes at every key (#368).
   const warning = page.getByRole("status").filter({ hasText: "This line looks mistyped" });
   await expect(warning).toHaveCount(0);
 
@@ -21,8 +22,9 @@ test("a mistyped line gets a warning under its box, and the profile can still be
   const typo = lines.replace("cutting preparation time", "cutting preparation\\xsax شسزشسزشسز time");
   await results.fill(typo);
   await expect(warning).toBeVisible();
-  await expect(warning).toContainText("preparation\\xsax شسزشسزشسز time");
-  await expect(results).toHaveAccessibleDescription(/This line looks mistyped/);
+  await expect(warning).toHaveText("This line looks mistyped");
+  await expect(page.getByRole("status").filter({ hasText: "preparation" })).toHaveCount(0);
+  await expect(results).toHaveAccessibleDescription(/This line looks mistyped.*preparation\\xsax شسزشسزشسز time/);
 
   await results.fill(lines);
   await expect(warning).toHaveCount(0);

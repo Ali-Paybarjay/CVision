@@ -221,8 +221,12 @@ describe("profile screens", () => {
     expect(words).toContain(typo);
     expect(words).toContain("Check it before you approve. If it’s right as it is, leave it.");
     // Screen readers hear it with the box, and the box isn't marked as an error.
-    const noteId = /<div id="([^"]+)"><div role="status"/.exec(html)?.[1];
+    const noteId = /<div id="([^"]+)" class="[^"]*border-warning/.exec(html)?.[1];
+    expect(noteId).toBeDefined();
     expect(html).toMatch(new RegExp(`<textarea[^>]*aria-describedby="[^"]*${noteId}"`));
+    // Only the title is live, so editing the line doesn't read the whole warning again at every key (#368).
+    expect(html).toContain('<p role="status" class="font-semibold">This line looks mistyped</p>');
+    expect(html).not.toMatch(/<div role="status"[^>]*>(?:(?!<\/div>).)*looks mistyped/);
     expect(html).not.toMatch(new RegExp(`<textarea[^>]*aria-describedby="[^"]*${noteId}"[^>]*aria-invalid`));
     expect(text(render(draftFromProfile(sara)))).not.toContain("looks mistyped");
   });
