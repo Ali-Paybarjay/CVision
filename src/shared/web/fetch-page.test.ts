@@ -206,6 +206,49 @@ describe("readablePage", () => {
     expect(readablePage(html).text).toBe("Data Analyst & Insight\nAcme\n\nThe full ad");
   });
 
+  describe("a page that marks its own content with <main>, as NHS Jobs does (#382)", () => {
+    const advert =
+      "<h1>Specialty Doctor in Cardiology</h1><p>Northfield Hospitals NHS Trust</p>" +
+      "<p>You will run cardiology clinics, see referrals on the acute take and teach foundation doctors on the ward.</p>" +
+      "<h2>Person specification</h2><ul><li>Full GMC registration</li><li>MRCP or equivalent</li></ul>";
+
+    it("reads only <main>, without the cookie banner, menus and footer around it", () => {
+      const html =
+        '<body><a href="#maincontent">Skip to main content</a><div><h2>Cookies on this site</h2><p>We use small files.</p></div>' +
+        `<nav>Home · Sign in</nav><main id="maincontent" class="wrapper">${advert}</main><footer>Accessibility · Privacy</footer></body>`;
+
+      expect(readablePage(html).text).toBe(
+        "Specialty Doctor in Cardiology\nNorthfield Hospitals NHS Trust\n" +
+          "You will run cardiology clinics, see referrals on the acute take and teach foundation doctors on the ward.\n" +
+          "Person specification\nFull GMC registration\nMRCP or equivalent",
+      );
+    });
+
+    it("keeps a posting's title and employer before <main> when the posting has no description", () => {
+      const posting = { "@type": "JobPosting", title: "Specialty Doctor", hiringOrganization: "Northfield" };
+      const html = `<script type="application/ld+json">${JSON.stringify(posting)}</script><nav>Menu</nav><main>${advert}</main>`;
+      const { text } = readablePage(html);
+
+      expect(text.startsWith("Specialty Doctor\nNorthfield\n\nSpecialty Doctor in Cardiology")).toBe(true);
+      expect(text).not.toContain("Menu");
+    });
+
+    it("reads the whole page when <main> is too short to be the ad, such as a shell still loading", () => {
+      const { text } = readablePage(`<div>${advert}</div><main><p>Loading…</p></main>`);
+      expect(text).toContain("Person specification");
+      expect(text).toContain("Loading…");
+    });
+
+    it("doesn't take a <main> from a comment, or end one at a </main> inside a script", () => {
+      const html = `<!-- <main>${advert.replace("Cardiology", "Old")}</main> --><nav>Menu</nav><main>${advert}<script>"</main>"</script><p>Closing date 1 December</p></main>`;
+      const { text } = readablePage(html);
+
+      expect(text).not.toContain("Old");
+      expect(text).not.toContain("Menu");
+      expect(text.endsWith("MRCP or equivalent\n\nClosing date 1 December")).toBe(true);
+    });
+  });
+
   it("reads the body of a page with no </head>, and a commented-out script doesn't hide what follows", () => {
     expect(readablePage("<html><head><title>Ad</title><body><p>The ad</p>").text).toBe("The ad");
     expect(readablePage("<p>Before</p><!-- <script> --><p>After</p>").text).toBe("Before\nAfter");
@@ -306,6 +349,7 @@ describe("readablePage, on hostile pages", () => {
     ["unclosed script tags", "<script>"],
     ["unclosed comments", "<!--"],
     ["unclosed titles", "<title>"],
+    ["unclosed main tags", "<main>"],
   ])("reads 200 KB of %s in well under a second", (_name, piece) => {
     const html = piece.repeat(Math.ceil(200_000 / piece.length));
     const started = performance.now();
