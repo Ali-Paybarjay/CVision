@@ -5,7 +5,8 @@ import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
 import { ButtonLink, Button, Card, cn, Field, Input, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { checkJobAction, readAdLinkAction, type CheckJobResult, type ReadAdLinkResult } from "../job-actions";
-import { checkAdText, MAX_AD_CHARACTERS, parseAdUrl } from "../job-extraction";
+import { checkAdText, parseAdUrl } from "../job-extraction";
+import { needsPersonSpecHint, personSpecHint } from "../job-link";
 import { useStoredProfile } from "../profile-store";
 import { MatchReport } from "./match-report";
 import { SignInToStart } from "./sign-in-to-start";
@@ -375,7 +376,8 @@ export function JobForm({ profile, demoMode, initialSource = "link", focusAd, on
                   {...props}
                   name="ad"
                   rows={12}
-                  maxLength={MAX_AD_CHARACTERS}
+                  // No maxLength: it cut a long paste without a word, often the person specification at the end.
+                  // checkAdText says when the ad is too long instead (#400).
                   value={ad}
                   onChange={(event) => setAd(event.target.value)}
                   disabled={busy}
@@ -384,6 +386,7 @@ export function JobForm({ profile, demoMode, initialSource = "link", focusAd, on
               )}
             </Field>
           )}
+          {showAd && needsPersonSpecHint(ad, url) && <p className="text-sm text-text-muted">{personSpecHint}</p>}
 
           {profile && (
             <p className="text-sm text-text-muted">

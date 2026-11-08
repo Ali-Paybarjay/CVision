@@ -124,3 +124,18 @@ export function adLinkFailureMessage(reason: AdLinkFailure, link: string): strin
   const from = reason === "not-a-page" ? "the file" : "the page";
   return `${why} Copy the ad from ${from} and paste it below.`;
 }
+
+/** Under the ad box, when an NHS ad may have left its criteria in a PDF (#400). */
+export const personSpecHint =
+  "NHS ads often keep the person specification in a PDF called Job description and person specification. Paste its criteria below the ad as well, so we can match them.";
+
+/**
+ * Whether to show personSpecHint: the ad is from NHS Jobs or Trac (by its link, or an NHS ad pasted without one) and
+ * its text has neither a person specification nor essential criteria. Trac often keeps them only in the PDF.
+ */
+export function needsPersonSpecHint(ad: string, link: string): boolean {
+  const text = ad.toLowerCase();
+  if (text.trim() === "" || text.includes("person specification") || text.includes("essential")) return false;
+  const site = jobSite(link.trim())?.name;
+  return site === "NHS Jobs" || site === "Trac" || /\bnhs\b/.test(text);
+}

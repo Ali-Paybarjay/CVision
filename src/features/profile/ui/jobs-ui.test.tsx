@@ -146,6 +146,10 @@ describe("JobForm", () => {
 
     expect(html).toMatch(/<input(?=[^>]*value="text")(?=[^>]*checked="")[^>]*>/);
     expect(html).toMatch(/<textarea[^>]*name="ad"/);
+    // A long paste is never cut without a word: checkAdText says it is too long instead (#400).
+    expect(html).not.toMatch(/<textarea[^>]*maxlength/i);
+    // The person specification hint waits for an NHS ad without its criteria.
+    expect(text(html)).not.toContain("person specification in a PDF");
     expect(text(html)).toContain("Paste the whole ad");
     expect(html).not.toMatch(/name="url"/);
     expect(text(html)).not.toContain("Get the ad");

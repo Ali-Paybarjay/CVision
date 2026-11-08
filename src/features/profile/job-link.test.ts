@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { adLinkFailureMessage, jobSite, siteLabel, type AdLinkFailure } from "./job-link";
+import { brand } from "@/shared/brand";
+import { adLinkFailureMessage, jobSite, needsPersonSpecHint, personSpecHint, siteLabel, type AdLinkFailure } from "./job-link";
 
 describe("jobSite", () => {
   it("knows a site by its address and its subdomains, whatever the case", () => {
@@ -67,5 +68,26 @@ describe("adLinkFailureMessage", () => {
 
   it("asks for the text from the file when the link opens one", () => {
     expect(adLinkFailureMessage("not-a-page", "https://jobs.example.com/ad.pdf")).toContain("Copy the ad from the file");
+  });
+});
+
+describe("needsPersonSpecHint (#400)", () => {
+  const nhsAd = "Staff Nurse, Band 5. Main duties of the job: care for patients on the ward. Closing date 30 November.";
+
+  it("asks for the PDF's criteria when an NHS Jobs or Trac ad has none on the page", () => {
+    expect(needsPersonSpecHint(nhsAd, "https://www.jobs.nhs.uk/candidate/jobadvert/C9999-26-0001")).toBe(true);
+    expect(needsPersonSpecHint(nhsAd, "https://apps.trac.jobs/job-advert/999999")).toBe(true);
+    expect(needsPersonSpecHint("Staff Nurse with an NHS trust. Main duties: care for patients.", "")).toBe(true);
+  });
+
+  it("stays quiet when the ad has its criteria, or is not an NHS ad", () => {
+    expect(needsPersonSpecHint(`${nhsAd}\n\nPerson Specification\nQualifications`, "https://www.jobs.nhs.uk/x")).toBe(false);
+    expect(needsPersonSpecHint(`${nhsAd}\nEssential criteria: NMC registration`, "https://apps.trac.jobs/x")).toBe(false);
+    expect(needsPersonSpecHint("Junior Data Analyst. Strong SQL.", "https://www.reed.co.uk/jobs/1")).toBe(false);
+    expect(needsPersonSpecHint("", "https://www.jobs.nhs.uk/x")).toBe(false);
+  });
+
+  it("says it in the brand's voice", () => {
+    for (const phrase of brand.bannedPhrases) expect(personSpecHint.toLowerCase()).not.toContain(phrase.toLowerCase());
   });
 });
