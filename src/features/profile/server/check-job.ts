@@ -84,7 +84,8 @@ export function matchPrompt(profile: Profile, job: Job): Promise<string> {
     .join("\n");
 
   return loadPrompt("profile-match", {
-    job: withoutTags(`${job.title} at ${job.company}`, tags),
+    // The whole ad as well, so a clinical line can be judged in the setting and words of the ad (#399).
+    job: withoutTags(`${job.title} at ${job.company}\n\n${job.description}`, tags),
     requirements: withoutTags(requirements || "(none)", tags),
     profile: withoutTags(lines || "(empty)", tags),
   });
