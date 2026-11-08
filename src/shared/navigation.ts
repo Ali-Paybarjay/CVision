@@ -3,7 +3,8 @@ export const navItems = [
   { href: "/", label: "Home" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/profile", label: "Profile" },
-  { href: "/jobs", label: "Jobs" },
+  // "Check a job", as the page title and the path steps say: a pilot read "Jobs" as a job search (8 November).
+  { href: "/jobs", label: "Check a job" },
   { href: "/tailor", label: "Tailor" },
   { href: "/cv-check", label: "CV check" },
   { href: "/interview", label: "Interview" },

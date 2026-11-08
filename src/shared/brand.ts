@@ -82,7 +82,7 @@ export const brand = {
     /** Above the example, so a new visitor sees the outcome is a whole CV, not one sentence (Marzieh, #176). */
     title: (firstName: string, job: string) => `${firstName}’s CV, tailored for a ${job} job`,
     caption: (name: string, firstName: string, job: string, company: string) =>
-      `${name} is a fictional example. The numbered lines were tailored for the ${job} job at ${company}, from ${firstName}’s own answers to follow-up questions.`,
+      `${name} is a fictional example. The numbered lines were tailored for the ${job} job at ${company}, from ${firstName}’s own answers to follow-up questions. It works the same way for any UK job, from shops and offices to NHS roles.`,
   },
   /** Never write these anywhere: app copy, AI output, invitations or slides. */
   bannedPhrases: ["guaranteed", "dream job", "beat the bots", "hack the ATS", "revolutionary", "10x", "effortless"],

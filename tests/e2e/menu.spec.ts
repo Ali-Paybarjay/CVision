@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // The open menu on a phone sits above everything on the page, so a tap on one of its links reaches that link (#298).
-// Tailor's five steps are positioned (`relative`), and once drew over the menu, under "Jobs" and "Tailor".
+// Tailor's five steps are positioned (`relative`), and once drew over the menu, under "Check a job" and "Tailor".
 
 test("on a phone the open menu covers Tailor's steps, and its links take the tap", async ({ page }) => {
   await page.goto("/tailor?job=sara-job-1");
@@ -21,7 +21,7 @@ test("on a phone the open menu covers Tailor's steps, and its links take the tap
     expect(onTop, `${await link.textContent()} is on top`).toBe(true);
   }
 
-  await menu.getByRole("link", { name: "Jobs" }).click();
+  await menu.getByRole("link", { name: "Check a job" }).click();
   await expect(page).toHaveURL(/\/jobs$/);
 });
 
@@ -60,7 +60,7 @@ test("on a phone Escape and a tap outside close the open menu, and the tap still
 
   // Escape from a link inside the menu closes it and gives focus back to the Menu button.
   await menuButton.click();
-  await menu.getByRole("link", { name: "Jobs" }).focus();
+  await menu.getByRole("link", { name: "Check a job" }).focus();
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect(menuButton).toBeFocused();

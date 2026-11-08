@@ -93,6 +93,8 @@ describe("home page headline (#178)", () => {
     expect(html).toContain("<h2 id=\"example-title\"");
     expect(words(html)).toContain("Sara’s CV, tailored for a Junior Data Analyst job");
     expect(words(html)).toContain("Sara Khan is a fictional example.");
+    // A doctor in the pilot wasn't sure CVision was for them, with only a data analyst shown (8 November).
+    expect(words(html)).toContain("It works the same way for any UK job, from shops and offices to NHS roles.");
     expect(words(hero).split(brand.proof).length - 1).toBe(1);
   });
 
