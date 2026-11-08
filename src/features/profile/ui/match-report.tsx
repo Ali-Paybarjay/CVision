@@ -116,9 +116,10 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         </Notice>
       )}
 
-      {/* A pilot tailored for a job far from his field and found the questions no use (#338): say so before Tailor. */}
+      {/* A pilot tailored for a job far from his field and found the questions no use (#338): say so before Tailor,
+          in amber so it isn't missed. */}
       {canTailor && hasRequirements && fitLabel(match.score) === "Several gaps" && (
-        <Notice tone="info" title="This job is a long way from your profile">
+        <Notice tone="warning" title="This job is a long way from your profile">
           It asks for a lot your profile doesn’t show yet. Tailoring only rewords what you’ve told us, so it can’t fill
           those gaps. You can still tailor your CV for it, or check a job closer to your experience.
         </Notice>

@@ -32,6 +32,14 @@ describe("MatchReport for a job far from the profile", () => {
     expect(html).toContain("Tailor my CV for this job");
   });
 
+  it("shows the warning in amber for any score under 50", () => {
+    for (const score of [35, 49]) {
+      const html = report(score);
+      expect(html).toContain("a long way from your profile");
+      expect(html).toMatch(/class="[^"]*bg-warning-bg text-warning[^"]*"[^>]*>(?:(?!<\/p>).)*a long way from your profile/);
+    }
+  });
+
   it("says nothing of the kind for a partial or strong fit", () => {
     expect(report(50)).not.toContain("a long way from your profile");
     expect(report(80)).not.toContain("a long way from your profile");
