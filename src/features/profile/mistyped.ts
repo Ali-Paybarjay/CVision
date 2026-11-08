@@ -17,8 +17,9 @@ const SIGNS = [
 const OTHER_KEYBOARD = /[\p{Script=Arabic}\p{Script=Cyrillic}\p{Script=Hebrew}]+/u;
 const LATIN = /\p{Script=Latin}/u;
 
-/** How many characters of a long line to show, around the part that looks wrong. */
+/** How many characters of a long line to show, and how many of them come before the part that looks wrong. */
 const EXCERPT_LENGTH = 80;
+const EXCERPT_BEFORE = 25;
 
 /** Where the first sign is in a line, or -1 if it looks fine. */
 function firstSign(line: string): number {
@@ -31,7 +32,7 @@ function firstSign(line: string): number {
 /** The part of a long line around `at`, cut at spaces, with "…" where it was cut. */
 function excerpt(line: string, at: number): string {
   if (line.length <= EXCERPT_LENGTH) return line;
-  let start = Math.max(0, at - EXCERPT_LENGTH / 3);
+  let start = Math.max(0, at - EXCERPT_BEFORE);
   let end = Math.min(line.length, start + EXCERPT_LENGTH);
   start = Math.max(0, end - EXCERPT_LENGTH);
   // Cut at a space, but never past the part that looks wrong.
