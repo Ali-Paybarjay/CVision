@@ -42,5 +42,11 @@
   },
   "url": "https://example.com/jobs/marrowby-castlefold-amu-band-6",
   "source": "pasted",
-  "deadline": "2026-11-30"
+  "deadline": "2026-11-30",
+  "role": {
+    "discipline": "Nursing",
+    "specialty": "Acute Medical Unit",
+    "level": "Band 6",
+    "registration": "NMC"
+  }
 }
