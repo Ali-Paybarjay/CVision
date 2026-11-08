@@ -13,9 +13,10 @@ vi.mock("@/features/profile/server/save-request", () => ({
   handleSaveRequest: vi.fn(async () => ({ ok: true, savedAt: "2026-10-21T12:00:00.000Z", cvFormat: null })),
 }));
 
-function save(headers: Record<string, string> = {}): Request {
+function save(headers: Record<string, string> = {}, account?: string): Request {
   const form = new FormData();
   form.set("profile", JSON.stringify(personas.sara.profile));
+  if (account) form.set("account", account);
   return new Request("http://localhost:3000/profile/save", { method: "POST", body: form, headers });
 }
 
@@ -51,6 +52,19 @@ describe("POST /profile/save", () => {
 
     expect((await POST(save())).status).toBe(401);
     expect(handleSaveRequest).not.toHaveBeenCalled();
+  });
+
+  // A profile page left open while another account signed in must not save over that account's profile (#350).
+  it("refuses a save from a page built for another account", async () => {
+    const response = await POST(save({}, "user-0"));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ ok: false, code: "forbidden", message: expect.stringContaining("different account") });
+    expect(handleSaveRequest).not.toHaveBeenCalled();
+  });
+
+  it("saves from a page built for the account signed in now", async () => {
+    expect((await POST(save({}, "user-1"))).status).toBe(200);
   });
 
   it("refuses a save from another site", async () => {

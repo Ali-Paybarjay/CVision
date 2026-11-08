@@ -90,6 +90,36 @@ describe("signOut", () => {
     await expect(signOut()).rejects.toThrow("redirect /");
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
+
+  // Next keeps recent pages alive; a full load after sign-out leaves none of this account's pages in the tab (#350).
+  it("returns home for a full page load when the form asks for one, instead of redirecting", async () => {
+    auth.signOut.mockResolvedValue({ error: null });
+    const data = new FormData();
+    data.set("reload", "1");
+    expect(await signOut({}, data)).toEqual({ go: "/" });
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("full page load after signing in (#350)", () => {
+  it("returns the next page instead of redirecting when the form asks for a full load", async () => {
+    expect(await signIn({}, form({ next: "/interview?job=1", reload: "1" }))).toEqual({ go: "/interview?job=1" });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("still redirects a form without JavaScript, where the redirect is a full load anyway", async () => {
+    await expect(signIn({}, form({ next: "/profile" }))).rejects.toThrow("redirect /profile");
+  });
+
+  it("returns the next page after a sign-up that signs straight in", async () => {
+    auth.signUp.mockResolvedValue({ data: { session: {}, user: { identities: [{}] } }, error: null });
+    expect(await signUp({}, form({ next: "/profile", reload: "1" }))).toEqual({ go: "/profile" });
+  });
+
+  it("asks for the full load only once JavaScript runs: the server-rendered form has no such field", () => {
+    expect(renderToStaticMarkup(<AuthForm mode="sign-in" />)).not.toContain('name="reload"');
+  });
 });
 
 describe("AuthForm", () => {

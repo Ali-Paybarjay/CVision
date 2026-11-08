@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/features/account/current-user";
 import { cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
 import { modelAccessFor } from "@/features/profile/server/access";
 import { handleExtractRequest, statusFor, type ExtractResponse } from "@/features/profile/server/extract-request";
+import { builtForAnotherAccount, otherAccountMessage } from "@/features/profile/server/same-account";
 import { isSameOrigin } from "@/features/profile/server/same-origin";
 import { getAiMode } from "@/shared/ai";
 import { track } from "@/shared/analytics/track";
@@ -41,6 +42,8 @@ export async function POST(request: Request) {
   } catch {
     return reply({ ok: false, code: "missing", message: cvFileMessages.missing });
   }
+  // A page left open for another account, before anything is read or sent to the model (#350).
+  if (user && builtForAnotherAccount(form, user.id)) return reply({ ok: false, code: "forbidden", message: otherAccountMessage });
 
   const result = await handleExtractRequest(form, { requester: access.requester });
   if (result.ok) {

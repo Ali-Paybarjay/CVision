@@ -14,11 +14,12 @@ vi.mock("@/features/profile/server/extract-request", async (importOriginal) => {
   return { ...actual, handleExtractRequest: vi.fn(actual.handleExtractRequest) };
 });
 
-function upload(fields: { consent?: string } = {}): Request {
+function upload(fields: { consent?: string; account?: string } = {}): Request {
   const form = new FormData();
   const cv = readFileSync(join(process.cwd(), "sample-data", "cvs", "sara.docx"));
   form.set("cv", new File([cv], "sara.docx"));
   if (fields.consent) form.set("consent", fields.consent);
+  if (fields.account) form.set("account", fields.account);
   return new Request("http://localhost:3000/profile/extract", { method: "POST", body: form });
 }
 
@@ -75,6 +76,24 @@ describe("POST /profile/extract", () => {
     await POST(upload());
 
     expect(track).not.toHaveBeenCalled();
+  });
+
+  // A profile page left open while another account signed in, in another tab or after the session ended (#350).
+  it("refuses an upload from a page built for another account, before reading it", async () => {
+    getCurrentUser.mockResolvedValue({ id: "user-2", email: null });
+
+    const response = await POST(upload({ consent: cvConsent.version, account: "user-1" }));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ ok: false, code: "forbidden", message: expect.stringContaining("different account") });
+    expect(handleExtractRequest).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  it("reads an upload from a page built for the account signed in now", async () => {
+    getCurrentUser.mockResolvedValue({ id: "user-1", email: null });
+
+    expect((await POST(upload({ consent: cvConsent.version, account: "user-1" }))).status).toBe(200);
   });
 
   it("refuses an upload from another site", async () => {

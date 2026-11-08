@@ -3,10 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { brand } from "@/shared/brand";
 import { AccountDeleted, AccountDeletedView, notDeletedStraightAway } from "./account-deleted";
-import { signOut } from "./actions";
 import { userTables, type DataSummary } from "./data-rights";
 import { DeleteAccountForm } from "./delete-account-form";
-import { SignOutButton } from "./sign-out-button";
+import { SignOutForm } from "./sign-out-button";
 import { DataRightsView } from "./your-data";
 
 // Render checks for the data-rights screens (issue #43). Deleting, downloading and clearing are tested in
@@ -184,9 +183,11 @@ describe("SignOutButton", () => {
       },
     });
 
-    const form = SignOutButton() as ReactElement<{ action: unknown; onSubmit: () => void }>;
+    // SignOutButton passes the action from useActionState(signOut), which also asks for a full page load (#350).
+    const action = vi.fn();
+    const form = SignOutForm({ action, pending: false }) as ReactElement<{ action: unknown; onSubmit: () => void }>;
     expect(isValidElement(form) && form.type).toBe("form");
-    expect(form.props.action).toBe(signOut);
+    expect(form.props.action).toBe(action);
 
     form.props.onSubmit();
 

@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
+import { fullReloadField } from "./full-reload-field";
 import { safeRedirectPath } from "./safe-redirect";
 
 export type AuthFormState = {
@@ -13,7 +14,21 @@ export type AuthFormState = {
   checkEmail?: string;
   /** Set after sign-up when the email already has an account, so no email is sent (#328). */
   existingAccount?: string;
+  /** Set once signed in, when the form asked for a full page load: where to load (#350). */
+  go?: string;
 };
+
+/** What signing out tells SignOutButton: where to load as a new page, when it asked for one (#350). */
+export type SignOutState = { go?: string };
+
+/**
+ * Ends a sign-in, sign-up or sign-out at `path`. A form with JavaScript asks for a full page load (fullReloadField,
+ * #350), so the path is returned for the browser to load; otherwise the redirect is already a full load.
+ */
+function arriveAt(formData: FormData | undefined, path: string): { go: string } {
+  if (formData?.get(fullReloadField) === "1") return { go: path };
+  redirect(path);
+}
 
 const CredentialsSchema = z.object({
   email: z.email("Enter a valid email address."),
@@ -55,7 +70,7 @@ export async function signUp(_: AuthFormState, formData: FormData): Promise<Auth
 
   // With email confirmation on, there is no session until the link is opened.
   if (!data.session) return { checkEmail: credentials.email };
-  redirect(next);
+  return arriveAt(formData, next);
 }
 
 export async function signIn(_: AuthFormState, formData: FormData): Promise<AuthFormState> {
@@ -68,7 +83,7 @@ export async function signIn(_: AuthFormState, formData: FormData): Promise<Auth
   const { error } = await supabase.auth.signInWithPassword(credentials);
   if (error) return { error: "That email and password do not match an account." };
 
-  redirect(readNext(formData));
+  return arriveAt(formData, readNext(formData));
 }
 
 /**
@@ -76,8 +91,8 @@ export async function signIn(_: AuthFormState, formData: FormData): Promise<Auth
  * each other device does the same when the user signs out there. Signing out everywhere (Supabase's default)
  * would sign the other devices out with nothing to clear their data.
  */
-export async function signOut(): Promise<void> {
+export async function signOut(_state?: SignOutState, formData?: FormData): Promise<SignOutState> {
   const supabase = await createSupabaseServerClient();
   await supabase?.auth.signOut({ scope: "local" });
-  redirect("/");
+  return arriveAt(formData, "/");
 }

@@ -128,6 +128,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
       reason: options.reason,
       cv: options.cv ?? undefined,
       consentVersion: options.consentVersion,
+      account: accountId,
     });
     if (!result.ok) return result.message;
     updateAccount({ ...next, savedAt: result.savedAt, cvFormat: result.cvFormat });
@@ -248,6 +249,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
         onStartManual={saved ? undefined : handleStartManual}
         onCancel={stepBack}
         carriedFile={carried}
+        account={accountId}
       />
     );
   } else {
