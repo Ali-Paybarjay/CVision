@@ -45,6 +45,9 @@ const JOB_SITES: JobSite[] = [
   { host: "caterer.com", name: "Caterer.com", textOnly: true },
   { host: "retailchoice.com", name: "Retail Choice", textOnly: true },
   { host: "milkround.com", name: "Milkround", textOnly: true },
+  // A security check (a CAPTCHA) answers with 403, checked on 8 Nov 2026 (a pilot doctor's feedback): NHS and other
+  // health jobs that don't use NHS Jobs are often on Trac.
+  { host: "trac.jobs", name: "Trac", textOnly: true },
   // These answer with a page that isn't the ad: a "Quick Check Needed" box, or a "We're moving" page.
   { host: "civilservicejobs.service.gov.uk", name: "Civil Service Jobs", textOnly: true },
   { host: "app.welcometothejungle.com", name: "Welcome to the Jungle", textOnly: true },

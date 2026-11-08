@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { cameFromThisApp } from "@/shared/in-app-history";
 
 type BackLinkProps = {
   /**
@@ -31,10 +32,13 @@ export function BackLink({ href }: BackLinkProps) {
   );
 }
 
-/** Browsers without the Navigation API can't say, so the link then opens its own address. */
+/**
+ * The Navigation API says so where the browser has it. Elsewhere the app's own record of this tab's pages answers, so
+ * Back still goes to the page the user came from rather than a fixed page (a pilot noticed, 8 November).
+ */
 function previousPageIsOnThisSite(): boolean {
   const { navigation } = window as Window & { navigation?: { canGoBack: boolean } };
-  return navigation?.canGoBack === true;
+  return navigation ? navigation.canGoBack === true : cameFromThisApp();
 }
 
 function ArrowIcon() {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { SignOutButton } from "@/features/account/sign-out-button";
 import { brand } from "@/shared/brand";
+import { InAppHistory } from "@/shared/in-app-history";
 import { SiteFooter, SiteHeader } from "@/shared/ui";
 import "./globals.css";
 
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en-GB" className={`${inter.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
+        <InAppHistory />
         <SiteHeader signOut={<SignOutButton appearance="link" />} />
         {children}
         <SiteFooter />
