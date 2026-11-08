@@ -21,6 +21,7 @@ describe("jobSite", () => {
     expect(jobSite("https://uk.indeed.com/viewjob?jk=0123456789abcdef")?.textOnly).toBe(true);
     expect(jobSite("https://www.totaljobs.com/job/administrator/pennine-health-job108000001")?.textOnly).toBe(true);
     expect(jobSite("https://www.civilservicejobs.service.gov.uk/csr/jobs.cgi?jcode=1900001")?.textOnly).toBe(true);
+    expect(jobSite("https://apps.trac.jobs/job-advert/1234567")).toMatchObject({ name: "Trac", textOnly: true });
     expect(jobSite("https://www.reed.co.uk/jobs/data-analyst/55512345")?.textOnly).toBeUndefined();
     expect(jobSite("https://www.jobs.nhs.uk/candidate/jobadvert/C9123-25-0001")?.textOnly).toBeUndefined();
   });
