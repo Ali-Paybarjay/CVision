@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { Button, Field, Input, Notice } from "@/shared/ui";
 import { signIn, signUp, type AuthFormState } from "./actions";
-import { FullReloadField, useFullReload } from "./full-reload";
+import { FullReloadField, useFullReloadAction } from "./full-reload";
 import { defaultDestination, withNext } from "./safe-redirect";
 
 const copy = {
@@ -22,12 +22,14 @@ export function AuthForm({
   disabled?: boolean;
   next?: string;
 }) {
-  const [state, action, pending] = useActionState<AuthFormState, FormData>(mode === "sign-up" ? signUp : signIn, {});
+  // Signed in: the next page loads afresh, so no page kept from before (another account's, perhaps) survives (#350).
+  const [state, action, pending] = useActionState<AuthFormState, FormData>(
+    useFullReloadAction(mode === "sign-up" ? signUp : signIn),
+    {},
+  );
   const text = copy[mode];
   // A pilot asked to see the password while typing it (8 November).
   const [showPassword, setShowPassword] = useState(false);
-  // Signed in: load the next page afresh, so no page kept from before (another account's, perhaps) survives (#350).
-  useFullReload(state.go);
 
   if (state.checkEmail) {
     return (
