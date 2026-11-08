@@ -500,7 +500,7 @@ export default function PrivacyPage() {
             <Link href={yourDataPath} className={link}>
               Your data page
             </Link>
-            . Your profile also has its own Download my data button on the{" "}
+            . Your profile also has its own Download my profile button on the{" "}
             <Link href="/profile" className={link}>
               Profile
             </Link>{" "}
