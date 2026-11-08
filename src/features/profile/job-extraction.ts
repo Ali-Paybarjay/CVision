@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ContractTypeSchema, HoursSchema, JobSchema, WorkModeSchema, type Job, type Salary } from "@/shared/contracts";
+import { ContractTypeSchema, HoursSchema, JobRoleSchema, JobSchema, WorkModeSchema, type Job, type JobRole, type Salary } from "@/shared/contracts";
 import { uniqueLines } from "./cv-extraction";
 
 // A pasted job ad becomes a Job in two parts: the model reads the facts (title, pay, requirements…),
@@ -41,6 +41,8 @@ export const JobExtractionSchema = z.object({
     essential: z.array(z.string()),
     desirable: z.array(z.string()),
   }),
+  /** Each part empty when the ad does not say (#398). */
+  role: JobRoleSchema,
 });
 export type JobExtraction = z.infer<typeof JobExtractionSchema>;
 
@@ -68,7 +70,21 @@ export function jobFromExtraction(
     requirements: { essential, desirable },
     url: details.url,
     source: "pasted",
+    ...roleFrom(extraction.role),
   });
+}
+
+const noRole: JobRole = { discipline: "", specialty: "", level: "", registration: "" };
+
+/** The role, trimmed, or nothing when the ad says nothing about it: a Job without `role` means "not known". */
+function roleFrom(role: JobRole): { role?: JobRole } {
+  const trimmed = {
+    discipline: role.discipline.trim(),
+    specialty: role.specialty.trim(),
+    level: role.level.trim(),
+    registration: role.registration.trim(),
+  };
+  return Object.values(trimmed).some(Boolean) ? { role: trimmed } : {};
 }
 
 /** The facts of a Job in the model's format: the mock answer for a sample ad. */
@@ -82,6 +98,7 @@ export function extractionFromJob(job: Job): JobExtraction {
     hours: job.hours,
     workMode: job.workMode,
     requirements: job.requirements,
+    role: job.role ?? noRole,
   };
 }
 
