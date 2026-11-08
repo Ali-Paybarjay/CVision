@@ -10,7 +10,7 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 
 ## Fields
 
-- `title`: the job title, as written.
+- `title`: the job title, as written. If the ad never states it as a title but names the role in its text (for example "our graduate engineers join a two-year programme"), use that role in the ad's words as a title, such as "Graduate Engineer". An empty string only if the ad names no role at all.
 - `company`: the employer's name, as written. If a recruitment agency posted the ad and doesn't name the employer, use an empty string.
 - `location`: the town, city or region, as written (for example "Manchester" or "Remote (UK)"). An empty string if the ad doesn't say.
 - `salary`: the pay in pounds. `min` and `max` are plain numbers: £29,000 is 29000 and £30k is 30000. A single figure goes in both. `period` is "year", "day" or "hour". Use null if the ad gives no figure ("competitive" is not a figure) or the pay is not in pounds.
