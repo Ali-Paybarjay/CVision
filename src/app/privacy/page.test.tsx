@@ -138,7 +138,9 @@ describe("privacy page", () => {
 
   it("says how to use the rights in the app and how to complain to the ICO", () => {
     expect(html).toContain('href="/dashboard/your-data"');
-    expect(text).toContain("Download my data");
+    expect(text).toContain("Use Download a copy of my data on the Your data page");
+    // The Profile page's own button is "Download my profile" since #356 (end-of-batch review, 8 November).
+    expect(text).toContain("Your profile also has its own Download my profile button on the Profile page.");
     expect(text).toContain("Delete my account");
     expect(text).toContain("To withdraw your consent.");
     expect(html).toContain('href="https://ico.org.uk/make-a-complaint/');
