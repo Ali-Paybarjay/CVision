@@ -37,6 +37,35 @@ Hobbies: watching TV, going out with friends
 
 References available on request`;
 
+/**
+ * A fictional doctor trained outside the UK (#375): dated posts and rotations, but no word of UK registration, audit
+ * or teaching. A pilot found the check said nothing about what UK clinical posts look for.
+ */
+const doctorCv = `Dr Amira Haddad
+Manchester · 07700 900123 · amira.haddad@example.com
+
+Profile
+Doctor with four years of hospital experience in internal medicine and emergency care, looking for a clinical post in the NHS.
+
+Experience
+Senior House Officer, Internal Medicine, Al Noor General Hospital, Amman, Jordan
+September 2023 to August 2025
+- Managed a ward of 24 adult patients with the medical team.
+- Assessed and treated patients in the emergency department on night shifts.
+
+Foundation Doctor, Rotations in General Surgery, Paediatrics and Emergency Medicine, Al Noor General Hospital
+September 2021 to August 2023
+- Took histories, examined patients and prepared discharge summaries.
+
+Education
+MBBS, University of Jordan, 2021
+
+Skills
+Clinical assessment, venepuncture, cannulation, ECG interpretation, patient communication`;
+
+/** A registration or GMC number the model made up: seven digits in a row. */
+const madeUpNumber = /\b\d{7}\b/;
+
 function quotesIn(text: string): string[] {
   return [...text.matchAll(/"([^"\n]{4,})"|“([^”\n]{4,})”/g)].map((match) => match[1] ?? match[2]);
 }
@@ -85,6 +114,16 @@ describe.skipIf(!getAiProvider())("cvcheck-review", () => {
     expect(result.readiness).toBe("not-ready");
     expect(result.issues.some((issue) => issue.severity === "high")).toBe(true);
     expectHonestAndOnVoice(result, weakCv);
+  });
+
+  it("checks a doctor's CV for what UK clinical posts ask, and makes up no registration", async () => {
+    const result = await checkCv(doctorCv);
+    const written = [result.summary, ...result.issues.flatMap((issue) => [issue.title, issue.explanation, issue.fix])].join("\n");
+    console.info(`doctor CV: score ${result.score}, ${result.issues.map((issue) => issue.title).join(" | ")}`);
+    expect(written, "UK registration is raised").toMatch(/\bGMC\b|General Medical Council|registration/i);
+    expect(written, "audit, quality improvement or teaching is raised").toMatch(/audit|quality improvement|teaching/i);
+    expect(written, "no made-up number").not.toMatch(madeUpNumber);
+    expectHonestAndOnVoice(result, doctorCv);
   });
 
   it("ignores instructions inside the CV", async () => {

@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { brand } from "@/shared/brand";
 import { carryFromCheck } from "@/shared/carried-cv";
-import type { CvCheckResult, CvIssue } from "@/shared/contracts";
+import type { CvCheckResult } from "@/shared/contracts";
 import { Button, ButtonLink, Card, cn, Field, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { withNext } from "@/features/account/safe-redirect";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
+import { longCvNote, readinessLabels, resultAsText, resultFileName, severityLabels, type ResultNotes } from "../result-text";
 import type { CvCheckResponse } from "../server/check-request";
 
 type Source = "file" | "text";
@@ -182,17 +183,14 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
   );
 }
 
-const readinessLabels: Record<CvCheckResult["readiness"], string> = {
-  ready: "Ready for UK employers",
-  "nearly-ready": "Nearly ready",
-  "not-ready": "Not ready yet",
-};
-
-const severityLabels: Record<CvIssue["severity"], string> = {
-  high: "Fix first",
-  medium: "Worth fixing",
-  low: "Polish",
-};
+/** Hands the result to the browser as a text file (#375). Made here from what is on screen; nothing is sent anywhere. */
+function downloadResult(result: CvCheckResult, notes: ResultNotes) {
+  const now = new Date();
+  const url = URL.createObjectURL(new Blob([resultAsText(result, now, notes)], { type: "text/plain;charset=utf-8" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: resultFileName(now) });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 /** The result of a check. Exported for its render tests. */
 export function CvCheckReport({
@@ -219,7 +217,7 @@ export function CvCheckReport({
       )}
       {truncated && (
         <Notice tone="info" title="We checked the start of your CV">
-          Your CV is very long, so we read only the first part. UK employers expect two pages at most.
+          {longCvNote}
         </Notice>
       )}
 
@@ -299,9 +297,17 @@ export function CvCheckReport({
         {signedIn && file && account && (
           <p className="text-sm text-text-muted">We’ll bring the CV you just checked, so you don’t need to upload it again.</p>
         )}
+        {/* Said plainly, so a visitor isn't surprised to be asked for the file again after sign-up (#375). */}
+        {!signedIn && file && (
+          <p className="text-sm text-text-muted">
+            You’ll upload your CV once more after you create your account: we don’t keep the file while you sign up.
+          </p>
+        )}
       </Card>
 
-      <div>
+      {/* A pilot lost the result on leaving the page (#375): the file keeps it, made in this browser. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={() => downloadResult(result, { demoMode, truncated })}>Download this result</Button>
         <Button variant="quiet" onClick={onCheckAnother}>
           Check another CV
         </Button>

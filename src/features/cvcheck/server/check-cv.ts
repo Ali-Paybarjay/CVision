@@ -23,14 +23,26 @@ export function readinessFor(score: number): CvCheckResult["readiness"] {
 
 const severityOrder = { high: 0, medium: 1, low: 2 } as const;
 
+/**
+ * The model now and then escapes a quote twice, so the user would read `2021\"` (seen in an eval, #375). A CV check
+ * never needs a backslash before a quote, so it goes.
+ */
+const withoutStrayEscapes = (text: string) => text.replace(/\\+(["'“”‘’])/g, "$1");
+
 export function toCvCheckResult(answer: CvCheckAnswer): CvCheckResult {
   const issues = answer.issues
     .map((issue, index) => ({ issue, index }))
     // Most serious first; the model's own order breaks ties.
     .sort((a, b) => severityOrder[a.issue.severity] - severityOrder[b.issue.severity] || a.index - b.index)
     .slice(0, MAX_ISSUES)
-    .map(({ issue }, index) => ({ id: `issue-${index + 1}`, ...issue }));
-  return { readiness: readinessFor(answer.score), score: answer.score, summary: answer.summary, issues };
+    .map(({ issue }, index) => ({
+      id: `issue-${index + 1}`,
+      ...issue,
+      title: withoutStrayEscapes(issue.title),
+      explanation: withoutStrayEscapes(issue.explanation),
+      fix: withoutStrayEscapes(issue.fix),
+    }));
+  return { readiness: readinessFor(answer.score), score: answer.score, summary: withoutStrayEscapes(answer.summary), issues };
 }
 
 /**
