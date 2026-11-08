@@ -44,7 +44,14 @@ export function noUsage(model: string): ModelUsage {
   return { model, inputTokens: 0, outputTokens: 0, costUsd: 0, ok: false };
 }
 
-type CountFilter = { userId: string } | { anonymousKey: string } | { allAnonymous: true };
+/**
+ * The model of a row that is no request to a model: something with a daily limit of its own, such as our server
+ * opening the link to a job ad (#391). Model requests never count these rows (reserveWithinFeatureLimit).
+ */
+export const NO_MODEL = "none";
+
+/** Whose rows to count: their model requests, or with `feature`, only that feature's rows. */
+type CountFilter = ({ userId: string } | { anonymousKey: string } | { allAnonymous: true }) & { feature?: string };
 
 export interface UsageStore {
   /** Adds a row for a request about to be sent, with nothing used yet, and returns its id and when it was saved. */
@@ -81,6 +88,7 @@ export function createMemoryUsageStore(): UsageStore {
     async countSince(filter, since) {
       return [...rows.values()].filter((row) => {
         if (row.at < since) return false;
+        if (filter.feature ? row.feature !== filter.feature : row.model === NO_MODEL) return false;
         const who = row.requester;
         if ("userId" in filter) return who !== undefined && "userId" in who && who.userId === filter.userId;
         if ("anonymousKey" in filter) return who !== undefined && "anonymousKey" in who && who.anonymousKey === filter.anonymousKey;
@@ -125,6 +133,7 @@ function createSupabaseUsageStore(): UsageStore | null {
       if ("userId" in filter) query = query.eq("user_id", filter.userId);
       else if ("anonymousKey" in filter) query = query.eq("anonymous_key", filter.anonymousKey);
       else query = query.is("user_id", null);
+      query = filter.feature ? query.eq("feature", filter.feature) : query.neq("model", NO_MODEL);
       const { count, error, status } = await query;
       if (error) throw new UsageLogError("count", error, status);
       return count ?? 0;
@@ -208,6 +217,33 @@ export async function reserveWithinDailyLimit(request: UsageRequest, usage: Usag
   if (refusal) {
     await releaseReservation(reserved.id, usage);
     throw new LimitReachedError(refusal.message, refusal.limit);
+  }
+  return reserved.id;
+}
+
+/**
+ * Reserves a row for something that is no request to a model but needs a daily limit of its own, such as our server
+ * opening the link to a job ad (#391), and counts only that feature's rows of the requester. It reserves before
+ * counting, as reserveWithinDailyLimit does, so requests that arrive together cannot all take the last place, and the
+ * row never counts towards the requester's model requests. Returns the row's id, or null when the requester has used
+ * the day's `limit`. Without a count there is no limit: the row is taken back and the failure thrown.
+ */
+export async function reserveWithinFeatureLimit(
+  request: { requester: Requester; feature: string },
+  limit: number,
+  usage: UsageStore = getUsageStore(),
+): Promise<UsageRowId | null> {
+  const reserved = await usage.reserve({ ...request, model: NO_MODEL });
+  let count: number;
+  try {
+    count = await usage.countSince({ ...request.requester, feature: request.feature }, startOfUtcDay(reserved.createdAt));
+  } catch (error) {
+    await releaseReservation(reserved.id, usage);
+    throw error;
+  }
+  if (count > limit) {
+    await releaseReservation(reserved.id, usage);
+    return null;
   }
   return reserved.id;
 }

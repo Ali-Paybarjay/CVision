@@ -5,6 +5,7 @@ import { MAX_PROFILE_CHARACTERS } from "./cv-limits";
 import { checkJobAction, readAdLinkAction } from "./job-actions";
 import { MAX_AD_CHARACTERS } from "./job-extraction";
 import { matchJob, parseJob } from "./server/check-job";
+import { reserveLinkRead, settleLinkRead } from "./server/link-read-limit";
 import { saveJobAndMatch } from "./server/job-store";
 import { loadAccountProfile } from "./server/profile-account";
 import { readAdLink } from "./server/read-ad-link";
@@ -28,6 +29,8 @@ vi.mock("./server/check-job", async (importOriginal) => {
 });
 // Opening a link is the network: each test says what the page gave (server/read-ad-link.test.ts reads real HTML).
 vi.mock("./server/read-ad-link", () => ({ readAdLink: vi.fn() }));
+// The day's link reads are counted in the usage log: server/link-read-limit.test.ts tests that.
+vi.mock("./server/link-read-limit", () => ({ reserveLinkRead: vi.fn(), settleLinkRead: vi.fn() }));
 
 const sara = personas.sara;
 const ad = sara.jobs[0].description;
@@ -39,6 +42,7 @@ beforeEach(() => {
   createSupabaseServerClient.mockResolvedValue({});
   vi.mocked(saveJobAndMatch).mockResolvedValue(true);
   vi.mocked(loadAccountProfile).mockResolvedValue({ profile: sara.profile, savedAt: "2026-10-21T09:00:00.000Z", cvFormat: null });
+  vi.mocked(reserveLinkRead).mockResolvedValue({ ok: true, id: 7 });
 });
 
 afterEach(() => {
@@ -272,6 +276,7 @@ describe("readAdLinkAction", () => {
 
     expect(await readAdLinkAction({ url: link })).toEqual({ ok: false, code: "sign-in", message: "Sign in to check a job against your profile." });
     expect(readAdLink).not.toHaveBeenCalled();
+    expect(reserveLinkRead).not.toHaveBeenCalled();
     expect(track).not.toHaveBeenCalled();
   });
 
@@ -280,6 +285,42 @@ describe("readAdLinkAction", () => {
     vi.mocked(readAdLink).mockResolvedValue({ ok: true, url: link, text: ad, truncated: false });
 
     expect(await readAdLinkAction({ url: link })).toMatchObject({ ok: true });
+    // Against the day's visitor key, which link-read-limit.ts finds when there is no account.
+    expect(reserveLinkRead).toHaveBeenCalledWith(undefined);
+  });
+
+  it("takes one of the day's reads before opening the page, and notes whether it was read (#391)", async () => {
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: true, url: link, text: ad, truncated: false });
+    vi.mocked(readAdLink).mockResolvedValueOnce({ ok: false, reason: "not-found", url: link });
+
+    await readAdLinkAction({ url: link });
+    await readAdLinkAction({ url: link });
+
+    expect(reserveLinkRead).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(vi.mocked(reserveLinkRead).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(readAdLink).mock.invocationCallOrder[0]);
+    expect(settleLinkRead).toHaveBeenNthCalledWith(1, 7, true);
+    expect(settleLinkRead).toHaveBeenNthCalledWith(2, 7, false);
+  });
+
+  it("takes none for a site we never open", async () => {
+    vi.mocked(readAdLink).mockResolvedValue({ ok: false, reason: "text-only-site", url: "https://uk.linkedin.com/jobs/view/4012345678" });
+
+    await readAdLinkAction({ url: "https://uk.linkedin.com/jobs/view/4012345678" });
+
+    expect(reserveLinkRead).not.toHaveBeenCalled();
+    expect(settleLinkRead).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["used up", "limit", "You’ve reached today’s limit for getting ads from links. Copy the ad from the page and paste it below."],
+    ["can't be counted", "limit-error", "We couldn’t open the link just now. Copy the ad from the page and paste it below."],
+  ] as const)("opens nothing when the day's reads are %s, and asks for the ad's text", async (_, reason, message) => {
+    vi.mocked(reserveLinkRead).mockResolvedValue({ ok: false, reason });
+
+    expect(await readAdLinkAction({ url: link })).toEqual({ ok: false, code: "unreadable", message });
+    expect(readAdLink).not.toHaveBeenCalled();
+    expect(settleLinkRead).not.toHaveBeenCalled();
+    expect(track).toHaveBeenCalledWith("jobs.link_read", { outcome: reason, site: "Reed", demo: true }, { userId: "user-1" });
   });
 
   it("records the outcome and the site's name, never the link, the employer or the ad", async () => {

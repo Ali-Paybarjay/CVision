@@ -125,6 +125,15 @@ export function adLinkFailureMessage(reason: AdLinkFailure, link: string): strin
   return `${why} Copy the ad from ${from} and paste it below.`;
 }
 
+/** Why no page was opened at all: the day's reads from links are used up, or couldn't be counted (#391). */
+export type LinkLimitReason = "limit" | "limit-error";
+
+/** Then what to do, as for a link that can't be read: the ad box is right below the message. */
+export const linkLimitMessages: Record<LinkLimitReason, string> = {
+  limit: "You’ve reached today’s limit for getting ads from links. Copy the ad from the page and paste it below.",
+  "limit-error": "We couldn’t open the link just now. Copy the ad from the page and paste it below.",
+};
+
 /** Under the ad box, when an NHS ad may have left its criteria in a PDF (#400). */
 export const personSpecHint =
   "NHS ads often keep the person specification in a PDF called Job description and person specification. Paste its criteria below the ad as well, so we can match them.";
