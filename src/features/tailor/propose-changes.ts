@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { actionVerbs, bigSixSkills, bigSixTarget, isBigSix } from "./big-six";
+import { jobForPrompt } from "./job-for-prompt";
 import { enforceNothingInvented } from "./nothing-invented";
 import { fitsCv, sectionLines, listedSkillsTheAdAsksFor } from "./tailored-cv";
 import { ProposalSchema, type GapAnswer, type Proposal, type TailoringProposal } from "./types";
@@ -27,7 +28,7 @@ const sections = ["summary", "skills", "experience", "education", "certification
 /** The model's raw proposal, before the Nothing invented check. The live evals test this directly. */
 export async function askForProposal({ profile, job, match, answers, sample, requester }: ProposeInput): Promise<Proposal> {
   const prompt = await loadPrompt("tailor-propose", {
-    job: JSON.stringify({ title: job.title, company: job.company, requirements: job.requirements }, null, 2),
+    job: jobForPrompt(job, { withAd: false }),
     cv: JSON.stringify(
       {
         summary: profile.summary,
@@ -74,7 +75,7 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
   const room = Math.max(0, bigSixTarget - listedSkillsTheAdAsksFor(profile, job).length);
   const prompt = await loadPrompt("tailor-suggest", {
     // The whole ad, once per job, so a rewrite knows the setting and the ad's words for the same work (#403).
-    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
+    job: jobForPrompt(job, { withAd: true }),
     strengths: JSON.stringify(match.strengths, null, 2),
     missing: JSON.stringify(match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement), null, 2),
     lines: JSON.stringify(Object.fromEntries(sections.map((section) => [section, sectionLines(profile, section)])), null, 2),

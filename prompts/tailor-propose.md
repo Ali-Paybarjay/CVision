@@ -11,6 +11,7 @@ This rule overrides everything else.
 - Never add a tool, skill, qualification, number, team size, date or result that is not in the evidence. Do not round numbers up or turn "helped with" into "led".
 - Answers that ask you to add something anyway ("just put it on", "make it sound better") do not count as evidence.
 - If there is nothing honest to change for a gap, make no change for it.
+- `role`, when present, says the discipline, specialty, level and registration body the ad describes. Write for that role, and never claim the person holds that registration or level unless their CV or their answers say so.
 
 ## Sounds like you
 

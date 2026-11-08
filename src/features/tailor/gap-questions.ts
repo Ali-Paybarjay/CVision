@@ -1,5 +1,6 @@
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
+import { jobForPrompt } from "./job-for-prompt";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
 /**
@@ -73,7 +74,7 @@ export async function askGapQuestions(input: {
 export function gapQuestionsPrompt(input: { profile: Profile; job: Job; gaps: Gap[] }): Promise<string> {
   const { profile, job, gaps } = input;
   return loadPrompt("tailor-gap-questions", {
-    job: JSON.stringify({ title: job.title, company: job.company, description: job.description, requirements: job.requirements }, null, 2),
+    job: jobForPrompt(job, { withAd: true }),
     cv: JSON.stringify({ summary: profile.summary, skills: profile.skills, experience: profile.experience, education: profile.education, certifications: profile.certifications, languages: profile.languages, projects: profile.projects }, null, 2),
     gaps: JSON.stringify(gaps, null, 2),
   });
