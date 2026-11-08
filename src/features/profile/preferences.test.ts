@@ -8,6 +8,7 @@ import {
   noteLines,
   preferencesFromDraft,
   readPounds,
+  withPlaceFollowingTown,
   type PreferencesDraft,
 } from "./preferences";
 
@@ -139,5 +140,26 @@ describe("describePreferences", () => {
     expect(describePreferences(empty, " London ")).toEqual(["London (your town or city)"]);
     expect(describePreferences({ ...empty, location: "Manchester" }, "London")).toEqual(["Manchester"]);
     expect(describePreferences(empty, " ")).toEqual([]);
+  });
+});
+
+describe("withPlaceFollowingTown", () => {
+  const sara = personas.sara.profile;
+  const living = (town: string | undefined, place: string) => ({
+    ...sara,
+    contact: { ...sara.contact, location: town },
+    preferences: { ...sara.preferences, location: place },
+  });
+
+  // Profiles saved before #363 copied the town or city into the place to work, and the copy stayed behind (#369).
+  it("empties a place to work that only repeats the town or city, so it follows a move", () => {
+    expect(withPlaceFollowingTown(living("Leeds", "Leeds")).preferences).toEqual({ ...sara.preferences, location: "" });
+    expect(withPlaceFollowingTown(living("Leeds", " leeds ")).preferences.location).toBe("");
+  });
+
+  it("keeps a place the user chose, an empty place and a profile with no town or city as they are", () => {
+    for (const profile of [living("Leeds", "Manchester"), living("Leeds", ""), living(undefined, "Leeds")]) {
+      expect(withPlaceFollowingTown(profile)).toBe(profile);
+    }
   });
 });

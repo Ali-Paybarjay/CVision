@@ -1,5 +1,6 @@
 import type { Profile } from "@/shared/contracts";
 import { isManualConsent, type ConsentRecord } from "./consent";
+import { withPlaceFollowingTown } from "./preferences";
 import type { StoredProfile } from "./profile-store";
 import type { AccountProfile } from "./server/profile-account";
 import type { CvFormat } from "./server/read-cv";
@@ -18,12 +19,14 @@ export type SavedProfile = {
   cvFormat: CvFormat | null;
 };
 
+// Both read a place to work that only repeats the town or city as empty, as profiles saved before #363 have it (#369).
+
 export function fromBrowser(stored: StoredProfile): SavedProfile {
-  return { profile: stored.profile, savedAt: stored.savedAt, consent: stored.consent, cvFormat: null };
+  return { profile: withPlaceFollowingTown(stored.profile), savedAt: stored.savedAt, consent: stored.consent, cvFormat: null };
 }
 
 export function fromAccount(account: AccountProfile): SavedProfile {
-  return { profile: account.profile, savedAt: account.savedAt, consent: null, cvFormat: account.cvFormat };
+  return { profile: withPlaceFollowingTown(account.profile), savedAt: account.savedAt, consent: null, cvFormat: account.cvFormat };
 }
 
 /** True when the profile came from a CV, so another upload is "a new CV". A profile typed in by hand has none. */

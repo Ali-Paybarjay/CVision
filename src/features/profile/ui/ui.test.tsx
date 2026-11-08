@@ -107,6 +107,7 @@ describe("profile screens", () => {
     );
     expect(html).toContain("This replaces your current profile");
     expect(html).toContain("Nothing changes until you check the new details and approve them.");
+    expect(html).toContain("What you’re looking for stays as it is.");
     expect(html).toContain("Keep my current profile");
   });
 
@@ -732,6 +733,16 @@ describe("profile screens", () => {
     expect(html("")).toContain("London (your town or city)");
     expect(html("Manchester")).toContain("Manchester");
     expect(html("Manchester")).not.toContain("London");
+  });
+
+  // Before #363 the town or city was copied into the place to work. Read back, it is the town or city again (#369).
+  it("shows a saved place to work that only repeats the town or city as the town or city", () => {
+    const reza = personas.reza.profile;
+    const profile = { ...reza, contact: { ...reza.contact, location: "Leeds" }, preferences: { ...reza.preferences, location: "Leeds" } };
+    const savedAt = "2026-10-21T10:00:00.000Z";
+
+    expect(overview(fromBrowser({ ...stored("reza"), profile }), "browser")).toContain("Leeds (your town or city)");
+    expect(overview(fromAccount({ profile, savedAt, cvFormat: null }), "account")).toContain("Leeds (your town or city)");
   });
 
   it("says in the preferences form that an empty place means the town or city", () => {
