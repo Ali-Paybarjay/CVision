@@ -7,7 +7,6 @@ import { ButtonLink, Button, Card, cn, Field, Input, Notice, Textarea, WaitNote 
 import { checkJobAction, readAdLinkAction, type CheckJobResult, type ReadAdLinkResult } from "../job-actions";
 import { checkAdText, MAX_AD_CHARACTERS, parseAdUrl } from "../job-extraction";
 import { useStoredProfile } from "../profile-store";
-import { BackLink } from "./back-link";
 import { MatchReport } from "./match-report";
 import { SignInToStart } from "./sign-in-to-start";
 import { SignInNotice } from "./upload-step";
@@ -17,16 +16,13 @@ type CheckJobSuccess = Extract<CheckJobResult, { ok: true }>;
 /** How the user gives the ad: its link, which we read for them, or its text (#330). */
 export type AdSource = "link" | "text";
 
-/** What the user gave, so Back from the report shows it again. */
-export type AdInput = { source: AdSource; ad: string; url: string };
-
 /**
- * What the last "Get the ad" found: the ad, or why there is none. "restored" is the ad as it was before the report.
+ * What the last "Get the ad" found: the ad, or why there is none.
  * The ad box shows once there is one, and a changed link hides it again until the user gets the ad from that link.
  */
-type LinkOutcome = { kind: "read"; site: string; tooLong: boolean } | { kind: "unreadable"; message: string } | { kind: "restored" };
+type LinkOutcome = { kind: "read"; site: string; tooLong: boolean } | { kind: "unreadable"; message: string };
 
-type View = { name: "form"; input: AdInput | null } | { name: "report"; result: CheckJobSuccess; input: AdInput };
+type View = { name: "form" } | { name: "report"; result: CheckJobSuccess };
 
 /** The check can take up to two minutes (the page's maxDuration), so after a minute the wait says so. */
 const SLOW_AFTER_MS = 60_000;
@@ -39,13 +35,13 @@ export type JobProfileSource = { kind: "account"; profile: Profile | null } | { 
 
 /**
  * The jobs page: give the ad's link or paste its text, then see the match report.
- * The ad is compared with the profile the user approved on /profile. Back on the report returns to the ad as given;
- * there is no Back out of the page, since the steps bar and the menu at the top lead everywhere else.
+ * The ad is compared with the profile the user approved on /profile. The page has no Back: the steps bar and the menu
+ * at the top lead everywhere else, and "Check another job" on the report starts again.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before the check.
  */
 export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMode: boolean; source?: JobProfileSource }) {
   const stored = useStoredProfile();
-  const [view, setView] = useState<View>({ name: "form", input: null });
+  const [view, setView] = useState<View>({ name: "form" });
   // Focus moves to each new view, but not on the first page load.
   const [navigated, setNavigated] = useState(false);
 
@@ -59,7 +55,6 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
   else if (source.kind === "signed-out") profile = null;
   else profile = stored === undefined ? undefined : (stored?.profile ?? null);
 
-  let back: React.ReactNode = null;
   let content: React.ReactNode;
   if (profile === undefined) {
     content = (
@@ -69,8 +64,6 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
     );
   } else if (view.name === "report") {
     const { job, match, saved, demo } = view.result;
-    const { input } = view;
-    back = <BackLink onClick={() => show({ name: "form", input })} />;
     content = (
       <MatchReport
         job={job}
@@ -78,7 +71,7 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
         saved={saved}
         demo={demo}
         focusHeading={navigated}
-        onCheckAnother={() => show({ name: "form", input: null })}
+        onCheckAnother={() => show({ name: "form" })}
       />
     );
   } else if (source.kind === "signed-out" && !demoMode) {
@@ -98,19 +91,13 @@ export function JobChecker({ demoMode, source = { kind: "browser" } }: { demoMod
       <JobForm
         profile={profile}
         demoMode={demoMode}
-        initial={view.input}
         focusAd={navigated}
-        onChecked={(result, input) => show({ name: "report", result, input })}
+        onChecked={(result) => show({ name: "report", result })}
       />
     );
   }
 
-  return (
-    <div className="flex flex-col gap-6">
-      {back}
-      {content}
-    </div>
-  );
+  return <div className="flex flex-col gap-6">{content}</div>;
 }
 
 type Errors = { ad?: string; url?: string; form?: string; signIn?: boolean };
@@ -119,31 +106,29 @@ type JobFormProps = {
   /** The user's approved profile; null only in demo mode, where a sample profile is used instead. */
   profile: Profile | null;
   demoMode: boolean;
-  /** The ad and link to show again, after Back from the report. */
-  initial?: AdInput | null;
-  /** Moves focus to the ad's link or its text, after Back or "Check another job". */
+  /** How the form starts: with the ad's link (the default) or its text. */
+  initialSource?: AdSource;
+  /** Moves focus to the ad's link or its text, after "Check another job". */
   focusAd: boolean;
-  onChecked: (result: CheckJobSuccess, input: AdInput) => void;
+  onChecked: (result: CheckJobSuccess) => void;
 };
 
 /** "Get the ad" opens the page within 10 seconds (fetchPublicPage), plus the time to reach our server. */
 const readingLinkNote = "Opening the page and copying the ad. This can take up to 15 seconds.";
 
-export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobFormProps) {
+export function JobForm({ profile, demoMode, initialSource = "link", focusAd, onChecked }: JobFormProps) {
   // The shared Input and Textarea take no ref, so fields are found by name inside the form.
   const formRef = useRef<HTMLFormElement>(null);
   const focusField = (name: "ad" | "url") => formRef.current?.querySelector<HTMLElement>(`[name="${name}"]`)?.focus();
-  const [source, setSource] = useState<AdSource>(initial?.source ?? "link");
-  const [url, setUrl] = useState(initial?.url ?? "");
+  const [source, setSource] = useState<AdSource>(initialSource);
+  const [url, setUrl] = useState("");
   // Each way keeps its own ad, so one never brings the other's back: the ad from the link (read, or pasted when it
   // couldn't be read), and the pasted ad.
-  const [linkAd, setLinkAd] = useState(initial?.source === "link" ? initial.ad : "");
-  const [pastedAd, setPastedAd] = useState(initial?.source === "text" ? initial.ad : "");
+  const [linkAd, setLinkAd] = useState("");
+  const [pastedAd, setPastedAd] = useState("");
   const ad = source === "link" ? linkAd : pastedAd;
   const setAd = source === "link" ? setLinkAd : setPastedAd;
-  const [fromLink, setFromLink] = useState<LinkOutcome | null>(
-    initial?.source === "link" && initial.ad !== "" ? { kind: "restored" } : null,
-  );
+  const [fromLink, setFromLink] = useState<LinkOutcome | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [reading, setReading] = useState(false);
   const [pending, setPending] = useState(false);
@@ -163,7 +148,7 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
   }, [focusAd]);
 
   useEffect(() => {
-    if (fromLink?.kind === "read" || fromLink?.kind === "unreadable") outcomeRef.current?.focus();
+    if (fromLink) outcomeRef.current?.focus();
   }, [fromLink]);
 
   function chooseSource(next: AdSource) {
@@ -258,7 +243,7 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
         result = { ok: false, code: "ai-unavailable", message: "We couldn’t reach CVision. Check your connection and try again." };
       }
       if (result.ok) {
-        onChecked(result, { source, ad, url });
+        onChecked(result);
         return;
       }
       if (result.code === "ad") setErrors({ ad: result.message });
@@ -359,7 +344,7 @@ export function JobForm({ profile, demoMode, initial, focusAd, onChecked }: JobF
             </div>
           )}
 
-          {source === "link" && (fromLink?.kind === "read" || fromLink?.kind === "unreadable") && (
+          {source === "link" && fromLink && (
             <div ref={outcomeRef} tabIndex={-1} className="outline-none">
               {fromLink.kind === "read" ? (
                 // "The text", not "the ad": a page can open without the ad on it, which only the user can tell.

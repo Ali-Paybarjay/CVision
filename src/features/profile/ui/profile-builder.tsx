@@ -18,7 +18,6 @@ import type { SaveReason } from "../server/save-request";
 import type { AccountProfile } from "../server/profile-account";
 import { carriedCvFor, clearCarriedCv, subscribeCarriedCv } from "@/shared/carried-cv";
 import { Button, Card, Notice } from "@/shared/ui";
-import { BackLink } from "./back-link";
 import { ProfileOverview } from "./profile-overview";
 import { ReviewStep, type ReviewSource } from "./review-step";
 import { saveProfileToAccount } from "./save-profile";
@@ -63,8 +62,8 @@ export function consentToSend(source: ReviewSource, consent: ConsentRecord | nul
 /**
  * The profile page: upload a CV (with consent), or type the details in by hand when there is no CV, check them and
  * approve them all at once, then see and manage the saved profile. Nothing is saved before the user approves it
- * (You approve everything). Back goes to the step before; there is none on the first step, since the steps bar and the
- * menu at the top lead out of the page.
+ * (You approve everything). The page has no Back: each step's own button (Cancel, Start again, Keep my current
+ * profile) goes to the step before, and the steps bar and the menu at the top lead out of the page.
  * `demoMode` is true while the AI is in mock mode, so the page can say so before an upload.
  */
 export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { demoMode: boolean; storage?: ProfileStorage }) {
@@ -216,7 +215,7 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
     );
   }
 
-  // The step before this one, if the page has one.
+  // The step before this one, if the page has one: where the step's own Cancel button goes.
   let stepBack: (() => void) | undefined;
   let content: React.ReactNode;
   if (view.name === "review") {
@@ -303,7 +302,6 @@ export function ProfileBuilder({ demoMode, storage = { kind: "browser" } }: { de
 
   return (
     <div className="flex flex-col gap-6">
-      {stepBack && <BackLink onClick={stepBack} />}
       {message && <Notice tone="success">{message}</Notice>}
       {content}
     </div>

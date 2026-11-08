@@ -745,11 +745,4 @@ describe("BackLink", () => {
     expect(html).toMatch(/^<a href="\/dashboard"[^>]*><svg[^>]*aria-hidden="true"/);
     expect(text(html).trim()).toBe("Back");
   });
-
-  it("is a button inside the page, for the step before", () => {
-    const html = renderToStaticMarkup(<BackLink onClick={noop} />);
-
-    expect(html).toMatch(/^<button type="button"/);
-    expect(text(html).trim()).toBe("Back");
-  });
 });
