@@ -4,6 +4,7 @@ import { useEffect, useId, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
 import { manualConsent, manualConsentPoints, type ConsentRecord, type ProfileStorageKind } from "../consent";
+import { mistypedLines } from "../mistyped";
 import {
   approvalFor,
   reviewReducer,
@@ -202,7 +203,7 @@ export function ReviewStep({
             }
           >
             {(props) => (
-              <Textarea
+              <LinesBox
                 {...props}
                 value={draft.summary.value.text}
                 onChange={(event) => act({ type: "edit-summary", text: event.target.value })}
@@ -518,6 +519,41 @@ type FromCvFieldsProps<T> = FieldsProps<T> & { fromCv: boolean };
 type JobLines = Pick<ExperienceDraft, "duties" | "achievements">;
 
 /**
+ * A box of lines that become evidence (the summary, what you did, results). Under it, any line that looks mistyped
+ * (mistyped.ts), because the match quotes such a line word for word and Tailor builds on it. It never stops approval.
+ */
+function LinesBox({ value, ...props }: React.ComponentProps<typeof Textarea> & { value: string }) {
+  const noteId = useId();
+  const lines = mistypedLines(value);
+  const describedBy = [props["aria-describedby"], lines.length > 0 && noteId].filter(Boolean).join(" ") || undefined;
+  return (
+    <>
+      <Textarea {...props} value={value} aria-describedby={describedBy} />
+      {lines.length > 0 && (
+        <div id={noteId}>
+          <Notice tone="warning" title={lines.length === 1 ? "This line looks mistyped" : "These lines look mistyped"}>
+            <ul className="flex flex-col gap-1">
+              {lines.map((line, index) => (
+                <li key={index}>
+                  <q dir="auto" className="break-words">
+                    {line}
+                  </q>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1">
+              {lines.length === 1
+                ? "Check it before you approve. If it’s right as it is, leave it."
+                : "Check them before you approve. If a line is right as it is, leave it."}
+            </p>
+          </Notice>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * The hint under "What you did" (#236). A job read from the CV with nothing under it says why the box is empty,
  * so the user doesn't think we dropped their lines; once they type, it is the usual hint again.
  * `read` is what the CV had for this job (null for a job added by hand). The hint speaks of what the CV had, not of
@@ -619,12 +655,12 @@ function ExperienceFields({ value, errors, fromCv, readFromCv, onChange }: FromC
       />
       <Field label="What you did" hint={dutiesHint(value, fromCv, readFromCv)} error={errors.duties}>
         {(props) => (
-          <Textarea {...props} value={value.duties} onChange={(event) => onChange({ duties: event.target.value })} className="min-h-28" />
+          <LinesBox {...props} value={value.duties} onChange={(event) => onChange({ duties: event.target.value })} className="min-h-28" />
         )}
       </Field>
       <Field label="Results and achievements" hint="One per line. A number makes each one stronger." error={errors.achievements}>
         {(props) => (
-          <Textarea
+          <LinesBox
             {...props}
             value={value.achievements}
             onChange={(event) => onChange({ achievements: event.target.value })}
@@ -665,7 +701,7 @@ function VolunteeringFields({ value, errors, fromCv, onChange }: FromCvFieldsPro
       />
       <Field label="What you did" hint={fromCv ? "One per line, as on your CV." : "One per line."} error={errors.details}>
         {(props) => (
-          <Textarea {...props} value={value.details} onChange={(event) => onChange({ details: event.target.value })} className="min-h-28" />
+          <LinesBox {...props} value={value.details} onChange={(event) => onChange({ details: event.target.value })} className="min-h-28" />
         )}
       </Field>
     </>
@@ -739,7 +775,7 @@ function ProjectFields({ value, errors, fromCv, onChange }: FromCvFieldsProps<Pr
       />
       <Field label="What you did" hint={fromCv ? "One per line, as on your CV." : "One per line."} error={errors.details}>
         {(props) => (
-          <Textarea {...props} value={value.details} onChange={(event) => onChange({ details: event.target.value })} className="min-h-28" />
+          <LinesBox {...props} value={value.details} onChange={(event) => onChange({ details: event.target.value })} className="min-h-28" />
         )}
       </Field>
       <Field label="Link (optional)" hint="For example its page on GitHub or in your portfolio" error={errors.url}>
