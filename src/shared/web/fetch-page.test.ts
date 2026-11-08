@@ -238,6 +238,96 @@ describe("readablePage", () => {
     const deep = '{"@graph":'.repeat(5000) + "null" + "}".repeat(5000);
     expect(() => readablePage(`<script type="application/ld+json">${deep}</script><p>Ad</p>`)).not.toThrow();
   });
+
+  it("keeps an ad the page prints twice, for wide screens and for phones, once (NHS Jobs, #411)", () => {
+    const ad =
+      "<h2>Job description</h2><p>Our neonatal unit cares for around 600 babies a year, from 23 weeks' gestation. We are looking for a senior staff nurse to lead shifts, teach students and support families through their stay. Most of our nurses joined us as students.</p>" +
+      "<h2>Person Specification</h2><h3>Qualifications</h3><h4>Essential</h4><ul><li>NMC registration</li><li>Neonatal course (QIS)</li><li>Experience of caring for babies who need intensive care</li></ul>" +
+      "<h4>Desirable</h4><ul><li>Leadership qualification</li><li>Teaching or mentoring qualification</li><li>Quality improvement experience</li></ul>";
+    const html = `<main><div class="hide-mobile">${ad}</div>\n<details class="nhsuk-details"><summary>Read the ad</summary>\n<div>${ad}</div></details></main>`;
+
+    expect(readablePage(html).text).toBe(`${readablePage(ad).text}\n\nRead the ad`);
+
+    // The same when each section comes straight after its own copy, as NHS Jobs prints them.
+    const sections = ad.split(/(?=<h2>)/).map((section) => `<div class="hide-mobile">${section}</div><details><div>${section}</div></details>`);
+    const lines = (text: string) => text.split("\n").filter(Boolean);
+    expect(lines(readablePage(sections.join("")).text)).toEqual(lines(readablePage(ad).text));
+  });
+
+  it("keeps a short line each time it comes, such as the label on every row of a person specification", () => {
+    const rows = ["NMC registration", "Neonatal course (QIS)", "Teaching qualification"]
+      .map((criterion) => `<p>${criterion}</p><p>Essential</p><p>Application form</p>`)
+      .join("");
+    expect(readablePage(rows).text).toBe(
+      "NMC registration\nEssential\nApplication form\nNeonatal course (QIS)\nEssential\nApplication form\nTeaching qualification\nEssential\nApplication form",
+    );
+
+    // A short block such as the band and the pay can come twice as well.
+    const details = "<p>Band 6</p><p>£39,959 to £48,117 a year</p><p>Permanent</p>";
+    expect(readablePage(`${details}<p>About us</p>${details}`).text).toBe(
+      "Band 6\n£39,959 to £48,117 a year\nPermanent\nAbout us\nBand 6\n£39,959 to £48,117 a year\nPermanent",
+    );
+  });
+
+  it("keeps criteria the ad lists again elsewhere under their own Essential heading", () => {
+    const criteria = [
+      "NMC registration as an adult nurse",
+      "At least two years of post-registration experience in acute medicine",
+      "Mentorship qualification or willingness to work towards it",
+      "Experience of leading a shift on a busy medical ward",
+      "Competent in IV drug administration and venepuncture",
+    ];
+    const list = `<ul>${criteria.map((criterion) => `<li>${criterion}</li>`).join("")}</ul>`;
+    const html = `<h3>What we are looking for</h3>${list}<h2>Person Specification</h2><h4>Essential</h4>${list}<h4>Desirable</h4><ul><li>ALS certificate</li></ul>`;
+
+    expect(readablePage(html).text).toContain(`Person Specification\nEssential\n${criteria.join("\n")}`);
+  });
+
+  it("keeps the heading above a long criterion the ad repeats in another group", () => {
+    const long =
+      "Experience of working with children and young people with complex health needs and their families, including safeguarding and multi-agency working, in an acute paediatric or community setting";
+    const html =
+      `<h4>Qualifications</h4><h5>Essential</h5><ul><li>Registered Children's Nurse (NMC)</li></ul><h5>Desirable</h5><ul><li>${long}</li></ul>` +
+      `<h4>Experience</h4><h5>Essential</h5><ul><li>${long}</li><li>At least two years post-registration experience</li></ul>`;
+
+    expect(readablePage(html).text).toContain(`Experience\nEssential\n${long}\nAt least two years post-registration experience`);
+  });
+
+  it("keeps the next group's Essential heading after a group printed twice", () => {
+    const list = (items: string[]) => `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+    const group = (essential: string[], desirable: string[]) => `<h4>Essential</h4>${list(essential)}<h4>Desirable</h4>${list(desirable)}`;
+    const twice = (html: string) => `<div class="hide-mobile">${html}</div><details class="nhsuk-details"><div>${html}</div></details>`;
+    const registration = group(
+      ["Registered nurse on the NMC register with a current, active PIN", "First degree in nursing or a diploma with continuing professional development at degree level"],
+      ["Practice supervisor or assessor qualification, or willing to work towards one"],
+    );
+    const experience = group(
+      ["Two years of post-registration experience on a busy acute surgical ward", "Experience of coordinating a shift and supervising healthcare assistants and students"],
+      ["Intermediate Life Support (ILS) certificate"],
+    );
+    const lines = (text: string) => text.split("\n").filter(Boolean);
+    const once = lines(readablePage(`<h2>Person Specification</h2>${registration}${experience}`).text);
+
+    expect(lines(readablePage(`<h2>Person Specification</h2>${twice(registration)}${experience}`).text)).toEqual(once);
+    expect(lines(readablePage(`<h2>Person Specification</h2>${twice(registration)}${twice(experience)}`).text)).toEqual(once);
+  });
+
+  it("drops a short section printed twice in a row, but not a block that only begins like it", () => {
+    const twice = (html: string) => `<div class="hide-mobile">${html}</div><details class="nhsuk-details"><div>${html}</div></details>`;
+    const spec = "<h2>Person Specification</h2><h4>Essential</h4><ul><li>NMC registration</li></ul><h4>Desirable</h4><ul><li>Mentorship qualification</li></ul>";
+    const employer = "<h2>Employer details</h2><p>Example Community Hospital</p><p>Exampleton</p>";
+    const lines = (text: string) => text.split("\n").filter(Boolean);
+    expect(lines(readablePage(`<main>${twice(spec)}${twice(employer)}</main>`).text)).toEqual(lines(readablePage(spec + employer).text));
+
+    const pay = (contract: string) => `<p>Band 6</p><p>£39,959 a year</p><p>${contract}</p>`;
+    expect(readablePage(pay("Permanent") + pay("Permanent") + pay("Fixed term")).text).toBe(
+      "Band 6\n£39,959 a year\nPermanent\nBand 6\n£39,959 a year\nFixed term",
+    );
+  });
+
+  it("reads a page of a hundred thousand repeated lines in one pass", () => {
+    expect(readablePage("<p>Apply now</p>".repeat(100_000)).text).toBe("Apply now");
+  });
 });
 
 describe("isPrivateAddress", () => {
@@ -317,6 +407,13 @@ describe("readablePage, on hostile pages", () => {
     const html = "<script type=application/ld+json>{</script>".repeat(Math.ceil(2_000_000 / 43));
     const started = performance.now();
     readablePage(html);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it("reads 1.7 MB of different lines, printed twice, in well under a second (#411)", () => {
+    const once = Array.from({ length: 50_000 }, (_, index) => `<p>Line ${index}</p>`).join("");
+    const started = performance.now();
+    readablePage(once + once);
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
