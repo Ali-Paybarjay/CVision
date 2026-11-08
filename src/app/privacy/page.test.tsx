@@ -35,6 +35,11 @@ function sourceFiles(dir: string): string[] {
 const labOnlyKeys = ["cvision.interview-lab.v1"];
 
 describe("privacy page", () => {
+  it("says the AI use records also note each job ad link our server opens, never the link itself (#430)", () => {
+    expect(text).toContain("We also keep one record each time our server opens the link to a job ad for you");
+    expect(text).toContain("Never the link itself.");
+  });
+
   it("keeps the section the deletion message links to", () => {
     expect(html).toContain('id="not-deleted-straight-away"');
     expect(text).toContain("What isn’t deleted straight away");

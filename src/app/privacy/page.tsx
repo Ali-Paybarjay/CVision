@@ -142,7 +142,9 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
       <>
         <p>
           One record for each request to the AI: which feature and model it was for, how much text was processed, what
-          it cost and whether it worked. Never the text itself.
+          it cost and whether it worked. Never the text itself. We also keep one record each time our server opens the
+          link to a job ad for you, and whether it could read the page, so we can limit how many pages it opens for one
+          person each day. Never the link itself.
         </p>
         <p>
           We use these to set daily limits on AI use. We also add them up by day, or over a set time when we test the app,
