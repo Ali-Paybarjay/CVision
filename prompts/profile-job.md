@@ -16,7 +16,7 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 - `salary`: the pay in pounds. `min` and `max` are plain numbers: £29,000 is 29000 and £30k is 30000. A single figure goes in both. `period` is "year", "day" or "hour". Use null if the ad gives no figure ("competitive" is not a figure) or the pay is not in pounds.
 - `contractType`: "permanent", "fixed-term", "contract" or "temporary". null if the ad doesn't say.
 - `hours`: "full-time" or "part-time". null if the ad doesn't say.
-- `workMode`: "remote", "hybrid" or "on-site" ("office-based" is "on-site"). null if the ad doesn't say.
+- `workMode`: "remote", "hybrid" or "on-site" ("office-based" is "on-site"). null if the ad doesn't say which. Travelling between sites or visiting customers is not a work mode, so it alone gives null.
 - `requirements.essential`: what a candidate must already have: skills, tools, experience, qualifications and licences. Items under headings such as "Essential", "Requirements", "Must have", "You will have" or "About you" belong here. If the ad doesn't separate essential from desirable, put every requirement here.
 - `requirements.desirable`: what the ad calls desirable, preferred, a bonus or nice to have.
 
