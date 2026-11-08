@@ -1,5 +1,6 @@
 import type { Profile } from "@/shared/contracts";
 import { cvFileMessages } from "../cv-limits";
+import { pageAccountField } from "../server/same-account";
 import type { SaveReason, SaveResponse } from "../server/save-request";
 
 /** The form field names of POST /profile/save (see saveFields in server/save-request.ts). */
@@ -12,9 +13,11 @@ const fields = { profile: "profile", cv: "cv", consent: "consent", reason: "reas
  */
 export async function saveProfileToAccount(
   profile: Profile,
-  options: { reason: SaveReason; cv?: File; consentVersion?: string },
+  options: { reason: SaveReason; cv?: File; consentVersion?: string; account?: string },
 ): Promise<SaveResponse> {
   const form = new FormData();
+  // The account this page was built for, so the server refuses a save from a page left open for another one (#350).
+  if (options.account) form.set(pageAccountField, options.account);
   form.set(fields.profile, JSON.stringify(profile));
   form.set(fields.reason, options.reason);
   if (options.cv) form.set(fields.cv, options.cv);

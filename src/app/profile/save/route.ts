@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/features/account/current-user";
 import { cvFileMessages, MAX_CV_BYTES } from "@/features/profile/cv-limits";
+import { builtForAnotherAccount, otherAccountMessage } from "@/features/profile/server/same-account";
 import { isSameOrigin } from "@/features/profile/server/same-origin";
 import { handleSaveRequest, type SaveResponse } from "@/features/profile/server/save-request";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
@@ -30,6 +31,8 @@ export async function POST(request: Request) {
   } catch {
     return reply({ ok: false, code: "invalid", message: "Your profile could not be read. Reload the page and try again." });
   }
+  // A page left open for another account must not save over this one's profile (#350).
+  if (builtForAnotherAccount(form, user.id)) return reply({ ok: false, code: "forbidden", message: otherAccountMessage });
 
   return reply(await handleSaveRequest(form, { supabase, userId: user.id }));
 }

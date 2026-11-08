@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { Button, Field, Input, Notice } from "@/shared/ui";
 import { signIn, signUp, type AuthFormState } from "./actions";
+import { FullReloadField, useFullReload } from "./full-reload";
 import { defaultDestination, withNext } from "./safe-redirect";
 
 const copy = {
@@ -23,6 +24,8 @@ export function AuthForm({
 }) {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(mode === "sign-up" ? signUp : signIn, {});
   const text = copy[mode];
+  // Signed in: load the next page afresh, so no page kept from before (another account's, perhaps) survives (#350).
+  useFullReload(state.go);
 
   if (state.checkEmail) {
     return (
@@ -45,6 +48,7 @@ export function AuthForm({
         </Notice>
       )}
       <input type="hidden" name="next" value={next} />
+      <FullReloadField />
       <Field label="Email" error={state.fieldErrors?.email}>
         {(props) => <Input {...props} name="email" type="email" autoComplete="email" required disabled={disabled} />}
       </Field>

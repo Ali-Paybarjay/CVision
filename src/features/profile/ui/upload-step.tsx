@@ -7,6 +7,7 @@ import { Button, Card, Field, Notice, WaitNote } from "@/shared/ui";
 import { consentPoints, cvConsent, type ConsentRecord, type ProfileStorageKind } from "../consent";
 import { ACCEPTED_CV_FILES, cvFileMessages, MAX_CV_BYTES } from "../cv-limits";
 import type { ExtractResponse } from "../server/extract-request";
+import { pageAccountField } from "../server/same-account";
 import { ConsentBox } from "./consent-box";
 import { useFocusHeading } from "./focus-heading";
 import { Steps } from "./steps";
@@ -33,6 +34,8 @@ type UploadStepProps = {
   onCancel?: () => void;
   /** The CV the user just checked in the CV check (#336): put in the file field, so they don't upload it again. */
   carriedFile?: File | null;
+  /** The account this page was built for, sent with the upload so the server refuses a page left open (#350). */
+  account?: string;
 };
 
 type Errors = { file?: string; consent?: string; form?: string; signIn?: boolean };
@@ -47,6 +50,7 @@ export function UploadStep({
   onStartManual,
   onCancel,
   carriedFile = null,
+  account,
 }: UploadStepProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   // Each carried CV goes into the file field once; the user can still choose another file. A newer carried CV (the
@@ -149,6 +153,7 @@ export function UploadStep({
 
       <Card>
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6" aria-busy={pending}>
+          {account && <input type="hidden" name={pageAccountField} value={account} />}
           <Field label="Your CV" hint="A PDF or a Word (.docx) file, up to 4 MB." error={errors.file}>
             {(props) => (
               <input
