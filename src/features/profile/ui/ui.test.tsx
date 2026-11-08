@@ -9,7 +9,7 @@ import { builtFromCv, fromAccount, fromBrowser, type SavedProfile } from "../sav
 import { BackLink } from "./back-link";
 import { PreferencesForm } from "./preferences-form";
 import { consentToSend, ProfileBuilder } from "./profile-builder";
-import { deleteQuestion, ProfileOverview } from "./profile-overview";
+import { deleteNote, deleteQuestion, ProfileOverview } from "./profile-overview";
 import { dutiesHint, ReviewStep } from "./review-step";
 import { SignInToStart } from "./sign-in-to-start";
 import { SignInNotice, UploadStep } from "./upload-step";
@@ -555,8 +555,10 @@ describe("profile screens", () => {
     expect(html).toContain("Check and edit your details");
     expect(html).toContain("What you’re looking for");
     expect(html).toContain(personas[name].profile.preferences.location);
-    expect(html).toContain("Download my data");
+    expect(html).toContain("Download my profile");
     expect(html).toContain("Delete my profile");
+    // A browser profile has no account, so no way to Your data.
+    expect(html).not.toContain("delete your account");
     expect(html).toContain("Paste a job ad");
     // The personas have no volunteering, projects or languages, so their summary is as it was before #227.
     expect(html).not.toMatch(/Volunteering|Projects|Languages/);
@@ -636,6 +638,14 @@ describe("profile screens", () => {
     expect(deleteQuestion(fromBrowser(stored("sara")), "browser")).toBe("Delete your profile from this browser?");
   });
 
+  // The button used to say Delete everything, but the account and the rest of its records stay.
+  it("says what stays when the profile is deleted from an account", () => {
+    expect(deleteNote("account")).toBe(
+      "Your account, saved job ads, tailored CVs and applications stay. This can’t be undone, so download your profile first if you want a copy.",
+    );
+    expect(deleteNote("browser")).toBe("This can’t be undone, so download your profile first if you want a copy.");
+  });
+
   it("sends the account the consent just given with a new CV or a typed-in profile, and none with an edit", () => {
     const given = (version: string) => ({ version, givenAt: "2026-10-25T09:00:00.000Z" });
 
@@ -653,6 +663,7 @@ describe("profile screens", () => {
     expect(html).toContain("Saved to your CVision account, last changed on 21 October 2026.");
     expect(html).toContain("The CV file you uploaded (PDF) is kept with it.");
     expect(html).not.toContain("this browser");
+    expect(html).toContain("To download everything in your account, or to delete your account, go to Your data");
   });
 
   it("invites the user to add preferences when there are none", () => {
