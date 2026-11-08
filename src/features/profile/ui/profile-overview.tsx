@@ -44,7 +44,7 @@ export function ProfileOverview({
   const [editingPreferences, setEditingPreferences] = useState(false);
   const [preferencesSaved, setPreferencesSaved] = useState(false);
   const latestJob = profile.experience[0];
-  const preferences = describePreferences(profile.preferences);
+  const preferences = describePreferences(profile.preferences, profile.contact.location);
   const notes = noteLines(profile.preferences.notes);
   const anyPreferences = preferences.length > 0 || notes.length > 0;
 
@@ -122,7 +122,12 @@ export function ProfileOverview({
       <Card>
         <h2 className="text-xl">What you’re looking for</h2>
         {editingPreferences ? (
-          <PreferencesForm preferences={profile.preferences} onSave={savePreferences} onCancel={() => setEditingPreferences(false)} />
+          <PreferencesForm
+            preferences={profile.preferences}
+            townOrCity={profile.contact.location}
+            onSave={savePreferences}
+            onCancel={() => setEditingPreferences(false)}
+          />
         ) : (
           <>
             {anyPreferences ? (

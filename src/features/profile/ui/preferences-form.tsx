@@ -20,13 +20,15 @@ import { count } from "./format";
 
 type PreferencesFormProps = {
   preferences: JobPreferences;
+  /** The town or city in the user's contact details: the place to work when this one is left empty. */
+  townOrCity?: string;
   /** Saves the preferences; resolves to a message for the user if it couldn't. */
   onSave: (preferences: JobPreferences) => Promise<string | null>;
   onCancel: () => void;
 };
 
 /** What kind of work the user is looking for: place, way of working, contract, hours, pay, must-haves and deal-breakers. */
-export function PreferencesForm({ preferences, onSave, onCancel }: PreferencesFormProps) {
+export function PreferencesForm({ preferences, townOrCity, onSave, onCancel }: PreferencesFormProps) {
   const [draft, setDraft] = useState<PreferencesDraft>(() => draftFromPreferences(preferences));
   const [errors, setErrors] = useState<PreferencesErrors>({});
   const [problem, setProblem] = useState<string | null>(null);
@@ -59,7 +61,14 @@ export function PreferencesForm({ preferences, onSave, onCancel }: PreferencesFo
 
   return (
     <form onSubmit={(event) => void submit(event)} noValidate className="mt-4 flex flex-col gap-5" aria-busy={saving}>
-      <Field label="Where you want to work" hint="A town, city or postcode">
+      <Field
+        label="Where you want to work"
+        hint={
+          townOrCity?.trim()
+            ? `A town, city or postcode. Leave it empty to use your town or city, ${townOrCity.trim()}.`
+            : "A town, city or postcode"
+        }
+      >
         {(props) => <Input {...props} value={draft.location} onChange={(event) => change({ location: event.target.value })} />}
       </Field>
 

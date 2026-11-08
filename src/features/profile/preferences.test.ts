@@ -134,4 +134,10 @@ describe("describePreferences", () => {
   it("is empty when nothing is set", () => {
     expect(describePreferences(empty)).toEqual([]);
   });
+
+  it("uses the town or city, said as such, only when no place to work is set", () => {
+    expect(describePreferences(empty, " London ")).toEqual(["London (your town or city)"]);
+    expect(describePreferences({ ...empty, location: "Manchester" }, "London")).toEqual(["Manchester"]);
+    expect(describePreferences(empty, " ")).toEqual([]);
+  });
 });

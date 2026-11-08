@@ -126,8 +126,12 @@ export function readPounds(text: string): number | null {
   return amount > 0 && amount <= 1_000_000 ? amount : null;
 }
 
-/** Plain lines for the profile overview, or an empty list when nothing is set. */
-export function describePreferences(preferences: JobPreferences): string[] {
+/**
+ * Plain lines for the profile overview, or an empty list when nothing is set. With no place to work, the place is the
+ * user's town or city from their contact details, said as such: the two are kept apart, so one can be where they
+ * live and the other where they want to work.
+ */
+export function describePreferences(preferences: JobPreferences, townOrCity = ""): string[] {
   const labels = <T>(options: { value: T; label: string }[], chosen: T[]) =>
     options.filter((option) => chosen.includes(option.value)).map((option) => option.label);
   const either = (words: string[]) => (words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words.at(-1)}` : words.join(""));
@@ -145,7 +149,7 @@ export function describePreferences(preferences: JobPreferences): string[] {
   }
 
   return [
-    preferences.location,
+    preferences.location || (townOrCity.trim() && `${townOrCity.trim()} (your town or city)`),
     either(labels(workModeOptions, preferences.workModes)),
     either(labels(contractTypeOptions, preferences.contractTypes)),
     either(labels(hoursOptions, preferences.hours)),
