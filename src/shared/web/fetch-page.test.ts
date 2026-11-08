@@ -224,6 +224,17 @@ describe("readablePage", () => {
       );
     });
 
+    it("drops the links and buttons that only lead back, and keeps every other link", () => {
+      const html =
+        '<main><div class="back-link"><a class="back-link__link" href="/search"><span>Go back</span></a></div>' +
+        `${advert}<p><a href="https://trust.example">Visit our website</a> or read about <a href="/back">back care</a>.</p>` +
+        '<a href="/search">Back to search results</a><button type="button">Back</button></main>';
+      const { text } = readablePage(html);
+
+      expect(text.startsWith("Specialty Doctor in Cardiology")).toBe(true);
+      expect(text.endsWith("MRCP or equivalent\n\nVisit our website or read about back care .")).toBe(true);
+    });
+
     it("keeps a posting's title and employer before <main> when the posting has no description", () => {
       const posting = { "@type": "JobPosting", title: "Specialty Doctor", hiringOrganization: "Northfield" };
       const html = `<script type="application/ld+json">${JSON.stringify(posting)}</script><nav>Menu</nav><main>${advert}</main>`;
@@ -350,6 +361,7 @@ describe("readablePage, on hostile pages", () => {
     ["unclosed comments", "<!--"],
     ["unclosed titles", "<title>"],
     ["unclosed main tags", "<main>"],
+    ["unclosed links", "<a href=x>back to "],
   ])("reads 200 KB of %s in well under a second", (_name, piece) => {
     const html = piece.repeat(Math.ceil(200_000 / piece.length));
     const started = performance.now();
