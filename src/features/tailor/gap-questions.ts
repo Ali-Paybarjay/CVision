@@ -31,8 +31,15 @@ const notAboutSkills = new RegExp(
 );
 
 /** The gaps worth a question: what the job asks the person to know or have done. */
+/**
+ * A degree. When the CV shows one, only its accreditation or UK equivalence can be unclear, and no answer to that makes
+ * a CV line: the employer checks it. So an unclear degree gets no question, and a degree is never one to make stronger.
+ * A missing degree still gets one. "Degree-level knowledge of statistics" is about knowledge, so it is not a degree.
+ */
+const aDegree = /\b(degree(?![- ]level)|bsc|b\.sc|beng|b\.eng|msc|m\.sc|meng|m\.eng|mphil|phd|hnd|hnc)\b/i;
+
 export function skillGaps(gaps: Gap[]): Gap[] {
-  return gaps.filter((gap) => !notAboutSkills.test(gap.requirement));
+  return gaps.filter((gap) => !notAboutSkills.test(gap.requirement) && !(gap.kind === "unclear" && aDegree.test(gap.requirement)));
 }
 
 /** A plain yes-or-no question for one gap, used as the mock answer and as a fallback. */
@@ -72,7 +79,7 @@ export function strongerGaps(job: Job, match: MatchResult): Gap[] {
   const seen = new Set<string>();
   return match.strengths.flatMap((strength) => {
     const requirement = normalise(strength.requirement);
-    if (notAboutSkills.test(strength.requirement) || asked.has(requirement) || seen.has(requirement)) return [];
+    if (notAboutSkills.test(strength.requirement) || aDegree.test(strength.requirement) || asked.has(requirement) || seen.has(requirement)) return [];
     seen.add(requirement);
     return [
       {

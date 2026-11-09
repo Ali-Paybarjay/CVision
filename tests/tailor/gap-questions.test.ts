@@ -54,6 +54,42 @@ describe("the gap questions ask only about skills and experience", () => {
   });
 });
 
+describe("a degree the CV already shows is never asked about", () => {
+  const of = (kind: Gap["kind"], requirement: string): Gap => ({ ...gap("d", requirement), kind });
+
+  it.each([
+    "Accredited degree in Chemical/Environmental or Process Engineering",
+    "IChemE-accredited BEng or MEng in Chemical Engineering",
+    "A degree in engineering or a related subject",
+    "MSc in Data Science or equivalent",
+  ])("asks nothing when %s is only unclear", (requirement) => {
+    expect(skillGaps([of("unclear", requirement)])).toEqual([]);
+  });
+
+  it("still asks when the CV shows no degree at all", () => {
+    expect(skillGaps([of("missing", "Accredited degree in Chemical Engineering")])).toHaveLength(1);
+  });
+
+  it("still asks about degree-level knowledge, which is about knowledge, not a degree", () => {
+    expect(skillGaps([of("unclear", "Degree-level knowledge of statistics")])).toHaveLength(1);
+  });
+
+  it("never turns a degree the CV meets into a Make it stronger question", () => {
+    const { jobs, match } = personas.sara;
+    const strengths = [
+      { requirement: "Accredited degree in Chemical Engineering", evidence: "BSc Chemical Engineering, Harrowgate University" },
+      { requirement: "Strong SQL", evidence: "Skills: SQL" },
+    ];
+    expect(strongerGaps(jobs[0], { ...match, strengths }).map((item) => item.requirement)).toEqual(["Strong SQL"]);
+  });
+
+  it("tells the model never to ask whether a degree is accredited", async () => {
+    const { profile, jobs, match } = personas.sara;
+    const prompt = await gapQuestionsPrompt({ profile, job: jobs[0], gaps: match.gaps });
+    expect(prompt).toContain("Never ask whether a degree is accredited, recognised or equivalent");
+  });
+});
+
 describe("the gap questions prompt", () => {
   it("finds the role first and keeps the ad's own words (#401)", async () => {
     const { profile, jobs, match } = personas.sara;

@@ -15,6 +15,7 @@ You are helping someone tailor their CV to one job. Compare the job ad with thei
 - Leave a gap out, with no question at all, when:
   - it is a condition of the job and not about skills or experience: a driving licence, right to work, location, travel, hours, availability, salary or vetting of the person. Work on these subjects is experience, so "Processing DBS checks for new starters" or "Experience leading shift teams" still gets a question. A professional registration or licence to practise (for example with the GMC, NMC or HCPC, or Gas Safe) is a qualification, not a condition, so it gets a question;
   - the CV already shows it clearly;
+  - it is a degree the CV already shows, even when the ad asks for an accredited, recognised or UK-equivalent one. Never ask whether a degree is accredited, recognised or equivalent: the employer checks that, and no answer makes a CV line;
   - it is too vague to answer, such as "a positive attitude". Knowledge of a named subject, such as safeguarding, clinical governance or a standard, is not vague: ask what they have done with it.
 - Never ask about the same thing twice.
 
