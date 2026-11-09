@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { gapQuestionsKey, keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
-import { gapQuestionsPrompt, skillGaps } from "@/features/tailor";
+import { gapQuestionsPrompt, skillGaps, strongerGaps } from "@/features/tailor";
 import type { GapQuestion } from "@/features/tailor/types";
 import { personas } from "@/shared/sample-data";
 
@@ -75,12 +75,19 @@ describe("gap questions asked once per job (#304)", () => {
     expect(ask).toHaveBeenCalledTimes(3);
   });
 
+  it("asks again when the strengths change, since they can become questions too", async () => {
+    const ask = vi.fn(async () => questions);
+    await keptGapQuestions(input, ask);
+    await keptGapQuestions({ ...input, match: { ...input.match, strengths: input.match.strengths.slice(1) } }, ask);
+    expect(ask).toHaveBeenCalledTimes(2);
+  });
+
   it("gives the same key whatever the Profile's id, so a re-saved Profile keeps its questions", async () => {
     expect(await gapQuestionsKey({ ...input, profile: { ...profile, id: "another-id" } })).toBe(await gapQuestionsKey(input));
   });
 
   it("keys the questions on the request text the model gets, so a new prompt gives a new key (#416)", async () => {
-    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps) });
+    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match) });
     expect(await gapQuestionsKey(input)).toBe(createHash("sha256").update(prompt).digest("hex"));
   });
 

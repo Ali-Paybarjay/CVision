@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/features/account/current-user";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
-import { gapQuestionsPrompt, skillGaps } from "../gap-questions";
+import { gapQuestionsPrompt, skillGaps, strongerGaps } from "../gap-questions";
 import { GapQuestionSchema, type GapQuestion } from "../types";
 
 type Input = { profile: Profile; job: Job; match: MatchResult };
@@ -13,12 +13,12 @@ const StoredSchema = z.object({ key: z.string().min(1), questions: z.array(GapQu
 
 /**
  * A hash of the request text the model gets for these questions: the prompt file, the ad as jobForPrompt gives it,
- * the CV and the gaps (#416). When any of them changes, a new prompt included, the stored questions no longer fit
+ * the CV, the gaps and the strengths to make stronger (#416). When any of them changes, a new prompt included, the stored questions no longer fit
  * and new ones are asked for. The Profile's id and contact details are not in that text, so a re-saved Profile
  * keeps its questions.
  */
 export async function gapQuestionsKey({ profile, job, match }: Input): Promise<string> {
-  const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps) });
+  const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match) });
   return createHash("sha256").update(prompt).digest("hex");
 }
 

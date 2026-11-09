@@ -31,19 +31,29 @@ Take these only from what the ad says; never guess them from the job title or th
 
 ## How to ask
 
-- One question for each gap you keep, with the gap's `id` as `gapId`.
+You get two lists. "The gaps" are what the CV does not show, or shows only vaguely. "Make it stronger" are requirements the CV already meets, each with the CV line or earlier answer that shows it in `detail`.
+
+- Ask about every gap you keep. Then ask about "Make it stronger" items until there are 5 questions in all, the most important for this job first. Skip one only when its line already gives scale and a result, or when it repeats another question. With 5 or more gaps, ask no "Make it stronger" questions.
+- One question for each item you keep, with its `id` as `gapId`.
 - One question about one thing. No "and" joining two topics, no "If not, tell us…".
 - At most 20 words, in a simple sentence and with no flattery. For the requirement itself, use the ad's own words: its Band or grade, the registration body, a procedure, the setting. A nurse expects "Have you worked as a Band 5 nurse on an acute ward?", not "Have you worked in healthcare?".
-- Ask what they have done, not what they could do. Speak to them as "you".
-- For an `unclear` gap, name the CV line it relates to, e.g. "Your CV mentions dashboards for the sales team. Did you present the results yourself?"
+- Use their field's words too: the specialist terms, systems, standards, equipment and brands in their CV or the ad (for example DICOM, PACS, HAZOP, SolidWorks). Leave out only empty words and buzzwords.
+- Tie every question to their own work: name a role and employer from their CV, or quote a few words of the CV line it builds on. Example: "At Northbridge Imaging you installed CT scanners. Did you also set up their link to the hospital PACS?"
+- For a `missing` gap, ask whether they did the closest real version of it in their own work, naming the role where that is most likely.
+- For an `unclear` gap or a "Make it stronger" item, ask for exactly the missing piece: how many or how often, whether they led it or did it alone, which systems, models or brands, or what changed as a result.
+- When a requirement names equipment, systems, brands or standards the CV doesn't mention, ask which of them they have used, with those names as the options.
+- Ask what they have done, not what they could do. Never "How good are you at…" and never a self-rating. Speak to them as "you".
+- Never ask about the same thing twice. When two items are one piece of work (CAD, SolidWorks, 3D modelling), ask once.
 
 ## Answers they can tap
 
-- `options`: two or three different things they may have done for this requirement, the most common first.
-- Each option is one complete, first-person, past-tense sentence that names the requirement and could stand as a fact, e.g. for Power BI: "I built Power BI dashboards at work." and "I used Power BI in a course or my own project."
-- At most 15 words each. No numbers, employers, tools or results that the requirement or their CV does not mention.
+- `options`: two or three different things they may really have done, the most likely first.
+- Each option is one complete, first-person, past-tense sentence of at most 15 words that names the requirement in the ad's words and is built from their own roles. Count the words: with a long employer name, cut other words, never the requirement. Example: "I led HAZOP reviews for new units at Fenwick Chemicals."
+- Employers, roles, systems and tools may come only from their CV or the requirement. Use a number only if their CV has it.
 - Each option must be plainly true or false for this person, and none may be a stretch of another.
 - Never write a "No" option. The app adds it, and it is a normal answer.
+
+The examples above show the pattern only. Never copy their employers, systems or wording: write each question from this person's CV and this job.
 
 ## The job
 
@@ -56,3 +66,7 @@ Take these only from what the ad says; never guess them from the job title or th
 ## The gaps
 
 {{gaps}}
+
+## Make it stronger
+
+{{stronger}}

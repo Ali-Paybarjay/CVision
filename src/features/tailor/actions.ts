@@ -12,7 +12,7 @@ import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
 import { coverLetterText, declinedRequirements, inventedTerms, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
-import { defaultGapQuestion } from "./gap-questions";
+import { defaultGapQuestion, isStrongerGap, questionGaps } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
 import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
@@ -103,6 +103,10 @@ function plainNextStep(gapId: string): NextStep {
   };
 }
 
+/** For a no to a "Make it stronger" question: the CV already shows this, so the user has only nothing more to add. */
+const keepsLine = "No problem. Your CV keeps this line as it is.";
+const nothingToAdd = "Nothing more to add.";
+
 /**
  * Turns the user's answer to one gap question into suggested changes. A tap is enough: "yes" to a single tool or
  * skill always gives a suggestion, and the user is never asked for more. Every change starts as "proposed" and has
@@ -119,25 +123,31 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
   const hasExperience = parsed.data.hasExperience && !(typed && saysNo(chosen));
 
   const [access, profile, job, match] = await Promise.all([tailorModelAccess(), getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
-  const gap = match?.gaps.find((item) => item.id === gapId);
+  // The match's gaps and the strengths to make stronger: every gap a question on the page can be about.
+  const gaps = job && match ? questionGaps(job, match) : [];
+  const gap = gaps.find((item) => item.id === gapId);
   if (!profile || !job || !match || !gap) {
     // A user whose session ended reads the sample data, where a real job's gap is missing: they need to sign in again.
     return { ok: false, message: access.allowed ? "We could not find this job. Open it again from your jobs." : access.message };
   }
+  // A no to a strength means "nothing more to add": its answer never says they have not done what the CV shows.
   const answer = !hasExperience
-    ? (typed ? chosen : detail) || "I haven't done this."
+    ? (typed ? chosen : detail) || (isStrongerGap(gap) ? nothingToAdd : "I haven't done this.")
     : chosen
       ? [chosen, detail].filter(Boolean).join(". ")
       : answerSentence(gap.requirement, parsed.data.where ?? "work", detail);
   // A "no" never changes the CV, so it is kept even when the model cannot be asked, as at the daily limit (#314).
   // It gets the plain next step instead of one written for this job.
   const keptNo = (): AnswerGapResult => ({ ok: true, answer, hasExperience, changes: [], nextSteps: [plainNextStep(gapId)], hint: null, removed: 0 });
+  // A no to a strength means "nothing more to add", not "I have not done this": the CV line stays, with no model call.
+  if (!hasExperience && isStrongerGap(gap)) return { ok: true, answer, hasExperience, changes: [], nextSteps: [], hint: keepsLine, removed: 0 };
   if (!access.allowed) return hasExperience ? { ok: false, message: access.message } : keptNo();
 
-  // Only answers to this job's real gaps count; the current gap's answer is the one just sent.
+  // Only answers to this job's real gaps count; the current gap's answer is the one just sent. A no to a strength is
+  // left out, because it would block words the CV already shows.
   const earlier: GapAnswer[] = (parsed.data.earlierAnswers ?? []).flatMap((item) => {
-    const other = match.gaps.find((candidate) => candidate.id === item.gapId);
-    if (!other || other.id === gapId) return [];
+    const other = gaps.find((candidate) => candidate.id === item.gapId);
+    if (!other || other.id === gapId || (isStrongerGap(other) && !item.hasExperience)) return [];
     const text = item.answer.trim() || "I haven't done this.";
     return [{ gapId: other.id, question: defaultGapQuestion(other).question, answer: text, hasExperience: item.hasExperience }];
   });
@@ -284,7 +294,9 @@ export type CreateCoverLetterResult =
 export async function createCoverLetter(request: CoverLetterRequest): Promise<CreateCoverLetterResult> {
   const parsed = CoverLetterRequestSchema.safeParse(request);
   if (!parsed.success) return { ok: false, message: "We could not read your changes. Try again." };
-  const { jobId, answers } = parsed.data;
+  const { jobId } = parsed.data;
+  // A no to a strength means "nothing more to add", so the letter must not leave out what the CV already shows.
+  const answers = parsed.data.answers.filter((answer) => answer.hasExperience || !isStrongerGap({ id: answer.gapId }));
 
   const access = await tailorModelAccess();
   if (!access.allowed) return { ok: false, message: "Sign in to write your cover letter." };

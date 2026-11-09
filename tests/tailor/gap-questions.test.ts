@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { askGapQuestions, gapQuestionsPrompt, skillGaps } from "@/features/tailor";
+import { askGapQuestions, gapQuestionsPrompt, pickQuestions, questionGaps, skillGaps, strongerGaps } from "@/features/tailor";
+import type { GapQuestion } from "@/features/tailor";
 import type { Gap } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 
@@ -67,5 +68,87 @@ describe("the gap questions prompt", () => {
     const { profile, jobs, match } = personas.sara;
     const prompt = await gapQuestionsPrompt({ profile, job: jobs[0], gaps: match.gaps });
     expect(prompt).toContain(JSON.stringify(jobs[0].description));
+  });
+});
+
+describe("Make it stronger: questions from strengths, up to five in all", () => {
+  const { profile, jobs, match } = personas.sara;
+  const job = jobs[0];
+
+  it("turns each strength into an unclear gap that quotes its CV line, with importance from the ad", () => {
+    const stronger = strongerGaps(job, {
+      ...match,
+      strengths: [...match.strengths, { requirement: "Healthcare or NHS data", evidence: "Analysed A&E waiting times for my MSc" }],
+    });
+    expect(stronger.map(({ requirement, importance, kind }) => [requirement, importance, kind])).toEqual([
+      ["Strong SQL", "essential", "unclear"],
+      ["Python or R for analysis", "essential", "unclear"],
+      ["Dashboards in Power BI or Tableau", "essential", "unclear"],
+      ["Healthcare or NHS data", "desirable", "unclear"],
+    ]);
+    expect(stronger[0].detail).toBe('Already shown by: "Cleaned and joined weekly sales data from 120 stores using SQL and Python"');
+  });
+
+  it("sends no strengths when there are five gaps or more, since none could be asked about", () => {
+    const five = ["a", "b", "c", "d", "e"].map((id) => gap(id, `Requirement ${id}`));
+    expect(strongerGaps(job, { ...match, gaps: five })).toEqual([]);
+    expect(strongerGaps(job, { ...match, gaps: five.slice(1) })).not.toEqual([]);
+  });
+
+  it("gives a strength the same short id whatever its spelling, so stored questions still find it", () => {
+    const [first] = strongerGaps(job, match);
+    const [again] = strongerGaps(job, { ...match, strengths: [{ requirement: "  strong   SQL. ", evidence: "Another line" }] });
+    expect(first.id).toMatch(/^stronger-[0-9a-f]{8}$/);
+    expect(again.id).toBe(first.id);
+    expect(strongerGaps(job, { ...match, strengths: [{ requirement: "Strong Python", evidence: "x" }] })[0].id).not.toBe(first.id);
+  });
+
+  it("leaves out job conditions, strengths already asked about as gaps, and repeats", () => {
+    const stronger = strongerGaps(job, {
+      ...match,
+      strengths: [
+        { requirement: "Full UK driving licence", evidence: "Full UK driving licence" },
+        { requirement: "Power BI", evidence: "Skills: Power BI" },
+        { requirement: "Strong SQL", evidence: "Skills: SQL" },
+        { requirement: "strong sql", evidence: "SQL again" },
+      ],
+    });
+    expect(stronger.map((gap) => gap.requirement)).toEqual(["Strong SQL"]);
+  });
+
+  it("lists the match's gaps first, then the strengths", () => {
+    expect(questionGaps(job, match).map((gap) => gap.id.replace(/-[0-9a-f]{8}$/, ""))).toEqual(["sara-gap-1", "sara-gap-2", "sara-gap-3", "stronger", "stronger", "stronger"]);
+  });
+
+  const a = (id: string, importance: Gap["importance"] = "essential") => ({ ...gap(id, `Requirement ${id}`), importance });
+  const asked = (...ids: string[]): GapQuestion[] => ids.map((gapId) => ({ gapId, question: `About ${gapId}?` }));
+
+  it("fills up to five with strength questions, essentials first", () => {
+    const gaps = [a("a1"), a("a2", "desirable")];
+    const stronger = [a("b1", "desirable"), a("b2"), a("b3"), a("b4"), a("b5")];
+    const picked = pickQuestions(asked("b1", "b2", "b3", "b4", "b5", "a2", "a1"), gaps, stronger);
+    expect(picked.map((item) => item.gapId)).toEqual(["a1", "a2", "b2", "b3", "b4"]);
+  });
+
+  it("never cuts a gap's question to make room, and adds no strength questions past five", () => {
+    const gaps = ["a1", "a2", "a3", "a4", "a5", "a6"].map((id) => a(id));
+    const picked = pickQuestions(asked("a1", "a2", "a3", "a4", "a5", "a6", "b1"), gaps, [a("b1")]);
+    expect(picked.map((item) => item.gapId)).toEqual(["a1", "a2", "a3", "a4", "a5", "a6"]);
+  });
+
+  it("drops questions about unknown gaps and keeps one per gap", () => {
+    const picked = pickQuestions([...asked("x", "a1", "b1"), { gapId: "a1", question: "Again?" }], [a("a1")], [a("b1")]);
+    expect(picked).toEqual(asked("a1", "b1"));
+  });
+
+  it("sends the strengths to the model in their own section of the prompt", async () => {
+    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match) });
+    expect(prompt.indexOf("## Make it stronger")).toBeGreaterThan(prompt.indexOf("## The gaps"));
+    expect(prompt.slice(prompt.indexOf("## Make it stronger"))).toContain(`"id": "${strongerGaps(job, match)[0].id}"`);
+  });
+
+  it("in mock mode, still asks only about the match's gaps", async () => {
+    const questions = await askGapQuestions({ profile, job, match });
+    expect(questions.map((item) => item.gapId)).toEqual(["sara-gap-1", "sara-gap-2", "sara-gap-3"]);
   });
 });
