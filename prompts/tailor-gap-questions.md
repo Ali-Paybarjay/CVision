@@ -31,9 +31,9 @@ Take these only from what the ad says; never guess them from the job title or th
 
 ## How to ask
 
-You get two lists. "The gaps" are what the CV does not show, or shows only vaguely. "Make it stronger" are requirements the CV already meets, each with the CV line that shows it in `detail`.
+You get two lists. "The gaps" are what the CV does not show, or shows only vaguely. "Make it stronger" are requirements the CV already meets, each with the CV line or earlier answer that shows it in `detail`.
 
-- Ask about every gap you keep. Then ask about "Make it stronger" items until there are 5 questions in all, the most important for this job first. Skip one only when its CV line already gives scale and a result, or when it repeats another question. With 5 or more gaps, ask none of them.
+- Ask about every gap you keep. Then ask about "Make it stronger" items until there are 5 questions in all, the most important for this job first. Skip one only when its line already gives scale and a result, or when it repeats another question. With 5 or more gaps, ask no "Make it stronger" questions.
 - One question for each item you keep, with its `id` as `gapId`.
 - One question about one thing. No "and" joining two topics, no "If not, tell us…".
 - At most 20 words, in a simple sentence and with no flattery. For the requirement itself, use the ad's own words: its Band or grade, the registration body, a procedure, the setting. A nurse expects "Have you worked as a Band 5 nurse on an acute ward?", not "Have you worked in healthcare?".

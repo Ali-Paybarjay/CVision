@@ -1,6 +1,7 @@
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { jobForPrompt } from "./job-for-prompt";
+import { normalise } from "./nothing-invented";
 import { GapQuestionListSchema, type GapQuestion } from "./types";
 
 /**
@@ -46,11 +47,6 @@ export function defaultGapQuestion(gap: Gap): GapQuestion {
 /** The most questions Tailor fills up to with strengths. It never cuts a gap's question to stay under it. */
 export const questionTarget = 5;
 
-/** Lower case, single spaces, no full stop at the end: the same requirement however the ad and the match spell it. */
-function normalised(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.;:,\s]+$/, "");
-}
-
 /** FNV-1a: a short, stable id for a text, with no node: import, so this file stays safe to import from anywhere. */
 function shortHash(text: string): string {
   let hash = 0x811c9dc5;
@@ -62,16 +58,20 @@ function shortHash(text: string): string {
 }
 
 /**
- * "Make it stronger": requirements the CV already meets, as gaps of kind "unclear" whose detail quotes the CV line.
+ * "Make it stronger": requirements the CV already meets, as gaps of kind "unclear" whose detail quotes the CV line
+ * or follow-up answer that shows it.
  * A same-field CV meets almost everything, so without these a pilot got only two questions (7 Nov). The model asks
  * about the ones whose line gives no scale, scope, systems or result. A no to one of them never counts as "not done".
  */
 export function strongerGaps(job: Job, match: MatchResult): Gap[] {
-  const asked = new Set(skillGaps(match.gaps).map((gap) => normalised(gap.requirement)));
-  const essential = new Set(job.requirements.essential.map(normalised));
+  const gaps = skillGaps(match.gaps);
+  // With five gaps or more no strength can be asked about, so the model is not sent them and the stored key ignores them.
+  if (gaps.length >= questionTarget) return [];
+  const asked = new Set(gaps.map((gap) => normalise(gap.requirement)));
+  const essential = new Set(job.requirements.essential.map(normalise));
   const seen = new Set<string>();
   return match.strengths.flatMap((strength) => {
-    const requirement = normalised(strength.requirement);
+    const requirement = normalise(strength.requirement);
     if (notAboutSkills.test(strength.requirement) || asked.has(requirement) || seen.has(requirement)) return [];
     seen.add(requirement);
     return [
@@ -80,14 +80,14 @@ export function strongerGaps(job: Job, match: MatchResult): Gap[] {
         requirement: strength.requirement,
         importance: essential.has(requirement) ? "essential" : "desirable",
         kind: "unclear",
-        detail: `The CV shows it in: "${strength.evidence}"`,
+        detail: `Already shown by: "${strength.evidence}"`,
       } satisfies Gap,
     ];
   });
 }
 
 /** True for a gap made by strongerGaps: the CV meets it already, so a no means "nothing more to add". */
-export function isStrongerGap(gap: Gap): boolean {
+export function isStrongerGap(gap: Pick<Gap, "id">): boolean {
   return gap.id.startsWith("stronger-");
 }
 

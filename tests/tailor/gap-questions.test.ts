@@ -86,7 +86,13 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
       ["Dashboards in Power BI or Tableau", "essential", "unclear"],
       ["Healthcare or NHS data", "desirable", "unclear"],
     ]);
-    expect(stronger[0].detail).toBe('The CV shows it in: "Cleaned and joined weekly sales data from 120 stores using SQL and Python"');
+    expect(stronger[0].detail).toBe('Already shown by: "Cleaned and joined weekly sales data from 120 stores using SQL and Python"');
+  });
+
+  it("sends no strengths when there are five gaps or more, since none could be asked about", () => {
+    const five = ["a", "b", "c", "d", "e"].map((id) => gap(id, `Requirement ${id}`));
+    expect(strongerGaps(job, { ...match, gaps: five })).toEqual([]);
+    expect(strongerGaps(job, { ...match, gaps: five.slice(1) })).not.toEqual([]);
   });
 
   it("gives a strength the same short id whatever its spelling, so stored questions still find it", () => {

@@ -105,6 +105,7 @@ function plainNextStep(gapId: string): NextStep {
 
 /** For a no to a "Make it stronger" question: the CV already shows this, so the user has only nothing more to add. */
 const keepsLine = "No problem. Your CV keeps this line as it is.";
+const nothingToAdd = "Nothing more to add.";
 
 /**
  * Turns the user's answer to one gap question into suggested changes. A tap is enough: "yes" to a single tool or
@@ -129,8 +130,9 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
     // A user whose session ended reads the sample data, where a real job's gap is missing: they need to sign in again.
     return { ok: false, message: access.allowed ? "We could not find this job. Open it again from your jobs." : access.message };
   }
+  // A no to a strength means "nothing more to add": its answer never says they have not done what the CV shows.
   const answer = !hasExperience
-    ? (typed ? chosen : detail) || "I haven't done this."
+    ? (typed ? chosen : detail) || (isStrongerGap(gap) ? nothingToAdd : "I haven't done this.")
     : chosen
       ? [chosen, detail].filter(Boolean).join(". ")
       : answerSentence(gap.requirement, parsed.data.where ?? "work", detail);
@@ -292,7 +294,9 @@ export type CreateCoverLetterResult =
 export async function createCoverLetter(request: CoverLetterRequest): Promise<CreateCoverLetterResult> {
   const parsed = CoverLetterRequestSchema.safeParse(request);
   if (!parsed.success) return { ok: false, message: "We could not read your changes. Try again." };
-  const { jobId, answers } = parsed.data;
+  const { jobId } = parsed.data;
+  // A no to a strength means "nothing more to add", so the letter must not leave out what the CV already shows.
+  const answers = parsed.data.answers.filter((answer) => answer.hasExperience || !isStrongerGap({ id: answer.gapId }));
 
   const access = await tailorModelAccess();
   if (!access.allowed) return { ok: false, message: "Sign in to write your cover letter." };

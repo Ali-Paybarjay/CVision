@@ -1,4 +1,4 @@
-// Fictional people and ads for the gap questions eval (gap-questions.eval.ts). Never a real CV or ad (rule 8).
+// Fictional people and ads for the gap questions eval (gap-questions-stronger.eval.ts). Never a real CV or ad (rule 8).
 import type { Gap, Job, MatchResult, Profile, Strength } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 
