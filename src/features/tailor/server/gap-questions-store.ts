@@ -18,7 +18,7 @@ const StoredSchema = z.object({ key: z.string().min(1), questions: z.array(GapQu
  * keeps its questions.
  */
 export async function gapQuestionsKey({ profile, job, match }: Input): Promise<string> {
-  const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match) });
+  const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match, profile) });
   return createHash("sha256").update(prompt).digest("hex");
 }
 

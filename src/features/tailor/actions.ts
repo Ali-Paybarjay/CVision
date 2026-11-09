@@ -124,7 +124,7 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
 
   const [access, profile, job, match] = await Promise.all([tailorModelAccess(), getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   // The match's gaps and the strengths to make stronger: every gap a question on the page can be about.
-  const gaps = job && match ? questionGaps(job, match) : [];
+  const gaps = profile && job && match ? questionGaps(job, match, profile) : [];
   const gap = gaps.find((item) => item.id === gapId);
   if (!profile || !job || !match || !gap) {
     // A user whose session ended reads the sample data, where a real job's gap is missing: they need to sign in again.

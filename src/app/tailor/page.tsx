@@ -127,7 +127,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   }
 
   const [{ questions, notice }, savedChanges] = await Promise.all([questionsFor({ profile, job, match }), getMySavedChanges(job.id)]);
-  const gaps = questionGaps(job, match);
+  const gaps = questionGaps(job, match, profile);
   const prompts = questions.flatMap(({ gapId, question, options }) => {
     const gap = gaps.find((item) => item.id === gapId);
     return gap ? [{ gap, question, options }] : [];
