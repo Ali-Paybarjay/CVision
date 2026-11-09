@@ -40,6 +40,7 @@ const total = (rows: Row[]) => rows.find((row) => row.group === "total" && row.f
 
 const amy = randomUUID();
 const ben = randomUUID();
+const cara = randomUUID();
 let db: PGlite;
 
 async function addRequest(feature: string, at: string, who: { user?: string; anonymous?: string }, cost: number) {
@@ -51,7 +52,7 @@ async function addRequest(feature: string, at: string, who: { user?: string; ano
 
 beforeAll(async () => {
   db = await createTestDatabase();
-  for (const id of [amy, ben]) await db.query("insert into auth.users (id) values ($1)", [id]);
+  for (const id of [amy, ben, cara]) await db.query("insert into auth.users (id) values ($1)", [id]);
 
   // The window is 14 July 10:00 to 10:40 in London, which is BST: 09:00 to 09:40 UTC.
   await addRequest("profile-extract", "2026-07-14T09:05:00Z", { user: amy }, 0.002);
@@ -59,6 +60,11 @@ beforeAll(async () => {
   await addRequest("tailor-propose", "2026-07-14T09:20:00Z", { user: ben }, 0.003);
   // The free CV check has no account.
   await addRequest("cv-check", "2026-07-14T09:30:00Z", { anonymous: "visitor-1" }, 0.0005);
+  // Opening a job ad's link (#429) writes a row with model 'none', no tokens and no cost: not a model request.
+  await db.query(
+    "insert into public.ai_usage (user_id, feature, model, input_tokens, output_tokens, cost_usd, ok, created_at) values ($1, 'profile-link', 'none', 0, 0, 0, false, $2)",
+    [cara, "2026-07-14T09:25:00Z"],
+  );
   // Just outside: before the start, and at the end itself.
   await addRequest("profile-extract", "2026-07-14T08:59:59Z", { user: ben }, 0.9);
   await addRequest("tailor-propose", "2026-07-14T09:40:00Z", { user: ben }, 0.9);
@@ -84,14 +90,21 @@ describe("supabase/queries/ai-cost.sql", () => {
 
   it("adds up only the requests inside the London window, counting accounts but not visitors", async () => {
     const rows = await runQuery("2026-07-14 10:00", "2026-07-14 10:40");
-    expect(total(rows)).toMatchObject({ requests: 4, accounts: 2, input_tokens: 4000, output_tokens: 2000, cost_usd: 0.0065, log_rows: 6 });
+    expect(total(rows)).toMatchObject({ requests: 4, accounts: 2, input_tokens: 4000, output_tokens: 2000, cost_usd: 0.0065, log_rows: 7 });
     expect(rows.find((row) => row.group === "per-job" && row.feature === "total")).toMatchObject({ requests: 2, cost_usd: 0.004 });
     expect(rows.find((row) => row.feature === "cv-check")).toMatchObject({ group: "cv-check", requests: 1, accounts: 0 });
   });
 
   it("still gives the total row, with zeros, for a window with no request", async () => {
     const rows = await runQuery("2026-07-15 10:00", "2026-07-15 10:40");
-    expect(rows).toEqual([{ group: "total", feature: "total", requests: 0, accounts: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, log_rows: 6 }]);
+    expect(rows).toEqual([{ group: "total", feature: "total", requests: 0, accounts: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0, log_rows: 7 }]);
+  });
+
+  it("leaves out the rows for opening a job ad's link, which ask no model, but still counts them in log_rows (#435)", async () => {
+    const rows = await runQuery("2026-07-14 10:00", "2026-07-14 10:40");
+    expect(rows.some((row) => row.feature === "profile-link")).toBe(false);
+    expect(rows.some((row) => row.group === "other")).toBe(false);
+    expect(total(rows)).toMatchObject({ requests: 4, accounts: 2, cost_usd: 0.0065, log_rows: 7 });
   });
 
   it("needs the role's select on public.ai_usage: without it the query stops with a permission error", async () => {

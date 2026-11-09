@@ -21,6 +21,9 @@
 -- feature 'total'), which is always there, with zeros when the window has no request. accounts counts the signed-in
 -- accounts that made requests: 1 on the window's total means only the test account was busy. log_rows counts every row
 -- in public.ai_usage, inside the window or not: 0 means the database role sees none of them.
+-- Rows with model 'none' (NO_MODEL in src/shared/ai/usage.ts) are not model requests: since #429 the server writes one
+-- each time it opens a job ad's link (feature profile-link, no tokens, no cost). They are left out of every row here,
+-- as the daily AI limits leave them out (#435), and are counted only in log_rows.
 -- The ai-cost-report workflow reads these eight columns by name and in this order: change them together.
 with time_window as (
   select
@@ -45,6 +48,7 @@ requests as (
   cross join time_window w
   where u.created_at >= w.starts_at
     and u.created_at < w.ends_at
+    and u.model <> 'none'
 )
 select
   coalesce(cost_group, 'total') as "group",
