@@ -2,7 +2,7 @@
 // Run with `npm run eval`, or from Actions → eval with tests/tailor/gap-questions-stronger.eval.ts.
 // Fictional people and ads only (gap-questions.cases.ts). Each case asks the model once and prints its questions.
 import { beforeAll, describe, expect, it } from "vitest";
-import { askGapQuestions, questionGaps, skillGaps, type GapQuestion } from "@/features/tailor";
+import { askGapQuestions, isStrongerGap, questionGaps, skillGaps, type GapQuestion } from "@/features/tailor";
 import { getAiProvider } from "@/shared/ai";
 import { gapCases } from "./gap-questions.cases";
 
@@ -48,6 +48,12 @@ describe.skipIf(!getAiProvider())("Gap questions (live)", () => {
       for (const id of ids) expect(known).toContain(id);
     });
 
+    it("asks about a gap in general, naming no one employer, so a No means not done anywhere (#442)", () => {
+      // The first word of each employer, or two for "St Aldhelm's", so "At Halden, did you…" is caught too.
+      const employers = input.profile.experience.map(({ company }) => company.split(" ").slice(0, /^st\.?$/i.test(company.split(" ")[0]) ? 2 : 1).join(" "));
+      for (const item of questions.filter((question) => !isStrongerGap({ id: question.gapId }))) expect(has(item.question, employers), item.question).toBe(false);
+    });
+
     if (neverClaims) {
       it("offers no answer that claims work the CV does not show", () => {
         for (const option of questions.flatMap((item) => item.options ?? [])) expect(option, option).not.toMatch(neverClaims);
@@ -57,7 +63,7 @@ describe.skipIf(!getAiProvider())("Gap questions (live)", () => {
     if (name.startsWith("(a)")) {
       it("asks five questions, each tied to their own work, at least two in their field's words", () => {
         expect(questions).toHaveLength(5);
-        for (const item of questions) expect(has(item.question, names), item.question).toBe(true);
+        for (const item of questions) expect(has([item.question, ...(item.options ?? [])].join(" "), names), item.question).toBe(true);
         expect(questions.filter((item) => has(item.question, terms)).length).toBeGreaterThanOrEqual(2);
       });
     }

@@ -136,6 +136,8 @@ describe("never shows a question whether something in the CV is accredited or re
     expect(prompt).toContain("A degree in another subject or at a lower level is a real gap");
     expect(prompt).toContain("Fewer than 5 questions is better than one that adds nothing.");
     expect(prompt).toContain('Never an open "How did you…"');
+    expect(prompt).toContain("never name one employer in it");
+    expect(prompt).toContain("their No must mean they have not done it anywhere");
     expect(prompt).toContain("Give options for every question, with one exception: work that none of their roles could include");
   });
 });
