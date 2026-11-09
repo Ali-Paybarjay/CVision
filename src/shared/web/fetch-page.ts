@@ -262,14 +262,21 @@ const blockEnds = /<\/(p|div|li|ul|ol|dd|dt|h[1-6]|tr|section|article|header|foo
 const maxJsonLdBlocks = 10;
 /** JobPosting sits at the top of JSON-LD or in its @graph; deeper is not a job board's data. */
 const maxJsonLdDepth = 4;
-/** The page's own content, as the page marks it: the first <main>, without the cookie banner and menus around it. */
-const mainBlock = /<main\b[^<>]*>([\s\S]*?)(?:<\/main\s*>|$)/i;
+/** Every <main> and </main> tag, but not a custom element such as <main-footer> (#434). */
+const mainTags = /<main(?=[\s/>])([^<>]*)>|<\/main\s*>/gi;
+/** The hidden attribute, tested once quoted values are gone, so a class such as "w-full hidden md:block" doesn't count. */
+const hiddenAttribute = /(?:^|\s)hidden(?=[\s=/]|$)/i;
 /** Less text than the shortest ad is a page shell or a mistake, so the whole page is read instead. */
 const minMainLength = 200;
 /** Every link and button, so the ones that only lead back can go. */
 const linksAndButtons = /<(a|button)\b[^<>]*>([\s\S]*?)(?:<\/\1\s*>|$)/gi;
-/** "Go back", "Back" or "Back to search results": the page's way out, never part of the ad (NHS Jobs, #382). */
-const backWords = /^(?:go )?back(?: to\b.*)?$/i;
+/**
+ * "Go back", "Back" or a short way out such as "Back to search results", "‹ Back to all jobs" or "Back to jobs (24)":
+ * never part of the ad (NHS Jobs, #382). A longer "Back to ...", or one that doesn't end in a way out, is the ad's own
+ * words, such as a "Back to Work" scheme (#434).
+ */
+const backWords =
+  /^[^a-z]*(?:go )?back(?: to(?: [a-z]+){0,3} (?:top|home|homepage|search|results|jobs|vacancies|roles|careers|opportunities|positions|openings|adverts|ads|listings?|list|page))?[^a-z]*$/i;
 
 /**
  * The page's title and readable text. Most job boards also describe the ad as schema.org JobPosting data for search
@@ -297,8 +304,36 @@ function pageText(html: string): string {
   const visible = html
     .replace(hiddenBlocks, " ")
     .replace(linksAndButtons, (whole, _tag: string, inside: string) => (backWords.test(textOf(inside)) ? " " : whole));
-  const main = htmlToText(visible.match(mainBlock)?.[1] ?? "");
+  const main = htmlToText(mainOf(visible));
   return main.length >= minMainLength ? main : htmlToText(visible);
+}
+
+/**
+ * The page's own content, as the page marks it: every top-level <main> that isn't hidden, each up to the </main> that
+ * closes it, so a <main> nested inside one doesn't cut the ad short and a later one doesn't pull in the footer between
+ * them (#434). A hidden <main> is skipped with everything in it, and a </main> that closes nothing is ignored, as a
+ * browser does. Empty when there is no such <main>; one that is never closed runs to the end of the page.
+ */
+function mainOf(visible: string): string {
+  const parts: string[] = [];
+  let depth = 0;
+  let hidden = false;
+  let start = 0;
+  for (const tag of visible.matchAll(mainTags)) {
+    if (tag[0][1] === "/") {
+      if (depth === 0) continue;
+      depth--;
+      if (depth === 0 && !hidden) parts.push(visible.slice(start, tag.index));
+    } else {
+      if (depth === 0) {
+        hidden = hiddenAttribute.test((tag[1] ?? "").replace(/"[^"]*"|'[^']*'/g, ""));
+        start = tag.index + tag[0].length;
+      }
+      depth++;
+    }
+  }
+  if (depth > 0 && !hidden) parts.push(visible.slice(start));
+  return parts.join("\n");
 }
 
 /** HTML as plain text, a line per block. */
@@ -440,6 +475,12 @@ const entities: Record<string, string> = {
   hellip: "…",
   bull: "•",
   middot: "·",
+  laquo: "«",
+  raquo: "»",
+  lsaquo: "‹",
+  rsaquo: "›",
+  larr: "←",
+  rarr: "→",
   copy: "©",
   eacute: "é",
   egrave: "è",
