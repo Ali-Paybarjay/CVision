@@ -34,7 +34,9 @@ Take these only from what the ad says; never guess them from the job title or th
 
 You get two lists. "The gaps" are what the CV does not show, or shows only vaguely. "Make it stronger" are requirements the CV already meets, each with the CV line or earlier answer that shows it in `detail`.
 
-- Ask about every gap you keep. Then ask about "Make it stronger" items until there are 5 questions in all, the most important for this job first. Skip one only when its line already gives scale and a result, or when it repeats another question. With 5 or more gaps, ask no "Make it stronger" questions.
+- Ask about every gap you keep. Then ask about "Make it stronger" items until there are 5 questions in all, the most important for this job first. With 5 or more gaps, ask no "Make it stronger" questions.
+- Ask about a "Make it stronger" item only when a true answer would add a fact this job cares about to that line: words the ad uses that the line lacks (the ad says "commissioning", the line says "installed"), the scale, their part in it, the systems or standards the ad names, or the result. Skip it when any answer could only repeat the line, when it repeats another question, or when it is a trait too vague to answer. Fewer than 5 questions is better than one that adds nothing.
+- Never ask whether something in their CV is accredited, recognised, current, valid or verified.
 - One question for each item you keep, with its `id` as `gapId`.
 - One question about one thing. No "and" joining two topics, no "If not, tell us…".
 - At most 20 words, in a simple sentence and with no flattery. For the requirement itself, use the ad's own words: its Band or grade, the registration body, a procedure, the setting. A nurse expects "Have you worked as a Band 5 nurse on an acute ward?", not "Have you worked in healthcare?".
@@ -44,6 +46,7 @@ You get two lists. "The gaps" are what the CV does not show, or shows only vague
 - For an `unclear` gap or a "Make it stronger" item, ask for exactly the missing piece: how many or how often, whether they led it or did it alone, which systems, models or brands, or what changed as a result.
 - When a requirement names equipment, systems, brands or standards the CV doesn't mention, ask which of them they have used, with those names as the options.
 - Ask what they have done, not what they could do. Never "How good are you at…" and never a self-rating. Speak to them as "you".
+- Ask for one concrete piece they can name or tap. Never an open "How did you…", "Tell us about…" or "Describe…".
 - Never ask about the same thing twice. When two items are one piece of work (CAD, SolidWorks, 3D modelling), ask once.
 
 ## Answers they can tap

@@ -38,6 +38,14 @@ const notAboutSkills = new RegExp(
  */
 const aDegree = /\b(degree(?![- ]level)|bsc|b\.sc|beng|b\.eng|msc|m\.sc|meng|m\.eng|mphil|phd|hnd|hnc)\b/i;
 
+/**
+ * What a CV meets once and for all, so a question about it adds no fact to the line: a certificate, registration,
+ * membership or licence the CV already names, a language, a number of years, or a trait too vague to answer.
+ * Work done with these is still a strength to make stronger, so this looks at the requirement only.
+ */
+const nothingToStrengthen =
+  /\b(certif\w*|registration|registered with|chartered|membership|member of|licen[cs]e|qualifications?|fluen(t|cy)|native speaker|(written and spoken|spoken and written) english|english (language|proficiency)|ielts|\d+\s*\+?\s*(or more )?years?|years'? (of )?experience|(positive|can-do) attitude|enthusias\w*|(self-)?motivated|willing(ness)? to learn|team player|passion(ate)?)\b/i;
+
 export function skillGaps(gaps: Gap[]): Gap[] {
   return gaps.filter((gap) => !notAboutSkills.test(gap.requirement) && !(gap.kind === "unclear" && aDegree.test(gap.requirement)));
 }
@@ -79,7 +87,8 @@ export function strongerGaps(job: Job, match: MatchResult): Gap[] {
   const seen = new Set<string>();
   return match.strengths.flatMap((strength) => {
     const requirement = normalise(strength.requirement);
-    if (notAboutSkills.test(strength.requirement) || aDegree.test(strength.requirement) || asked.has(requirement) || seen.has(requirement)) return [];
+    const fixed = notAboutSkills.test(strength.requirement) || aDegree.test(strength.requirement) || nothingToStrengthen.test(strength.requirement);
+    if (fixed || asked.has(requirement) || seen.has(requirement)) return [];
     seen.add(requirement);
     return [
       {

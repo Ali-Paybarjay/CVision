@@ -90,6 +90,51 @@ describe("a degree the CV already shows is never asked about", () => {
   });
 });
 
+describe("Make it stronger asks only where an answer can add to the CV line", () => {
+  const { jobs, match } = personas.sara;
+  const asked = (requirement: string) => strongerGaps(jobs[0], { ...match, strengths: [{ requirement, evidence: "A fictional CV line" }] }).length;
+
+  it.each([
+    "CSCS card or equivalent certification",
+    "PRINCE2 certified",
+    "NMC registration",
+    "Registered with the HCPC",
+    "Chartered Engineer (CEng)",
+    "Membership of IChemE",
+    "Full licence to practise",
+    "Relevant qualifications in health and safety",
+    "Fluent English",
+    "Excellent written and spoken English",
+    "At least 3 years' experience in process design",
+    "5+ years in field service",
+    "A positive attitude",
+    "Enthusiasm for data",
+    "Self-motivated",
+    "Willingness to learn",
+    "Team player",
+  ])("never asks about %s, which the CV meets once and for all", (requirement) => {
+    expect(asked(requirement)).toBe(0);
+  });
+
+  it.each([
+    "Fault diagnosis to component level",
+    "Stakeholder communication",
+    "Experience leading shift teams",
+    "Process safety studies such as HAZOP",
+    "Commissioning of new plant",
+  ])("still makes %s stronger", (requirement) => {
+    expect(asked(requirement)).toBe(1);
+  });
+
+  it("tells the model to skip a strength no answer can add to, and never to ask an open question", async () => {
+    const { profile } = personas.sara;
+    const prompt = await gapQuestionsPrompt({ profile, job: jobs[0], gaps: match.gaps, stronger: strongerGaps(jobs[0], match) });
+    expect(prompt).toContain("Fewer than 5 questions is better than one that adds nothing.");
+    expect(prompt).toContain("Never ask whether something in their CV is accredited, recognised, current, valid or verified.");
+    expect(prompt).toContain('Never an open "How did you…"');
+  });
+});
+
 describe("the gap questions prompt", () => {
   it("finds the role first and keeps the ad's own words (#401)", async () => {
     const { profile, jobs, match } = personas.sara;
