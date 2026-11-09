@@ -49,7 +49,8 @@ describe.skipIf(!getAiProvider())("Gap questions (live)", () => {
     });
 
     it("asks about a gap in general, naming no one employer, so a No means not done anywhere (#442)", () => {
-      const employers = input.profile.experience.map((job) => job.company);
+      // The first word of each employer, or two for "St Aldhelm's", so "At Halden, did you…" is caught too.
+      const employers = input.profile.experience.map(({ company }) => company.split(" ").slice(0, /^st\.?$/i.test(company.split(" ")[0]) ? 2 : 1).join(" "));
       for (const item of questions.filter((question) => !isStrongerGap({ id: question.gapId }))) expect(has(item.question, employers), item.question).toBe(false);
     });
 
