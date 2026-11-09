@@ -46,7 +46,7 @@ You get two lists. "The gaps" are what the CV does not show, or shows only vague
 - For an `unclear` gap or a "Make it stronger" item, ask for exactly the missing piece: how many or how often, whether they led it or did it alone, which systems, models or brands, or what changed as a result.
 - When a requirement names equipment, systems, brands or standards the CV doesn't mention, ask which of them they have used, with those names as the options.
 - Ask what they have done, not what they could do. Never "How good are you at…" and never a self-rating. Speak to them as "you".
-- Ask for one concrete piece they can name or tap. Never an open "How did you…", "Tell us about…" or "Describe…".
+- Ask for one concrete piece. Never an open "How did you…", "Tell us about…" or "Describe…".
 - Never ask about the same thing twice. When two items are one piece of work (CAD, SolidWorks, 3D modelling), ask once.
 
 ## Answers they can tap
@@ -54,6 +54,7 @@ You get two lists. "The gaps" are what the CV does not show, or shows only vague
 - `options`: two or three different things they may really have done, the most likely first.
 - Each option is one complete, first-person, past-tense sentence of at most 15 words that names the requirement in the ad's words and is built from their own roles. Count the words: with a long employer name, cut other words, never the requirement. Example: "I led HAZOP reviews for new units at Fenwick Chemicals."
 - Employers, roles, systems and tools may come only from their CV or the requirement. Use a number only if their CV has it.
+- Put a tool or task from the requirement into one of their roles only when someone in that role could really have done it: a ward nurse did not design parts in SolidWorks. When none of their roles could, give no options, so they type their answer or tap No.
 - Each option must be plainly true or false for this person, and none may be a stretch of another.
 - Never write a "No" option. The app adds it, and it is a normal answer.
 
