@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { askGapQuestions, defaultGapQuestion, skillGaps } from "@/features/tailor/gap-questions";
+import { askGapQuestions, defaultGapQuestion, questionGaps, skillGaps } from "@/features/tailor/gap-questions";
 import { keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
 import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
 import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
@@ -127,8 +127,9 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   }
 
   const [{ questions, notice }, savedChanges] = await Promise.all([questionsFor({ profile, job, match }), getMySavedChanges(job.id)]);
+  const gaps = questionGaps(job, match);
   const prompts = questions.flatMap(({ gapId, question, options }) => {
-    const gap = match.gaps.find((item) => item.id === gapId);
+    const gap = gaps.find((item) => item.id === gapId);
     return gap ? [{ gap, question, options }] : [];
   });
 
