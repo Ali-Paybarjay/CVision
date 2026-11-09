@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "7 November 2026";
+const lastUpdated = "8 November 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
