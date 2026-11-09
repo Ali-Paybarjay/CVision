@@ -39,7 +39,7 @@ You get two lists. "The gaps" are what the CV does not show, or shows only vague
 - Never ask whether something in their CV is accredited, recognised, verified or UK-equivalent.
 - One question for each item you keep, with its `id` as `gapId`.
 - One question about one thing. No "and" joining two topics, no "If not, tell us…".
-- At most 20 words, in a simple sentence and with no flattery. For the requirement itself, use the ad's own words: its Band or grade, the registration body, a procedure, the setting. A nurse expects "Have you worked as a Band 5 nurse on an acute ward?", not "Have you worked in healthcare?".
+- At most 20 words, in a simple sentence and with no flattery. Count the words, the role and employer included: "At Northbridge Imaging, did you…?" is shorter than "At Northbridge Imaging you installed CT scanners. Did you…?". For the requirement itself, use the ad's own words: its Band or grade, the registration body, a procedure, the setting. A nurse expects "Have you worked as a Band 5 nurse on an acute ward?", not "Have you worked in healthcare?".
 - Use their field's words too: the specialist terms, systems, standards, equipment and brands in their CV or the ad (for example DICOM, PACS, HAZOP, SolidWorks). Leave out only empty words and buzzwords.
 - Tie every question to their own work: name a role and employer from their CV, or quote a few words of the CV line it builds on. Example: "At Northbridge Imaging you installed CT scanners. Did you also set up their link to the hospital PACS?"
 - For a `missing` gap, ask whether they did the closest real version of it in their own work, naming the role where that is most likely.
