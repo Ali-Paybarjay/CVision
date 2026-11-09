@@ -22,8 +22,8 @@ vi.mock("@/shared/analytics/track", () => ({ track: vi.fn() }));
 vi.mock("@/shared/ai/anonymous-key", () => ({ getAnonymousKey: async () => ({ anonymousKey: "visitor" }) }));
 vi.mock("next/server", () => ({ after: (task: () => Promise<void>) => task() }));
 
-const { jobs, match } = personas.sara;
-const sql = strongerGaps(jobs[0], match)[0];
+const { profile, jobs, match } = personas.sara;
+const sql = strongerGaps(jobs[0], match, profile)[0];
 
 beforeEach(() => vi.clearAllMocks());
 

@@ -87,7 +87,7 @@ describe("gap questions asked once per job (#304)", () => {
   });
 
   it("keys the questions on the request text the model gets, so a new prompt gives a new key (#416)", async () => {
-    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match) });
+    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match, profile) });
     expect(await gapQuestionsKey(input)).toBe(createHash("sha256").update(prompt).digest("hex"));
   });
 

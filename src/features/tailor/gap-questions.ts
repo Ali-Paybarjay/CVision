@@ -1,4 +1,5 @@
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
+import { profileEvidenceLines } from "@/features/profile/match";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { jobForPrompt } from "./job-for-prompt";
 import { normalise } from "./nothing-invented";
@@ -31,24 +32,24 @@ const notAboutSkills = new RegExp(
 );
 
 /** The gaps worth a question: what the job asks the person to know or have done. */
-/**
- * A degree. When the CV shows one, only its accreditation or UK equivalence can be unclear, and no answer to that makes
- * a CV line: the employer checks it. So an unclear degree gets no question, and a degree is never one to make stronger.
- * A missing degree still gets one. "Degree-level knowledge of statistics" is about knowledge, so it is not a degree.
- */
-const aDegree = /\b(degree(?![- ]level)|bsc|b\.sc|beng|b\.eng|msc|m\.sc|meng|m\.eng|mphil|phd|hnd|hnc)\b/i;
-
-/**
- * What a CV meets once and for all, so a question about it adds no fact to the line: a certificate, registration,
- * membership or licence the CV already names, a language, a number of years, or a trait too vague to answer.
- * Work done with these is still a strength to make stronger, so this looks at the requirement only.
- */
-const nothingToStrengthen =
-  /\b(certif\w*|registration|registered with|chartered|membership|member of|licen[cs]e|qualifications?|fluen(t|cy)|native speaker|(written and spoken|spoken and written) english|english (language|proficiency)|ielts|\d+\s*\+?\s*(or more )?years?|years'? (of )?experience|(positive|can-do) attitude|enthusias\w*|(self-)?motivated|willing(ness)? to learn|team player|passion(ate)?)\b/i;
-
 export function skillGaps(gaps: Gap[]): Gap[] {
-  return gaps.filter((gap) => !notAboutSkills.test(gap.requirement) && !(gap.kind === "unclear" && aDegree.test(gap.requirement)));
+  return gaps.filter((gap) => !notAboutSkills.test(gap.requirement));
 }
+
+/** CV lines a strength cannot be made stronger from: a degree, a certificate or a language is held or not (#440). */
+const heldOrNot = new Set(["education", "certification", "language"]);
+
+/** A number of years, which the CV's dates already show, or a trait too vague to answer (#440). */
+const nothingToAdd =
+  /\b\d+\s*\+?\s*(or more\s+)?years?'?\s+(of\s+)?(experience|in|as|working)\b|^(an? )?(positive|can-do) attitude\b|^enthusias|^(self-|highly )motivated\b|^willing(ness)? to learn\b|^(a )?team player\b|^passion(ate)?\b/i;
+
+/**
+ * A question whether something in their CV is accredited, recognised, verified or UK-equivalent. The employer checks
+ * that, and no answer makes a CV line, so such a question is never shown, whatever the model wrote (#440). Whether a
+ * registration is current stays: a nurse's CV says "NMC registered, revalidated 2025".
+ */
+export const asksIfVerified =
+  /\b(is|are|was|were|has|have)\s+(it|they|your\b[^?]{0,100}?)\s+(been\s+)?([\w-]+\s+|\w+-)?(accredited|recogni[sz]ed|verified)(\s+(by|as|in|with|for)\b[^?]*)?\?\s*$|\bequivalent to an? (uk|british)\b/i;
 
 /** A plain yes-or-no question for one gap, used as the mock answer and as a fallback. */
 export function defaultGapQuestion(gap: Gap): GapQuestion {
@@ -78,16 +79,17 @@ function shortHash(text: string): string {
  * A same-field CV meets almost everything, so without these a pilot got only two questions (7 Nov). The model asks
  * about the ones whose line gives no scale, scope, systems or result. A no to one of them never counts as "not done".
  */
-export function strongerGaps(job: Job, match: MatchResult): Gap[] {
+export function strongerGaps(job: Job, match: MatchResult, profile: Profile): Gap[] {
   const gaps = skillGaps(match.gaps);
   // With five gaps or more no strength can be asked about, so the model is not sent them and the stored key ignores them.
   if (gaps.length >= questionTarget) return [];
   const asked = new Set(gaps.map((gap) => normalise(gap.requirement)));
   const essential = new Set(job.requirements.essential.map(normalise));
+  const fixedLines = new Set(profileEvidenceLines(profile).flatMap((line) => (heldOrNot.has(line.kind) ? [normalise(line.text)] : [])));
   const seen = new Set<string>();
   return match.strengths.flatMap((strength) => {
     const requirement = normalise(strength.requirement);
-    const fixed = notAboutSkills.test(strength.requirement) || aDegree.test(strength.requirement) || nothingToStrengthen.test(strength.requirement);
+    const fixed = notAboutSkills.test(strength.requirement) || nothingToAdd.test(strength.requirement) || fixedLines.has(normalise(strength.evidence));
     if (fixed || asked.has(requirement) || seen.has(requirement)) return [];
     seen.add(requirement);
     return [
@@ -108,18 +110,19 @@ export function isStrongerGap(gap: Pick<Gap, "id">): boolean {
 }
 
 /** Every gap a question can be about: the match's gaps first, then the strengths to make stronger. */
-export function questionGaps(job: Job, match: MatchResult): Gap[] {
-  return [...skillGaps(match.gaps), ...strongerGaps(job, match)];
+export function questionGaps(job: Job, match: MatchResult, profile: Profile): Gap[] {
+  return [...skillGaps(match.gaps), ...strongerGaps(job, match, profile)];
 }
 
 const essentialFirst = (gaps: Gap[]) => [...gaps].sort((a, b) => Number(b.importance === "essential") - Number(a.importance === "essential"));
 
 /**
  * The questions to show, from what the model wrote: one per known gap, every gap's question, then strength
- * questions only until there are `questionTarget` in all. Essentials come first in each group.
+ * questions only until there are `questionTarget` in all. Essentials come first in each group. A question whether
+ * something in their CV is accredited or recognised is never one of them.
  */
 export function pickQuestions(questions: GapQuestion[], gaps: Gap[], stronger: Gap[]): GapQuestion[] {
-  const one = (gap: Gap) => questions.find((item) => item.gapId === gap.id) ?? [];
+  const one = (gap: Gap) => questions.find((item) => item.gapId === gap.id && !asksIfVerified.test(item.question)) ?? [];
   const fromGaps = essentialFirst(gaps).flatMap(one);
   const fromStrengths = essentialFirst(stronger).flatMap(one).slice(0, Math.max(0, questionTarget - fromGaps.length));
   return [...fromGaps, ...fromStrengths];
@@ -138,7 +141,7 @@ export async function askGapQuestions(input: {
 }): Promise<GapQuestion[]> {
   const { profile, job, match, requester } = input;
   const gaps = skillGaps(match.gaps);
-  const stronger = strongerGaps(job, match);
+  const stronger = strongerGaps(job, match, profile);
   if (gaps.length === 0 && stronger.length === 0) return [];
 
   const prompt = await gapQuestionsPrompt({ profile, job, gaps, stronger });

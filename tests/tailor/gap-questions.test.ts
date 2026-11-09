@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { askGapQuestions, gapQuestionsPrompt, pickQuestions, questionGaps, skillGaps, strongerGaps } from "@/features/tailor";
+import { askGapQuestions, asksIfVerified, gapQuestionsPrompt, pickQuestions, questionGaps, skillGaps, strongerGaps } from "@/features/tailor";
 import type { GapQuestion } from "@/features/tailor";
 import type { Gap } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
@@ -54,83 +54,87 @@ describe("the gap questions ask only about skills and experience", () => {
   });
 });
 
-describe("a degree the CV already shows is never asked about", () => {
-  const of = (kind: Gap["kind"], requirement: string): Gap => ({ ...gap("d", requirement), kind });
+describe("a degree, certificate or language the CV shows is never a Make it stronger question (#440)", () => {
+  const { profile, jobs, match } = personas.sara;
+  const withLines = {
+    ...profile,
+    education: [{ institution: "Harrowgate University", qualification: "BSc", subject: "Chemical Engineering" }],
+    certifications: [{ name: "NEBOSH General Certificate", issuer: "NEBOSH", year: 2021 }],
+    languages: [{ name: "Welsh", level: "Fluent" }],
+  };
+  const stronger = (requirement: string, evidence: string) => strongerGaps(jobs[0], { ...match, strengths: [{ requirement, evidence }] }, withLines);
 
   it.each([
-    "Accredited degree in Chemical/Environmental or Process Engineering",
-    "IChemE-accredited BEng or MEng in Chemical Engineering",
-    "A degree in engineering or a related subject",
-    "MSc in Data Science or equivalent",
-  ])("asks nothing when %s is only unclear", (requirement) => {
-    expect(skillGaps([of("unclear", requirement)])).toEqual([]);
+    ["Accredited degree in Chemical Engineering", "BSc in Chemical Engineering, Harrowgate University"],
+    ["Health and safety qualification", "NEBOSH General Certificate, NEBOSH, 2021"],
+    ["Welsh speaker", "Welsh (Fluent)"],
+  ])("leaves out %s, shown by an education, certificate or language line", (requirement, evidence) => {
+    expect(stronger(requirement, evidence)).toEqual([]);
   });
 
-  it("still asks when the CV shows no degree at all", () => {
-    expect(skillGaps([of("missing", "Accredited degree in Chemical Engineering")])).toHaveLength(1);
+  it.each(["At least 3 years' experience in process design", "5+ years in field service", "A positive attitude", "Enthusiasm for data", "Self-motivated", "Willingness to learn", "Team player"])(
+    "leaves out %s, which the CV's dates show or no answer can add to",
+    (requirement) => {
+      expect(stronger(requirement, "A fictional duty line")).toEqual([]);
+    },
+  );
+
+  it.each([
+    "Ability to work with a high degree of accuracy",
+    "Experience supervising PhD students",
+    "Managing patient registration",
+    "Testing and certification of electrical installations",
+    "Software licence management",
+    "Working with children aged 0-5 years",
+    "Fault diagnosis to component level",
+  ])("still makes %s stronger when a work line shows it", (requirement) => {
+    expect(stronger(requirement, "A fictional duty line")).toHaveLength(1);
   });
 
-  it("still asks about degree-level knowledge, which is about knowledge, not a degree", () => {
-    expect(skillGaps([of("unclear", "Degree-level knowledge of statistics")])).toHaveLength(1);
-  });
-
-  it("never turns a degree the CV meets into a Make it stronger question", () => {
-    const { jobs, match } = personas.sara;
-    const strengths = [
-      { requirement: "Accredited degree in Chemical Engineering", evidence: "BSc Chemical Engineering, Harrowgate University" },
-      { requirement: "Strong SQL", evidence: "Skills: SQL" },
-    ];
-    expect(strongerGaps(jobs[0], { ...match, strengths }).map((item) => item.requirement)).toEqual(["Strong SQL"]);
-  });
-
-  it("tells the model never to ask whether a degree is accredited", async () => {
-    const { profile, jobs, match } = personas.sara;
-    const prompt = await gapQuestionsPrompt({ profile, job: jobs[0], gaps: match.gaps });
-    expect(prompt).toContain("Never ask whether a degree is accredited, recognised or equivalent");
+  it("still asks about an unclear degree gap, since a degree in another subject or a lower one is a real gap", () => {
+    expect(skillGaps([{ ...gap("d", "BEng in Chemical Engineering"), kind: "unclear" }])).toHaveLength(1);
   });
 });
 
-describe("Make it stronger asks only where an answer can add to the CV line", () => {
-  const { jobs, match } = personas.sara;
-  const asked = (requirement: string) => strongerGaps(jobs[0], { ...match, strengths: [{ requirement, evidence: "A fictional CV line" }] }).length;
-
+describe("never shows a question whether something in the CV is accredited or recognised (#440)", () => {
   it.each([
-    "CSCS card or equivalent certification",
-    "PRINCE2 certified",
-    "NMC registration",
-    "Registered with the HCPC",
-    "Chartered Engineer (CEng)",
-    "Membership of IChemE",
-    "Full licence to practise",
-    "Relevant qualifications in health and safety",
-    "Fluent English",
-    "Excellent written and spoken English",
-    "At least 3 years' experience in process design",
-    "5+ years in field service",
-    "A positive attitude",
-    "Enthusiasm for data",
-    "Self-motivated",
-    "Willingness to learn",
-    "Team player",
-  ])("never asks about %s, which the CV meets once and for all", (requirement) => {
-    expect(asked(requirement)).toBe(0);
+    "Is your BSc in Chemical Engineering from Harrowgate University accredited?",
+    "Is your degree accredited by IChemE?",
+    "Has your degree been recognised by UK ENIC?",
+    "Is it IChemE-accredited?",
+    "Was your degree assessed as equivalent to a UK bachelor's degree?",
+  ])("drops: %s", (question) => {
+    expect(asksIfVerified.test(question)).toBe(true);
   });
 
   it.each([
-    "Fault diagnosis to component level",
-    "Stakeholder communication",
-    "Experience leading shift teams",
-    "Process safety studies such as HAZOP",
-    "Commissioning of new plant",
-  ])("still makes %s stronger", (requirement) => {
-    expect(asked(requirement)).toBe(1);
+    "Which recognised awarding bodies have you worked with?",
+    "In your current role at Fenmoor, did you lead HAZOP reviews?",
+    "Have you used SolidWorks or an equivalent 3D CAD tool?",
+    "Is your current team bigger than five people?",
+    // Whether a registration is current makes a CV line for a nurse, so this one stays.
+    "Is your NMC registration current?",
+    "Did you write validated test methods at Kestrel Energy Lab?",
+  ])("keeps: %s", (question) => {
+    expect(asksIfVerified.test(question)).toBe(false);
   });
 
-  it("tells the model to skip a strength no answer can add to, and never to ask an open question", async () => {
-    const { profile } = personas.sara;
-    const prompt = await gapQuestionsPrompt({ profile, job: jobs[0], gaps: match.gaps, stronger: strongerGaps(jobs[0], match) });
+  it("leaves the question out of the ones shown, and keeps the rest", () => {
+    const degree = { ...gap("deg", "Accredited degree in Chemical Engineering"), kind: "unclear" as const };
+    const sql = gap("sql", "Strong SQL");
+    const questions: GapQuestion[] = [
+      { gapId: "deg", question: "Is your BSc in Chemical Engineering from Harrowgate University accredited?" },
+      { gapId: "sql", question: "At Northgate, which databases did you query in SQL?" },
+    ];
+    expect(pickQuestions(questions, [degree, sql], []).map((item) => item.gapId)).toEqual(["sql"]);
+  });
+
+  it("tells the model to skip a degree whose only unclear part is its accreditation, and never to ask an open question", async () => {
+    const { profile, jobs, match } = personas.sara;
+    const prompt = await gapQuestionsPrompt({ profile, job: jobs[0], gaps: match.gaps });
+    expect(prompt).toContain("Never ask whether something in their CV is accredited, recognised, verified or UK-equivalent.");
+    expect(prompt).toContain("A degree in another subject or at a lower level is a real gap");
     expect(prompt).toContain("Fewer than 5 questions is better than one that adds nothing.");
-    expect(prompt).toContain("Never ask whether something in their CV is accredited, recognised, current, valid or verified.");
     expect(prompt).toContain('Never an open "How did you…"');
   });
 });
@@ -160,7 +164,7 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
     const stronger = strongerGaps(job, {
       ...match,
       strengths: [...match.strengths, { requirement: "Healthcare or NHS data", evidence: "Analysed A&E waiting times for my MSc" }],
-    });
+    }, profile);
     expect(stronger.map(({ requirement, importance, kind }) => [requirement, importance, kind])).toEqual([
       ["Strong SQL", "essential", "unclear"],
       ["Python or R for analysis", "essential", "unclear"],
@@ -172,16 +176,16 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
 
   it("sends no strengths when there are five gaps or more, since none could be asked about", () => {
     const five = ["a", "b", "c", "d", "e"].map((id) => gap(id, `Requirement ${id}`));
-    expect(strongerGaps(job, { ...match, gaps: five })).toEqual([]);
-    expect(strongerGaps(job, { ...match, gaps: five.slice(1) })).not.toEqual([]);
+    expect(strongerGaps(job, { ...match, gaps: five }, profile)).toEqual([]);
+    expect(strongerGaps(job, { ...match, gaps: five.slice(1) }, profile)).not.toEqual([]);
   });
 
   it("gives a strength the same short id whatever its spelling, so stored questions still find it", () => {
-    const [first] = strongerGaps(job, match);
-    const [again] = strongerGaps(job, { ...match, strengths: [{ requirement: "  strong   SQL. ", evidence: "Another line" }] });
+    const [first] = strongerGaps(job, match, profile);
+    const [again] = strongerGaps(job, { ...match, strengths: [{ requirement: "  strong   SQL. ", evidence: "Another line" }] }, profile);
     expect(first.id).toMatch(/^stronger-[0-9a-f]{8}$/);
     expect(again.id).toBe(first.id);
-    expect(strongerGaps(job, { ...match, strengths: [{ requirement: "Strong Python", evidence: "x" }] })[0].id).not.toBe(first.id);
+    expect(strongerGaps(job, { ...match, strengths: [{ requirement: "Strong Python", evidence: "x" }] }, profile)[0].id).not.toBe(first.id);
   });
 
   it("leaves out job conditions, strengths already asked about as gaps, and repeats", () => {
@@ -193,12 +197,12 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
         { requirement: "Strong SQL", evidence: "Skills: SQL" },
         { requirement: "strong sql", evidence: "SQL again" },
       ],
-    });
+    }, profile);
     expect(stronger.map((gap) => gap.requirement)).toEqual(["Strong SQL"]);
   });
 
   it("lists the match's gaps first, then the strengths", () => {
-    expect(questionGaps(job, match).map((gap) => gap.id.replace(/-[0-9a-f]{8}$/, ""))).toEqual(["sara-gap-1", "sara-gap-2", "sara-gap-3", "stronger", "stronger", "stronger"]);
+    expect(questionGaps(job, match, profile).map((gap) => gap.id.replace(/-[0-9a-f]{8}$/, ""))).toEqual(["sara-gap-1", "sara-gap-2", "sara-gap-3", "stronger", "stronger", "stronger"]);
   });
 
   const a = (id: string, importance: Gap["importance"] = "essential") => ({ ...gap(id, `Requirement ${id}`), importance });
@@ -223,9 +227,9 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
   });
 
   it("sends the strengths to the model in their own section of the prompt", async () => {
-    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match) });
+    const prompt = await gapQuestionsPrompt({ profile, job, gaps: skillGaps(match.gaps), stronger: strongerGaps(job, match, profile) });
     expect(prompt.indexOf("## Make it stronger")).toBeGreaterThan(prompt.indexOf("## The gaps"));
-    expect(prompt.slice(prompt.indexOf("## Make it stronger"))).toContain(`"id": "${strongerGaps(job, match)[0].id}"`);
+    expect(prompt.slice(prompt.indexOf("## Make it stronger"))).toContain(`"id": "${strongerGaps(job, match, profile)[0].id}"`);
   });
 
   it("in mock mode, still asks only about the match's gaps", async () => {

@@ -37,17 +37,14 @@ describe.skipIf(!getAiProvider())("Gap questions (live)", () => {
       for (const item of questions) expect(item.question, item.question).not.toMatch(conditions);
     });
 
-    it("asks for one concrete piece, never an open question or whether a CV item is accredited or current", () => {
-      for (const item of questions) {
-        expect(item.question, item.question).not.toMatch(/^(how did you|tell us|describe)\b|,\s*how did you\b/i);
-        expect(item.question, item.question).not.toMatch(/\b(accredited|recognised|recognized|verified)\b/i);
-      }
+    it("asks for one concrete piece, never an open question", () => {
+      for (const item of questions) expect(item.question, item.question).not.toMatch(/^(how did you|tell us|describe)\b|,\s*how did you\b/i);
     });
 
     it("asks at most one question per gap, and only about known gaps", () => {
       const ids = questions.map((item) => item.gapId);
       expect(new Set(ids).size).toBe(ids.length);
-      const known = questionGaps(input.job, input.match).map((gap) => gap.id);
+      const known = questionGaps(input.job, input.match, input.profile).map((gap) => gap.id);
       for (const id of ids) expect(known).toContain(id);
     });
 
