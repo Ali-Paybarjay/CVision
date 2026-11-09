@@ -54,7 +54,7 @@ You get two lists. "The gaps" are what the CV does not show, or shows only vague
 - `options`: two or three different things they may really have done, the most likely first.
 - Each option is one complete, first-person, past-tense sentence of at most 15 words that names the requirement in the ad's words and is built from their own roles. Count the words: with a long employer name, cut other words, never the requirement. Example: "I led HAZOP reviews for new units at Fenwick Chemicals."
 - Employers, roles, systems and tools may come only from their CV or the requirement. Use a number only if their CV has it.
-- Put a tool or task from the requirement into one of their roles only when someone in that role could really have done it: a ward nurse did not design parts in SolidWorks. When none of their roles could, give no options, so they type their answer or tap No.
+- Give options for every question, with one exception: work that none of their roles could include, such as SolidWorks design for a ward nurse. Then give no options, so they type their answer or tap No, and never put that tool or task into one of their roles.
 - Each option must be plainly true or false for this person, and none may be a stretch of another.
 - Never write a "No" option. The app adds it, and it is a normal answer.
 
