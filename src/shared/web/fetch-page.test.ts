@@ -258,6 +258,96 @@ describe("readablePage", () => {
       expect(text).not.toContain("Menu");
       expect(text.endsWith("MRCP or equivalent\n\nClosing date 1 December")).toBe(true);
     });
+
+    it("reads a <main> past one nested inside it, up to the </main> that closes it (#434)", () => {
+      const html = `<main id="content"><h1>Ward Sister</h1><main class="e-con">${advert}</main><h2>How to apply</h2><p>Salary £52,000. Closing date 1 December.</p></main><footer>Privacy</footer>`;
+      const { text } = readablePage(html);
+
+      expect(text.startsWith("Ward Sister\nSpecialty Doctor in Cardiology")).toBe(true);
+      expect(text).toContain("Closing date 1 December.");
+      expect(text).not.toContain("Privacy");
+    });
+
+    it("stops each <main> at its own </main>, so a hidden <main> or a stray </main> after the ad adds nothing (#434)", () => {
+      const aside = '<aside><h2>Latest vacancies</h2><ul><li><a href="/jobs/1">Fundraising Officer</a></li></ul></aside>';
+      const footer = "<footer><p>Privacy policy · Cookie settings</p></footer>";
+      const adOnly = readablePage(`<main>${advert}</main>`).text;
+
+      for (const html of [
+        `<nav>Menu</nav><main id="primary">${advert}</main>${aside}</main>${footer}`,
+        `<nav>Menu</nav><main>${advert}</main>${footer}<main hidden><p>We use cookies to make this site work.</p></main>`,
+      ]) {
+        expect(readablePage(html).text, html).toBe(adOnly);
+      }
+    });
+
+    it("reads the whole page when its only visible <main> is too short, even with a hidden one after it (#434)", () => {
+      const notice = "We use cookies to make this site work and to see how people use it. ".repeat(4);
+      const { text } = readablePage(`<div>${advert}</div><main><p>Loading…</p></main><main hidden><p>${notice}</p></main>`);
+
+      expect(text).toContain("Person specification");
+    });
+
+    it("doesn't take a custom element such as <main-footer> for <main> (#434)", () => {
+      const links = Array.from({ length: 30 }, (_, index) => `<a href="/page-${index}">Footer link ${index}</a>`).join(" ");
+      const { text } = readablePage(`<div>${advert}</div><main-footer>${links}</main-footer>`);
+
+      expect(text).toContain("Person specification");
+    });
+
+    it("skips a hidden <main>, such as a cookie notice, for the visible one after it (#434)", () => {
+      const notice = "We use cookies to make this site work and to see how people use it. ".repeat(4);
+      const { text } = readablePage(`<main hidden><p>${notice}</p></main><nav>Menu</nav><main>${advert}</main>`);
+
+      expect(text.startsWith("Specialty Doctor in Cardiology")).toBe(true);
+      expect(text).not.toContain("cookies");
+    });
+
+    it("reads a <main> whose class or aria-hidden only sounds hidden (#434)", () => {
+      for (const attributes of ['class="page hidden-sm"', 'class="w-full hidden md:block"', 'aria-hidden="true"']) {
+        const { text } = readablePage(`<nav>Menu</nav><main ${attributes}>${advert}</main>`);
+        expect(text, attributes).toContain("Person specification");
+        expect(text, attributes).not.toContain("Menu");
+      }
+    });
+
+    it("keeps the ad's own words that start with Back to, such as a Back to Work scheme (#434)", () => {
+      const html =
+        `<main>${advert}<p>We welcome people returning through the <a href="/btw">Back to Work</a> scheme.</p>` +
+        '<p><a href="/rtp">Back to nursing after a career break? Our return to practice programme pays your course fees</a></p>' +
+        '<button type="button">Back to work after a career break? Read about our support</button><h2><a href="/coach">Back to Work Coach</a></h2>' +
+        '<p>See the <a href="/whp">Back to Work and Health Programme jobs</a> page.</p></main>';
+      const { text } = readablePage(html);
+
+      expect(text).toContain("returning through the Back to Work scheme.");
+      expect(text).toContain("Back to nursing after a career break?");
+      expect(text).toContain("Back to work after a career break?");
+      expect(text).toContain("Back to Work Coach");
+      expect(text).toContain("See the Back to Work and Health Programme jobs page.");
+    });
+
+    it("still drops the short ways out, such as Back to all jobs or Back to job search (#434)", () => {
+      const ways = [
+        ...["Back to all jobs", "Back to job search", "Back to current vacancies", "Back to jobs", "Back to top", "Go back"],
+        ...["Back to all roles", "Back to job listings", "Back to the list", "Back to previous page", "Back to home"],
+        ...["Back to careers", "Back to all opportunities", "Back to homepage", "‹ Back to jobs", "Back to search results »"],
+        ...["Back to jobs (24)", "Back to jobs &rsaquo;", "&laquo; Back to vacancies"],
+      ];
+      const { text } = readablePage(`<main>${advert}${ways.map((way) => `<a href="/x">${way}</a>`).join("")}</main>`);
+
+      expect(text.endsWith("MRCP or equivalent")).toBe(true);
+    });
+
+    it("keeps the ad after a Back to link that is never closed, on a page with no line breaks (#434)", () => {
+      const html = `<main><a href="/vacancies">Back to vacancies${advert}<p>Apply to <a href="mailto:jobs@example.com">jobs@example.com</a> by 1 December.</p></main>`;
+      const { text } = readablePage(html);
+
+      expect(text).toContain("Specialty Doctor in Cardiology");
+      expect(text).toContain("Person specification");
+
+      const wordsOnly = `<main><a href="/vacancies">Back to vacancies<h2>About the team</h2><p>Join our friendly team on the stroke unit</p><a href="/jobs">See all our jobs</a>${advert}</main>`;
+      expect(readablePage(wordsOnly).text).toContain("Join our friendly team on the stroke unit");
+    });
   });
 
   it("reads the body of a page with no </head>, and a commented-out script doesn't hide what follows", () => {
@@ -451,9 +541,18 @@ describe("readablePage, on hostile pages", () => {
     ["unclosed comments", "<!--"],
     ["unclosed titles", "<title>"],
     ["unclosed main tags", "<main>"],
+    ["main tags opened and closed", "<main></main>"],
+    ["hidden main tags", "<main hidden>"],
     ["unclosed links", "<a href=x>back to "],
   ])("reads 200 KB of %s in well under a second", (_name, piece) => {
     const html = piece.repeat(Math.ceil(200_000 / piece.length));
+    const started = performance.now();
+    readablePage(html);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it("reads a back link padded with 200 KB of punctuation in well under a second (#434)", () => {
+    const html = `<main><a href="/x">${". ".repeat(100_000)}Back to jobs${" .".repeat(100_000)}x</a></main>`;
     const started = performance.now();
     readablePage(html);
     expect(performance.now() - started).toBeLessThan(500);
