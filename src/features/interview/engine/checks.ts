@@ -194,9 +194,29 @@ const genericFeedbackPatterns = genericFeedbackPhrases.map((term) => [term, whol
  * question, so a spelling inside double quotes, or one that `quotable` also uses, is the source's, not the model's.
  */
 export function usSpellingHits(text: string, quotable = ""): string[] {
-  const own = text.replace(/"[^"\n]*"|“[^”\n]*”/g, " ");
-  return usSpellingPatterns.filter(([, pattern]) => pattern.test(own) && !pattern.test(quotable)).map(([term]) => term);
+  return modelsOwnHits(usSpellingPatterns, text, quotable);
 }
+
+/** The terms whose pattern matches the model's own words: text inside double quotes, and terms `quotable` uses, are left out. */
+function modelsOwnHits(patterns: readonly (readonly [string, RegExp])[], text: string, quotable: string): string[] {
+  const own = text.replace(/"[^"\n]*"|“[^”\n]*”/g, " ");
+  return patterns.filter(([, pattern]) => pattern.test(own) && !pattern.test(quotable)).map(([term]) => term);
+}
+
+/**
+ * The verb "practise", in either spelling and any form (#249). The interview writes "practice" only as a noun (#234),
+ * so the verb next to it reads like a typo. Interview text only: in the CV check and Tailor the verb is plain UK English.
+ */
+export const practiseVerbs = ["practise", "practises", "practised", "practising", "practiced", "practicing"] as const;
+
+const practiseVerbPatterns = practiseVerbs.map((term) => [term, wholePhrase(term)] as const);
+
+/** The forms of the verb "practise" in the model's own words: quoted text, and words `quotable` uses, are left alone. */
+export function practiseVerbHits(text: string, quotable = ""): string[] {
+  return modelsOwnHits(practiseVerbPatterns, text, quotable);
+}
+
+const practiseVerbMessage = 'Never use the verb "practise" in any form or spelling: write prepare, rehearse or work through instead.';
 
 /** The generic praise or advice phrases that appear in a text. */
 export function genericFeedbackHits(text: string): string[] {
@@ -576,6 +596,7 @@ export function evaluationProblems(output: EvaluationDraft, context: EvaluationC
   if (brandPhraseHits(feedback).length) problems.push({ path: ["strengths"], message: "Feedback uses a phrase the brand bans." });
   const quotable = [context.mainAnswer, context.followUpAnswer ?? "", context.quotable ?? ""].join("\n");
   if (usSpellingHits(feedback, quotable).length) problems.push({ path: ["strengths"], message: "Use UK spelling in the feedback." });
+  if (practiseVerbHits(feedback, quotable).length) problems.push({ path: ["strengths"], message: practiseVerbMessage });
   if (genericFeedbackHits([...output.strengths, ...output.weaknesses, output.improvement].join("\n")).length) {
     problems.push({ path: ["strengths"], message: "Feedback must be specific to this answer: no generic praise or advice." });
   }
@@ -615,6 +636,7 @@ export function reportProblems(output: ReportDraft, context: ReportContext): Pro
   const text = [output.verdict, output.levelGapNote ?? "", ...output.priorities.flatMap((p) => [p.title, p.detail]), ...output.uncertaintyNotes.map((n) => n.note)].join("\n");
   if (brandPhraseHits(text).length) problems.push({ path: ["verdict"], message: "The report uses a phrase the brand bans." });
   if (usSpellingHits(text, context.quotable).length) problems.push({ path: ["verdict"], message: "Use UK spelling in the report." });
+  if (practiseVerbHits(text, context.quotable).length) problems.push({ path: ["verdict"], message: practiseVerbMessage });
   if (genericFeedbackHits(output.priorities.flatMap((p) => [p.title, p.detail]).join("\n")).length) {
     problems.push({ path: ["priorities"], message: "Priorities must be specific to this job and these answers: no generic advice." });
   }
@@ -807,6 +829,7 @@ export function suggestionProblems(output: SuggestionDraft, context: SuggestionC
   const quotable = [context.cv, context.jobDescription, question.text, ...context.role.namedItems.map((item) => item.text)].join("\n");
   if (brandPhraseHits(all).length) problems.push({ path: ["sampleAnswer"], message: "Uses a phrase the brand bans." });
   if (usSpellingHits(all, quotable).length) problems.push({ path: ["sampleAnswer"], message: "Use UK spelling." });
+  if (practiseVerbHits(all, quotable).length) problems.push({ path: ["sampleAnswer"], message: practiseVerbMessage });
   const sourceTopics = bannedTopicHits(quotable);
   const personal = written.flatMap((text) => splitSentences(text).filter((sentence) => firstPerson.test(sentence))).flatMap((sentence) => bannedTopicHits(sentence));
   if (personal.some((term) => !sourceTopics.includes(term))) problems.push({ path: ["sampleAnswer"], message: "Touches a protected or personal topic." });

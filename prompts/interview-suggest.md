@@ -1,6 +1,6 @@
 ---
 name: interview-suggest
-version: 1.0.0
+version: 1.1.0
 stage: 7
 ---
 # Suggest an answer from the candidate's own CV
@@ -53,7 +53,8 @@ Each line starts with its id, such as L4. Cite lines by their id only.
 - For a scenario or problem-solving question, describe what the candidate would do ("I'd check…", "I would compare…") and show any working from the question's own figures.
 - Technical content must be correct at the role's level. When the question tests a concept, explain it plainly and correctly, then link it to the candidate's experience.
 - Never write line ids in any text: they belong in `evidenceLineIds` only.
-- UK English (organisation, analyse, behaviour, practise as a verb), plain words and short sentences. It should sound like a person speaking, not like a CV.
+- UK English (organisation, analyse, behaviour, programme), plain words and short sentences. It should sound like a person speaking, not like a CV.
+- Write "practice" only as a noun ("your practice", "a practice run"). Never use the verb, in either spelling or any form (practise, practised, practising, practiced): write prepare, rehearse or work through instead. The app uses only the noun, so the verb reads like a typo next to it.
 - Never mention the candidate's age, health, family, religion, ethnicity, nationality or any other personal characteristic.
 - Never use: guaranteed, dream job, beat the bots, hack the ATS, revolutionary, 10x, effortless.
 

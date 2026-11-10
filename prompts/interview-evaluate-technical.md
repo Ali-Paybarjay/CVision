@@ -1,6 +1,6 @@
 ---
 name: interview-evaluate-technical
-version: 1.2.0
+version: 1.3.0
 stage: 5
 rubric: technical-v1
 ---
@@ -54,7 +54,8 @@ For this question type, applied evidence looks like: {{applied_evidence}}
 - The outline of a stronger answer uses placeholders such as "[your actual figure]" or "[the system you used]" instead of inventing facts about the candidate.
 - Quotes are copied exactly from `<candidate_answer>`: never from the question, never paraphrased.
 - Do not compute an overall score; the app does that.
-- Feedback follows the voice rules: direct and expert, plain words and short sentences, UK English spelling (organisation, analyse, behaviour, practising).
+- Feedback follows the voice rules: direct and expert, plain words and short sentences, UK English spelling (organisation, analyse, behaviour, programme).
+- Write "practice" only as a noun ("your practice", "a practice run"). Never use the verb, in either spelling or any form (practise, practised, practising, practiced): write prepare, rehearse or work through instead. The app uses only the noun, so the verb reads like a typo next to it.
 - No feedback that would fit any answer: never "great answer", "well done", "keep practising", "practise more" or "be more confident". Tie every point to this answer and this job.
 - Never suggest adding a skill, figure or result the candidate has not given. Point them to their own experience or to a placeholder instead.
 
