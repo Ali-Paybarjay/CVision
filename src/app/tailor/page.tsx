@@ -9,8 +9,9 @@ import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
-import { ButtonLink, Card, Notice, Page, PathSteps, WaitNote, wideFrame } from "@/shared/ui";
+import { ButtonLink, Card, Notice, Page, PathSteps, wideFrame } from "@/shared/ui";
 import { TailorSignIn, tailorStart } from "./tailor-sign-in";
+import { TailorWaitNote } from "./tailor-wait-note";
 import { TailorWorkspace } from "./tailor-workspace";
 
 export const metadata: Metadata = { title: "Tailor your CV" };
@@ -19,11 +20,13 @@ export const metadata: Metadata = { title: "Tailor your CV" };
  * Shown while the page is built. The first time a job is opened the model writes its gap questions, which a pilot
  * took for a frozen page when all it said was "Loading your CV…" (#332). After that the questions are kept (#318),
  * so the note is only on screen for a moment, and it has to read well for that too. It sits in the job's own wide
- * frame, so the path steps don't jump when the workspace arrives (#393). "20 seconds" is measured on the live site
- * (6 to 8 November): the slowest first visit took 9.1 seconds, and askModel may ask once more after a broken answer.
+ * frame, so the path steps don't jump when the workspace arrives (#393). "Up to a minute", as for reading a CV (#419):
+ * the 20 seconds measured on 6 to 8 November came before ads with up to 36 requirements (#408) and the "Make it
+ * stronger" questions (#439), and an eval with 14 gaps now takes up to 16 seconds, twice that when askModel asks
+ * again after a broken answer. A smaller number needs a new live measurement on a long ad.
  */
 const tailorLoadingNote =
-  "Getting your CV ready for this job. The first time, we also write a few questions about it, which can take up to 20 seconds.";
+  "Getting your CV ready for this job. The first time, we also write a few questions about it, which can take up to a minute.";
 
 // /tailor?job=<id>: the user's CV for one job, with a question per gap and every change approved by them.
 export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
@@ -31,7 +34,7 @@ export default function TailorPage({ searchParams }: PageProps<"/tailor">) {
     <Suspense
       fallback={
         <WorkspaceFrame>
-          <WaitNote>{tailorLoadingNote}</WaitNote>
+          <TailorWaitNote>{tailorLoadingNote}</TailorWaitNote>
         </WorkspaceFrame>
       }
     >

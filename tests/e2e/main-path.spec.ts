@@ -93,6 +93,8 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
 
   await expect(page).toHaveURL(/\/tailor\?job=sara-job-1$/);
   await expect(page.getByText("Sample data · mock mode")).toBeVisible();
+  // The heading takes focus when the workspace arrives, so a screen reader says the page is ready (#419).
+  await expect(page.getByRole("heading", { level: 1, name: "Tailor your CV" })).toBeFocused();
 
   // Suggestions from the CV come without any question, and wait for the user: nothing goes in until they approve.
   await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();

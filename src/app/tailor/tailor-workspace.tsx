@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { decideChange } from "@/features/tailor/actions";
 import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
 import { buildTailoredCv } from "@/features/tailor/tailored-cv";
@@ -48,6 +48,15 @@ function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]
  * preview in the review step shows approved changes only.
  */
 export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [] }: TailorWorkspaceProps) {
+  // The page's heading takes focus once when the workspace arrives, so a screen reader says the page is ready (#419).
+  // Only once: Next.js runs effects again when the user comes back to this page, and focus then stays where it was.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (focused.current) return;
+    focused.current = true;
+    heading.current?.focus({ preventScroll: true });
+  }, []);
   const [gapStates, setGapStates] = useState<Record<string, GapState>>(() =>
     Object.fromEntries(
       savedChanges.flatMap((change) => (change.gapId ? [[change.gapId, { phase: "answered", nextSteps: [], hint: null }]] : [])),
@@ -171,7 +180,9 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
     <Card className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <header className="flex flex-col gap-3 border-b border-line pb-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl">Tailor your CV</h1>
+            <h1 ref={heading} tabIndex={-1} className="text-xl">
+              Tailor your CV
+            </h1>
             <StatusPill status={applied ? "completed" : "in-progress"} />
           </div>
           <h2 className="text-3xl leading-tight sm:text-4xl">{job.title}</h2>
