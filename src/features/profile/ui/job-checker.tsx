@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Profile } from "@/shared/contracts";
 import { ButtonLink, Button, Card, cn, Field, Input, Notice, Textarea, WaitNote } from "@/shared/ui";
@@ -129,6 +129,9 @@ export function JobForm({ profile, demoMode, initialSource = "link", focusAd, on
   const [pastedAd, setPastedAd] = useState("");
   const ad = source === "link" ? linkAd : pastedAd;
   const setAd = source === "link" ? setLinkAd : setPastedAd;
+  // The link goes with the ad only when the user chose to give it; with text, the ad is all there is. The check and
+  // the person specification hint both use this, so an NHS link typed before "Paste the text" counts for neither.
+  const link = source === "link" ? url : "";
   const [fromLink, setFromLink] = useState<LinkOutcome | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [reading, setReading] = useState(false);
@@ -219,8 +222,6 @@ export function JobForm({ profile, demoMode, initialSource = "link", focusAd, on
       return;
     }
 
-    // The link goes with the ad only when the user chose to give it; with text, the ad is all there is.
-    const link = source === "link" ? url : "";
     const checkedAd = checkAdText(ad);
     const checkedUrl = parseAdUrl(link);
     const found: Errors = {
@@ -362,31 +363,19 @@ export function JobForm({ profile, demoMode, initialSource = "link", focusAd, on
           )}
 
           {showAd && (
-            <Field
-              label="The job ad"
+            <AdBox
               hint={
                 source === "link" && fromLink?.kind !== "unreadable"
                   ? "Check it’s the job ad, and all of it, and delete anything else, such as menus or other jobs. If the ad isn’t there, copy it from the page and paste it here instead."
                   : "Paste the whole ad: the job title, what you would do and what the employer asks for."
               }
               error={errors.ad}
-            >
-              {(props) => (
-                <Textarea
-                  {...props}
-                  name="ad"
-                  rows={12}
-                  // No maxLength: it cut a long paste without a word, often the person specification at the end.
-                  // checkAdText says when the ad is too long instead (#400).
-                  value={ad}
-                  onChange={(event) => setAd(event.target.value)}
-                  disabled={busy}
-                  className="min-h-64"
-                />
-              )}
-            </Field>
+              ad={ad}
+              link={link}
+              disabled={busy}
+              onChange={setAd}
+            />
           )}
-          {showAd && needsPersonSpecHint(ad, url) && <p className="text-sm text-text-muted">{personSpecHint}</p>}
 
           {profile && (
             <p className="text-sm text-text-muted">
@@ -417,6 +406,54 @@ export function JobForm({ profile, demoMode, initialSource = "link", focusAd, on
         </form>
       </Card>
     </section>
+  );
+}
+
+type AdBoxProps = {
+  hint: string;
+  error?: string;
+  ad: string;
+  /** The link that goes with the ad to the check, or "" when there is none. */
+  link: string;
+  disabled: boolean;
+  onChange: (ad: string) => void;
+};
+
+/**
+ * The ad box. When an NHS ad may have left its criteria in a PDF, the hint shows right under it, in a live region so a
+ * screen reader reads it as it appears, and the box names it among its descriptions (#420).
+ */
+export function AdBox({ hint, error, ad, link, disabled, onChange }: AdBoxProps) {
+  const specHintId = useId();
+  const specHint = needsPersonSpecHint(ad, link);
+
+  return (
+    <Field label="The job ad" hint={hint} error={error}>
+      {(props) => (
+        // A column, as the field's own is, so the box sits as it did and the empty live region adds no space.
+        <div className="flex flex-col">
+          <Textarea
+            {...props}
+            aria-describedby={[props["aria-describedby"], specHint && specHintId].filter(Boolean).join(" ") || undefined}
+            name="ad"
+            rows={12}
+            // No maxLength: it cut a long paste without a word, often the person specification at the end.
+            // checkAdText says when the ad is too long instead (#400).
+            value={ad}
+            onChange={(event) => onChange(event.target.value)}
+            disabled={disabled}
+            className="min-h-64"
+          />
+          <div aria-live="polite">
+            {specHint && (
+              <p id={specHintId} className="mt-1.5 text-sm text-text-muted">
+                {personSpecHint}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </Field>
   );
 }
 

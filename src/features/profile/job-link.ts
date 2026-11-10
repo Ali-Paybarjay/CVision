@@ -134,17 +134,29 @@ export const linkLimitMessages: Record<LinkLimitReason, string> = {
   "limit-error": "We couldn’t open the link just now. Copy the ad from the page and paste it below.",
 };
 
-/** Under the ad box, when an NHS ad may have left its criteria in a PDF (#400). */
+/**
+ * Under the ad box, when an NHS ad may have left its criteria in a PDF (#400). Only the criteria: the whole PDF is often
+ * longer than the box takes, and cutting it down would cost the very criteria (#420).
+ */
 export const personSpecHint =
-  "NHS ads often keep the person specification in a PDF called Job description and person specification. Paste its criteria below the ad as well, so we can match them.";
+  "NHS ads often keep the person specification in a PDF called Job description and person specification. Paste its essential and desirable criteria below the ad, not the whole PDF, so we can match them.";
 
 /**
- * Whether to show personSpecHint: the ad is from NHS Jobs or Trac (by its link, or an NHS ad pasted without one) and
- * its text has neither a person specification nor essential criteria. Trac often keeps them only in the PDF.
+ * A line or table cell that is only a criteria heading, such as "Person specification" or "Essential criteria:".
+ * The words alone are not enough: "Job description and person specification (PDF)" is the link to the PDF, and
+ * "essential car user" is a criterion (#420).
+ */
+const CRITERIA_HEADING = /^(?:person specification|(?:essential|desirable)(?:\s+criteria)?)\s*(?::|$)/i;
+
+/** An NHS employer, for an ad pasted without its link. "NHS" alone is in ads from firms that work with the NHS. */
+const NHS_EMPLOYER = /\bnhs (?:foundation )?trust\b|\bagenda for change\b|\bband [1-9]/i;
+
+/**
+ * Whether to show personSpecHint: the ad is from NHS Jobs or Trac (by its link, or an NHS employer's ad pasted
+ * without one) and its text has no criteria heading. Trac often keeps the criteria only in the PDF.
  */
 export function needsPersonSpecHint(ad: string, link: string): boolean {
-  const text = ad.toLowerCase();
-  if (text.trim() === "" || text.includes("person specification") || text.includes("essential")) return false;
+  if (ad.trim() === "" || ad.split(/[\n\t]/).some((piece) => CRITERIA_HEADING.test(piece.trim()))) return false;
   const site = jobSite(link.trim())?.name;
-  return site === "NHS Jobs" || site === "Trac" || /\bnhs\b/.test(text);
+  return site === "NHS Jobs" || site === "Trac" || NHS_EMPLOYER.test(ad);
 }
