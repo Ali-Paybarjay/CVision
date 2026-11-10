@@ -10,7 +10,7 @@ import { getAnonymousKey } from "@/shared/ai/anonymous-key";
 import { TailoringChangeSchema, type Job, type TailoringChange } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
-import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
+import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, withoutRoleClaims, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
 import { defaultGapQuestion, isStrongerGap, questionGaps } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
@@ -329,6 +329,16 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
         text = coverLetterText(letter, profile.fullName);
         named = inventedTerms(text, gaps, answers, profile);
       }
+    }
+    // A registration or Band only the ad gives is never claimed for the user (#424). The prompt asks for this; here
+    // any sentence that still claims one is taken out, while the job's own title, Band and all, may stay.
+    if (named.length === 0 && job.role) {
+      const checked = withoutRoleClaims(letter, job.title, { profile, gaps, answers, role: job.role });
+      if (checked.claims.length > 0 && checked.letter.paragraphs.length === 0) {
+        return { ok: false, message: `The draft kept saying you hold “${checked.claims[0]}”, which only the job ad says, so we did not use it. Try again.` };
+      }
+      letter = checked.letter;
+      text = coverLetterText(letter, profile.fullName);
     }
     if (named.length > 0) {
       return { ok: false, message: `The draft kept mentioning “${named[0]}”, which you told us you have not done, so we did not use it. Try again, or change your answer to that question.` };
