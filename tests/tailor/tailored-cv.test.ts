@@ -190,6 +190,28 @@ describe("the tailored CV for a job (#216)", () => {
     expect(cv.unplaced).toEqual([]);
   });
 
+  it("puts in only one of two skills that are almost the same, and does not call the other left out (#190)", () => {
+    const asking = { ...job, requirements: { essential: ["Stakeholder communication"], desirable: [] } };
+    const cv = buildTailoredCv({ ...profile, skills: ["Communication", "Stakeholder communication", "Team leadership", "Leadership"] }, [], asking);
+    expect(shown(cv)).toEqual(["Stakeholder communication", "Team leadership"]);
+    expect(cv.leftInProfile).toEqual([]);
+  });
+
+  it("keeps both of two almost-same skills when the user approved both", () => {
+    const approved = ["Communication", "Stakeholder communication"].map((after) => change("approved", { id: after, section: "skills", before: null, after }));
+    expect(shown(buildTailoredCv(profile, approved, job))).toEqual(["Communication", "Stakeholder communication"]);
+  });
+
+  it("names the Profile's skills and tools that did not fit, instead of leaving them off without a word (#190)", () => {
+    const many = ["Negotiation", "Creativity", "Mentoring", "Coaching", "Initiative", "Teamwork", "Leadership", "Communication", "Stakeholder management"];
+    const tools = ["SQL", "Python", "Excel", "Word", "Git", "Jira"];
+    const cv = buildTailoredCv({ ...profile, skills: [...many, ...tools] }, [], job);
+    const onCv = [...shown(cv), ...cv.technicalSkills.map((line) => line.text)];
+    expect(cv.leftInProfile).toHaveLength(5);
+    expect([...onCv, ...cv.leftInProfile].sort()).toEqual([...many, ...tools].sort());
+    expect(cv.overLimit).toEqual([]);
+  });
+
   it("lists a role's lines the job asks about first and keeps the roles in order", () => {
     const line = profile.experience[0].duties.at(-1)!;
     const asking = { ...job, requirements: { essential: [line], desirable: [] } };

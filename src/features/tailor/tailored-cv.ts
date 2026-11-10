@@ -1,7 +1,7 @@
 // The tailored CV: the user's Profile with only their approved changes applied (You approve everything).
 // Pure code, shared by the preview and the PDF and Word export.
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
-import { bigSixTarget, isBigSix } from "./big-six";
+import { bigSixTarget, isBigSix, nearSameSkill } from "./big-six";
 import { normalise } from "./nothing-invented";
 
 /** One line of the tailored CV; `tailored` marks a line that came from an approved change. */
@@ -57,6 +57,12 @@ export type TailoredCv = {
   unplaced: TailoringChange[];
   /** Lines the user approved that did not fit the limits on skills, tools and certificates, so the page can say so. */
   overLimit: string[];
+  /**
+   * Skills from the Profile, not approved changes, that did not fit the six main skills and four tools, so the page
+   * can name them rather than leave them off without a word (#190). A main skill left out only because one almost the
+   * same is on the CV is not among them. They stay in the Profile.
+   */
+  leftInProfile: string[];
 };
 
 const month = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
@@ -207,7 +213,21 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     return mentions(line.text, adWords) ? 3 : 4;
   };
   const mainSkills = allSkills.filter((line) => isBigSix(line.text) && (job !== undefined || line.tailored));
-  const skills = [...mainSkills].sort((a, b) => rank(a) - rank(b)).slice(0, bigSixTarget);
+  // Of two skills that are almost the same, such as "Communication" and "Stakeholder communication", only one goes in, unless
+  // both were approved (#190): the one the ad asks for more, and with the same rank the more specific name.
+  const skills: CvLine[] = [];
+  const nearSame: CvLine[] = [];
+  for (const line of [...mainSkills].sort((a, b) => rank(a) - rank(b))) {
+    const twin = line.tailored ? undefined : skills.find((kept) => nearSameSkill(kept.text, line.text));
+    if (!twin) {
+      if (skills.length < bigSixTarget) skills.push(line);
+    } else if (!twin.tailored && rank(twin) === rank(line) && line.text.length > twin.text.length) {
+      skills[skills.indexOf(twin)] = line;
+      nearSame.push(twin);
+    } else {
+      nearSame.push(line);
+    }
+  }
   // A main skill that did not make the six stays in the Profile; it is not a tool. An approved one is reported to the user, never lost silently.
   const leftOut = mainSkills.filter((line) => !skills.includes(line));
   const otherSkills = allSkills.filter((line) => !isBigSix(line.text) && !isDrivingLicence(line));
@@ -244,6 +264,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     languages: (profile.languages ?? []).map((item) => asIs(item.level ? `${item.name} (${item.level})` : item.name)),
     unplaced: approved.filter((change) => !used.has(change.id)),
     overLimit: [...leftOut, ...tools.slice(maxTools), ...certificates.slice(maxCertificates)].filter((line) => line.tailored).map((line) => line.text),
+    leftInProfile: [...leftOut.filter((line) => !nearSame.includes(line)), ...tools.slice(maxTools)].filter((line) => !line.tailored).map((line) => line.text),
   };
 }
 
