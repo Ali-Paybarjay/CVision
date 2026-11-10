@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTailoredCv, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
+import { approveOnePerLine, buildTailoredCv, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { cvLines } from "@/features/tailor/nothing-invented";
 import { personas } from "@/shared/sample-data";
@@ -112,6 +112,33 @@ describe("the tailored CV (You approve everything)", () => {
     const cv = buildTailoredCv(profile, [approved]);
     expect(cv.education[0]).toEqual({ text: approved.after, tailored: true });
     expect(cv.unplaced).toEqual([]);
+  });
+
+  it("tells a change that lost its line to another apart from one whose line is not on the CV (#272)", () => {
+    const nowhere = change("approved", { section: "education", before: "MSc Data Science", after: "MSc Data Science (Merit)" });
+    const first = change("approved", { after: "First version" });
+    const second = { ...change("approved", { after: "Second version" }), id: "second" };
+    expect(buildTailoredCv(profile, [nowhere, first, second]).sameLine.map((item) => item.after)).toEqual(["Second version"]);
+  });
+
+  it("approving a second change to a line sends the first back to the suggestions (#272)", () => {
+    const first = change("approved", { after: "First version" });
+    const second = { ...change("proposed", { after: "Second version" }), id: "second" };
+    const other = { ...change("approved", { section: "education", before: "MSc Data Science", after: "MSc (Merit)" }), id: "other" };
+    const { changes, sentBack } = approveOnePerLine([first, second, other], { ...second, status: "approved" });
+
+    expect(sentBack).toEqual([{ ...first, status: "proposed" }]);
+    expect(changes.map((item) => [item.id, item.status])).toEqual([[first.id, "proposed"], ["second", "approved"], ["other", "approved"]]);
+    const cv = buildTailoredCv(profile, changes);
+    expect(allText(cv)).toContain("Second version");
+    expect(cv.sameLine).toEqual([]);
+  });
+
+  it("sends nothing back for a rejection or a change that adds a new line", () => {
+    const first = change("approved", { after: "First version" });
+    expect(approveOnePerLine([first], { ...first, id: "x", status: "rejected" }).sentBack).toEqual([]);
+    const added = change("approved", { section: "skills", before: null, after: "Git" });
+    expect(approveOnePerLine([added], { ...added, id: "y" }).sentBack).toEqual([]);
   });
 
   it("never drops an approved change silently: one it cannot place is listed in unplaced", () => {

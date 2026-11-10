@@ -55,6 +55,8 @@ export type TailoredCv = {
   languages: CvLine[];
   /** Approved changes whose `before` line is not on the CV (or was already changed), so they could not be placed. */
   unplaced: TailoringChange[];
+  /** Those of `unplaced` whose line is on the CV but already taken by another approved change to it (#272). */
+  sameLine: TailoringChange[];
   /** Lines the user approved that did not fit the limits on skills, tools and certificates, so the page can say so. */
   overLimit: string[];
   /**
@@ -76,6 +78,26 @@ export function formatMonth(value: string | null | undefined): string {
 
 function same(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
+}
+
+/** Two changes to the same CV line: only one of them can be on the CV. */
+function sameTarget(a: TailoringChange, b: TailoringChange): boolean {
+  return a.id !== b.id && a.section === b.section && a.before !== null && b.before !== null && same(a.before, b.before);
+}
+
+/**
+ * The changes after the user approves `next`: an earlier approved change to the same line goes back to "proposed",
+ * because only one change per line can be on the CV (#272). `sentBack` lists those, for the page to save and say so.
+ */
+export function approveOnePerLine(changes: TailoringChange[], next: TailoringChange): { changes: TailoringChange[]; sentBack: TailoringChange[] } {
+  const sentBack =
+    next.status === "approved"
+      ? changes.filter((change) => change.status === "approved" && sameTarget(change, next)).map((change) => ({ ...change, status: "proposed" as const }))
+      : [];
+  return {
+    changes: changes.map((change) => (change.id === next.id ? next : (sentBack.find((item) => item.id === change.id) ?? change))),
+    sentBack,
+  };
 }
 
 /** An education entry as one CV line, e.g. "MSc, Data Science, University of Manchester, Merit". */
@@ -263,6 +285,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     projects: (profile.projects ?? []).map((item) => ({ title: item.name, company: item.organisation ?? "", dates: dateRange(item.startDate, item.endDate), lines: item.details.map(asIs) })),
     languages: (profile.languages ?? []).map((item) => asIs(item.level ? `${item.name} (${item.level})` : item.name)),
     unplaced: approved.filter((change) => !used.has(change.id)),
+    sameLine: approved.filter((change) => !used.has(change.id) && approved.some((other) => used.has(other.id) && sameTarget(other, change))),
     overLimit: [...leftOut, ...tools.slice(maxTools), ...certificates.slice(maxCertificates)].filter((line) => line.tailored).map((line) => line.text),
     leftInProfile: [...leftOut.filter((line) => !nearSame.includes(line)), ...tools.slice(maxTools)].filter((line) => !line.tailored).map((line) => line.text),
   };
