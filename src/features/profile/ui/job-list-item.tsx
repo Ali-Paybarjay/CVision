@@ -113,7 +113,8 @@ export function JobRow({
   const deleting = state.phase === "asking" && state.deleting;
   return (
     <li className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-4">
+      {/* Every row as tall as a Delete button, and Delete's text on the right edge, like "On your dashboard". */}
+      <div className="flex min-h-11 flex-wrap items-center gap-x-4">
         <Link href={href} className="text-accent underline underline-offset-4">
           {name}
         </Link>
@@ -121,7 +122,7 @@ export function JobRow({
           <span className="ml-auto text-sm text-text-muted">On your dashboard</span>
         ) : (
           state.phase === "idle" && (
-            <Button ref={refs?.deleteButton} variant="quiet" size="compact" onClick={onAsk} className="ml-auto">
+            <Button ref={refs?.deleteButton} variant="quiet" size="compact" onClick={onAsk} className="-mr-3.5 ml-auto">
               Delete<span className="sr-only"> {name}</span>
             </Button>
           )
