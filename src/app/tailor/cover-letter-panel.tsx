@@ -3,10 +3,21 @@
 import { useTransition } from "react";
 import { createCoverLetter } from "@/features/tailor/actions";
 import { findBrandProblems } from "@/features/tailor/brand-check";
-import { letterBasis, letterHead, type LetterHead, type LetterState } from "@/features/tailor/letter-state";
+import {
+  bodyWordCount,
+  canApprove,
+  joinLetter,
+  letterBasis,
+  letterHead,
+  splitLetter,
+  type LetterDraft,
+  type LetterHead,
+  type LetterState,
+} from "@/features/tailor/letter-state";
 import { approvedOnly, type GapAnswer } from "@/features/tailor/types";
 import type { Profile, TailoringChange } from "@/shared/contracts";
-import { Button, CvPaper, Field, Notice, Textarea } from "@/shared/ui";
+import { Button, CvPaper, Notice } from "@/shared/ui";
+import { LetterParagraphCard } from "./letter-paragraph-card";
 import { unreachableMessage } from "./messages";
 
 export type { LetterState };
@@ -35,22 +46,31 @@ function LetterHeading({ head }: { head: LetterHead }) {
   );
 }
 
-/** Write, edit and approve the cover letter for this job. */
+/** Write the cover letter for this job, keep, remove or edit each paragraph, then approve it. */
 export function CoverLetterPanel({ jobId, profile, changes, answers, letter, setLetter }: CoverLetterPanelProps) {
   const [pending, startTransition] = useTransition();
   const approvedCount = changes.filter((change) => change.status === "approved").length;
   const problems = letter ? findBrandProblems(letter.text) : [];
   const basis = letterBasis(changes, answers);
   const head = letter?.text ? letterHead(profile, new Date()) : null;
+  // A letter from before paragraphs had decisions is taken as kept, as the user saw all of it.
+  const draft = letter?.draft ?? (letter?.text ? splitLetter(letter.text, "kept") : null);
+  const pendingCount = draft?.paragraphs.filter((paragraph) => paragraph.decision === "pending").length ?? 0;
+
+  const update = (next: LetterDraft) => setLetter({ text: joinLetter(next), approved: false, draft: next });
 
   const write = () =>
     startTransition(async () => {
       try {
         // Only the approved changes, as the letter uses nothing else.
         const result = await createCoverLetter({ jobId, changes: approvedOnly(changes), answers });
-        setLetter(result.ok ? { text: result.text, approved: false } : { text: letter?.text ?? "", approved: false, error: result.message });
+        setLetter(
+          result.ok
+            ? { text: result.text, approved: false, draft: splitLetter(result.text) }
+            : { text: letter?.text ?? "", approved: false, draft: letter?.draft, error: result.message },
+        );
       } catch {
-        setLetter({ text: letter?.text ?? "", approved: false, error: unreachableMessage });
+        setLetter({ text: letter?.text ?? "", approved: false, draft: letter?.draft, error: unreachableMessage });
       }
     });
 
@@ -58,7 +78,7 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
     <div className="flex flex-col gap-4">
       <p className="text-sm text-text-muted">
         Written only from your CV, the {approvedCount} {approvedCount === 1 ? "change" : "changes"} you approved and your own answers.
-        Read it, change anything, then approve it.
+        Keep, remove or edit each paragraph, then approve the letter.
       </p>
 
       {letter?.error && <Notice tone="error">{letter.error}</Notice>}
@@ -72,17 +92,24 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
         </CvPaper>
       )}
 
-      {letter && letter.text && !letter.approved && (
-        <Field label="Your cover letter" hint="Edit it freely. Keep it true: only what you have actually done.">
-          {(props) => (
-            <Textarea
-              {...props}
-              className="min-h-96"
-              value={letter.text}
-              onChange={(event) => setLetter({ text: event.target.value, approved: false })}
+      {draft && letter?.text && !letter.approved && (
+        <div className="flex flex-col gap-3">
+          {draft.greeting && <p className="text-sm text-text-muted">{draft.greeting}</p>}
+          {draft.paragraphs.map((paragraph, index) => (
+            <LetterParagraphCard
+              // A new draft brings new paragraphs, so each card starts again from its own text.
+              key={`${index}:${paragraph.text}`}
+              paragraph={paragraph}
+              number={index + 1}
+              total={draft.paragraphs.length}
+              disabled={pending}
+              onChange={(next) => update({ ...draft, paragraphs: draft.paragraphs.map((item, at) => (at === index ? next : item)) })}
             />
-          )}
-        </Field>
+          ))}
+          <p className="text-sm text-text-muted" aria-live="polite">
+            Your letter now: {bodyWordCount(draft)} words.
+          </p>
+        </div>
       )}
 
       {letter?.approved && (
@@ -112,16 +139,23 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
         )}
         {letter?.text && !letter.approved && (
           <Button
-            onClick={() => setLetter({ text: letter.text.trim(), approved: true, basis })}
-            disabled={pending || letter.text.trim() === ""}
+            onClick={() => draft && setLetter({ text: joinLetter(draft), approved: true, basis, draft })}
+            disabled={pending || !draft || !canApprove(draft)}
           >
             Approve cover letter
           </Button>
         )}
+        {letter?.text && !letter.approved && draft && !canApprove(draft) && (
+          <span className="text-sm text-text-muted">
+            {pendingCount > 0
+              ? `Keep or remove ${pendingCount === 1 ? "the last paragraph" : `the other ${pendingCount} paragraphs`} to approve the letter.`
+              : "Keep at least one paragraph to approve the letter."}
+          </span>
+        )}
         {letter?.approved && (
           <>
             <span className="text-sm font-semibold text-accent">✓ Approved</span>
-            <Button variant="quiet" onClick={() => setLetter({ text: letter.text, approved: false })}>
+            <Button variant="quiet" onClick={() => setLetter({ text: letter.text, approved: false, draft: draft ?? undefined })}>
               Edit
             </Button>
           </>

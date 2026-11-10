@@ -1,6 +1,7 @@
 // Live prompt evals for the cover letter: real requests to the model, run with `npm run eval`.
 import { describe, expect, it } from "vitest";
 import { coverLetterText, findBrandProblems, inventedTerms, writeCoverLetter } from "@/features/tailor";
+import { splitLetter } from "@/features/tailor/letter-state";
 import { getAiProvider } from "@/shared/ai";
 import { coverLetterCases, declinedCase, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
 
@@ -23,6 +24,11 @@ describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
     it("Sounds like you: reuses the user's own phrases and no template phrases", () => {
       expect(ownPhrasesUsed(text, input)).toBeGreaterThanOrEqual(2);
       for (const phrase of templatePhrases) expect(text.toLowerCase(), phrase).not.toContain(phrase);
+    });
+
+    it("is short: the body stays under 230 words, as pilot users found 300 too long", () => {
+      const body = splitLetter(text).paragraphs.map((paragraph) => paragraph.text).join(" ");
+      expect(body.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(230);
     });
 
     it("follows the brand: no banned words, UK spelling", () => {

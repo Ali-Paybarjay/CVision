@@ -25,9 +25,9 @@ This rule overrides everything else.
 ## Shape
 
 - `greeting`: "Dear Hiring Manager," unless the ad names a person.
-- `paragraphs`: exactly three paragraphs, 250 to 350 words in total, following this template:
-  1. The job title and that they are applying. One or two sentences on something specific the ad says about the employer or the role. Then what this letter adds to their CV.
-  2. What sets them apart for this job, in broad terms, and where it shows in their experience. Connect it to the main skills on their CV with one or two concrete examples, in their words, that meet the essential requirements. If their CV plainly shows something an employer may question, such as a change of career, you may say so in one sentence and then move on to those skills. End with one sentence that sums up the paragraph.
+- `paragraphs`: exactly three short paragraphs, 150 to 200 words in total, never more than 220. Each paragraph stands on its own, as the person may remove any one of them. Follow this template:
+  1. The job title and that they are applying. One sentence on something specific the ad says about the employer or the role.
+  2. What sets them apart for this job, in broad terms, and where it shows in their experience. Give one or two concrete examples, in their words, that meet the essential requirements. If their CV plainly shows something an employer may question, such as a change of career, you may say so in one sentence and then move on to the examples.
   3. What the employer needs, taken from the ad, and how the person's real experience meets it. Leave out everything under "Requirements they said no to", even as something the employer wants. Close by saying they would welcome an interview.
 - For a requirement they lack, do not name it at all, not even to say they lack it or that the ad asks for it, and do not claim it in other words. You may name a real related skill they do have instead. Never pretend.
 - Do not put the date, their address, a closing line such as "Yours sincerely" or their name in `paragraphs`. The app adds them.
