@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { answerGap } from "@/features/tailor/actions";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
-import { Button, Notice, Textarea } from "@/shared/ui";
+import { Button, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { ChangeCard } from "./change-card";
 import { unreachableMessage } from "./messages";
 
@@ -36,11 +36,14 @@ type GapCardProps = {
 export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf }: GapCardProps) {
   const [detail, setDetail] = useState("");
   const [pending, startTransition] = useTransition();
+  // A yes asks the model for a line, which took about 30 seconds on the live site (6 November, #325); a no needs no model.
+  const [askingModel, setAskingModel] = useState(false);
   const errorId = useId();
   const { gap, options = [] } = prompt;
 
   const submit = (chosen: string | null) => {
     setState({ phase: "working" });
+    setAskingModel(chosen !== null);
     startTransition(async () => {
       try {
         const earlier = earlierAnswers.map(({ gapId, answer, hasExperience }) => ({ gapId, answer, hasExperience }));
@@ -88,6 +91,7 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
           >
             {pending ? "Writing a suggestion…" : "Save answer"}
           </button>
+          <WaitNote>{pending && askingModel && "Writing a line for your CV from your answer. This can take up to 30 seconds."}</WaitNote>
           {options.length > 0 && (
             <div className="flex flex-col gap-2" role="group" aria-label="Or choose an answer">
               <p className="text-sm text-text-muted">Or choose the one that fits:</p>
