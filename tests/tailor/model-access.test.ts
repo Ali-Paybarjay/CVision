@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
+import { findBrandProblems } from "@/features/tailor";
+import { modelFailureMessage, tailorModelAccess, whatStillWorks, whatStillWorksOnQuestions } from "@/features/tailor/server/model-access";
 import { AskModelError } from "@/shared/ai";
 
 const { getCurrentUser } = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
@@ -30,9 +31,14 @@ describe("tailorModelAccess", () => {
 });
 
 describe("modelFailureMessage", () => {
-  it("shows the daily limit's own message", () => {
+  it("shows the daily limit's own message, then what still works (#314)", () => {
     const error = new AskModelError("You have reached today's limit. Try again tomorrow.", "limit-reached");
-    expect(modelFailureMessage(error, "suggest a change", "Try again in a moment.")).toBe("You have reached today's limit. Try again tomorrow.");
+    expect(modelFailureMessage(error, "suggest a change", "Try again in a moment.")).toBe(`You have reached today's limit. Try again tomorrow. ${whatStillWorks}`);
+    expect(modelFailureMessage(error, "write the gap questions", "", "You can still answer No.")).toBe("You have reached today's limit. Try again tomorrow. You can still answer No.");
+  });
+
+  it("names only things that need no model, in our voice", () => {
+    for (const text of [whatStillWorks, whatStillWorksOnQuestions]) expect(findBrandProblems(text)).toEqual([]);
   });
 
   it("logs only the reason for any other failure, and shows the fallback", () => {

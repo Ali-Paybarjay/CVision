@@ -1,5 +1,6 @@
 // At the daily limit, a "no" is still kept: it never changes the CV, so it needs no model (#314).
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { whatStillWorksOnQuestions } from "@/features/tailor/server/model-access";
 import { answerGap } from "@/features/tailor/actions";
 import { AskModelError } from "@/shared/ai";
 
@@ -31,9 +32,12 @@ describe("answering a gap question at the daily limit (#314)", () => {
     expect(result).toMatchObject({ ok: true, hasExperience: false, answer: "No, not yet.", changes: [] });
   });
 
-  it("still gives the limit's message for a yes, which needs the model to write a line", async () => {
+  it("still gives the limit's message for a yes, which needs the model to write a line, and says what still works (#314)", async () => {
     const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-3", answer: "I used Git at work.", hasExperience: true });
-    expect(result).toEqual({ ok: false, message: limit.message });
+    expect(result).toEqual({
+      ok: false,
+      message: `${limit.message} Your answer stays here, so you can save it again tomorrow for a suggestion. ${whatStillWorksOnQuestions}`,
+    });
   });
 });
 
