@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { coverLetterText, findBrandProblems, inventedTerms, writeCoverLetter } from "@/features/tailor";
 import { getAiProvider } from "@/shared/ai";
-import { coverLetterCases, declinedCase, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
+import { awardClaimedByPerson, coverLetterCases, declinedCase, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
 
 describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
   it("a requirement the user said no to is neither named nor claimed in other words (#251)", async () => {
@@ -17,12 +17,18 @@ describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
 
     it("Nothing invented: mentions nothing the user said they have not done", async () => {
       text = coverLetterText(await writeCoverLetter(input), input.profile.fullName);
+      // Printed so a reviewer can read what no check sees, such as a line that says more than its source (#315).
+      console.log(`=== LETTER ${input.profile.fullName}\n${text}`);
       expect(inventedTerms(text, gaps, input.answers, input.profile)).toEqual([]);
     });
 
     it("Sounds like you: reuses the user's own phrases and no template phrases", () => {
       expect(ownPhrasesUsed(text, input)).toBeGreaterThanOrEqual(2);
       for (const phrase of templatePhrases) expect(text.toLowerCase(), phrase).not.toContain(phrase);
+    });
+
+    it("an award to the store or team is not claimed for the person (#315)", () => {
+      expect(text).not.toMatch(awardClaimedByPerson);
     });
 
     it("follows the brand: no banned words, UK spelling", () => {

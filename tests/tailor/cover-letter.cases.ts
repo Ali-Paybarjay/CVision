@@ -1,6 +1,6 @@
 // Cover letter cases for the four personas: their sample answers and the changes they approved.
 // The unit tests run them in mock mode; the live evals send them to the model.
-import { sampleAnswers, sampleProposals, type CoverLetterInput } from "@/features/tailor";
+import { declinedRequirements, sampleAnswers, sampleProposals, type CoverLetterInput } from "@/features/tailor";
 import { personas, type PersonaName } from "@/shared/sample-data";
 
 export const coverLetterCases = (Object.keys(personas) as PersonaName[]).map((name) => {
@@ -15,6 +15,8 @@ export const coverLetterCases = (Object.keys(personas) as PersonaName[]).map((na
       jobId: jobs[0].id,
       status: "approved" as const,
     })),
+    // As createCoverLetter sends it, so an eval sees the same letter a user would (#315).
+    declined: declinedRequirements(match.gaps, sampleAnswers[name], profile),
   };
   return { name, input, gaps: match.gaps };
 });
@@ -31,6 +33,9 @@ export const declinedCase = (() => {
   const input: CoverLetterInput = { profile, job, answers, changes: [], declined: [gap.requirement] };
   return { input, gaps: [gap], claims: /\bnebosh\b/i };
 })();
+
+/** An award given to a store, team or company, claimed by the person (Daniel's CV: "Store of the Year…", #315). */
+export const awardClaimedByPerson = /\bI (was|have been) (named|awarded|voted)\b/i;
 
 /** Template phrases that do not sound like anyone in particular. */
 export const templatePhrases = [

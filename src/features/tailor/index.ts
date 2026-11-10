@@ -10,8 +10,10 @@ export {
   coverLetterText,
   declinedRequirements,
   inventedTerms,
+  nothingMoreToAdd,
   sampleCoverLetter,
   writeCoverLetter,
   type CoverLetter,
   type CoverLetterInput,
+  type NothingMore,
 } from "./cover-letter";
