@@ -1,6 +1,7 @@
 "use server";
 
 import { after } from "next/server";
+import { z } from "zod";
 import { getCurrentUser, type CurrentUser } from "@/features/account/current-user";
 import { getAiMode } from "@/shared/ai";
 import { track, type EventActor } from "@/shared/analytics/track";
@@ -13,7 +14,7 @@ import { adLinkFailureMessage, jobSite, linkLimitMessages, siteLabel } from "./j
 import { modelAccessFor } from "./server/access";
 import { matchJob, parseJob, sampleJobFor } from "./server/check-job";
 import { describeAiError, type AiErrorCode } from "./server/extract-request";
-import { saveJobAndMatch } from "./server/job-store";
+import { deleteJob, saveJobAndMatch } from "./server/job-store";
 import { reserveLinkRead, settleLinkRead } from "./server/link-read-limit";
 import { loadAccountProfile } from "./server/profile-account";
 import { readProfileInput } from "./server/profile-input";
@@ -179,6 +180,30 @@ export async function readAdLinkAction(input: { url: unknown }): Promise<ReadAdL
 
   if (!read.ok) return { ok: false, code: "unreadable", message: adLinkFailureMessage(read.reason, read.url) };
   return { ok: true, text: read.text, site: siteLabel(read.url), tooLong: read.truncated || read.text.length > MAX_AD_CHARACTERS };
+}
+
+export type DeleteJobResult = { ok: true } | { ok: false; message: string };
+
+const deleteJobMessages = {
+  "on-dashboard": "This job is on your dashboard, so it can’t be deleted here.",
+  "not-found": "We couldn’t find this job. Reload the page to see your jobs.",
+  failed: "We couldn’t delete this job just now. Try again in a minute.",
+} as const;
+
+/**
+ * Deletes one of the signed-in user's jobs from a list of their jobs (#462), with everything kept for it, unless they
+ * applied for it: a job on the dashboard stays. A page left open for another account can't delete anything, as the
+ * database deletes only the rows of the account signed in now.
+ */
+export async function deleteJobAction(jobId: unknown): Promise<DeleteJobResult> {
+  const supabase = await createSupabaseServerClient();
+  const user = supabase ? await getCurrentUser() : null;
+  if (!supabase || !user) return { ok: false, message: "Sign in to delete a job." };
+  // Anything can be posted to an action, so the id is checked before use.
+  if (!z.uuid().safeParse(jobId).success) return { ok: false, message: deleteJobMessages["not-found"] };
+
+  const outcome = await deleteJob(supabase, jobId as string);
+  return outcome === "deleted" ? { ok: true } : { ok: false, message: deleteJobMessages[outcome] };
 }
 
 async function save(user: CurrentUser | null, job: Job, match: MatchResult): Promise<SaveState> {

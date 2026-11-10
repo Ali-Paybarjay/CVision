@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AskModelError } from "@/shared/ai";
 import { personas } from "@/shared/sample-data";
 import { MAX_PROFILE_CHARACTERS } from "./cv-limits";
-import { checkJobAction, readAdLinkAction } from "./job-actions";
+import { checkJobAction, deleteJobAction, readAdLinkAction } from "./job-actions";
 import { MAX_AD_CHARACTERS } from "./job-extraction";
 import { matchJob, parseJob } from "./server/check-job";
 import { reserveLinkRead, settleLinkRead } from "./server/link-read-limit";
-import { saveJobAndMatch } from "./server/job-store";
+import { deleteJob, saveJobAndMatch } from "./server/job-store";
 import { loadAccountProfile } from "./server/profile-account";
 import { readAdLink } from "./server/read-ad-link";
 
@@ -21,7 +21,7 @@ vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
 vi.mock("@/shared/analytics/track", () => ({ track }));
 vi.mock("@/shared/supabase/env", () => ({ isSupabaseConfigured }));
 vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
-vi.mock("./server/job-store", () => ({ saveJobAndMatch: vi.fn() }));
+vi.mock("./server/job-store", () => ({ saveJobAndMatch: vi.fn(), deleteJob: vi.fn() }));
 vi.mock("./server/profile-account", () => ({ loadAccountProfile: vi.fn() }));
 vi.mock("./server/check-job", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./server/check-job")>();
@@ -334,5 +334,41 @@ describe("readAdLinkAction", () => {
     expect(track).toHaveBeenCalledWith("jobs.link_read", { outcome: "blocked", site: "other", demo: true }, { userId: "user-1" });
     const sent = JSON.stringify(track.mock.calls);
     for (const text of ["reed.co.uk", "pennine", "55512345", ad.slice(0, 40)]) expect(sent.toLowerCase()).not.toContain(text.toLowerCase());
+  });
+});
+
+describe("deleteJobAction", () => {
+  const jobId = "00000000-0000-4000-8000-000000000001";
+
+  it("deletes one of the signed-in user's jobs (#462)", async () => {
+    vi.mocked(deleteJob).mockResolvedValue("deleted");
+
+    expect(await deleteJobAction(jobId)).toEqual({ ok: true });
+    expect(deleteJob).toHaveBeenCalledWith({}, jobId);
+  });
+
+  it.each([
+    ["nobody is signed in", () => getCurrentUser.mockResolvedValue(null)],
+    ["accounts are not switched on", () => createSupabaseServerClient.mockResolvedValue(null)],
+  ])("deletes nothing when %s", async (_, setUp) => {
+    setUp();
+
+    expect(await deleteJobAction(jobId)).toEqual({ ok: false, message: "Sign in to delete a job." });
+    expect(deleteJob).not.toHaveBeenCalled();
+  });
+
+  it.each([["sara-job-1"], [42], [undefined]])("doesn't ask the database about %s, which is no job's id", async (id) => {
+    expect(await deleteJobAction(id)).toEqual({ ok: false, message: "We couldn’t find this job. Reload the page to see your jobs." });
+    expect(deleteJob).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["on-dashboard", "This job is on your dashboard, so it can’t be deleted here."],
+    ["not-found", "We couldn’t find this job. Reload the page to see your jobs."],
+    ["failed", "We couldn’t delete this job just now. Try again in a minute."],
+  ] as const)("says why a job was not deleted (%s)", async (outcome, message) => {
+    vi.mocked(deleteJob).mockResolvedValue(outcome);
+
+    expect(await deleteJobAction(jobId)).toEqual({ ok: false, message });
   });
 });
