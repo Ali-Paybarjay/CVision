@@ -20,8 +20,11 @@ const answers = [
 describe.skipIf(!getAiProvider())("A new work line goes under the role the answer names (live)", () => {
   it("puts Sara's Greenway Foods answer under Greenway Foods", async () => {
     const proposal = await askForProposal({ profile, job: jobs[0], match, answers, sample: { changes: [], nextSteps: [] } });
-    const experience = proposal.changes.filter((change) => change.section === "experience");
-    for (const change of experience) console.log(`=== CHANGE\n${change.before ?? "(new)"}\n→ ${change.after}\nevidence: ${change.evidence}`);
+    // Only the changes this answer gave: a change may also quote a follow-up answer already in Sara's Profile, about
+    // her Northgate work, and that one rightly stays there.
+    const fromAnswer = (evidence: string) => answers[0].answer.toLowerCase().includes(evidence.toLowerCase().replace(/[.\s]+$/, ""));
+    const experience = proposal.changes.filter((change) => change.section === "experience" && fromAnswer(change.evidence));
+    for (const change of proposal.changes) console.log(`=== CHANGE\n${change.before ?? "(new)"}\n→ ${change.after}\nevidence: ${change.evidence}`);
 
     expect(experience.length).toBeGreaterThan(0);
     for (const change of experience) {
