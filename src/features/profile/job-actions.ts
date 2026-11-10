@@ -200,9 +200,10 @@ export async function deleteJobAction(jobId: unknown): Promise<DeleteJobResult> 
   const user = supabase ? await getCurrentUser() : null;
   if (!supabase || !user) return { ok: false, message: "Sign in to delete a job." };
   // Anything can be posted to an action, so the id is checked before use.
-  if (!z.uuid().safeParse(jobId).success) return { ok: false, message: deleteJobMessages["not-found"] };
+  const id = z.uuid().safeParse(jobId);
+  if (!id.success) return { ok: false, message: deleteJobMessages["not-found"] };
 
-  const outcome = await deleteJob(supabase, jobId as string);
+  const outcome = await deleteJob(supabase, id.data);
   return outcome === "deleted" ? { ok: true } : { ok: false, message: deleteJobMessages[outcome] };
 }
 
