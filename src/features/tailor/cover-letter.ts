@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Gap, Job, Profile, TailoringChange } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { jobForPrompt } from "./job-for-prompt";
+import { isStrongerGap } from "./gap-questions";
 import { cvLines, normalise, requirementTerms } from "./nothing-invented";
 import { buildTailoredCv } from "./tailored-cv";
 import type { GapAnswer } from "./types";
@@ -25,9 +26,29 @@ export type CoverLetterInput = {
   declined?: string[];
   /** What the last draft named from `declined`, when this is a second attempt. */
   namedInLastDraft?: string[];
+  /**
+   * "Make it stronger" questions the user had nothing more to add to: the CV line stays usable, but what the question
+   * asked about must not be added to it (#315). Kept apart from `declined`, so the CV line's own words are never blocked.
+   */
+  nothingMore?: NothingMore[];
   /** Whose daily limit the request counts against: { userId } for a signed-in user. */
   requester?: Requester;
 };
+
+/** A "Make it stronger" question the user said no to, with the CV line it was about. */
+export type NothingMore = { question: string; cvLine: string };
+
+/**
+ * The "Make it stronger" questions the user had nothing more to add to, each with the CV line it was about,
+ * taken from the gap's detail (`Already shown by: "…"`).
+ */
+export function nothingMoreToAdd(gaps: Gap[], answers: GapAnswer[]): NothingMore[] {
+  return answers.flatMap((answer) => {
+    const gap = !answer.hasExperience ? gaps.find((item) => item.id === answer.gapId && isStrongerGap(item)) : undefined;
+    const cvLine = gap?.detail?.match(/^Already shown by: "([^]*)"$/)?.[1];
+    return gap && cvLine ? [{ question: answer.question.trim() || gap.requirement, cvLine }] : [];
+  });
+}
 
 /** The closing line of every letter; only the code adds it and the name, so neither can appear twice. */
 export const letterSignOff = "Yours sincerely,";
@@ -150,6 +171,7 @@ export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLe
     ),
     answers: JSON.stringify(answers, null, 2),
     declined: JSON.stringify({ requirements: input.declined ?? [], namedInLastDraft: input.namedInLastDraft ?? [] }, null, 2),
+    nothingMore: JSON.stringify(input.nothingMore ?? [], null, 2),
   });
 
   return askModel({

@@ -10,7 +10,7 @@ import { getAnonymousKey } from "@/shared/ai/anonymous-key";
 import { TailoringChangeSchema, type Job, type TailoringChange } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
-import { coverLetterText, declinedRequirements, inventedTerms, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
+import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
 import { defaultGapQuestion, isStrongerGap, questionGaps } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
@@ -295,8 +295,10 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
   const parsed = CoverLetterRequestSchema.safeParse(request);
   if (!parsed.success) return { ok: false, message: "We could not read your changes. Try again." };
   const { jobId } = parsed.data;
-  // A no to a strength means "nothing more to add", so the letter must not leave out what the CV already shows.
+  // A no to a strength means "nothing more to add", so it never blocks words the CV already shows; it goes to the
+  // letter apart, as `nothingMore`, so the letter keeps the CV line but adds nothing the question asked about (#315).
   const answers = parsed.data.answers.filter((answer) => answer.hasExperience || !isStrongerGap({ id: answer.gapId }));
+  const strongerNos = parsed.data.answers.filter((answer) => !answer.hasExperience && isStrongerGap({ id: answer.gapId }));
 
   const access = await tailorModelAccess();
   if (!access.allowed) return { ok: false, message: "Sign in to write your cover letter." };
@@ -308,7 +310,8 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
   try {
     const gaps = match?.gaps ?? [];
     const declined = declinedRequirements(gaps, answers, profile);
-    const input = { profile, job, changes, answers, declined, requester: access.requester };
+    const nothingMore = match && strongerNos.length > 0 ? nothingMoreToAdd(questionGaps(job, match, profile), strongerNos) : [];
+    const input = { profile, job, changes, answers, declined, nothingMore, requester: access.requester };
     let letter = await writeCoverLetter(input);
     let text = coverLetterText(letter, profile.fullName);
     let named = inventedTerms(text, gaps, answers, profile);
