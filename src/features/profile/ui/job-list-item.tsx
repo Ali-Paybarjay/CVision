@@ -98,6 +98,7 @@ export function JobRow({
   };
 }) {
   const questionId = useId();
+  const nameId = useId();
   const detailId = useId();
 
   if (state.phase === "deleted") {
@@ -129,9 +130,10 @@ export function JobRow({
         )}
       </div>
       {state.phase === "asking" && (
+        // Named by the question and the job, so a screen reader says which job, not only "Delete this job?".
         <div
           role="alertdialog"
-          aria-labelledby={questionId}
+          aria-labelledby={`${questionId} ${nameId}`}
           aria-describedby={detailId}
           onKeyDown={(event) => {
             if (event.key !== "Escape" || deleting) return;
@@ -143,7 +145,9 @@ export function JobRow({
           <p id={questionId} className="font-semibold">
             Delete this job?
           </p>
-          <p className="mt-1 text-sm [overflow-wrap:anywhere]">{name}</p>
+          <p id={nameId} className="mt-1 text-sm [overflow-wrap:anywhere]">
+            {name}
+          </p>
           <p id={detailId} className="mt-1 text-sm text-text-muted">
             Its match, your CV changes for it and any interview practice go too. This can’t be undone.
           </p>

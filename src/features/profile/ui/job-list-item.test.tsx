@@ -42,10 +42,12 @@ describe("JobListItem", () => {
   it("asks in the row before deleting, saying what goes with the job and that it can't be undone", () => {
     const html = row({ phase: "asking", deleting: false, problem: null });
 
-    const dialog = /<div role="alertdialog" aria-labelledby="([^"]+)" aria-describedby="([^"]+)"/.exec(html);
+    const dialog = /<div role="alertdialog" aria-labelledby="([^" ]+) ([^"]+)" aria-describedby="([^"]+)"/.exec(html);
     expect(dialog).not.toBeNull();
-    const [, questionId, detailId] = dialog ?? [];
+    const [, questionId, nameId, detailId] = dialog ?? [];
     expect(html).toContain(`<p id="${questionId}" class="font-semibold">Delete this job?</p>`);
+    // The job's name is part of the question's name, so a screen reader says which job.
+    expect(html).toMatch(new RegExp(`<p id="${nameId}"[^>]*>${name}</p>`));
     expect(html).toMatch(new RegExp(`<p id="${detailId}"[^>]*>Its match, your CV changes for it and any interview practice go too. This can’t be undone.</p>`));
     expect(text(html)).toContain(name);
     // One Delete at a time: the row's own button gives way to the question's two.
