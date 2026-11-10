@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { decideChange } from "@/features/tailor/actions";
 import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
-import { approveOnePerLine, buildTailoredCv } from "@/features/tailor/tailored-cv";
+import { approveOnePerLine, buildTailoredCv, newLineRole } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
 import { Button, Card, Notice } from "@/shared/ui";
@@ -135,6 +135,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       earlierAnswers={Object.values(answers).filter((item) => item.gapId !== prompt.gap.id)}
       changes={changes.filter((change) => change.gapId === prompt.gap.id)}
       onDecide={update}
+      roleOf={(change) => newLineRole(profile, change)}
     />
   );
 
@@ -243,7 +244,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   Suggestions from your answers
                 </h4>
                 {fromAnswers.map((change) => (
-                  <ChangeCard key={change.id} change={change} onDecide={update} />
+                  <ChangeCard key={change.id} change={change} onDecide={update} role={newLineRole(profile, change)} />
                 ))}
               </section>
             )}

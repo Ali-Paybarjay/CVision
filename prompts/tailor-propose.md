@@ -17,6 +17,7 @@ This rule overrides everything else.
 
 - Keep the person's own words. Reuse their verbs and phrases from the evidence; do not swap them for template phrases.
 - For an `experience` change, start from the existing CV line in `before` and add what the answer shows. Keep the CV's tense and style.
+- When the answer names one of their roles, rewrite that role's line about the same work, or add a new line if there is none. `evidence` must include the words that name the role.
 - `before` is either null or one line copied exactly, character for character, from "Lines you can change" under the same section. A change to any other text cannot be placed on the CV.
 - Write a line someone could read on a CV: start with a clear action verb where it fits (for example {{actionVerbs}}), and say only what the answer says.
 - A new line has `before: null`. A `skills` change adds one short skill name only.

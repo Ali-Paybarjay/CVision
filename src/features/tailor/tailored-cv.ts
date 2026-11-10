@@ -80,6 +80,31 @@ function same(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
 }
 
+/** Lower case words only, so "Hartley's" and "Hartley’s" match and "EE" is not found inside "engineering". */
+const asWords = (text: string) => ` ${normalise(text).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+
+/**
+ * The role a new work line goes under (#446), as an index into `profile.experience`, or -1 when there is none. The
+ * roles whose company the evidence names (all of them if it names none); of those, the one whose title it names, the
+ * longest title first, so "Deputy Store Manager at Hartley's" is not read as "Store Manager"; otherwise the most recent.
+ */
+export function roleForNewLine(profile: Profile, change: Pick<TailoringChange, "evidence">): number {
+  const evidence = asWords(change.evidence);
+  const names = (name: string) => asWords(name).trim() !== "" && evidence.includes(asWords(name));
+  const roles = profile.experience.map((role, index) => ({ ...role, index }));
+  const atCompany = roles.filter((role) => names(role.company));
+  const pool = atCompany.length > 0 ? atCompany : roles;
+  const byTitle = pool.filter((role) => names(role.title)).sort((a, b) => b.title.length - a.title.length);
+  return (byTitle[0] ?? pool[0])?.index ?? -1;
+}
+
+/** "Customer Assistant (part-time), Greenway Foods": the role a new work line goes under, for its card. */
+export function newLineRole(profile: Profile, change: TailoringChange): string | undefined {
+  if (change.section !== "experience" || change.before !== null) return undefined;
+  const role = profile.experience[roleForNewLine(profile, change)];
+  return role ? `${role.title}, ${role.company}` : undefined;
+}
+
 /** Two changes to the same CV line: only one of them can be on the CV. */
 function sameTarget(a: TailoringChange, b: TailoringChange): boolean {
   return a.id !== b.id && a.section === b.section && a.before !== null && b.before !== null && same(a.before, b.before);
@@ -218,8 +243,13 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     // Every line looks the same: no skill name in bold in front of it.
     lines: [...role.duties, ...role.achievements].map((line) => apply(line, "experience")),
   }));
-  // A new experience line has no role to sit under, so it goes under the most recent one.
-  if (experience[0]) experience[0].lines.push(...added("experience"));
+  // A new experience line goes under the role its evidence names, or the most recent one (#446).
+  for (const change of approved.filter((item) => item.section === "experience" && item.before === null && !used.has(item.id))) {
+    const role = experience[roleForNewLine(profile, change)];
+    if (!role) continue;
+    used.add(change.id);
+    role.lines.push({ text: change.after, tailored: true });
+  }
   for (const role of experience) role.lines = relevantLinesFirst(role.lines, job);
 
   const allSkills = [...profile.skills.map((skill) => apply(skill, "skills")), ...added("skills")];

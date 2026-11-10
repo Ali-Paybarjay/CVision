@@ -2,7 +2,7 @@
 // exactly as it was, whatever the Profile says by then. Pure code, so the server and the tests share it.
 import type { Job, Profile, TailoredCv as SavedTailoredCv, TailoringChange } from "@/shared/contracts";
 import { normalise } from "./nothing-invented";
-import { buildTailoredCv, type TailoredCv } from "./tailored-cv";
+import { buildTailoredCv, roleForNewLine, type TailoredCv } from "./tailored-cv";
 
 const same = (a: string, b: string) => normalise(a) === normalise(b);
 
@@ -11,7 +11,8 @@ const textSections = new Set<TailoringChange["section"]>(["summary", "skills", "
 
 /**
  * The Profile with the approved changes written in, as the contract's `cv` asks: a changed line replaces the line it
- * was made from, and a new line goes where the tailored CV shows it (a new work line under the latest role).
+ * was made from, and a new line goes where the tailored CV shows it (a new work line under the role its evidence names, or the latest
+ * role, #446).
  * Education and certificates are structured in the Profile, so their changes stay in `changes` only and are applied
  * again when the saved CV is shown (savedCvLayout).
  */
@@ -33,7 +34,12 @@ export function applyApprovedChanges(profile: Profile, changes: TailoringChange[
     duties: role.duties.map((line) => swap(line, "experience")),
     achievements: role.achievements.map((line) => swap(line, "experience")),
   }));
-  if (experience[0]) experience[0] = { ...experience[0], duties: [...experience[0].duties, ...added("experience")] };
+  for (const change of approved.filter((item) => item.section === "experience" && item.before === null && !used.has(item.id))) {
+    const index = roleForNewLine(profile, change);
+    if (index < 0) continue;
+    used.add(change.id);
+    experience[index] = { ...experience[index], duties: [...experience[index].duties, change.after] };
+  }
   const skills = [...profile.skills.map((line) => swap(line, "skills")), ...added("skills")];
 
   return { ...profile, summary, skills, experience };
