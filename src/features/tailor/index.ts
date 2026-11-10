@@ -12,6 +12,7 @@ export {
   inventedTerms,
   nothingMoreToAdd,
   sampleCoverLetter,
+  withoutRoleClaims,
   writeCoverLetter,
   type CoverLetter,
   type CoverLetterInput,
