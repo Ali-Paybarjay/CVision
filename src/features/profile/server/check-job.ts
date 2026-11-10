@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { askModel, loadPrompt } from "@/shared/ai";
+import { cleanModelText } from "@/shared/clean-text";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { extractionFromJob, JobExtractionSchema, jobFromExtraction } from "../job-extraction";
@@ -85,8 +86,10 @@ export function matchPrompt(profile: Profile, job: Job): Promise<string> {
     .join("\n");
 
   return loadPrompt("profile-match", {
-    // The whole ad as well, so a clinical line can be judged in the setting and words of the ad (#399).
-    job: withoutTags(`${job.title} at ${job.company}\n\n${job.description}`, tags),
+    // The whole ad as well, so a clinical line can be judged in the setting and words of the ad (#399). Hidden
+    // characters go first: askModel removes them only after this, so "</j" + U+200B + "ob>" would pass withoutTags
+    // and reach the model as a real "</job>", putting the rest of an outsider's ad among the user's lines (#421).
+    job: withoutTags(cleanModelText(`${job.title} at ${job.company}\n\n${job.description}`).text, tags),
     requirements: withoutTags(requirements || "(none)", tags),
     profile: withoutTags(lines || "(empty)", tags),
   });
