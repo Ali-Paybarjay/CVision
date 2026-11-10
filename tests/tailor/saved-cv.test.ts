@@ -27,6 +27,8 @@ const changes = [
   change("education", "MSc, Data Science, University of Manchester, Merit", "MSc Data Science (Merit), University of Manchester"),
   change("skills", "SQL", "SQL (advanced)", "rejected"),
   change("skills", "Excel", "Excel (VBA)", "proposed"),
+  // A new line whose evidence names an older role goes under that role (#446).
+  { ...change("experience", null, "Trained new starters on the tills"), evidence: "I trained new starters on the tills at Greenway Foods.", evidenceSource: "follow-up-answer" as const },
 ];
 const approved = changes.filter((item) => item.status === "approved");
 const saved = { id: "s1", jobId: job.id, cv: applyApprovedChanges(profile, approved), changes: approved, coverLetter: null, savedAt: "2026-11-04T12:00:00.000Z" };
@@ -38,6 +40,8 @@ describe("the CV as it was sent (#207)", () => {
     expect(cv.experience[0].duties).toContain(changes[1].after);
     expect(cv.experience[0].duties).not.toContain(profile.experience[0].duties[1]);
     expect(cv.experience[0].duties.at(-1)).toBe("Explained the dashboards to store managers");
+    expect(cv.experience[1].duties.at(-1)).toBe("Trained new starters on the tills");
+    expect(cv.experience[0].duties).not.toContain("Trained new starters on the tills");
     expect(cv.skills).toContain("Communication");
     // Rejected and undecided changes never go in.
     expect(cv.skills).toContain("SQL");

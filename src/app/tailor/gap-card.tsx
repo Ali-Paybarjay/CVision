@@ -25,13 +25,15 @@ type GapCardProps = {
   earlierAnswers: GapAnswer[];
   changes: TailoringChange[];
   onDecide: (change: TailoringChange) => Promise<void>;
+  /** For a new work line, the role it goes under, shown on its card (#446). */
+  roleOf?: (change: TailoringChange) => string | undefined;
 };
 
 /**
  * One thing the job asks for that the CV does not show, answered in the user's own words, with one of the things they
  * may have done when the question offers any, or with a plain no.
  */
-export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide }: GapCardProps) {
+export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf }: GapCardProps) {
   const [detail, setDetail] = useState("");
   const [pending, startTransition] = useTransition();
   const errorId = useId();
@@ -105,7 +107,7 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
       )}
 
       {changes.map((change) => (
-        <ChangeCard key={change.id} change={change} onDecide={onDecide} />
+        <ChangeCard key={change.id} change={change} onDecide={onDecide} role={roleOf?.(change)} />
       ))}
 
       {state.phase === "answered" && (

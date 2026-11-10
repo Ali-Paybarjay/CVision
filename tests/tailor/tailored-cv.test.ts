@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveOnePerLine, buildTailoredCv, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
+import { approveOnePerLine, buildTailoredCv, newLineRole, roleForNewLine, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { cvLines } from "@/features/tailor/nothing-invented";
 import { personas } from "@/shared/sample-data";
@@ -317,5 +317,40 @@ describe("languages and projects on the tailored CV (#228)", () => {
   it("counts languages and projects as evidence for Nothing invented", () => {
     const lines = cvLines(full);
     for (const line of ["Welsh", "Fluent", "Bus delay dashboard", "Built a dashboard of bus delays"]) expect(lines).toContain(line);
+  });
+});
+
+describe("a new work line goes under the role it names (#446)", () => {
+  const newLine = (evidence: string, who = profile) => ({ ...change("approved", { section: "experience", before: null, after: "Trained new starters on the tills", evidence }) , who });
+  const roleOf = (evidence: string, who = profile) => who.experience[roleForNewLine(who, { evidence })];
+
+  it("puts Sara's Greenway line under Greenway Foods, on the CV and on its card", () => {
+    const { who, ...line } = newLine("I trained new starters on the tills at Greenway Foods.");
+    const cv = buildTailoredCv(who, [line]);
+    expect(cv.experience[1].lines).toContainEqual({ text: line.after, tailored: true });
+    expect(cv.experience[0].lines.map((item) => item.text)).not.toContain(line.after);
+    expect(newLineRole(who, line)).toBe("Customer Assistant (part-time), Greenway Foods");
+  });
+
+  it("puts a line that names no role under the most recent one", () => {
+    expect(roleOf("I trained new starters.").company).toBe("Northgate Retail Insights");
+  });
+
+  it("tells two roles at one company apart by the longest title named", () => {
+    expect(roleOf("Deputy Store Manager at Hartley's Home Stores", personas.daniel.profile).title).toBe("Deputy Store Manager");
+  });
+
+  it("goes by the company first", () => {
+    expect(roleOf("Maths Teacher at Riverside Academy", personas.reza.profile).company).toBe("Riverside Academy");
+  });
+
+  it("finds only whole words, so EE is not found in engineering", () => {
+    const withEe = { ...profile, experience: [...profile.experience, { ...profile.experience[1], title: "Sales Adviser", company: "EE" }] };
+    expect(roleOf("I did some engineering work.", withEe).company).toBe("Northgate Retail Insights");
+    expect(roleOf("I sold contracts at EE.", withEe).company).toBe("EE");
+  });
+
+  it("gives no role for a change that is not a new work line", () => {
+    expect(newLineRole(profile, change("approved"))).toBeUndefined();
   });
 });
