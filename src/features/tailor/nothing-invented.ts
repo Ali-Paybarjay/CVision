@@ -70,36 +70,101 @@ function namedIn(skill: string, evidence: string): boolean {
   return new RegExp(`(?<![a-z0-9])${name}(?![a-z0-9])`).test(normalise(evidence));
 }
 
-/** A level that is a claim when a CV line states it: a Band or a grade with a number, e.g. "Band 6", not "Senior". */
-const numberedLevel = /\b(band|grade)\s*\d/i;
+/** Registration bodies by their short name; a full name or "RGN" in any text is read as the short name (#432). */
+const bodies: { short: string; display: string; names: RegExp }[] = [
+  { short: "nmc", display: "NMC", names: /\b(nursing and midwifery council|rgn)\b/g },
+  { short: "gmc", display: "GMC", names: /\bgeneral medical council\b/g },
+  { short: "hcpc", display: "HCPC", names: /\bhealth and care professions council\b/g },
+  { short: "gphc", display: "GPhC", names: /\bgeneral pharmaceutical council\b/g },
+  { short: "gdc", display: "GDC", names: /\bgeneral dental council\b/g },
+];
+const numberWords: Record<string, string> = { one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9" };
 
-/** "A Band 6 role", "the Senior Staff Nurse (Band 6) post": the term names the job wanted, not one held. */
+/**
+ * One spelling for a Band, a grade and a registration body on both sides of the check: "Band-6", "Band6" and
+ * "Band six" are "band 6", and "Nursing and Midwifery Council" and "RGN" are "nmc". `withWardCodes` also reads "B6" as
+ * "band 6", only for the suggestion and the line it rewrites: in a job title "Ward B6" is the name of a ward.
+ */
+function oneSpelling(text: string, withWardCodes = false): string {
+  let result = normalise(text)
+    .replace(/\b(band|grade)[\s-]*(one|two|three|four|five|six|seven|eight|nine)\b/g, (_, kind: string, word: string) => `${kind} ${numberWords[word]}`)
+    .replace(/\b(band|grade)[\s-]*(\d+[a-d]?)\b/g, "$1 $2");
+  if (withWardCodes) result = result.replace(/\bb(\d+[a-d]?)\b/g, "band $1");
+  for (const body of bodies) result = result.replace(body.names, body.short);
+  return result;
+}
+
+type RoleTerm = { term: string; display: string; kind: "level" | "registration" };
+
+/** The claims the role makes: each listed body in `registration` (or the whole of it), and each Band or grade number in `level`. */
+function roleTerms(role: JobRole): RoleTerm[] {
+  const registration = oneSpelling(role.registration);
+  const named = bodies.filter((body) => new RegExp(`\\b${body.short}\\b`).test(registration));
+  const registrations: RoleTerm[] = named.length
+    ? named.map((body) => ({ term: body.short, display: body.display, kind: "registration" }))
+    : registration.length >= 2
+      ? [{ term: registration, display: role.registration.trim(), kind: "registration" }]
+      : [];
+  // "Band 5/6" claims Band 5 and Band 6; "Band 8a" stays Band 8a.
+  const levels = [...oneSpelling(role.level).matchAll(/\b(band|grade) (\d+[a-d]?(?:\s*\/\s*\d+[a-d]?)*)/g)].flatMap(([, kind, numbers]) =>
+    numbers.split("/").map((number): RoleTerm => {
+      const term = `${kind} ${number.trim()}`;
+      return { term, display: term[0].toUpperCase() + term.slice(1), kind: "level" };
+    }),
+  );
+  return [...registrations, ...levels];
+}
+
+const escaped = (term: string) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const has = (text: string, term: string) => new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`).test(text);
+
+/** Words that say the job or the registration is wanted, not held. */
+const wanting = "looking for|seeking|applying for|apply for|ready for|step up to|stepping up to|working towards|due to join|awaiting";
+
+/**
+ * Without the places that name the term as something wanted: "looking for a Band 6 role", "ready for the Senior
+ * Staff Nurse (Band 6) post", "due to join the NMC register". "Acted up into a Band 6 role" is a claim and stays.
+ */
 function withoutJobsWanted(text: string, term: string): string {
-  const name = normalise(term).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const wanted = new RegExp(`\\b(a|an|the|this|next)\\s+(?:[a-z-]+\\s+){0,3}\\(?${name}\\)?\\s+(role|post|position|job|vacancy)\\b`, "g");
-  return normalise(text).replace(wanted, " ");
+  const wanted = new RegExp(
+    `\\b(?:${wanting})\\s+(?:(?:a|an|the)\\s+)?(?:[a-z0-9-]+\\s+){0,3}\\(?${escaped(term)}\\)?\\s+(?:role|post|position|job|vacancy|register|registration|pin)\\b`,
+    "g",
+  );
+  return text.replace(wanted, " ");
 }
 
 /**
- * The ad's registration (e.g. "NMC") or numbered level (e.g. "Band 6") that the change claims and nothing the user
- * gave supports: not the line it rewrites, no CV line but the summary, and no answer where they said yes (#422).
- * The summary does not count, as "Looking for a Band 6 role" there is a wish, not a claim.
+ * The ad's registration (e.g. "NMC") or numbered Band or grade (e.g. "Band 6") that the change claims and nothing the
+ * user gave about themselves supports (#422, #432). Both sides are read in one spelling, and a term named only as
+ * something wanted never counts, on either side.
+ * - Support for a Band or grade: their job titles. For a registration: their job titles, skills and certificates,
+ *   name and issuer. The summary does not count ("Looking for a Band 6 role" is a wish), nor do duties, where
+ *   "Support the Band 6 nurse in charge" is about someone else.
+ * - For both: the line the change rewrites, their follow-up answers, and each yes answer with its gap's requirement,
+ *   so a typed "Yes" to the NMC gap counts. For a registration that requirement must be about registering, so a yes
+ *   to "Knowledge of the NMC Code" does not.
  */
 export function roleClaimAdded(change: ProposedChange, sources: EvidenceSources): string | null {
-  const role = sources.role;
-  if (!role) return null;
-  const terms = [role.registration, numberedLevel.test(role.level) ? role.level : ""].map((term) => term.trim()).filter((term) => term.length >= 2);
-  const supported = [
-    change.before ?? "",
-    ...cvLines({ ...sources.profile, summary: "" }),
-    ...sources.profile.followUpAnswers.map((item) => item.answer),
-    ...sources.answers.filter((answer) => answer.hasExperience).map((answer) => answer.answer),
-  ];
-  return (
-    terms.find(
-      (term) => namedIn(term, withoutJobsWanted(change.after, term)) && !supported.some((line) => namedIn(term, line)),
-    ) ?? null
-  );
+  if (!sources.role) return null;
+  const { profile, gaps, answers } = sources;
+  const titles = profile.experience.map((job) => job.title);
+  const ownLines = {
+    level: titles,
+    registration: [...titles, ...profile.skills, ...profile.certifications.flatMap((item) => [item.name, item.issuer ?? ""])],
+  };
+  const yes = answers.filter((answer) => answer.hasExperience);
+  const requirementsSaidYesTo = yes.flatMap((answer) => gaps.find((gap) => gap.id === answer.gapId)?.requirement ?? []);
+  const shared = [...profile.followUpAnswers.map((item) => item.answer), ...yes.map((answer) => answer.answer)];
+  const before = oneSpelling(change.before ?? "", true);
+  const after = oneSpelling(change.after, true);
+
+  const claim = roleTerms(sources.role).find(({ term, kind }) => {
+    if (!has(withoutJobsWanted(after, term), term)) return false;
+    const requirements = kind === "registration" ? requirementsSaidYesTo.filter((line) => /\bregist(er|ered|ration)\b/i.test(line)) : requirementsSaidYesTo;
+    const supported = [before, ...[...ownLines[kind], ...shared, ...requirements].map((line) => oneSpelling(line))];
+    return !supported.some((line) => has(withoutJobsWanted(line, term), term));
+  });
+  return claim?.display ?? null;
 }
 
 /** Why a change breaks Nothing invented, or null when it is supported. */
