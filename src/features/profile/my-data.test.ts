@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
 import { profileEvidenceLines } from "./match";
-import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs, MAX_LISTED_JOBS } from "./my-data";
+import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobIdsOnDashboard, listMyJobs, MAX_LISTED_JOBS } from "./my-data";
 
 const { getCurrentUser, createSupabaseServerClient } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -80,6 +80,7 @@ describe("with no account (Supabase not connected, or signed out)", () => {
     expect(await listMyJobs()).toEqual(personas.sara.jobs);
     expect(await getMyJob("sara-job-1")).toBe(personas.sara.jobs[0]);
     expect(await getMyMatch("sara-job-1")).toBe(personas.sara.match);
+    expect(await listMyJobIdsOnDashboard()).toEqual([]);
   });
 
   it("gives a signed-out visitor on the live site nothing, never a sample persona's profile and jobs as their own", async () => {
@@ -93,6 +94,7 @@ describe("with no account (Supabase not connected, or signed out)", () => {
     expect(await listMyJobs()).toEqual([]);
     expect(await getMyJob("sara-job-1")).toBeNull();
     expect(await getMyMatch("sara-job-1")).toBeNull();
+    expect(await listMyJobIdsOnDashboard()).toEqual([]);
   });
 
   it("answers null for a job id that no sample job has, so a wrong link says the job can't be found (#93)", async () => {
@@ -156,6 +158,19 @@ describe("for a signed-in user", () => {
     expect(queries[0].steps).toEqual(["select id, data", "order created_at desc", `limit ${MAX_LISTED_JOBS}`]);
   });
 
+  it("names the jobs on their dashboard, the ones they applied for, so a list doesn't offer to delete them (#462)", async () => {
+    const { client, queries } = fakeSupabase({
+      applications: [
+        { id: id(7), job_id: id(2), data: {} },
+        { id: id(8), job_id: id(5), data: {} },
+      ],
+    });
+    createSupabaseServerClient.mockResolvedValue(client);
+
+    expect(await listMyJobIdsOnDashboard()).toEqual([id(2), id(5)]);
+    expect(queries[0]).toEqual({ table: "applications", steps: ["select job_id"] });
+  });
+
   it("skips a saved job that no longer matches the contract", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { client } = fakeSupabase({
@@ -204,5 +219,7 @@ describe("for a signed-in user", () => {
     expect(await listMyJobs()).toEqual([]);
     expect(await getMyJob(id(1))).toBeNull();
     expect(await getMyMatch(id(1))).toBeNull();
+    // No job is named as on the dashboard: the list shows Delete, and deleteJobAction still refuses one that is.
+    expect(await listMyJobIdsOnDashboard()).toEqual([]);
   });
 });
