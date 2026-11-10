@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { askGapQuestions, defaultGapQuestion, questionGaps, skillGaps } from "@/features/tailor/gap-questions";
 import { keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
-import { modelFailureMessage, tailorModelAccess } from "@/features/tailor/server/model-access";
+import { modelFailureMessage, tailorModelAccess, whatStillWorksOnQuestions } from "@/features/tailor/server/model-access";
 import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
 import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
@@ -162,7 +162,7 @@ async function questionsFor(input: { profile: Profile; job: Job; match: MatchRes
     const questions = await keptGapQuestions({ ...input, userId: requester && "userId" in requester ? requester.userId : undefined }, () => askGapQuestions({ ...input, requester }));
     return { questions, notice: null };
   } catch (error) {
-    const message = modelFailureMessage(error, "write the gap questions", "");
+    const message = modelFailureMessage(error, "write the gap questions", "", whatStillWorksOnQuestions);
     return { questions: fallback, notice: message || null };
   }
 }

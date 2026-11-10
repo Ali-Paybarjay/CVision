@@ -17,11 +17,19 @@ export async function tailorModelAccess(): Promise<ModelAccess> {
 }
 
 /**
- * The message the user sees when the model fails: the daily limit's own message, or a plain retry.
- * Logs the reason only, never CV or letter text.
+ * What still works at the daily limit, which the limit's own message does not say (#314): nothing below needs the model.
+ * A no to a gap question is kept too, so where questions can be answered `whatStillWorksOnQuestions` says so.
  */
-export function modelFailureMessage(error: unknown, step: string, fallback: string): string {
-  if (error instanceof AskModelError && error.reason === "limit-reached") return error.message;
+export const whatStillWorks = "You can still approve the changes you have, download your CV and open the employer's site.";
+export const whatStillWorksOnQuestions =
+  "You can still answer No to a question, approve the changes you have, download your CV and open the employer's site.";
+
+/**
+ * The message the user sees when the model fails: at the daily limit its own message and then what still works
+ * (`atLimit`, by default `whatStillWorks`), otherwise a plain retry. Logs the reason only, never CV or letter text.
+ */
+export function modelFailureMessage(error: unknown, step: string, fallback: string, atLimit: string = whatStillWorks): string {
+  if (error instanceof AskModelError && error.reason === "limit-reached") return `${error.message} ${atLimit}`;
   const reason = error instanceof AskModelError ? error.reason : error instanceof Error ? error.name : "unknown";
   console.error(`tailor: could not ${step} (${reason})`);
   return fallback;

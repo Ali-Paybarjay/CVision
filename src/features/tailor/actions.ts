@@ -17,7 +17,7 @@ import { enforceNothingInvented } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
 import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
 import { letterHead } from "./letter-state";
-import { modelFailureMessage, tailorModelAccess } from "./server/model-access";
+import { modelFailureMessage, tailorModelAccess, whatStillWorksOnQuestions } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
 import { savedCvLayout } from "./saved-cv";
 import { getMyTailoredCv, saveTailoredCv } from "./server/tailored-cvs";
@@ -197,7 +197,9 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
       modelFailureMessage(error, "suggest a next step", "");
       return keptNo();
     }
-    return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
+    // A yes needs the model to write its line; the answer stays in its box, so the user can save it again tomorrow (#314).
+    const atLimit = `Your answer stays here, so you can save it again tomorrow for a suggestion. ${whatStillWorksOnQuestions}`;
+    return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.", atLimit) };
   }
 }
 
