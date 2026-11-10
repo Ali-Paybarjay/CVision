@@ -22,6 +22,11 @@ describe("the gap card", () => {
     expect(html).toContain("Save answer");
   });
 
+  it("has an empty live region under Save answer, for the note while a suggestion is written (#325)", () => {
+    const html = card({ gap, question: "Have you done this?" });
+    expect(html.indexOf('<div aria-live="polite"></div>')).toBeGreaterThan(html.indexOf("Save answer"));
+  });
+
   it("asks for the answer in the user's own words when the question has no options", () => {
     const html = card({ gap, question: "Have you done this?" });
     expect(html).toContain("Your answer…");
