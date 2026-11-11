@@ -14,6 +14,8 @@ const notAboutSkills = new RegExp(
   [
     // Only a driving licence: "Full licence to practise" or "Gas Safe licence" is a qualification to ask about (#401).
     "driv(ing|er'?s?) licen[cs]e",
+    // "Full UK licence" is a driving licence too; "a full licence to practise" is not (#418).
+    "full (uk )?licen[cs]e(?! to practi[cs]e)",
     "own (car|vehicle|transport)",
     "^right to work$",
     "right to work in\\b",

@@ -19,6 +19,8 @@ describe("the gap questions ask only about skills and experience", () => {
     "Weekend and night shift cover when needed",
     "DBS check",
     "Enhanced DBS check",
+    "Full UK licence",
+    "Clean full UK licence",
   ])("never asks about %s", (requirement) => {
     expect(skillGaps([gap("a", requirement)])).toEqual([]);
   });
@@ -30,6 +32,7 @@ describe("the gap questions ask only about skills and experience", () => {
     "Gas Safe licence",
     // A licence to practise is a professional registration, not a driving licence (#401).
     "Full licence to practise",
+    "Registered independent prescriber (V300) with a full licence to practise",
     "Full GMC registration with a licence to practise",
     // Real skills and experience that only contain a word from a condition (#246).
     "Experience designing high-availability systems",
@@ -138,7 +141,13 @@ describe("never shows a question whether something in the CV is accredited or re
     expect(prompt).toContain('Never an open "How did you…"');
     expect(prompt).toContain("never name one employer in it");
     expect(prompt).toContain("their No must mean they have not done it anywhere");
-    expect(prompt).toContain("Give options for every question, with one exception: work that none of their roles could include");
+    expect(prompt).toContain("Give options for every question, with two exceptions.");
+    expect(prompt).toContain("A question that asks for a number, how often, or a result: give no options");
+    expect(prompt).toContain("never from the ad");
+    expect(prompt).toContain("For an `unclear` gap, first name the CV line it rests on in a short sentence of its own, without its employer, then ask.");
+    expect(prompt).toContain("or a course, degree, project or volunteering of theirs");
+    expect(prompt).toContain("Write the employer's name exactly as their CV does.");
+    expect(prompt).not.toContain("closest real version");
   });
 });
 
