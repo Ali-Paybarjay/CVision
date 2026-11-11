@@ -197,8 +197,8 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
       modelFailureMessage(error, "suggest a next step", "");
       return keptNo();
     }
-    // A yes needs the model to write its line; the answer stays in its box, so the user can save it again tomorrow (#314).
-    const atLimit = `Your answer stays here, so you can save it again tomorrow for a suggestion. ${whatStillWorksOnQuestions}`;
+    // A yes needs the model to write its line. The answer is only in its box on the page, not saved (#468).
+    const atLimit = `Your answer is not saved yet. Keep this page open, or copy your answer, and save it again tomorrow. ${whatStillWorksOnQuestions}`;
     return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.", atLimit) };
   }
 }

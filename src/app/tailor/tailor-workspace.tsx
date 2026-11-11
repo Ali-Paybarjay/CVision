@@ -35,6 +35,8 @@ type TailorWorkspaceProps = {
   prompts: GapPrompt[];
   /** The decisions the user saved on an earlier visit. */
   savedChanges?: TailoringChange[];
+  /** A message for the whole page, such as the daily limit's, under the heading, which takes focus, so a screen reader reads it (#468). */
+  notice?: string | null;
 };
 
 /** "Suggest again" brings back suggestions lost on an earlier visit; one the page already has is not shown twice. */
@@ -47,7 +49,7 @@ function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]
  * the job asks for that the CV does not show, the suggested changes, the cover letter, then download and Apply. The CV
  * preview in the review step shows approved changes only.
  */
-export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [] }: TailorWorkspaceProps) {
+export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [], notice = null }: TailorWorkspaceProps) {
   // The page's heading takes focus once when the workspace arrives, so a screen reader says the page is ready (#419).
   // Only once: Next.js runs effects again when the user comes back to this page, and focus then stays where it was.
   const heading = useRef<HTMLHeadingElement>(null);
@@ -207,6 +209,8 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
           {label && <p className="w-fit rounded-full border border-line px-2 py-0.5 text-xs text-text-muted">{label}</p>}
         </header>
 
+        {notice && <Notice tone="info">{notice}</Notice>}
+
         {saveNote && <Notice tone="info">{saveNote}</Notice>}
 
         <div className="flex flex-col divide-y divide-line">
@@ -319,7 +323,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
           <TailorStep
             {...stepProps(5)}
             title="5. Download and apply"
-            summary="Download PDF or Word and visit the employer's website"
+            summary="Download PDF or Word, then apply"
             status={statuses[5]}
             icon={<DownloadIcon />}
           >

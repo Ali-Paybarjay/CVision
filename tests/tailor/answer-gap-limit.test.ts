@@ -36,7 +36,7 @@ describe("answering a gap question at the daily limit (#314)", () => {
     const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-3", answer: "I used Git at work.", hasExperience: true });
     expect(result).toEqual({
       ok: false,
-      message: `${limit.message} Your answer stays here, so you can save it again tomorrow for a suggestion. ${whatStillWorksOnQuestions}`,
+      message: `${limit.message} Your answer is not saved yet. Keep this page open, or copy your answer, and save it again tomorrow. ${whatStillWorksOnQuestions}`,
     });
   });
 });

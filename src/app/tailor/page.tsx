@@ -138,7 +138,6 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
 
   return (
     <WorkspaceFrame>
-      {notice && <Notice tone="info">{notice}</Notice>}
       <TailorWorkspace
         job={job}
         jobUrl={webLink(job.url)}
@@ -146,6 +145,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
         profile={profile}
         prompts={prompts}
         savedChanges={savedChanges}
+        notice={notice}
       />
     </WorkspaceFrame>
   );
