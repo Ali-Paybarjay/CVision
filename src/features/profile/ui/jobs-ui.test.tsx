@@ -158,7 +158,8 @@ describe("JobForm", () => {
   });
 
   it("shows the person specification hint under the ad box, in a live region the box names (#420)", () => {
-    const nhsAd = "Staff Nurse, Band 5. Main duties of the job: care for patients on the ward. Closing date 30 November.";
+    // Pasted without a link, so the ad itself names the NHS employer: a Band alone is not enough (#469).
+    const nhsAd = "Staff Nurse, Band 5, Castlefold NHS Trust. Main duties of the job: care for patients on the ward.";
     const box = (ad: string) =>
       renderToStaticMarkup(<AdBox hint="Paste the whole ad." ad={ad} link="" disabled={false} onChange={noop} />);
     const describedBy = (html: string) => html.match(/<textarea[^>]*aria-describedby="([^"]*)"/)?.[1].split(" ") ?? [];

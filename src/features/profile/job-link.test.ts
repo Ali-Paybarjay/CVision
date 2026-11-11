@@ -124,7 +124,52 @@ describe("needsPersonSpecHint (#400)", () => {
     expect(pennine).toMatch(/NHS trusts/);
     expect(needsPersonSpecHint(pennine, "")).toBe(false);
     expect(needsPersonSpecHint("Healthcare Assistant. Pay: Agenda for Change. Main duties: personal care.", "")).toBe(true);
-    expect(needsPersonSpecHint("Physiotherapist, band 6. Main duties: assess and treat patients.", "")).toBe(true);
+  });
+
+  it("counts a Band only beside NHS, so a board without a trust stays in and a charity stays out (#469)", () => {
+    const physio = "Physiotherapist, band 6. Main duties: assess and treat patients.";
+    const charity =
+      "Family Support Worker, Band 5. Castlefold Children's Hospice is a local charity. You will need a Level 3 " +
+      "qualification in health and social care and experience of supporting families.";
+
+    expect(needsPersonSpecHint(`${physio} Employer: NHS Lothian.`, "")).toBe(true);
+    expect(needsPersonSpecHint(physio, "")).toBe(false);
+    expect(needsPersonSpecHint(charity, "https://www.reed.co.uk/jobs/family-support-worker/99999999")).toBe(false);
+    expect(needsPersonSpecHint(charity, "")).toBe(false);
+  });
+
+  describe("criteria that only point at the PDF (#469)", () => {
+    const nhsJobsLink = "https://www.jobs.nhs.uk/candidate/jobadvert/C9999-26-0001";
+    const pointer = "Please see the attached job description and person specification.";
+    // The shape NHS Jobs gives an ad whose employer kept the criteria in the PDF: its headings, then only a pointer.
+    const pointerOnly = `${nhsAd}\n\nPerson Specification\nAdditional Criteria\nEssential\n${pointer}\nDesirable\n${pointer}`;
+
+    it("asks for the criteria when every heading only points at an attached document", () => {
+      expect(needsPersonSpecHint(pointerOnly, nhsJobsLink)).toBe(true);
+      expect(needsPersonSpecHint(`Marrowby and Castlefold NHS Foundation Trust\n${pointerOnly}`, "")).toBe(true);
+      expect(needsPersonSpecHint(`${nhsAd}\nPerson specification: please see the attached job description`, nhsJobsLink)).toBe(true);
+    });
+
+    it("stays quiet when a heading has a real criterion under it, or points at text on the page", () => {
+      expect(needsPersonSpecHint(`${pointerOnly}\nExperience\nEssential\nWard experience at Band 5`, nhsJobsLink)).toBe(false);
+      expect(needsPersonSpecHint(`${nhsAd}\nPerson Specification\nEssential\nPlease refer to job description above`, nhsJobsLink)).toBe(false);
+    });
+
+    it("keeps the fictional Band 6 ad's criteria, under groups such as Qualifications and Skills and Abilities", () => {
+      expect(needsPersonSpecHint(clinicalJob.description, nhsJobsLink)).toBe(false);
+    });
+  });
+
+  it("counts a short line or cell with both Essential and Desirable as a heading (#469)", () => {
+    const trac = "https://apps.trac.jobs/job-advert/999999";
+    const table = "Criteria Essential Desirable How assessed\nNMC registration ✓ Application form\nALS certificate ✓ Interview";
+
+    expect(needsPersonSpecHint(`${nhsAd}\n${table}`, trac)).toBe(false);
+    expect(needsPersonSpecHint(`${nhsAd}\nEssential Desirable\nRegistered nurse ✓`, trac)).toBe(false);
+    // A sentence that only mentions both words is not a heading, and a short pointer is not a criterion.
+    const sentence = "Please read the essential and desirable criteria in the job pack carefully before you start your application.";
+    expect(needsPersonSpecHint(`${nhsAd}\n${sentence}`, trac)).toBe(true);
+    expect(needsPersonSpecHint(`${nhsAd}\nEssential and desirable criteria: see attached JD`, trac)).toBe(true);
   });
 
   it("asks for the essential and desirable criteria, not the whole PDF, in the brand's voice", () => {
