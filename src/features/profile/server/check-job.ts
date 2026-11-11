@@ -1,6 +1,8 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { after } from "next/server";
 import { askModel, loadPrompt } from "@/shared/ai";
+import { track } from "@/shared/analytics/track";
 import { cleanModelText } from "@/shared/clean-text";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
@@ -20,6 +22,7 @@ import type { Requester } from "./extract-profile";
  * In mock mode no model is called: the answer is the sample job the ad names (see sampleJobFor).
  */
 export async function parseJob(adText: string, options: { url: string | null; requester?: Requester }): Promise<Job> {
+  let counted = false;
   const extraction = await askModel({
     feature: "profile-job",
     prompt: await jobPrompt(adText),
@@ -31,9 +34,34 @@ export async function parseJob(adText: string, options: { url: string | null; re
     // Every criterion of a person specification is kept, so the reading matters more than its speed (#397).
     effort: "medium",
     maxTokens: 6000,
+    // jobPrompt removes the ad's hidden characters, so askModel finds none to count. They are counted here instead,
+    // when askModel would have: once, when the first request has its answer, in live mode only (#470).
+    onUsage: () => {
+      if (counted) return;
+      counted = true;
+      recordHiddenAdText(adText, options.requester);
+    },
   });
 
   return jobFromExtraction(extraction, { id: randomUUID(), adText, url: options.url });
+}
+
+/** Records how many hidden characters of each kind the ad had, never the text: askModel's own event, under profile-job. */
+function recordHiddenAdText(adText: string, requester: Requester): void {
+  const { counts } = cleanModelText(adText);
+  // Line separators became "\n" and stay, and every tamper sign is already counted under its own kind.
+  const removed = Object.entries(counts)
+    .filter(([kind]) => kind !== "lineSeparator" && kind !== "tamperSigns")
+    .reduce((sum, [, count]) => sum + count, 0);
+  if (removed === 0) return;
+
+  const record = () => track("ai.hidden_text_removed", { feature: "profile-job", removed, ...counts }, requester);
+  try {
+    after(record);
+  } catch {
+    // Outside a request, as in a prompt eval, after() throws and there is no response to wait for.
+    void record();
+  }
 }
 
 /**
@@ -70,9 +98,12 @@ export function sampleJobFor(adText: string): { persona: PersonaName; job: Job }
   return { persona: "sara", job: personas.sara.jobs[0] };
 }
 
-/** The request text for reading an ad. */
+/**
+ * The request text for reading an ad. Hidden characters go first, as in matchPrompt: askModel removes them only after
+ * this, so "</job_" + U+200B + "ad>" would pass withoutTags and reach the model as a real "</job_ad>" (#470).
+ */
 export function jobPrompt(adText: string): Promise<string> {
-  return loadPrompt("profile-job", { ad: withoutTags(adText, ["job_ad"]) });
+  return loadPrompt("profile-job", { ad: withoutTags(cleanModelText(adText).text, ["job_ad"]) });
 }
 
 /** The request text for a match: numbered requirements and numbered profile lines, without name or contact details. */
@@ -95,7 +126,17 @@ export function matchPrompt(profile: Profile, job: Job): Promise<string> {
   });
 }
 
-/** Removes anything that looks like the prompt's own tags, so pasted text cannot close its section early. */
+/**
+ * Removes anything that looks like the prompt's own tags, so pasted text cannot close its section early. One pattern
+ * for all of them, again until nothing changes: removing a tag can join the text either side into a new one, as
+ * "</jo</job>b>" leaves "</job>" and "</jo<profile>b>" leaves "</job>" too (#470).
+ */
 function withoutTags(text: string, tags: string[]): string {
-  return tags.reduce((result, tag) => result.replace(new RegExp(`<\\s*/?\\s*${tag}\\b[^>]*>`, "gi"), ""), text);
+  const tag = new RegExp(`<\\s*/?\\s*(?:${tags.join("|")})\\b[^>]*>`, "gi");
+  let result = text;
+  for (let previous = ""; result !== previous; ) {
+    previous = result;
+    result = result.replace(tag, "");
+  }
+  return result;
 }
