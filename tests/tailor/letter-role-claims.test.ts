@@ -56,6 +56,17 @@ describe("a letter that claims the ad's registration or Band (#424)", () => {
     expect(result.ok && result.text).toContain(nmc);
   });
 
+  it("loses the NMC sentence after a student's yes to the registration gap (#464)", async () => {
+    const answers = [{ gapId: "clinical-gap-nmc", question: "Do you hold current NMC registration?", answer: "I'm a final-year student nurse and qualify in March.", hasExperience: true }];
+    writeCoverLetter.mockResolvedValue(letter(applying, `${nmc} ${ivTherapy}`));
+    const result = await createCoverLetter({ ...request, answers });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.text).not.toContain("NMC");
+      expect(result.text).toContain(ivTherapy);
+    }
+  });
+
   it("says why when nothing of the letter is left", async () => {
     writeCoverLetter.mockResolvedValue(letter(nmc));
     const result = await createCoverLetter(request);
