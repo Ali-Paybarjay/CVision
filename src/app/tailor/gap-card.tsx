@@ -63,7 +63,17 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
         const earlier = earlierAnswers.map(({ gapId, answer, hasExperience }) => ({ gapId, answer, hasExperience }));
         // Words the user wrote are the answer itself, so they are not sent twice.
         const typed = chosen === detail.trim();
-        const result = await answerGap({ jobId, gapId: gap.id, answer: typed ? "" : detail, hasExperience: chosen !== null, chosen: chosen ?? undefined, typed, earlierAnswers: earlier });
+        const result = await answerGap({
+          jobId,
+          gapId: gap.id,
+          answer: typed ? "" : detail,
+          hasExperience: chosen !== null,
+          chosen: chosen ?? undefined,
+          typed,
+          // The question the user saw, so a "yes" covers only what it asked (#444).
+          question: prompt.question,
+          earlierAnswers: earlier,
+        });
         if (!result.ok) return setState({ phase: "error", message: result.message });
         onAnswered({ gapId: gap.id, question: prompt.question, answer: result.answer, hasExperience: result.hasExperience }, result.changes, result.nextSteps, result.hint);
       } catch {
