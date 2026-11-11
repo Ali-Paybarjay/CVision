@@ -125,6 +125,34 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(page.getByRole("link", { name: "Start interview practice" })).toHaveAttribute("href", "/interview?job=sara-job-1");
 });
 
+test("step 3: two decisions made one after the other both stay, while each is still being saved (#465)", async ({ page }) => {
+  // Every server action answers a second late, as on a slow phone line, so each decision is still being saved when
+  // the next one is made. Before #465 the second decision undid the first on the page and in the download.
+  await page.route("**/*", async (route) => {
+    if (route.request().headers()["next-action"]) await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+  await page.goto("/tailor?job=sara-job-1");
+  await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
+  const fromCv = page.getByRole("region", { name: "Suggestions from your CV" });
+  const tailoredLines = page.getByRole("complementary", { name: "Your CV for this job" }).getByText("(tailored for this job)");
+  const approve = fromCv.getByRole("button", { name: "Approve", exact: true });
+  const reject = fromCv.getByRole("button", { name: "Reject", exact: true });
+  await expect(approve.nth(1)).toBeVisible();
+
+  await approve.nth(0).click();
+  await approve.nth(1).click();
+  for (const index of [0, 1]) await expect(approve.nth(index)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("✓ Approved: 2")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(2);
+
+  await reject.nth(0).click();
+  await reject.nth(1).click();
+  for (const index of [0, 1]) await expect(reject.nth(index)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("✓ Approved: 0")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(0);
+});
+
 test.fixme("step 3: get the tailored CV for the pasted job, with each change marked (#49)", async ({ page }) => {
   // Starts where step 2 ends: its "Tailor my CV for this job" link to the job just pasted, not a sample persona.
   await page.goto("/tailor?job=sara-job-1");

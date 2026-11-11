@@ -134,6 +134,17 @@ describe("the tailored CV (You approve everything)", () => {
     expect(cv.sameLine).toEqual([]);
   });
 
+  it("treats two summaries as one line on a CV with no summary (#465)", () => {
+    const noSummary = { ...profile, summary: "" };
+    const first = { ...change("approved", { section: "summary", before: null, after: "First summary" }), id: "s1" };
+    const second = { ...change("proposed", { section: "summary", before: null, after: "Second summary" }), id: "s2" };
+    expect(approveOnePerLine([first, second], { ...second, status: "approved" }).sentBack).toEqual([{ ...first, status: "proposed" }]);
+    const both = buildTailoredCv(noSummary, [first, { ...second, status: "approved" }]);
+    expect(both.summary?.text).toBe("First summary");
+    expect(both.sameLine.map((item) => item.id)).toEqual(["s2"]);
+    expect(both.unplaced.map((item) => item.id)).toEqual(["s2"]);
+  });
+
   it("sends nothing back for a rejection or a change that adds a new line", () => {
     const first = change("approved", { after: "First version" });
     expect(approveOnePerLine([first], { ...first, id: "x", status: "rejected" }).sentBack).toEqual([]);

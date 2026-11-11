@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { suggestCvChanges } from "@/features/tailor/actions";
 import type { TailoringChange } from "@/shared/contracts";
 import { Button, Notice } from "@/shared/ui";
-import { ChangeCard } from "./change-card";
+import { ChangeCard, type LineNote } from "./change-card";
 import { unreachableMessage } from "./messages";
 
 type CvSuggestionsProps = {
@@ -15,10 +15,12 @@ type CvSuggestionsProps = {
   loaded: boolean;
   onSuggested: (changes: TailoringChange[]) => void;
   onDecide: (change: TailoringChange) => Promise<void>;
+  /** What happened to a card's line when another change to it was approved (#465). */
+  lineNoteOf?: (change: TailoringChange) => LineNote | undefined;
 };
 
 /** Suggestions from the CV alone, asked for as soon as the page opens: the user only approves or rejects. */
-export function CvSuggestions({ jobId, changes, loaded, onSuggested, onDecide }: CvSuggestionsProps) {
+export function CvSuggestions({ jobId, changes, loaded, onSuggested, onDecide, lineNoteOf }: CvSuggestionsProps) {
   const [state, setState] = useState<"waiting" | "done" | { error: string }>(loaded ? "done" : "waiting");
   const [, startTransition] = useTransition();
   // Asked once per page, even when React runs the effect twice in development.
@@ -72,7 +74,7 @@ export function CvSuggestions({ jobId, changes, loaded, onSuggested, onDecide }:
         </Notice>
       )}
       {changes.map((change) => (
-        <ChangeCard key={change.id} change={change} onDecide={onDecide} />
+        <ChangeCard key={change.id} change={change} onDecide={onDecide} lineNote={lineNoteOf?.(change)} />
       ))}
       {state === "done" && (
         <div>
