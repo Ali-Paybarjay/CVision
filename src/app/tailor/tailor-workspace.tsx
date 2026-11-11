@@ -8,7 +8,7 @@ import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
 import { Button, Card, Notice } from "@/shared/ui";
 import { ApplyPanel } from "./apply-panel";
-import { ChangeCard } from "./change-card";
+import { ChangeCard, type LineNote } from "./change-card";
 import { CoverLetterPanel } from "./cover-letter-panel";
 import { CvOverview } from "./cv-overview";
 import { CvPreview } from "./cv-preview";
@@ -63,10 +63,19 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
     ),
   );
   const [changes, setChanges] = useState<TailoringChange[]>(savedChanges);
+  // The latest list, for a decision made before the page has drawn the one before it (#465).
+  const latest = useRef<TailoringChange[]>(savedChanges);
+  const changeList = (next: (current: TailoringChange[]) => TailoringChange[]) => {
+    latest.current = next(latest.current);
+    setChanges(latest.current);
+  };
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
   const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
-  const [lineNote, setLineNote] = useState<string | null>(null);
+  // The last approval that sent an earlier change to the same line back, so both cards can say so (#465).
+  const [lineNotes, setLineNotes] = useState<{ approved: string; sentBack: string[] } | null>(null);
+  const lineNoteOf = (change: TailoringChange): LineNote | undefined =>
+    lineNotes?.approved === change.id ? "replaced" : lineNotes?.sentBack.includes(change.id) ? "sent-back" : undefined;
   const cv = buildTailoredCv(profile, changes, job);
   // Approved changes whose line is not on the CV; those that lost their line to another change are told apart (#272).
   const notFound = cv.unplaced.filter((change) => !cv.sameLine.includes(change));
@@ -102,9 +111,9 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
     const { gapId } = answer;
     // A new answer replaces the gap's earlier suggestions, in the saved decisions too, so an old approval
     // never stays on the CV after the user says something different.
-    const replaced = changes.filter((change) => change.gapId === gapId && change.status !== "rejected");
+    const replaced = latest.current.filter((change) => change.gapId === gapId && change.status !== "rejected");
     setAnswers((current) => ({ ...current, [gapId]: answer }));
-    setChanges((current) => [...current.filter((change) => change.gapId !== gapId), ...newChanges]);
+    changeList((current) => [...current.filter((change) => change.gapId !== gapId), ...newChanges]);
     setGapStates((current) => ({ ...current, [gapId]: { phase: "answered", nextSteps, hint } }));
     for (const change of replaced) {
       decideChange({ ...change, status: "rejected" }, { replaced: true }).catch(() => setSaveNote(unreachableMessage));
@@ -113,9 +122,9 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
 
   const update = async (next: TailoringChange) => {
     // Only one change per CV line: approving a second one sends the earlier one back to the suggestions (#272).
-    const { changes: updated, sentBack } = approveOnePerLine(changes, next);
-    setChanges(updated);
-    setLineNote(sentBack.length > 0 ? "This replaces the change you approved earlier to the same line. That one is back with your suggestions." : null);
+    const { changes: updated, sentBack } = approveOnePerLine(latest.current, next);
+    changeList(() => updated);
+    setLineNotes(sentBack.length > 0 ? { approved: next.id, sentBack: sentBack.map((change) => change.id) } : null);
     try {
       const results = await Promise.all([next, ...sentBack].map((change) => decideChange(change)));
       setSaveNote(results.find((result) => !result.saved)?.message ?? null);
@@ -136,6 +145,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       changes={changes.filter((change) => change.gapId === prompt.gap.id)}
       onDecide={update}
       roleOf={(change) => newLineRole(profile, change)}
+      lineNoteOf={lineNoteOf}
     />
   );
 
@@ -198,7 +208,6 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
         </header>
 
         {saveNote && <Notice tone="info">{saveNote}</Notice>}
-        {lineNote && <Notice tone="info">{lineNote}</Notice>}
 
         <div className="flex flex-col divide-y divide-line">
           <TailorStep {...stepProps(1)} title="1. Job details" summary="Job title and job description" status={statuses[1]} icon={<JobIcon />}>
@@ -244,7 +253,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   Suggestions from your answers
                 </h4>
                 {fromAnswers.map((change) => (
-                  <ChangeCard key={change.id} change={change} onDecide={update} role={newLineRole(profile, change)} />
+                  <ChangeCard key={change.id} change={change} onDecide={update} role={newLineRole(profile, change)} lineNote={lineNoteOf(change)} />
                 ))}
               </section>
             )}
@@ -252,8 +261,9 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
               jobId={job.id}
               changes={fromCv}
               loaded={fromCv.length > 0}
-              onSuggested={(suggested) => setChanges((current) => [...current, ...withoutRepeats(suggested, current)])}
+              onSuggested={(suggested) => changeList((current) => [...current, ...withoutRepeats(suggested, current)])}
               onDecide={update}
+              lineNoteOf={lineNoteOf}
             />
             <aside className="flex flex-col gap-3 border-t border-line pt-5" aria-labelledby="preview-heading">
               <h4 id="preview-heading" className="font-semibold">
@@ -268,9 +278,9 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
               )}
               {notFound.length > 0 && (
                 <Notice tone="error" title="Some approved changes are not in your CV">
-                  We could not find the CV line {notFound.length === 1 ? "this change replaces" : "these changes replace"}:{" "}
-                  {notFound.map((change) => `“${change.before ?? change.after}”`).join(", ")}. Reject the change, then answer the question again for a
-                  new suggestion.
+                  We could not find the CV {notFound.length === 1 ? "line this change replaces" : "lines these changes replace"}:{" "}
+                  {notFound.map((change) => `“${change.before ?? change.after}”`).join(", ")}. Reject {notFound.length === 1 ? "the change" : "them"}, then
+                  answer the question again for a new suggestion.
                 </Notice>
               )}
               {cv.overLimit.length > 0 && (

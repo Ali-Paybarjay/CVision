@@ -5,7 +5,7 @@ import { answerGap } from "@/features/tailor/actions";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
 import { Button, Notice, Textarea, WaitNote } from "@/shared/ui";
-import { ChangeCard } from "./change-card";
+import { ChangeCard, type LineNote } from "./change-card";
 import { unreachableMessage } from "./messages";
 
 export type GapPrompt = { gap: Gap; question: string; options?: string[] };
@@ -27,13 +27,15 @@ type GapCardProps = {
   onDecide: (change: TailoringChange) => Promise<void>;
   /** For a new work line, the role it goes under, shown on its card (#446). */
   roleOf?: (change: TailoringChange) => string | undefined;
+  /** What happened to a card's line when another change to it was approved (#465). */
+  lineNoteOf?: (change: TailoringChange) => LineNote | undefined;
 };
 
 /**
  * One thing the job asks for that the CV does not show, answered in the user's own words, with one of the things they
  * may have done when the question offers any, or with a plain no.
  */
-export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf }: GapCardProps) {
+export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf, lineNoteOf }: GapCardProps) {
   const [detail, setDetail] = useState("");
   const [pending, startTransition] = useTransition();
   // A yes asks the model for a line, which took about 30 seconds on the live site (6 November, #325); a no needs no model.
@@ -111,7 +113,7 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
       )}
 
       {changes.map((change) => (
-        <ChangeCard key={change.id} change={change} onDecide={onDecide} role={roleOf?.(change)} />
+        <ChangeCard key={change.id} change={change} onDecide={onDecide} role={roleOf?.(change)} lineNote={lineNoteOf?.(change)} />
       ))}
 
       {state.phase === "answered" && (

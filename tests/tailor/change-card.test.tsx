@@ -41,3 +41,16 @@ describe("a new work line on its card (#446)", () => {
     expect(html).toContain("This line is added under Customer Assistant (part-time), Greenway Foods. Nothing is removed.");
   });
 });
+
+describe("a card whose line had another approval (#465)", () => {
+  const render = (status: TailoringChange["status"], lineNote: "replaced" | "sent-back") =>
+    renderToStaticMarkup(<ChangeCard change={{ ...change("Good at problems"), status }} onDecide={async () => {}} lineNote={lineNote} />);
+
+  it("says on the approved card that it replaces the earlier one", () => {
+    expect(render("approved", "replaced")).toContain("This replaces the change you approved earlier to the same line. That one is back with your suggestions.");
+  });
+
+  it("says in the status of the card sent back why it is waiting again", () => {
+    expect(render("proposed", "sent-back")).toContain("Back with your suggestions: you approved another change to this line.");
+  });
+});

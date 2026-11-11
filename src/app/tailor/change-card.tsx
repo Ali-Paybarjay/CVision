@@ -4,6 +4,9 @@ import { useState, useTransition } from "react";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { Button, CvPaper, Field, FitLine, Textarea } from "@/shared/ui";
 
+/** What happened to a card's line when another change to it was approved (#465). */
+export type LineNote = "replaced" | "sent-back";
+
 const sectionNames: Record<TailoringChange["section"], string> = {
   summary: "Professional summary",
   skills: "Skills",
@@ -17,24 +20,37 @@ export function ChangeCard({
   change,
   onDecide,
   role,
+  lineNote,
 }: {
   change: TailoringChange;
   onDecide: (change: TailoringChange) => Promise<void>;
   /** For a new work line, the role it goes under, such as "Customer Assistant (part-time), Greenway Foods" (#446). */
   role?: string;
+  /** After an approval to a line that already had one: on the new change, "replaced"; on the earlier one, "sent-back" (#465). */
+  lineNote?: LineNote;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(change.after);
   const [pending, startTransition] = useTransition();
 
-  const decide = (status: TailoringStatus, after = change.after) =>
+  // The decision goes to the page at once, outside the transition: React would hold it until every async transition on
+  // the page ends, such as a suggestion being written, and a second decision in that time would undo the first (#465).
+  const decide = (status: TailoringStatus, after = change.after) => {
+    const saving = onDecide({ ...change, status, after });
     startTransition(async () => {
-      await onDecide({ ...change, status, after });
+      await saving;
       setEditing(false);
     });
+  };
 
   const statusText =
-    change.status === "approved" ? "✓ Approved" : change.status === "rejected" ? "✕ Rejected" : "Waiting for your decision";
+    change.status === "approved"
+      ? "✓ Approved"
+      : change.status === "rejected"
+        ? "✕ Rejected"
+        : lineNote === "sent-back"
+          ? "Back with your suggestions: you approved another change to this line."
+          : "Waiting for your decision";
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-line p-4">
@@ -100,6 +116,9 @@ export function ChangeCard({
             {statusText}
           </span>
         </div>
+      )}
+      {lineNote === "replaced" && change.status === "approved" && (
+        <p className="text-sm text-text-muted">This replaces the change you approved earlier to the same line. That one is back with your suggestions.</p>
       )}
     </div>
   );
