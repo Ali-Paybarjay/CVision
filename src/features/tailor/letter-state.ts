@@ -12,9 +12,10 @@ export type LetterDraft = { greeting: string; paragraphs: LetterParagraph[]; clo
 /**
  * The cover letter as the user last left it; only an approved letter is used for export.
  * `basis` is what the letter was approved against (see letterBasis); `stale` means the CV changed since.
+ * `note` says what was taken out of the letter before the user saw it (#466).
  * `draft` holds each paragraph and the user's decision while they read it; `text` is always the letter as it stands.
  */
-export type LetterState = { text: string; approved: boolean; basis?: string; stale?: boolean; error?: string; draft?: LetterDraft };
+export type LetterState = { text: string; approved: boolean; basis?: string; stale?: boolean; error?: string; draft?: LetterDraft; note?: string };
 
 const closingLine = /^(yours (faithfully|sincerely)|sincerely|kind regards|best regards|regards)\b/i;
 

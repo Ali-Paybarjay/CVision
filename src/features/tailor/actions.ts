@@ -10,7 +10,7 @@ import { getAnonymousKey } from "@/shared/ai/anonymous-key";
 import { TailoringChangeSchema, type Job, type TailoringChange } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
-import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, withoutRoleClaims, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
+import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, roleClaimsNote, withoutRoleClaims, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
 import { defaultGapQuestion, isStrongerGap, questionGaps } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
@@ -286,7 +286,8 @@ const CoverLetterRequestSchema = z.object({
 export type CoverLetterRequest = z.infer<typeof CoverLetterRequestSchema>;
 
 export type CreateCoverLetterResult =
-  | { ok: true; text: string; problems: BrandProblem[] }
+  /** `note`: what the page tells the user when sentences were taken out of the letter (#466). */
+  | { ok: true; text: string; problems: BrandProblem[]; note?: string }
   | { ok: false; message: string };
 
 /**
@@ -334,11 +335,16 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
     }
     // A registration or Band only the ad gives is never claimed for the user (#424). The prompt asks for this; here
     // any sentence that still claims one is taken out, while the job's own title, Band and all, may stay.
+    let note: string | undefined;
     if (named.length === 0 && job.role) {
       const checked = withoutRoleClaims(letter, job.title, { profile, gaps, answers, role: job.role });
-      if (checked.claims.length > 0 && checked.letter.paragraphs.length === 0) {
-        return { ok: false, message: `The draft kept saying you hold “${checked.claims[0]}”, which only the job ad says, so we did not use it. Try again.` };
+      if (checked.removed > 0 && checked.letter.paragraphs.length === 0) {
+        return {
+          ok: false,
+          message: `Every sentence in the draft said you hold “${checked.claims[0]}”, which your CV and answers do not show. If you do, add it to your profile and write the letter again.`,
+        };
       }
+      if (checked.removed > 0) note = roleClaimsNote(checked.removed, checked.claims);
       letter = checked.letter;
       text = coverLetterText(letter, profile.fullName);
     }
@@ -354,7 +360,7 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
         user ? { userId: user.id } : await getAnonymousKey(),
       );
     });
-    return { ok: true, text, problems: findBrandProblems(text) };
+    return { ok: true, text, problems: findBrandProblems(text), ...(note ? { note } : {}) };
   } catch (error) {
     return {
       ok: false,

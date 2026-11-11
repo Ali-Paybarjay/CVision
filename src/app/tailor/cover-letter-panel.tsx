@@ -57,7 +57,7 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
   const draft = letter?.draft ?? (letter?.text ? splitLetter(letter.text, "kept") : null);
   const pendingCount = draft?.paragraphs.filter((paragraph) => paragraph.decision === "pending").length ?? 0;
 
-  const update = (next: LetterDraft) => setLetter({ text: joinLetter(next), approved: false, draft: next });
+  const update = (next: LetterDraft) => setLetter({ text: joinLetter(next), approved: false, draft: next, note: letter?.note });
 
   const write = () =>
     startTransition(async () => {
@@ -66,7 +66,7 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
         const result = await createCoverLetter({ jobId, changes: approvedOnly(changes), answers });
         setLetter(
           result.ok
-            ? { text: result.text, approved: false, draft: splitLetter(result.text) }
+            ? { text: result.text, approved: false, draft: splitLetter(result.text), note: result.note }
             : { text: letter?.text ?? "", approved: false, draft: letter?.draft, error: result.message },
         );
       } catch {
@@ -82,6 +82,7 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
       </p>
 
       {letter?.error && <Notice tone="error">{letter.error}</Notice>}
+      {letter?.note && !letter.error && <Notice tone="info">{letter.note}</Notice>}
       {letter?.stale && (
         <Notice tone="warning">Your CV has changed since you approved this letter. Read it again, then approve it.</Notice>
       )}

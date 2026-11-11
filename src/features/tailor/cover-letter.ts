@@ -5,7 +5,7 @@ import type { Gap, Job, Profile, TailoringChange } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { jobForPrompt } from "./job-for-prompt";
 import { isStrongerGap } from "./gap-questions";
-import { cvLines, normalise, requirementTerms, roleClaimAdded, type EvidenceSources } from "./nothing-invented";
+import { cvLines, letterRoleClaim, normalise, requirementTerms, type EvidenceSources } from "./nothing-invented";
 import { buildTailoredCv } from "./tailored-cv";
 import type { GapAnswer } from "./types";
 
@@ -149,27 +149,29 @@ export function withoutSentencesNaming(letter: CoverLetter, terms: string[]): Co
   return withoutSentences(letter, (sentence) => terms.some((term) => normalise(sentence).includes(term)));
 }
 
-/** The ad's registration or Band that a sentence claims for the person, with the job's own title taken out first (#424). */
-function roleClaimIn(sentence: string, jobTitle: string, sources: EvidenceSources): string | null {
-  const title = jobTitle.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const withoutTitle = title ? sentence.replace(new RegExp(title, "gi"), " ") : sentence;
-  return roleClaimAdded({ section: "summary", before: null, after: withoutTitle, evidence: "", evidenceSource: "cv" }, sources);
+/**
+ * The letter without any sentence that claims, in the first person, the ad's registration (e.g. "NMC") or numbered
+ * Band (e.g. "Band 6") when nothing the user gave about themselves supports it (#424, #466): see letterRoleClaim.
+ * Naming the job is fine: "I am writing to apply for the post of Senior Staff Nurse (Band 6)" stays, "As an NMC
+ * registered nurse" goes. `claims` says what was taken out and `removed` how many sentences, so the page can say so.
+ */
+export function withoutRoleClaims(letter: CoverLetter, jobTitle: string, sources: EvidenceSources): { letter: CoverLetter; claims: string[]; removed: number } {
+  const claims = new Set<string>();
+  let removed = 0;
+  const trimmed = withoutSentences(letter, (sentence) => {
+    const claim = letterRoleClaim(sentence, jobTitle, sources);
+    if (!claim) return false;
+    claims.add(claim);
+    removed++;
+    return true;
+  });
+  return { letter: trimmed, claims: [...claims], removed };
 }
 
-/**
- * The letter without any sentence that claims the ad's registration (e.g. "NMC") or numbered Band (e.g. "Band 6") when
- * nothing the user gave about themselves supports it (#424), checked as roleClaimAdded checks a CV change. Naming the
- * job is fine: "I am applying for the Senior Staff Nurse (Band 6) post" stays, "As an NMC registered nurse" goes.
- * `claims` says what was taken out.
- */
-export function withoutRoleClaims(letter: CoverLetter, jobTitle: string, sources: EvidenceSources): { letter: CoverLetter; claims: string[] } {
-  const claims = new Set<string>();
-  const trimmed = withoutSentences(letter, (sentence) => {
-    const claim = roleClaimIn(sentence, jobTitle, sources);
-    if (claim) claims.add(claim);
-    return claim !== null;
-  });
-  return { letter: trimmed, claims: [...claims] };
+/** What the page says after sentences were taken out for a registration or Band only the ad gives (#466). */
+export function roleClaimsNote(removed: number, claims: string[]): string {
+  const sentences = removed === 1 ? "1 sentence" : `${removed} sentences`;
+  return `We took out ${sentences} saying you hold “${claims.join("” or “")}”, which your CV and answers do not show. If you do, add it to your profile and write the letter again.`;
 }
 
 export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLetter> {
