@@ -187,27 +187,68 @@ function promotedTo(line: string, term: string): string {
  */
 export function roleClaimAdded(change: ProposedChange, sources: EvidenceSources): string | null {
   if (!sources.role) return null;
-  const { profile, answers } = sources;
+  const after = oneSpelling(change.after, "line");
+  const before = oneSpelling(change.before ?? "", "line");
+  return roleTerms(sources.role).find((roleTerm) => has(withoutJobsWanted(after, roleTerm), roleTerm.term) && !supportedRoleTerm(roleTerm, before, sources))?.display ?? null;
+}
+
+/**
+ * A line that says the user is registered, outside the lines registration support usually comes from: their summary and
+ * their degree (#466). Only with "register", "registered" or "registration", and without "not" or "not yet" before it,
+ * so "NMC approved" on a degree, or "not yet NMC registered", is no support.
+ */
+const saysRegistered = (line: string) => /\bregist(?:er|ered|ration)\b/.test(line) && !/\bnot\b[^,;.]*\bregist(?:er|ered|ration)\b/.test(line);
+
+/** Whether something the user gave about themselves supports the term: see roleClaimAdded for what counts. */
+function supportedRoleTerm(roleTerm: RoleTerm, before: string, { profile, answers }: EvidenceSources): boolean {
+  const { term, kind } = roleTerm;
   const titles = profile.experience.map((job) => oneSpelling(job.title, "title"));
-  const workLines = profile.experience.flatMap((job) => [...job.duties, ...job.achievements]).map((line) => oneSpelling(line));
-  const registrationLines = [...profile.skills, ...profile.certifications.flatMap((item) => [item.name, item.issuer ?? ""])].map((line) => oneSpelling(line));
   // A tap is saved as "Yes, I have done this at work: <the requirement>." That part repeats the ad, not the user.
   const ownWords = (answer: string) => answer.replace(/^yes, i have done this (?:at work|in study or on my own): [^\n]*?\.(?:\s|$)/i, "");
   const shared = [
     ...profile.followUpAnswers.map((item) => item.answer),
     ...answers.filter((answer) => answer.hasExperience).map((answer) => ownWords(answer.answer)),
   ].map((line) => oneSpelling(line));
-  const before = oneSpelling(change.before ?? "", "line");
-  const after = oneSpelling(change.after, "line");
+  const own =
+    kind === "level"
+      ? [...titles, ...profile.experience.flatMap((job) => [...job.duties, ...job.achievements]).map((line) => promotedTo(oneSpelling(line), term))]
+      : [
+          ...titles,
+          ...[...profile.skills, ...profile.certifications.flatMap((item) => [item.name, item.issuer ?? ""])].map((line) => oneSpelling(line)),
+          ...[profile.summary, ...profile.education.flatMap((item) => [item.qualification, item.subject ?? ""])]
+            .map((line) => oneSpelling(line))
+            .filter(saysRegistered),
+        ];
+  return [withoutOthers(before, term), ...own, ...shared].some((line) => has(withoutJobsWanted(line, roleTerm), term));
+}
 
-  const claim = roleTerms(sources.role).find((roleTerm) => {
-    const { term, kind } = roleTerm;
-    if (!has(withoutJobsWanted(after, roleTerm), term)) return false;
-    const own = kind === "level" ? [...titles, ...workLines.map((line) => promotedTo(line, term))] : [...titles, ...registrationLines];
-    const supported = [withoutOthers(before, term), ...own, ...shared];
-    return !supported.some((line) => has(withoutJobsWanted(line, roleTerm), term));
-  });
-  return claim?.display ?? null;
+/** "I am a", "As a", "I have worked as a", "I hold", "my": the ways a letter says something is the person's own. */
+const firstPerson =
+  "i am|i'm|i was|i have been|i've been|as|currently|work(?:ed|ing)? as|acted up into|acting up into|i was promoted to|promoted to|i hold|my";
+
+/**
+ * The ad's registration or Band that one sentence of a cover letter claims for the user and nothing they gave supports
+ * (#466), with the same support as roleClaimAdded. Only a claim made in the first person counts: the term up to two words
+ * after "I am a", "As a", "I have worked as a", "I acted up into", "I hold" or "my", or "registered with the NMC". So
+ * "I am applying for the post of Senior Staff Nurse (Band 6)" and "This Band 6 role…" stay, and the job's title is taken
+ * out only where it names the post. "B6" is never read as a Band here: in a letter it is a ward.
+ */
+export function letterRoleClaim(sentence: string, jobTitle: string, sources: EvidenceSources): string | null {
+  if (!sources.role) return null;
+  let text = oneSpelling(sentence);
+  const title = escaped(oneSpelling(jobTitle));
+  if (title) {
+    text = text
+      .replace(new RegExp(`\\b(for (?:the|this)|of(?: the)?)\\s+${title}`, "g"), "$1 ")
+      .replace(new RegExp(`${title}(?=\\s+(?:post|role|position|vacancy)\\b)`, "g"), " ");
+  }
+  return (
+    roleTerms(sources.role).find((roleTerm) => {
+      const name = `\\(?${escaped(roleTerm.term)}\\)?(?![a-z0-9])`;
+      const claim = new RegExp(`\\b(?:${firstPerson})\\s+(?:(?:an?|the)\\s+)?(?:[a-z0-9()-]+\\s+){0,2}${name}|\\bregistered with the ${name}`);
+      return claim.test(withoutJobsWanted(text, roleTerm)) && !supportedRoleTerm(roleTerm, "", sources);
+    })?.display ?? null
+  );
 }
 
 /** Why a change breaks Nothing invented, or null when it is supported. */

@@ -1,7 +1,7 @@
 // Live prompt eval for the job's role (#422): real requests to the model, run with `npm run eval`.
 // The ad wants an NMC registered Band 6 nurse. Neither the CV suggestions nor the letter may claim what the user has not said.
 import { describe, expect, it } from "vitest";
-import { askForProposal, coverLetterText, roleClaimAdded, suggestFromCv, unsupportedReason, writeCoverLetter } from "@/features/tailor";
+import { askForProposal, coverLetterText, roleClaimAdded, suggestFromCv, unsupportedReason, withoutRoleClaims, writeCoverLetter } from "@/features/tailor";
 import type { GapAnswer } from "@/features/tailor/types";
 import { getAiProvider } from "@/shared/ai";
 import { clinicalFixtures, unregisteredFixtures } from "./clinical-fixture";
@@ -35,9 +35,12 @@ describe.skipIf(!getAiProvider())("The job's role is never claimed (live)", () =
       expect(forRole.map((item) => item.change.after)).toEqual([]);
     });
 
-    it("the cover letter names the post but claims neither", async () => {
-      const text = coverLetterText(await writeCoverLetter({ profile, job, changes: [], answers }), profile.fullName);
+    it("the cover letter names the post but claims neither, and the letter's check takes nothing out (#466)", async () => {
+      const letter = await writeCoverLetter({ profile, job, changes: [], answers });
+      const text = coverLetterText(letter, profile.fullName);
+      console.log(`=== LETTER ${profile.fullName}\n${text}`);
       for (const claim of claims) expect(text).not.toMatch(claim);
+      expect(withoutRoleClaims(letter, job.title, sources).claims).toEqual([]);
     });
   });
 });

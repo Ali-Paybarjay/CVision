@@ -1,6 +1,7 @@
 // The cover letter never claims the ad's registration or Band for a user who gave neither (#424), and may still name the job.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withoutRoleClaims } from "@/features/tailor";
+import { letterRoleClaim } from "@/features/tailor/nothing-invented";
 import { createCoverLetter } from "@/features/tailor/actions";
 import { clinicalFixtures, unregisteredFixtures } from "./clinical-fixture";
 
@@ -70,7 +71,10 @@ describe("a letter that claims the ad's registration or Band (#424)", () => {
   it("says why when nothing of the letter is left", async () => {
     writeCoverLetter.mockResolvedValue(letter(nmc));
     const result = await createCoverLetter(request);
-    expect(result).toEqual({ ok: false, message: "The draft kept saying you hold “NMC”, which only the job ad says, so we did not use it. Try again." });
+    expect(result).toEqual({
+      ok: false,
+      message: "Every sentence in the draft said you hold “NMC”, which your CV and answers do not show. If you do, add it to your profile and write the letter again.",
+    });
   });
 
   it("names what it took out", () => {
@@ -78,5 +82,57 @@ describe("a letter that claims the ad's registration or Band (#424)", () => {
     const checked = withoutRoleClaims(letter(applying, `${nmc} ${band}`), job.title, { profile, gaps: match.gaps, answers, role: job.role });
     expect(checked.claims).toEqual(["NMC", "Band 6"]);
     expect(checked.letter.paragraphs).toEqual([applying]);
+  });
+});
+
+describe("the letter's check takes out only a claim in the first person (#466)", () => {
+  const leah = { ...clinicalFixtures, answers: [] };
+  const sourcesOf = (fixtures: typeof unregisteredFixtures, profile = fixtures.profile) => ({ profile, gaps: fixtures.match.gaps, answers: fixtures.answers, role: fixtures.job.role });
+  const title = clinicalFixtures.job.title;
+
+  it.each([
+    "I am writing to apply for the post of Senior Staff Nurse (Band 6) on the Acute Medical Unit.",
+    "This Band 6 role would let me lead shifts.",
+    "I have looked after patients on Ward B6 for three years.",
+  ])("keeps a true sentence for Leah at Band 5: %s", (sentence) => {
+    expect(letterRoleClaim(sentence, title, sourcesOf(leah))).toBeNull();
+  });
+
+  it.each(["As a Band 6 nurse, I lead late shifts.", "I acted up into a Band 6 role on nights."])("takes out a Band Leah does not hold: %s", (sentence) => {
+    expect(letterRoleClaim(sentence, title, sourcesOf(leah))).toBe("Band 6");
+  });
+
+  it("takes the job's title out only where it names the post", () => {
+    const role = { ...clinicalFixtures.job.role!, level: "Band 6" };
+    const sources = { ...sourcesOf(leah), role };
+    expect(letterRoleClaim("I have worked as a Band 6 Staff Nurse on nights.", "Band 6 Staff Nurse", sources)).toBe("Band 6");
+    expect(letterRoleClaim("I am applying for the Band 6 Staff Nurse post.", "Band 6 Staff Nurse", sources)).toBeNull();
+    const nmc = { ...sourcesOf(unregisteredFixtures), role: { ...role, registration: "NMC" } };
+    expect(letterRoleClaim("I am a Registered Nurse (NMC) on an acute ward.", "Registered Nurse (NMC)", nmc)).toBe("NMC");
+  });
+
+  it("counts NMC registration in the summary or a degree, but not NMC approved or not yet registered", () => {
+    const sentence = "I am NMC registered and confident with IV therapy.";
+    const base = unregisteredFixtures.profile;
+    const withSummary = { ...base, summary: "NMC registered adult nurse with three years on an acute unit." };
+    const withDegree = { ...base, education: [{ ...base.education[0], qualification: "BSc (Hons) Adult Nursing, NMC registration 2022" }] };
+    const approved = { ...base, education: [{ ...base.education[0], qualification: "BSc Adult Nursing (NMC approved)" }] };
+    const notYet = { ...base, summary: "Adult nurse, not yet NMC registered." };
+    const check = (profile: typeof base) => letterRoleClaim(sentence, title, { ...sourcesOf(unregisteredFixtures, profile), answers: [] });
+    expect(check(withSummary)).toBeNull();
+    expect(check(withDegree)).toBeNull();
+    expect(check(approved)).toBe("NMC");
+    expect(check(notYet)).toBe("NMC");
+  });
+
+  it("tells the user what it took out, and says nothing when nothing was", async () => {
+    writeCoverLetter.mockResolvedValue(letter(`${applying} ${nmc}`, ivTherapy));
+    const result = await createCoverLetter(request);
+    expect(result).toMatchObject({
+      ok: true,
+      note: "We took out 1 sentence saying you hold “NMC”, which your CV and answers do not show. If you do, add it to your profile and write the letter again.",
+    });
+    writeCoverLetter.mockResolvedValue(letter(applying, ivTherapy));
+    expect(await createCoverLetter(request)).not.toHaveProperty("note");
   });
 });
