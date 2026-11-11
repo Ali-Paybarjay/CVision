@@ -26,7 +26,7 @@ type GapCardProps = {
   changes: TailoringChange[];
   onDecide: (change: TailoringChange) => Promise<void>;
   /** For a new work line, the role it goes under, shown on its card (#446). */
-  roleOf?: (change: TailoringChange) => string | undefined;
+  roleOf?: (change: TailoringChange) => { role: string; named: boolean } | undefined;
   /** What happened to a card's line when another change to it was approved (#465). */
   lineNoteOf?: (change: TailoringChange) => LineNote | undefined;
 };

@@ -80,29 +80,71 @@ function same(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
 }
 
-/** Lower case words only, so "Hartley's" and "Hartley’s" match and "EE" is not found inside "engineering". */
-const asWords = (text: string) => ` ${normalise(text).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+/** Lower case words only, without apostrophes, so "Sainsbury's" and "Sainsburys" match and "EE" is not found inside "engineering". */
+const asWords = (text: string) => ` ${normalise(text).replace(/['’]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
 
-/**
- * The role a new work line goes under (#446), as an index into `profile.experience`, or -1 when there is none. The
- * roles whose company the evidence names (all of them if it names none); of those, the one whose title it names, the
- * longest title first, so "Deputy Store Manager at Hartley's" is not read as "Store Manager"; otherwise the most recent.
- */
-export function roleForNewLine(profile: Profile, change: Pick<TailoringChange, "evidence">): number {
-  const evidence = asWords(change.evidence);
-  const names = (name: string) => asWords(name).trim() !== "" && evidence.includes(asWords(name));
-  const roles = profile.experience.map((role, index) => ({ ...role, index }));
-  const atCompany = roles.filter((role) => names(role.company));
-  const pool = atCompany.length > 0 ? atCompany : roles;
-  const byTitle = pool.filter((role) => names(role.title)).sort((a, b) => b.title.length - a.title.length);
-  return (byTitle[0] ?? pool[0])?.index ?? -1;
+/** True when a one-word name is in the text with a capital letter and not at the start of a sentence: "At Next…", not "Next, I…" or "the next day". */
+function namedWithCapital(text: string, name: string): boolean {
+  const word = name.replace(/['’]/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!/^\p{Lu}/u.test(word)) return false;
+  return new RegExp(`(?<!(?:^|[.!?:])\\s*)(?<![\\p{L}\\p{N}])${word}(?![\\p{L}\\p{N}])`, "u").test(text.replace(/['’]/g, ""));
 }
 
-/** "Customer Assistant (part-time), Greenway Foods": the role a new work line goes under, for its card. */
-export function newLineRole(profile: Profile, change: TailoringChange): string | undefined {
+/** Where a new work line goes (#446, #467): the index into `profile.experience`, or -1, and whether the evidence named the role. */
+export type NewLinePlace = { index: number; named: boolean };
+
+/**
+ * The role a new work line goes under. First the roles whose company the evidence names: the whole name, or for a name
+ * of several words its first word, and a name of one word only with a capital letter and not at the start of a sentence,
+ * so "for three years" is not the company Three. Of those (all roles if it names none), the roles whose title it names,
+ * whole or without its part in brackets; a title found only inside a longer title it names does not count, so "Deputy
+ * Store Manager" is not also "Store Manager". Of the titles that count, and of newer roles whose title holds one of
+ * them, the most recent: "As a maths teacher" goes under "Maths Teacher and Head of Year 9". Otherwise the most recent
+ * role, with `named: false`.
+ */
+export function newLinePlace(profile: Profile, change: Pick<TailoringChange, "evidence">): NewLinePlace {
+  const roles = profile.experience.map((role, index) => ({ ...role, index }));
+  if (roles.length === 0) return { index: -1, named: false };
+  const evidence = asWords(change.evidence);
+  const companyNamed = (company: string) => {
+    const words = asWords(company).trim().split(" ").filter(Boolean);
+    if (words.length === 0) return false;
+    if (words.length > 1 && evidence.includes(asWords(company))) return true;
+    const first = company.trim().split(/\s+/)[0];
+    return namedWithCapital(change.evidence, first);
+  };
+  const atCompany = roles.filter((role) => companyNamed(role.company));
+  const pool = atCompany.length > 0 ? atCompany : roles;
+
+  // Each role's titles, longest first, each taken out of the text once found, so a shorter title inside it is not found there.
+  const forms = pool
+    .flatMap((role) => [role.title, role.title.replace(/\s*\([^)]*\)/g, "")].map((title) => ({ role, title: asWords(title) })))
+    .filter((form) => form.title.trim() !== "")
+    .sort((a, b) => b.title.length - a.title.length);
+  let text = evidence;
+  const counted = new Set<number>();
+  for (const form of forms) {
+    if (!text.includes(form.title)) continue;
+    counted.add(form.role.index);
+    text = text.split(form.title).join(" | ");
+  }
+  if (counted.size === 0) return { index: pool[0].index, named: atCompany.length > 0 };
+  const countedTitles = [...counted].map((index) => asWords(profile.experience[index].title.replace(/\s*\([^)]*\)/g, "")));
+  const candidates = pool.filter((role) => counted.has(role.index) || countedTitles.some((title) => asWords(role.title).includes(title)));
+  return { index: Math.min(...candidates.map((role) => role.index)), named: true };
+}
+
+/** The role a new work line goes under, as an index into `profile.experience`, or -1 when there is none: see newLinePlace. */
+export function roleForNewLine(profile: Profile, change: Pick<TailoringChange, "evidence">): number {
+  return newLinePlace(profile, change).index;
+}
+
+/** The role a new work line goes under, for its card, such as "Customer Assistant (part-time), Greenway Foods", and whether the answer named it. */
+export function newLineRole(profile: Profile, change: TailoringChange): { role: string; named: boolean } | undefined {
   if (change.section !== "experience" || change.before !== null) return undefined;
-  const role = profile.experience[roleForNewLine(profile, change)];
-  return role ? `${role.title}, ${role.company}` : undefined;
+  const place = newLinePlace(profile, change);
+  const role = profile.experience[place.index];
+  return role ? { role: `${role.title}, ${role.company}`, named: place.named } : undefined;
 }
 
 /** Two changes to the same CV line: only one of them can be on the CV. A CV has one summary, so two summaries always are (#465). */

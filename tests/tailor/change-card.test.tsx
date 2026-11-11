@@ -36,9 +36,16 @@ describe("the change card (#299)", () => {
 describe("a new work line on its card (#446)", () => {
   it("names the role it goes under", () => {
     const html = renderToStaticMarkup(
-      <ChangeCard change={{ ...change(null), section: "experience" }} onDecide={async () => {}} role="Customer Assistant (part-time), Greenway Foods" />,
+      <ChangeCard change={{ ...change(null), section: "experience" }} onDecide={async () => {}} role={{ role: "Customer Assistant (part-time), Greenway Foods", named: true }} />,
     );
     expect(html).toContain("This line is added under Customer Assistant (part-time), Greenway Foods. Nothing is removed.");
+  });
+
+  it("says when the answer names no role on the CV (#467)", () => {
+    const html = renderToStaticMarkup(
+      <ChangeCard change={{ ...change(null), section: "experience" }} onDecide={async () => {}} role={{ role: "Data Analyst Intern, Northgate Retail Insights", named: false }} />,
+    );
+    expect(html).toContain("Your answer does not name a role on your CV, so this line is added under your latest role: Data Analyst Intern, Northgate Retail Insights. Nothing is removed.");
   });
 });
 
