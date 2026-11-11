@@ -24,8 +24,8 @@ export function ChangeCard({
 }: {
   change: TailoringChange;
   onDecide: (change: TailoringChange) => Promise<void>;
-  /** For a new work line, the role it goes under, such as "Customer Assistant (part-time), Greenway Foods" (#446). */
-  role?: string;
+  /** For a new work line, the role it goes under, such as "Customer Assistant (part-time), Greenway Foods", and whether the answer named it (#446, #467). */
+  role?: { role: string; named: boolean };
   /** After an approval to a line that already had one: on the new change, "replaced"; on the earlier one, "sent-back" (#465). */
   lineNote?: LineNote;
 }) {
@@ -66,7 +66,11 @@ export function ChangeCard({
           // A new line removes nothing, so nothing is struck through (#299).
           <>
             <p className="text-xs font-semibold text-text-muted">New line</p>
-            <p className="mt-1 text-text-muted">{role ? `This line is added under ${role}. Nothing is removed.` : "This line is added to your CV. Nothing is removed."}</p>
+            <p className="mt-1 text-text-muted">{!role
+                ? "This line is added to your CV. Nothing is removed."
+                : role.named
+                  ? `This line is added under ${role.role}. Nothing is removed.`
+                  : `Your answer does not name a role on your CV, so this line is added under your latest role: ${role.role}. Nothing is removed.`}</p>
           </>
         )}
         <p className="mt-4 text-xs font-semibold text-text-muted">After</p>

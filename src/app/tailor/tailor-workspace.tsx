@@ -290,7 +290,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
               )}
               {cv.leftInProfile.length > 0 && (
                 <Notice tone="info" title="Some of your skills are not on this CV">
-                  To keep it short, it shows the six main skills and four tools that fit this job best. These stay in your profile:{" "}
+                  To keep it short, it shows up to six main skills and four tools that fit this job best. These stay in your profile:{" "}
                   {cv.leftInProfile.join(", ")}.
                 </Notice>
               )}

@@ -57,11 +57,16 @@ export function isBigSix(skill: string): boolean {
   return bigSixSkills.some((name) => key(name) === key(skill));
 }
 
-/**
- * True when one main skill is the other with a word in front, such as "Communication" and "Stakeholder communication"
- * or "Leadership" and "Team leadership": on one CV they read as the same skill twice (#190).
- */
+/** Main skills that read as the same skill twice on one CV (#190, #467). Management is not Time or Project management. */
+const nearSameGroups = [
+  ["communication", "stakeholder communication"],
+  ["leadership", "team leadership"],
+  ["planning", "planning and scheduling"],
+  ["management", "people management", "team management"],
+];
+
+/** True for two names of one main skill, such as "Communication" and "Stakeholder communication", or the same name twice. */
 export function nearSameSkill(a: string, b: string): boolean {
-  const [x, y] = [` ${key(a)} `, ` ${key(b)} `];
-  return x.includes(y) || y.includes(x);
+  const [x, y] = [key(a), key(b)];
+  return x === y || nearSameGroups.some((group) => group.includes(x) && group.includes(y));
 }

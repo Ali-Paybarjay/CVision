@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveOnePerLine, buildTailoredCv, newLineRole, roleForNewLine, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
+import { approveOnePerLine, buildTailoredCv, newLineRole, newLinePlace, roleForNewLine, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { cvLines } from "@/features/tailor/nothing-invented";
 import { personas } from "@/shared/sample-data";
@@ -340,7 +340,7 @@ describe("a new work line goes under the role it names (#446)", () => {
     const cv = buildTailoredCv(who, [line]);
     expect(cv.experience[1].lines).toContainEqual({ text: line.after, tailored: true });
     expect(cv.experience[0].lines.map((item) => item.text)).not.toContain(line.after);
-    expect(newLineRole(who, line)).toBe("Customer Assistant (part-time), Greenway Foods");
+    expect(newLineRole(who, line)).toEqual({ role: "Customer Assistant (part-time), Greenway Foods", named: true });
   });
 
   it("puts a line that names no role under the most recent one", () => {
@@ -363,5 +363,79 @@ describe("a new work line goes under the role it names (#446)", () => {
 
   it("gives no role for a change that is not a new work line", () => {
     expect(newLineRole(profile, change("approved"))).toBeUndefined();
+  });
+});
+
+describe("a new work line goes under the role the answer means, even by a short name (#467)", () => {
+  const sara = personas.sara.profile;
+  const daniel = personas.daniel.profile;
+  const reza = personas.reza.profile;
+  const place = (who: typeof sara, evidence: string) => newLinePlace(who, { evidence });
+  const titleOf = (who: typeof sara, evidence: string) => who.experience[place(who, evidence).index].title;
+  const withRoles = (...roles: [string, string][]) => ({
+    ...sara,
+    experience: roles.map(([title, company]) => ({ ...sara.experience[0], title, company })),
+  });
+
+  it("finds Reza's newer role whose title holds the one he named", () => {
+    expect(place(reza, "As a maths teacher I ran revision classes.").index).toBe(0);
+  });
+
+  it("does not take a title found only inside a longer one, and takes the newest of several", () => {
+    expect(titleOf(daniel, "As store manager I coached my deputy store manager.")).toBe("Store Manager");
+    const acme = withRoles(["Senior Data Analyst", "Acme"], ["Data Analyst", "Acme"]);
+    expect(titleOf(acme, "As a data analyst at Acme I built reports.")).toBe("Senior Data Analyst");
+  });
+
+  it("reads a company of one word only with a capital and not at the start of a sentence", () => {
+    for (const company of ["Next", "Three", "Very"]) {
+      const who = withRoles(["Data Analyst", "Northgate"], ["Sales Assistant", company]);
+      expect(place(who, `At ${company} I trained three new starters.`)).toEqual({ index: 1, named: true });
+      for (const evidence of ["I trained new starters the next day.", "Three new starters joined.", "I worked there for three years.", "I was very careful with stock.", `${company}, I trained new starters.`]) {
+        expect(place(who, evidence), evidence).toEqual({ index: 0, named: false });
+      }
+    }
+  });
+
+  it("finds a role by the first word of its company, by its title without brackets, and without apostrophes", () => {
+    expect(place(sara, "At Greenway I trained new starters.")).toEqual({ index: 1, named: true });
+    expect(place(sara, "As a customer assistant I trained new starters.")).toEqual({ index: 1, named: true });
+    const tesco = withRoles(["Data Analyst", "Northgate"], ["Sales Assistant", "Tesco Stores Ltd"], ["Shop Assistant", "Sainsbury's"]);
+    expect(place(tesco, "At Tesco I trained new starters.").index).toBe(1);
+    expect(place(tesco, "At Sainsburys I trained new starters.").index).toBe(2);
+  });
+
+  it("says when the answer names no role on the CV", () => {
+    const line = { ...change("approved", { section: "experience", before: null, after: "Trained new starters", evidence: "At my weekend job at Tesco I trained new starters." }) };
+    expect(newLineRole(sara, line)).toEqual({ role: "Data Analyst Intern, Northgate Retail Insights", named: false });
+  });
+});
+
+describe("Management next to Time and Project management (#467)", () => {
+  const job = {
+    ...personas.sara.jobs[0],
+    requirements: { essential: ["Management", "Time management", "Project management"], desirable: [] },
+  };
+  const shown = (cv: ReturnType<typeof buildTailoredCv>) => cv.skills.map((line) => line.text);
+
+  it("keeps Management beside Time management and Project management", () => {
+    expect(shown(buildTailoredCv({ ...profile, skills: ["Management", "Time management", "Project management"] }, [], job))).toEqual([
+      "Management",
+      "Time management",
+      "Project management",
+    ]);
+  });
+
+  it("still keeps an approved Management beside them", () => {
+    const approved = change("approved", { id: "m", section: "skills", before: null, after: "Management" });
+    expect(shown(buildTailoredCv({ ...profile, skills: ["Time management", "Project management"] }, [approved], job))).toEqual([
+      "Management",
+      "Time management",
+      "Project management",
+    ]);
+  });
+
+  it("still puts in only one of People management and Management", () => {
+    expect(shown(buildTailoredCv({ ...profile, skills: ["Management", "People management"] }, [], job))).toHaveLength(1);
   });
 });
