@@ -11,7 +11,7 @@ import { clinicalFixtures } from "./clinical-fixture";
 const JOB_READER_KEEPS_WHOLE_PERSON_SPEC = true;
 
 /** For each specialist gap, words from the ad that a question someone in the role understands would use. */
-const specialistWords: Record<string, string[]> = {
+const specialistWords: Record<string, (string | RegExp)[]> = {
   "clinical-gap-1": ["practice supervisor", "practice assessor", "assessor", "supervisor"],
   "clinical-gap-2": ["shift", "nurse in charge", "in charge", "coordinat"],
   "clinical-gap-3": ["student", "junior staff", "teach", "taught", "supervis"],
@@ -19,7 +19,8 @@ const specialistWords: Record<string, string[]> = {
   "clinical-gap-5": ["safeguarding"],
   "clinical-gap-6": ["clinical governance", "incident"],
   "clinical-gap-7": ["revalidation", "cpd", "professional development"],
-  "clinical-gap-10": ["als", "advanced life support"],
+  // "als" as a whole word only: "professionals" and "also" are not ALS (#418).
+  "clinical-gap-10": [/\bals\b/i, "advanced life support"],
   "clinical-gap-11": ["v300", "prescrib", "licence to practise"],
   "clinical-gap-12": ["audit", "quality improvement"],
   "clinical-gap-13": ["venepuncture", "blood gas", "abg"],
@@ -30,7 +31,7 @@ const conditionGaps = ["clinical-gap-8", "clinical-gap-9"]; // Enhanced DBS chec
 const licenceGap = "clinical-gap-11"; // "… with a full licence to practise" (#401)
 
 const words = (text: string) => text.trim().split(/\s+/).length;
-const hasAny = (text: string, list: string[]) => list.some((word) => text.toLowerCase().includes(word));
+const hasAny = (text: string, list: (string | RegExp)[]) => list.some((word) => (typeof word === "string" ? text.toLowerCase().includes(word) : word.test(text)));
 
 describe.skipIf(!getAiProvider())("Gap questions on a long clinical ad (live)", () => {
   const { profile, job, match } = clinicalFixtures;
@@ -54,6 +55,8 @@ describe.skipIf(!getAiProvider())("Gap questions on a long clinical ad (live)", 
 
     for (const item of questions) {
       expect(words(item.question), item.question).toBeLessThanOrEqual(20);
+      // An unclear gap's question first names the CV line it rests on (#418).
+      if (match.gaps.find((gap) => gap.id === item.gapId)?.kind === "unclear") expect(item.question, "unclear gap without its CV line").toMatch(/^Your CV/);
       const list = specialistWords[item.gapId];
       if (!list) continue;
       expect(hasAny(item.question, list), `not in the ad's words: ${item.question}`).toBe(true);
