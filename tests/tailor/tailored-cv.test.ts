@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTailoredCv, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
+import { approveOnePerLine, buildTailoredCv, newLineRole, roleForNewLine, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { cvLines } from "@/features/tailor/nothing-invented";
 import { personas } from "@/shared/sample-data";
@@ -114,6 +114,33 @@ describe("the tailored CV (You approve everything)", () => {
     expect(cv.unplaced).toEqual([]);
   });
 
+  it("tells a change that lost its line to another apart from one whose line is not on the CV (#272)", () => {
+    const nowhere = change("approved", { section: "education", before: "MSc Data Science", after: "MSc Data Science (Merit)" });
+    const first = change("approved", { after: "First version" });
+    const second = { ...change("approved", { after: "Second version" }), id: "second" };
+    expect(buildTailoredCv(profile, [nowhere, first, second]).sameLine.map((item) => item.after)).toEqual(["Second version"]);
+  });
+
+  it("approving a second change to a line sends the first back to the suggestions (#272)", () => {
+    const first = change("approved", { after: "First version" });
+    const second = { ...change("proposed", { after: "Second version" }), id: "second" };
+    const other = { ...change("approved", { section: "education", before: "MSc Data Science", after: "MSc (Merit)" }), id: "other" };
+    const { changes, sentBack } = approveOnePerLine([first, second, other], { ...second, status: "approved" });
+
+    expect(sentBack).toEqual([{ ...first, status: "proposed" }]);
+    expect(changes.map((item) => [item.id, item.status])).toEqual([[first.id, "proposed"], ["second", "approved"], ["other", "approved"]]);
+    const cv = buildTailoredCv(profile, changes);
+    expect(allText(cv)).toContain("Second version");
+    expect(cv.sameLine).toEqual([]);
+  });
+
+  it("sends nothing back for a rejection or a change that adds a new line", () => {
+    const first = change("approved", { after: "First version" });
+    expect(approveOnePerLine([first], { ...first, id: "x", status: "rejected" }).sentBack).toEqual([]);
+    const added = change("approved", { section: "skills", before: null, after: "Git" });
+    expect(approveOnePerLine([added], { ...added, id: "y" }).sentBack).toEqual([]);
+  });
+
   it("never drops an approved change silently: one it cannot place is listed in unplaced", () => {
     const nowhere = change("approved", { section: "education", before: "MSc Data Science", after: "MSc Data Science (Merit)" });
     const first = change("approved", { after: "First version" });
@@ -188,6 +215,28 @@ describe("the tailored CV for a job (#216)", () => {
     expect(cv.skills).toHaveLength(6);
     expect(cv.overLimit).toEqual(["Presentation"]);
     expect(cv.unplaced).toEqual([]);
+  });
+
+  it("puts in only one of two skills that are almost the same, and does not call the other left out (#190)", () => {
+    const asking = { ...job, requirements: { essential: ["Stakeholder communication"], desirable: [] } };
+    const cv = buildTailoredCv({ ...profile, skills: ["Communication", "Stakeholder communication", "Team leadership", "Leadership"] }, [], asking);
+    expect(shown(cv)).toEqual(["Stakeholder communication", "Team leadership"]);
+    expect(cv.leftInProfile).toEqual([]);
+  });
+
+  it("keeps both of two almost-same skills when the user approved both", () => {
+    const approved = ["Communication", "Stakeholder communication"].map((after) => change("approved", { id: after, section: "skills", before: null, after }));
+    expect(shown(buildTailoredCv(profile, approved, job))).toEqual(["Communication", "Stakeholder communication"]);
+  });
+
+  it("names the Profile's skills and tools that did not fit, instead of leaving them off without a word (#190)", () => {
+    const many = ["Negotiation", "Creativity", "Mentoring", "Coaching", "Initiative", "Teamwork", "Leadership", "Communication", "Stakeholder management"];
+    const tools = ["SQL", "Python", "Excel", "Word", "Git", "Jira"];
+    const cv = buildTailoredCv({ ...profile, skills: [...many, ...tools] }, [], job);
+    const onCv = [...shown(cv), ...cv.technicalSkills.map((line) => line.text)];
+    expect(cv.leftInProfile).toHaveLength(5);
+    expect([...onCv, ...cv.leftInProfile].sort()).toEqual([...many, ...tools].sort());
+    expect(cv.overLimit).toEqual([]);
   });
 
   it("lists a role's lines the job asks about first and keeps the roles in order", () => {
@@ -268,5 +317,40 @@ describe("languages and projects on the tailored CV (#228)", () => {
   it("counts languages and projects as evidence for Nothing invented", () => {
     const lines = cvLines(full);
     for (const line of ["Welsh", "Fluent", "Bus delay dashboard", "Built a dashboard of bus delays"]) expect(lines).toContain(line);
+  });
+});
+
+describe("a new work line goes under the role it names (#446)", () => {
+  const newLine = (evidence: string, who = profile) => ({ ...change("approved", { section: "experience", before: null, after: "Trained new starters on the tills", evidence }) , who });
+  const roleOf = (evidence: string, who = profile) => who.experience[roleForNewLine(who, { evidence })];
+
+  it("puts Sara's Greenway line under Greenway Foods, on the CV and on its card", () => {
+    const { who, ...line } = newLine("I trained new starters on the tills at Greenway Foods.");
+    const cv = buildTailoredCv(who, [line]);
+    expect(cv.experience[1].lines).toContainEqual({ text: line.after, tailored: true });
+    expect(cv.experience[0].lines.map((item) => item.text)).not.toContain(line.after);
+    expect(newLineRole(who, line)).toBe("Customer Assistant (part-time), Greenway Foods");
+  });
+
+  it("puts a line that names no role under the most recent one", () => {
+    expect(roleOf("I trained new starters.").company).toBe("Northgate Retail Insights");
+  });
+
+  it("tells two roles at one company apart by the longest title named", () => {
+    expect(roleOf("Deputy Store Manager at Hartley's Home Stores", personas.daniel.profile).title).toBe("Deputy Store Manager");
+  });
+
+  it("goes by the company first", () => {
+    expect(roleOf("Maths Teacher at Riverside Academy", personas.reza.profile).company).toBe("Riverside Academy");
+  });
+
+  it("finds only whole words, so EE is not found in engineering", () => {
+    const withEe = { ...profile, experience: [...profile.experience, { ...profile.experience[1], title: "Sales Adviser", company: "EE" }] };
+    expect(roleOf("I did some engineering work.", withEe).company).toBe("Northgate Retail Insights");
+    expect(roleOf("I sold contracts at EE.", withEe).company).toBe("EE");
+  });
+
+  it("gives no role for a change that is not a new work line", () => {
+    expect(newLineRole(profile, change("approved"))).toBeUndefined();
   });
 });

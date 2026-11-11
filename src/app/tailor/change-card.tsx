@@ -13,7 +13,16 @@ const sectionNames: Record<TailoringChange["section"], string> = {
 };
 
 /** One suggested change with its before, after and evidence, and the user's Approve, Reject and Edit. Approve and Reject switch the decision. */
-export function ChangeCard({ change, onDecide }: { change: TailoringChange; onDecide: (change: TailoringChange) => Promise<void> }) {
+export function ChangeCard({
+  change,
+  onDecide,
+  role,
+}: {
+  change: TailoringChange;
+  onDecide: (change: TailoringChange) => Promise<void>;
+  /** For a new work line, the role it goes under, such as "Customer Assistant (part-time), Greenway Foods" (#446). */
+  role?: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(change.after);
   const [pending, startTransition] = useTransition();
@@ -41,7 +50,7 @@ export function ChangeCard({ change, onDecide }: { change: TailoringChange; onDe
           // A new line removes nothing, so nothing is struck through (#299).
           <>
             <p className="text-xs font-semibold text-text-muted">New line</p>
-            <p className="mt-1 text-text-muted">This line is added to your CV. Nothing is removed.</p>
+            <p className="mt-1 text-text-muted">{role ? `This line is added under ${role}. Nothing is removed.` : "This line is added to your CV. Nothing is removed."}</p>
           </>
         )}
         <p className="mt-4 text-xs font-semibold text-text-muted">After</p>

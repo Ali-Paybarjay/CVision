@@ -19,8 +19,8 @@
 - `server/link-read-limit.ts` (#391): سقف روزانهٔ خواندن از لینک. پیش از باز کردن هر صفحه، `reserveLinkRead` یک ردیف `profile-link` با مدل `none` در `ai_usage` می‌گذارد (`reserveWithinFeatureLimit` در `src/shared/ai/usage.ts`) و فقط همین ردیف‌ها را می‌شمارد: ۳۰ در هر روز UTC برای هر نفر، با `LINK_READ_DAILY_LIMIT` روی Vercel قابل تغییر. این ردیف‌ها از سقف درخواست‌های AI کم نمی‌کنند. بازدیدکنندهٔ بی‌حساب در حالت mock با کد روزانهٔ بازدیدکننده شمرده می‌شود. سایت‌های `textOnly` که باز نمی‌شوند شمرده نمی‌شوند. وقتی سقف پر است، یا شمردن ممکن نیست، هیچ صفحه‌ای باز نمی‌شود و صفحه مثل هر لینک ناخوانا متن آگهی را می‌خواهد. بعد از خواندن، `settleLinkRead` در ردیف می‌نویسد که صفحه خوانده شد یا نه.
 - `match.ts`: تطابق نیازمندی‌به‌نیازمندی. مدل برای هر نیازمندی فقط شمارهٔ یک خط از پروفایل (مثل `L7`) را می‌دهد و کد همان خط را کلمه‌به‌کلمه شاهد می‌گذارد، پس هیچ نقطهٔ قوتی بدون شاهد نمی‌آید (Nothing invented). امتیاز را کد حساب می‌کند: نیازمندی ضروری سه برابر امتیازی، «واضح» کامل و «مبهم» نصف.
 - `server/check-job.ts`: `parseJob` و `matchJob` با `askModel` و پرامپت‌های `prompts/profile-job.md` و `prompts/profile-match.md`. در حالت mock، آگهی نمونهٔ پرسونایی که نام شرکتش در متن است برمی‌گردد و تطابق با قاعده‌های سادهٔ کلمه‌ای ساخته می‌شود.
-- `server/job-store.ts`: ذخیرهٔ `Job` در `jobs` (با همان id) و `MatchResult` در `match_results` برای کاربر واردشده.
-- `job-actions.ts`: Server Actionهای صفحه: `checkJobAction` با رویدادهای `jobs.ad_pasted` و `jobs.match_shown`، و `readAdLinkAction` با `jobs.link_read` (نتیجه و نام سایت از فهرست، یا `other`؛ هیچ‌وقت لینک، نام کارفرما، متن آگهی یا رزومه).
+- `server/job-store.ts`: ذخیرهٔ `Job` در `jobs` (با همان id) و `MatchResult` در `match_results` برای کاربر واردشده، و `deleteJob` برای پاک کردن یک کار (پایین‌تر).
+- `job-actions.ts`: Server Actionهای صفحه: `checkJobAction` با رویدادهای `jobs.ad_pasted` و `jobs.match_shown`، `readAdLinkAction` با `jobs.link_read` (نتیجه و نام سایت از فهرست، یا `other`؛ هیچ‌وقت لینک، نام کارفرما، متن آگهی یا رزومه)، و `deleteJobAction` برای پاک کردن یک کار (پایین‌تر).
 - آزمون‌های پرامپت: `server/check-job.eval.ts` (فقط با `npm run eval`).
 
 ## خواندن دادهٔ کاربر برای بقیهٔ تیم (`my-data.ts`)
@@ -34,6 +34,7 @@
 | `getMyJob(jobId)` | `Job` یا `null` | آگهی نمونه با همین id (مثل `reza-job-1`)، وگرنه `null`، تا لینک اشتباه یا قدیمی آگهی Sara را باز نکند | `null` |
 | `getMyMatch(jobId)` | آخرین `MatchResult` آن آگهی یا `null` | تطابق همان آگهی نمونه، وگرنه `null` | `null` |
 | `getMyDataSource()` | `"account"`، `"sample"` یا `"none"` | `"sample"`، برای نشان دادن برچسب «دادهٔ نمونه» | `"none"` |
+| `listMyJobIdsOnDashboard()` | id کارهایی که کاربر برایشان Apply زده و در داشبوردند (#462) | `[]` | `[]` |
 
 این تابع‌ها cookie می‌خوانند: داخل کامپوننتی که در `<Suspense>` است، یا در Server Action و Route Handler صدایشان کن.
 
@@ -50,4 +51,32 @@ async function TailorView({ jobId }: { jobId: string }) {
   if (!job || !match || !profile) return <p>This job isn’t in your account.</p>;
   // ...
 }
+```
+
+## پاک کردن یک کار از فهرست کارها (#462)
+
+هر فهرست کارهای کاربر (مثل «Which job is this CV for?» در Tailor) می‌تواند به‌جای `<li>` خودش، ردیف آمادهٔ `JobListItem` را بگذارد (`ui/job-list-item.tsx`): پیوند کار، و کنارش دکمهٔ Delete.
+
+- با Delete، پرسش در همان ردیف باز می‌شود، مثل «Delete my profile» در Profile: نام کار، اینکه تطابق، تغییرهای رزومه و تمرین مصاحبهٔ آن کار هم پاک می‌شود و برگشت ندارد، و دو دکمهٔ Delete job و Keep it. اول Keep it فوکوس دارد و Escape همان Keep it است.
+- کاری که کاربر برایش Apply زده (ردیفی در `applications` دارد) پاک نمی‌شود، تا سابقهٔ درخواست‌ها نرود (تصمیم شایان، #462): کنارش به‌جای Delete «On your dashboard» می‌آید، و `deleteJobAction` هم آن را رد می‌کند.
+- پاک کردن با `deleteJobAction` → `deleteJob`: ردیف `jobs` پاک می‌شود و پایگاه داده (`on delete cascade`) تطابق، تغییرهای Tailor، سؤال‌های gap و تمرین مصاحبهٔ همان کار را با آن پاک می‌کند. RLS فقط ردیف‌های حساب واردشده را پاک می‌کند، پس صفحه‌ای که برای حساب دیگری باز مانده چیزی پاک نمی‌کند.
+- بعد از پاک شدن، ردیف در جای خودش می‌گوید «Deleted: …» و فوکوس به همان می‌رود؛ صفحهٔ بعدی که فهرست را می‌سازد آن کار را ندارد.
+
+```tsx
+import { listMyJobIdsOnDashboard, listMyJobs } from "@/features/profile/my-data";
+import { JobListItem } from "@/features/profile/ui/job-list-item";
+
+const [jobs, onDashboard] = await Promise.all([listMyJobs(), listMyJobIdsOnDashboard()]);
+// ...
+<ul className="mt-4 flex flex-col gap-3">
+  {jobs.map((job) => (
+    <JobListItem
+      key={job.id}
+      jobId={job.id}
+      name={`${job.title} at ${job.company}`}
+      href={`/tailor?job=${encodeURIComponent(job.id)}`}
+      onDashboard={onDashboard.includes(job.id)}
+    />
+  ))}
+</ul>
 ```

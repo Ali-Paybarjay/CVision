@@ -134,17 +134,65 @@ export const linkLimitMessages: Record<LinkLimitReason, string> = {
   "limit-error": "We couldn’t open the link just now. Copy the ad from the page and paste it below.",
 };
 
-/** Under the ad box, when an NHS ad may have left its criteria in a PDF (#400). */
+/**
+ * Under the ad box, when an NHS ad may have left its criteria in a PDF (#400). Only the criteria: the whole PDF is often
+ * longer than the box takes, and cutting it down would cost the very criteria (#420).
+ */
 export const personSpecHint =
-  "NHS ads often keep the person specification in a PDF called Job description and person specification. Paste its criteria below the ad as well, so we can match them.";
+  "NHS ads often keep the person specification in a PDF called Job description and person specification. Paste its essential and desirable criteria below the ad, not the whole PDF, so we can match them.";
 
 /**
- * Whether to show personSpecHint: the ad is from NHS Jobs or Trac (by its link, or an NHS ad pasted without one) and
- * its text has neither a person specification nor essential criteria. Trac often keeps them only in the PDF.
+ * A line or table cell that is only a criteria heading, such as "Person specification" or "Essential criteria:".
+ * The words alone are not enough: "Job description and person specification (PDF)" is the link to the PDF, and
+ * "essential car user" is a criterion (#420).
+ */
+const CRITERIA_HEADING = /^(?:person specification|(?:essential|desirable)(?:\s+criteria)?)\s*(?::|$)/i;
+
+/** A short line or table cell that names both kinds, such as "Criteria Essential Desirable How assessed" (#469). */
+const CRITERIA_COLUMNS = /^(?=.*\bessential\b)(?=.*\bdesirable\b)(?:\S+\s+){0,7}\S+$/i;
+
+/** Text that only points at a document the ad doesn't hold, such as "Please see the attached job description" (#469). */
+const POINTS_ELSEWHERE = /\b(?:attached|separate|enclosed)\b.*\b(?:document|job description|person specification|pdf|jd)\b/i;
+
+/**
+ * An NHS employer, for an ad pasted without its link or with a link to another site, such as Reed. "NHS" alone is in
+ * ads from firms that work with the NHS.
+ */
+const NHS_EMPLOYER = /\bnhs (?:foundation )?trust\b|\bagenda for change\b/i;
+
+/**
+ * Whether to show personSpecHint: the ad is from NHS Jobs or Trac (by its link, or an NHS employer's ad pasted
+ * without one or from another site) and its text has no criteria. Trac often keeps the criteria only in the PDF.
+ * A Band counts only beside "NHS", so Scottish and Welsh boards stay in but a charity's Band 5 doesn't (#469).
  */
 export function needsPersonSpecHint(ad: string, link: string): boolean {
-  const text = ad.toLowerCase();
-  if (text.trim() === "" || text.includes("person specification") || text.includes("essential")) return false;
+  if (ad.trim() === "" || hasCriteria(ad)) return false;
   const site = jobSite(link.trim())?.name;
-  return site === "NHS Jobs" || site === "Trac" || /\bnhs\b/.test(text);
+  return site === "NHS Jobs" || site === "Trac" || NHS_EMPLOYER.test(ad) || (/\bband [1-9]/i.test(ad) && /\bnhs\b/i.test(ad));
+}
+
+/**
+ * Whether the ad holds its criteria: it has a criteria heading, and what is under its headings is not only a pointer
+ * to a document. NHS Jobs shows "Person Specification" and "Essential" even when all that follows is "Please see the
+ * attached job description" (#469). Under a heading is the heading itself when it is such a pointer, else the text
+ * after its colon, else the first line after it that is neither a heading nor a group's name, the line just above a
+ * heading, such as "Qualifications" or "Additional Criteria". A heading with nothing under it still counts.
+ */
+function hasCriteria(ad: string): boolean {
+  const pieces = ad
+    .split(/[\n\t]/)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+  const isHeading = pieces.map((piece) => CRITERIA_HEADING.test(piece) || CRITERIA_COLUMNS.test(piece));
+  if (!isHeading.includes(true)) return false;
+
+  const under = pieces.flatMap((piece, index) => {
+    if (!isHeading[index]) return [];
+    if (POINTS_ELSEWHERE.test(piece)) return [piece];
+    const afterColon = piece.includes(":") ? piece.slice(piece.indexOf(":") + 1).trim() : "";
+    if (afterColon) return [afterColon];
+    const next = pieces.findIndex((_, later) => later > index && !isHeading[later] && !isHeading[later + 1]);
+    return next === -1 ? [] : [pieces[next]];
+  });
+  return under.length === 0 || under.some((text) => !POINTS_ELSEWHERE.test(text));
 }

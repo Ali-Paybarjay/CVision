@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { brand } from "@/shared/brand";
+import { personas } from "@/shared/sample-data";
+import clinicalJob from "../../../sample-data/clinical/job.json";
 import { adLinkFailureMessage, jobSite, needsPersonSpecHint, personSpecHint, siteLabel, type AdLinkFailure } from "./job-link";
 
 describe("jobSite", () => {
@@ -87,7 +89,92 @@ describe("needsPersonSpecHint (#400)", () => {
     expect(needsPersonSpecHint("", "https://www.jobs.nhs.uk/x")).toBe(false);
   });
 
-  it("says it in the brand's voice", () => {
+  describe("the fictional Band 6 ad (#420)", () => {
+    const whole = clinicalJob.description;
+    // Without its person specification, only "Job description and person specification (PDF, 220KB)" names it.
+    const withoutCriteria = whole.slice(0, whole.indexOf("Person specification\n")) + whole.slice(whole.indexOf("Employer certification"));
+
+    it("asks for the criteria when the page names only the PDF, from NHS Jobs, Trac or no link", () => {
+      expect(withoutCriteria).toContain("Job description and person specification (PDF, 220KB)");
+      expect(withoutCriteria).not.toContain("Essential criteria");
+      for (const link of ["https://www.jobs.nhs.uk/candidate/jobadvert/C9999-26-0001", "https://apps.trac.jobs/job-advert/999999", ""]) {
+        expect(needsPersonSpecHint(withoutCriteria, link), link || "no link").toBe(true);
+      }
+    });
+
+    it("stays quiet with the whole person specification", () => {
+      expect(needsPersonSpecHint(whole, "https://www.jobs.nhs.uk/candidate/jobadvert/C9999-26-0001")).toBe(false);
+      expect(needsPersonSpecHint(whole, "")).toBe(false);
+    });
+  });
+
+  it("counts a heading on its own line or in a table cell, not the word inside a criterion", () => {
+    const link = "https://www.jobs.nhs.uk/candidate/jobadvert/C9999-26-0001";
+
+    expect(needsPersonSpecHint(`${nhsAd}\nThis post needs an essential car user.`, link)).toBe(true);
+    expect(needsPersonSpecHint(`${nhsAd}\nEssential car user`, link)).toBe(true);
+    expect(needsPersonSpecHint(`${nhsAd}\nQualifications\tEssential\tDesirable`, link)).toBe(false);
+    expect(needsPersonSpecHint(`${nhsAd}\n  ESSENTIAL CRITERIA  \n- NMC registration`, link)).toBe(false);
+    expect(needsPersonSpecHint(`${nhsAd}\nDesirable:`, link)).toBe(false);
+  });
+
+  it("without a link, needs an NHS employer, not a firm that only works with the NHS", () => {
+    const pennine = personas.sara.jobs[0].description.replace("Essential:", "What you'll need:").replace("Desirable:", "Nice to have:");
+
+    expect(pennine).toMatch(/NHS trusts/);
+    expect(needsPersonSpecHint(pennine, "")).toBe(false);
+    expect(needsPersonSpecHint("Healthcare Assistant. Pay: Agenda for Change. Main duties: personal care.", "")).toBe(true);
+  });
+
+  it("counts a Band only beside NHS, so a board without a trust stays in and a charity stays out (#469)", () => {
+    const physio = "Physiotherapist, band 6. Main duties: assess and treat patients.";
+    const charity =
+      "Family Support Worker, Band 5. Castlefold Children's Hospice is a local charity. You will need a Level 3 " +
+      "qualification in health and social care and experience of supporting families.";
+
+    expect(needsPersonSpecHint(`${physio} Employer: NHS Lothian.`, "")).toBe(true);
+    expect(needsPersonSpecHint(physio, "")).toBe(false);
+    expect(needsPersonSpecHint(charity, "https://www.reed.co.uk/jobs/family-support-worker/99999999")).toBe(false);
+    expect(needsPersonSpecHint(charity, "")).toBe(false);
+  });
+
+  describe("criteria that only point at the PDF (#469)", () => {
+    const nhsJobsLink = "https://www.jobs.nhs.uk/candidate/jobadvert/C9999-26-0001";
+    const pointer = "Please see the attached job description and person specification.";
+    // The shape NHS Jobs gives an ad whose employer kept the criteria in the PDF: its headings, then only a pointer.
+    const pointerOnly = `${nhsAd}\n\nPerson Specification\nAdditional Criteria\nEssential\n${pointer}\nDesirable\n${pointer}`;
+
+    it("asks for the criteria when every heading only points at an attached document", () => {
+      expect(needsPersonSpecHint(pointerOnly, nhsJobsLink)).toBe(true);
+      expect(needsPersonSpecHint(`Marrowby and Castlefold NHS Foundation Trust\n${pointerOnly}`, "")).toBe(true);
+      expect(needsPersonSpecHint(`${nhsAd}\nPerson specification: please see the attached job description`, nhsJobsLink)).toBe(true);
+    });
+
+    it("stays quiet when a heading has a real criterion under it, or points at text on the page", () => {
+      expect(needsPersonSpecHint(`${pointerOnly}\nExperience\nEssential\nWard experience at Band 5`, nhsJobsLink)).toBe(false);
+      expect(needsPersonSpecHint(`${nhsAd}\nPerson Specification\nEssential\nPlease refer to job description above`, nhsJobsLink)).toBe(false);
+    });
+
+    it("keeps the fictional Band 6 ad's criteria, under groups such as Qualifications and Skills and Abilities", () => {
+      expect(needsPersonSpecHint(clinicalJob.description, nhsJobsLink)).toBe(false);
+    });
+  });
+
+  it("counts a short line or cell with both Essential and Desirable as a heading (#469)", () => {
+    const trac = "https://apps.trac.jobs/job-advert/999999";
+    const table = "Criteria Essential Desirable How assessed\nNMC registration ✓ Application form\nALS certificate ✓ Interview";
+
+    expect(needsPersonSpecHint(`${nhsAd}\n${table}`, trac)).toBe(false);
+    expect(needsPersonSpecHint(`${nhsAd}\nEssential Desirable\nRegistered nurse ✓`, trac)).toBe(false);
+    // A sentence that only mentions both words is not a heading, and a short pointer is not a criterion.
+    const sentence = "Please read the essential and desirable criteria in the job pack carefully before you start your application.";
+    expect(needsPersonSpecHint(`${nhsAd}\n${sentence}`, trac)).toBe(true);
+    expect(needsPersonSpecHint(`${nhsAd}\nEssential and desirable criteria: see attached JD`, trac)).toBe(true);
+  });
+
+  it("asks for the essential and desirable criteria, not the whole PDF, in the brand's voice", () => {
+    expect(personSpecHint).toContain("essential and desirable criteria");
+    expect(personSpecHint).toContain("not the whole PDF");
     for (const phrase of brand.bannedPhrases) expect(personSpecHint.toLowerCase()).not.toContain(phrase.toLowerCase());
   });
 });

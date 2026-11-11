@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { brand } from "@/shared/brand";
 import { personas } from "@/shared/sample-data";
 import {
   checkAdText,
@@ -120,6 +121,17 @@ describe("checkAdText", () => {
     expect(checkAdText("x".repeat(MIN_AD_CHARACTERS - 1)).ok).toBe(false);
     expect(checkAdText("x".repeat(MAX_AD_CHARACTERS + 1)).ok).toBe(false);
     expect(checkAdText("x".repeat(MIN_AD_CHARACTERS)).ok).toBe(true);
+  });
+
+  it("says how long a long ad is, how much we read, and to keep what the employer asks for (#420)", () => {
+    const result = checkAdText("x".repeat(MAX_AD_CHARACTERS + 1));
+
+    expect(result).toEqual({
+      ok: false,
+      message: "This is 20,001 characters, and we can read up to 20,000. Keep the ad and what the employer asks for.",
+    });
+    const message = result.ok ? "" : result.message.toLowerCase();
+    for (const phrase of brand.bannedPhrases) expect(message).not.toContain(phrase.toLowerCase());
   });
 });
 

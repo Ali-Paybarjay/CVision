@@ -32,3 +32,12 @@ describe("the change card (#299)", () => {
     }
   });
 });
+
+describe("a new work line on its card (#446)", () => {
+  it("names the role it goes under", () => {
+    const html = renderToStaticMarkup(
+      <ChangeCard change={{ ...change(null), section: "experience" }} onDecide={async () => {}} role="Customer Assistant (part-time), Greenway Foods" />,
+    );
+    expect(html).toContain("This line is added under Customer Assistant (part-time), Greenway Foods. Nothing is removed.");
+  });
+});

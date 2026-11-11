@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { coverLetterText, findBrandProblems, inventedTerms, writeCoverLetter } from "@/features/tailor";
 import { splitLetter } from "@/features/tailor/letter-state";
 import { getAiProvider } from "@/shared/ai";
-import { coverLetterCases, declinedCase, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
+import { awardClaimedByPerson, coverLetterCases, declinedCase, ownPhrasesUsed, templatePhrases } from "./cover-letter.cases";
 
 describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
   it("a requirement the user said no to is neither named nor claimed in other words (#251)", async () => {
@@ -18,6 +18,8 @@ describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
 
     it("Nothing invented: mentions nothing the user said they have not done", async () => {
       text = coverLetterText(await writeCoverLetter(input), input.profile.fullName);
+      // Printed so a reviewer can read what no check sees, such as a line that says more than its source (#315).
+      console.log(`=== LETTER ${input.profile.fullName}\n${text}`);
       expect(inventedTerms(text, gaps, input.answers, input.profile)).toEqual([]);
     });
 
@@ -29,6 +31,10 @@ describe.skipIf(!getAiProvider())("Cover letter (live)", () => {
     it("is short: the body stays under 230 words, as pilot users found 300 too long", () => {
       const body = splitLetter(text).paragraphs.map((paragraph) => paragraph.text).join(" ");
       expect(body.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(230);
+    });
+
+    it("an award to the store or team is not claimed for the person (#315)", () => {
+      expect(text).not.toMatch(awardClaimedByPerson);
     });
 
     it("follows the brand: no banned words, UK spelling", () => {

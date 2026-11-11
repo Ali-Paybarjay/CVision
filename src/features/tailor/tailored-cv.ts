@@ -1,7 +1,7 @@
 // The tailored CV: the user's Profile with only their approved changes applied (You approve everything).
 // Pure code, shared by the preview and the PDF and Word export.
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
-import { bigSixTarget, isBigSix } from "./big-six";
+import { bigSixTarget, isBigSix, nearSameSkill } from "./big-six";
 import { normalise } from "./nothing-invented";
 
 /** One line of the tailored CV; `tailored` marks a line that came from an approved change. */
@@ -55,8 +55,16 @@ export type TailoredCv = {
   languages: CvLine[];
   /** Approved changes whose `before` line is not on the CV (or was already changed), so they could not be placed. */
   unplaced: TailoringChange[];
+  /** Those of `unplaced` whose line is on the CV but already taken by another approved change to it (#272). */
+  sameLine: TailoringChange[];
   /** Lines the user approved that did not fit the limits on skills, tools and certificates, so the page can say so. */
   overLimit: string[];
+  /**
+   * Skills from the Profile, not approved changes, that did not fit the six main skills and four tools, so the page
+   * can name them rather than leave them off without a word (#190). A main skill left out only because one almost the
+   * same is on the CV is not among them. They stay in the Profile.
+   */
+  leftInProfile: string[];
 };
 
 const month = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" });
@@ -70,6 +78,51 @@ export function formatMonth(value: string | null | undefined): string {
 
 function same(a: string, b: string): boolean {
   return normalise(a) === normalise(b);
+}
+
+/** Lower case words only, so "Hartley's" and "Hartley’s" match and "EE" is not found inside "engineering". */
+const asWords = (text: string) => ` ${normalise(text).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+
+/**
+ * The role a new work line goes under (#446), as an index into `profile.experience`, or -1 when there is none. The
+ * roles whose company the evidence names (all of them if it names none); of those, the one whose title it names, the
+ * longest title first, so "Deputy Store Manager at Hartley's" is not read as "Store Manager"; otherwise the most recent.
+ */
+export function roleForNewLine(profile: Profile, change: Pick<TailoringChange, "evidence">): number {
+  const evidence = asWords(change.evidence);
+  const names = (name: string) => asWords(name).trim() !== "" && evidence.includes(asWords(name));
+  const roles = profile.experience.map((role, index) => ({ ...role, index }));
+  const atCompany = roles.filter((role) => names(role.company));
+  const pool = atCompany.length > 0 ? atCompany : roles;
+  const byTitle = pool.filter((role) => names(role.title)).sort((a, b) => b.title.length - a.title.length);
+  return (byTitle[0] ?? pool[0])?.index ?? -1;
+}
+
+/** "Customer Assistant (part-time), Greenway Foods": the role a new work line goes under, for its card. */
+export function newLineRole(profile: Profile, change: TailoringChange): string | undefined {
+  if (change.section !== "experience" || change.before !== null) return undefined;
+  const role = profile.experience[roleForNewLine(profile, change)];
+  return role ? `${role.title}, ${role.company}` : undefined;
+}
+
+/** Two changes to the same CV line: only one of them can be on the CV. */
+function sameTarget(a: TailoringChange, b: TailoringChange): boolean {
+  return a.id !== b.id && a.section === b.section && a.before !== null && b.before !== null && same(a.before, b.before);
+}
+
+/**
+ * The changes after the user approves `next`: an earlier approved change to the same line goes back to "proposed",
+ * because only one change per line can be on the CV (#272). `sentBack` lists those, for the page to save and say so.
+ */
+export function approveOnePerLine(changes: TailoringChange[], next: TailoringChange): { changes: TailoringChange[]; sentBack: TailoringChange[] } {
+  const sentBack =
+    next.status === "approved"
+      ? changes.filter((change) => change.status === "approved" && sameTarget(change, next)).map((change) => ({ ...change, status: "proposed" as const }))
+      : [];
+  return {
+    changes: changes.map((change) => (change.id === next.id ? next : (sentBack.find((item) => item.id === change.id) ?? change))),
+    sentBack,
+  };
 }
 
 /** An education entry as one CV line, e.g. "MSc, Data Science, University of Manchester, Merit". */
@@ -190,8 +243,13 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     // Every line looks the same: no skill name in bold in front of it.
     lines: [...role.duties, ...role.achievements].map((line) => apply(line, "experience")),
   }));
-  // A new experience line has no role to sit under, so it goes under the most recent one.
-  if (experience[0]) experience[0].lines.push(...added("experience"));
+  // A new experience line goes under the role its evidence names, or the most recent one (#446).
+  for (const change of approved.filter((item) => item.section === "experience" && item.before === null && !used.has(item.id))) {
+    const role = experience[roleForNewLine(profile, change)];
+    if (!role) continue;
+    used.add(change.id);
+    role.lines.push({ text: change.after, tailored: true });
+  }
   for (const role of experience) role.lines = relevantLinesFirst(role.lines, job);
 
   const allSkills = [...profile.skills.map((skill) => apply(skill, "skills")), ...added("skills")];
@@ -207,7 +265,21 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     return mentions(line.text, adWords) ? 3 : 4;
   };
   const mainSkills = allSkills.filter((line) => isBigSix(line.text) && (job !== undefined || line.tailored));
-  const skills = [...mainSkills].sort((a, b) => rank(a) - rank(b)).slice(0, bigSixTarget);
+  // Of two skills that are almost the same, such as "Communication" and "Stakeholder communication", only one goes in, unless
+  // both were approved (#190): the one the ad asks for more, and with the same rank the more specific name.
+  const skills: CvLine[] = [];
+  const nearSame: CvLine[] = [];
+  for (const line of [...mainSkills].sort((a, b) => rank(a) - rank(b))) {
+    const twin = line.tailored ? undefined : skills.find((kept) => nearSameSkill(kept.text, line.text));
+    if (!twin) {
+      if (skills.length < bigSixTarget) skills.push(line);
+    } else if (!twin.tailored && rank(twin) === rank(line) && line.text.length > twin.text.length) {
+      skills[skills.indexOf(twin)] = line;
+      nearSame.push(twin);
+    } else {
+      nearSame.push(line);
+    }
+  }
   // A main skill that did not make the six stays in the Profile; it is not a tool. An approved one is reported to the user, never lost silently.
   const leftOut = mainSkills.filter((line) => !skills.includes(line));
   const otherSkills = allSkills.filter((line) => !isBigSix(line.text) && !isDrivingLicence(line));
@@ -243,7 +315,9 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     projects: (profile.projects ?? []).map((item) => ({ title: item.name, company: item.organisation ?? "", dates: dateRange(item.startDate, item.endDate), lines: item.details.map(asIs) })),
     languages: (profile.languages ?? []).map((item) => asIs(item.level ? `${item.name} (${item.level})` : item.name)),
     unplaced: approved.filter((change) => !used.has(change.id)),
+    sameLine: approved.filter((change) => !used.has(change.id) && approved.some((other) => used.has(other.id) && sameTarget(other, change))),
     overLimit: [...leftOut, ...tools.slice(maxTools), ...certificates.slice(maxCertificates)].filter((line) => line.tailored).map((line) => line.text),
+    leftInProfile: [...leftOut.filter((line) => !nearSame.includes(line)), ...tools.slice(maxTools)].filter((line) => !line.tailored).map((line) => line.text),
   };
 }
 

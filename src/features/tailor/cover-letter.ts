@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { Gap, Job, Profile, TailoringChange } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { jobForPrompt } from "./job-for-prompt";
-import { cvLines, normalise, requirementTerms } from "./nothing-invented";
+import { isStrongerGap } from "./gap-questions";
+import { cvLines, normalise, requirementTerms, roleClaimAdded, type EvidenceSources } from "./nothing-invented";
 import { buildTailoredCv } from "./tailored-cv";
 import type { GapAnswer } from "./types";
 
@@ -25,9 +26,29 @@ export type CoverLetterInput = {
   declined?: string[];
   /** What the last draft named from `declined`, when this is a second attempt. */
   namedInLastDraft?: string[];
+  /**
+   * "Make it stronger" questions the user had nothing more to add to: the CV line stays usable, but what the question
+   * asked about must not be added to it (#315). Kept apart from `declined`, so the CV line's own words are never blocked.
+   */
+  nothingMore?: NothingMore[];
   /** Whose daily limit the request counts against: { userId } for a signed-in user. */
   requester?: Requester;
 };
+
+/** A "Make it stronger" question the user said no to, with the CV line it was about. */
+export type NothingMore = { question: string; cvLine: string };
+
+/**
+ * The "Make it stronger" questions the user had nothing more to add to, each with the CV line it was about,
+ * taken from the gap's detail (`Already shown by: "…"`).
+ */
+export function nothingMoreToAdd(gaps: Gap[], answers: GapAnswer[]): NothingMore[] {
+  return answers.flatMap((answer) => {
+    const gap = !answer.hasExperience ? gaps.find((item) => item.id === answer.gapId && isStrongerGap(item)) : undefined;
+    const cvLine = gap?.detail?.match(/^Already shown by: "([^]*)"$/)?.[1];
+    return gap && cvLine ? [{ question: answer.question.trim() || gap.requirement, cvLine }] : [];
+  });
+}
 
 /** The closing line of every letter; only the code adds it and the name, so neither can appear twice. */
 export const letterSignOff = "Yours sincerely,";
@@ -106,22 +127,49 @@ export function declinedRequirements(gaps: Gap[], answers: GapAnswer[], profile:
     .map((gap) => gap.requirement);
 }
 
-/**
- * The letter without any sentence that names one of these terms, for a model that keeps naming what the user said no to.
- * The user reads and approves the letter, so a shorter honest letter is better than none. Empty paragraphs go too.
- */
-export function withoutSentencesNaming(letter: CoverLetter, terms: string[]): CoverLetter {
+/** The letter without the sentences `drop` picks. A full stop ends a sentence only before a space, so "2.1%" stays whole. Empty paragraphs go too. */
+function withoutSentences(letter: CoverLetter, drop: (sentence: string) => boolean): CoverLetter {
   const paragraphs = letter.paragraphs
     .map((paragraph) =>
-      // A full stop ends a sentence only before a space, so "2.1%" stays whole.
       paragraph
         .split(/(?<=[.!?])\s+/)
-        .filter((sentence) => !terms.some((term) => normalise(sentence).includes(term)))
+        .filter((sentence) => !drop(sentence))
         .join(" ")
         .trim(),
     )
     .filter(Boolean);
   return { ...letter, paragraphs };
+}
+
+/**
+ * The letter without any sentence that names one of these terms, for a model that keeps naming what the user said no to.
+ * The user reads and approves the letter, so a shorter honest letter is better than none.
+ */
+export function withoutSentencesNaming(letter: CoverLetter, terms: string[]): CoverLetter {
+  return withoutSentences(letter, (sentence) => terms.some((term) => normalise(sentence).includes(term)));
+}
+
+/** The ad's registration or Band that a sentence claims for the person, with the job's own title taken out first (#424). */
+function roleClaimIn(sentence: string, jobTitle: string, sources: EvidenceSources): string | null {
+  const title = jobTitle.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const withoutTitle = title ? sentence.replace(new RegExp(title, "gi"), " ") : sentence;
+  return roleClaimAdded({ section: "summary", before: null, after: withoutTitle, evidence: "", evidenceSource: "cv" }, sources);
+}
+
+/**
+ * The letter without any sentence that claims the ad's registration (e.g. "NMC") or numbered Band (e.g. "Band 6") when
+ * nothing the user gave about themselves supports it (#424), checked as roleClaimAdded checks a CV change. Naming the
+ * job is fine: "I am applying for the Senior Staff Nurse (Band 6) post" stays, "As an NMC registered nurse" goes.
+ * `claims` says what was taken out.
+ */
+export function withoutRoleClaims(letter: CoverLetter, jobTitle: string, sources: EvidenceSources): { letter: CoverLetter; claims: string[] } {
+  const claims = new Set<string>();
+  const trimmed = withoutSentences(letter, (sentence) => {
+    const claim = roleClaimIn(sentence, jobTitle, sources);
+    if (claim) claims.add(claim);
+    return claim !== null;
+  });
+  return { letter: trimmed, claims: [...claims] };
 }
 
 export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLetter> {
@@ -150,6 +198,7 @@ export async function writeCoverLetter(input: CoverLetterInput): Promise<CoverLe
     ),
     answers: JSON.stringify(answers, null, 2),
     declined: JSON.stringify({ requirements: input.declined ?? [], namedInLastDraft: input.namedInLastDraft ?? [] }, null, 2),
+    nothingMore: JSON.stringify(input.nothingMore ?? [], null, 2),
   });
 
   return askModel({

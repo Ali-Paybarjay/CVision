@@ -71,6 +71,20 @@ export async function listMyJobs(): Promise<Job[]> {
 }
 
 /**
+ * The ids of the user's jobs that are on their dashboard because they applied for them. A list of jobs offers to
+ * delete only the others (#462); deleteJobAction refuses these too, so a failed read here only shows a button too many.
+ * Sample data and signed-out visitors: none.
+ */
+export async function listMyJobIdsOnDashboard(): Promise<string[]> {
+  const account = await getAccount();
+  if (account.source !== "account") return [];
+
+  const { data, error } = await account.supabase.from("applications").select("job_id");
+  if (error) return failed("applications", error) ?? [];
+  return (data ?? []).map((row: { job_id: string }) => row.job_id);
+}
+
+/**
  * One of the user's jobs, or null if they have none with that id.
  * Sample data: the sample job with that id (for example "reza-job-1"), or null for any other id, so a wrong or old link
  * says the job can't be found instead of opening Sara's job (Nazanin's note on #93).

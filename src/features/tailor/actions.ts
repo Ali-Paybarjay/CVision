@@ -10,14 +10,14 @@ import { getAnonymousKey } from "@/shared/ai/anonymous-key";
 import { TailoringChangeSchema, type Job, type TailoringChange } from "@/shared/contracts";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
-import { coverLetterText, declinedRequirements, inventedTerms, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
+import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, withoutRoleClaims, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
 import { defaultGapQuestion, isStrongerGap, questionGaps } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
 import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
 import { letterHead } from "./letter-state";
-import { modelFailureMessage, tailorModelAccess } from "./server/model-access";
+import { modelFailureMessage, tailorModelAccess, whatStillWorksOnQuestions } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
 import { savedCvLayout } from "./saved-cv";
 import { getMyTailoredCv, saveTailoredCv } from "./server/tailored-cvs";
@@ -197,7 +197,9 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
       modelFailureMessage(error, "suggest a next step", "");
       return keptNo();
     }
-    return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.") };
+    // A yes needs the model to write its line; the answer stays in its box, so the user can save it again tomorrow (#314).
+    const atLimit = `Your answer stays here, so you can save it again tomorrow for a suggestion. ${whatStillWorksOnQuestions}`;
+    return { ok: false, message: modelFailureMessage(error, "suggest a change", "We could not write a suggestion just now. Try again in a moment.", atLimit) };
   }
 }
 
@@ -295,8 +297,10 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
   const parsed = CoverLetterRequestSchema.safeParse(request);
   if (!parsed.success) return { ok: false, message: "We could not read your changes. Try again." };
   const { jobId } = parsed.data;
-  // A no to a strength means "nothing more to add", so the letter must not leave out what the CV already shows.
+  // A no to a strength means "nothing more to add", so it never blocks words the CV already shows; it goes to the
+  // letter apart, as `nothingMore`, so the letter keeps the CV line but adds nothing the question asked about (#315).
   const answers = parsed.data.answers.filter((answer) => answer.hasExperience || !isStrongerGap({ id: answer.gapId }));
+  const strongerNos = parsed.data.answers.filter((answer) => !answer.hasExperience && isStrongerGap({ id: answer.gapId }));
 
   const access = await tailorModelAccess();
   if (!access.allowed) return { ok: false, message: "Sign in to write your cover letter." };
@@ -308,7 +312,8 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
   try {
     const gaps = match?.gaps ?? [];
     const declined = declinedRequirements(gaps, answers, profile);
-    const input = { profile, job, changes, answers, declined, requester: access.requester };
+    const nothingMore = match && strongerNos.length > 0 ? nothingMoreToAdd(questionGaps(job, match, profile), strongerNos) : [];
+    const input = { profile, job, changes, answers, declined, nothingMore, requester: access.requester };
     let letter = await writeCoverLetter(input);
     let text = coverLetterText(letter, profile.fullName);
     let named = inventedTerms(text, gaps, answers, profile);
@@ -326,6 +331,16 @@ export async function createCoverLetter(request: CoverLetterRequest): Promise<Cr
         text = coverLetterText(letter, profile.fullName);
         named = inventedTerms(text, gaps, answers, profile);
       }
+    }
+    // A registration or Band only the ad gives is never claimed for the user (#424). The prompt asks for this; here
+    // any sentence that still claims one is taken out, while the job's own title, Band and all, may stay.
+    if (named.length === 0 && job.role) {
+      const checked = withoutRoleClaims(letter, job.title, { profile, gaps, answers, role: job.role });
+      if (checked.claims.length > 0 && checked.letter.paragraphs.length === 0) {
+        return { ok: false, message: `The draft kept saying you hold “${checked.claims[0]}”, which only the job ad says, so we did not use it. Try again.` };
+      }
+      letter = checked.letter;
+      text = coverLetterText(letter, profile.fullName);
     }
     if (named.length > 0) {
       return { ok: false, message: `The draft kept mentioning “${named[0]}”, which you told us you have not done, so we did not use it. Try again, or change your answer to that question.` };

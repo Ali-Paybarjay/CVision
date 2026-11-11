@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { decideChange } from "@/features/tailor/actions";
 import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
-import { buildTailoredCv } from "@/features/tailor/tailored-cv";
+import { approveOnePerLine, buildTailoredCv, newLineRole } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
 import { Button, Card, Notice } from "@/shared/ui";
@@ -48,6 +48,15 @@ function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]
  * preview in the review step shows approved changes only.
  */
 export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [] }: TailorWorkspaceProps) {
+  // The page's heading takes focus once when the workspace arrives, so a screen reader says the page is ready (#419).
+  // Only once: Next.js runs effects again when the user comes back to this page, and focus then stays where it was.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (focused.current) return;
+    focused.current = true;
+    heading.current?.focus({ preventScroll: true });
+  }, []);
   const [gapStates, setGapStates] = useState<Record<string, GapState>>(() =>
     Object.fromEntries(
       savedChanges.flatMap((change) => (change.gapId ? [[change.gapId, { phase: "answered", nextSteps: [], hint: null }]] : [])),
@@ -57,7 +66,10 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   const [answers, setAnswers] = useState<Record<string, GapAnswer>>({});
   const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [lineNote, setLineNote] = useState<string | null>(null);
   const cv = buildTailoredCv(profile, changes, job);
+  // Approved changes whose line is not on the CV; those that lost their line to another change are told apart (#272).
+  const notFound = cv.unplaced.filter((change) => !cv.sameLine.includes(change));
   // Worked out on every render, so a letter approved before the CV changed is never used as approved.
   const approvedLetter = currentLetter(letter, letterBasis(changes, Object.values(answers)));
 
@@ -100,10 +112,13 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   };
 
   const update = async (next: TailoringChange) => {
-    setChanges((current) => current.map((change) => (change.id === next.id ? next : change)));
+    // Only one change per CV line: approving a second one sends the earlier one back to the suggestions (#272).
+    const { changes: updated, sentBack } = approveOnePerLine(changes, next);
+    setChanges(updated);
+    setLineNote(sentBack.length > 0 ? "This replaces the change you approved earlier to the same line. That one is back with your suggestions." : null);
     try {
-      const result = await decideChange(next);
-      setSaveNote(result.saved ? null : result.message);
+      const results = await Promise.all([next, ...sentBack].map((change) => decideChange(change)));
+      setSaveNote(results.find((result) => !result.saved)?.message ?? null);
     } catch {
       setSaveNote(unreachableMessage);
     }
@@ -120,6 +135,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       earlierAnswers={Object.values(answers).filter((item) => item.gapId !== prompt.gap.id)}
       changes={changes.filter((change) => change.gapId === prompt.gap.id)}
       onDecide={update}
+      roleOf={(change) => newLineRole(profile, change)}
     />
   );
 
@@ -171,7 +187,9 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
     <Card className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <header className="flex flex-col gap-3 border-b border-line pb-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl">Tailor your CV</h1>
+            <h1 ref={heading} tabIndex={-1} className="text-xl">
+              Tailor your CV
+            </h1>
             <StatusPill status={applied ? "completed" : "in-progress"} />
           </div>
           <h2 className="text-3xl leading-tight sm:text-4xl">{job.title}</h2>
@@ -180,6 +198,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
         </header>
 
         {saveNote && <Notice tone="info">{saveNote}</Notice>}
+        {lineNote && <Notice tone="info">{lineNote}</Notice>}
 
         <div className="flex flex-col divide-y divide-line">
           <TailorStep {...stepProps(1)} title="1. Job details" summary="Job title and job description" status={statuses[1]} icon={<JobIcon />}>
@@ -225,7 +244,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   Suggestions from your answers
                 </h4>
                 {fromAnswers.map((change) => (
-                  <ChangeCard key={change.id} change={change} onDecide={update} />
+                  <ChangeCard key={change.id} change={change} onDecide={update} role={newLineRole(profile, change)} />
                 ))}
               </section>
             )}
@@ -241,16 +260,28 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                 Your CV for this job
               </h4>
               <p className="text-sm text-text-muted">Highlighted lines are the changes you approved.</p>
-              {cv.unplaced.length > 0 && (
+              {cv.sameLine.length > 0 && (
+                <Notice tone="error" title="More than one change to the same line">
+                  Only one change per line can be on your CV, so {cv.sameLine.map((change) => `“${change.after}”`).join(", ")}{" "}
+                  {cv.sameLine.length === 1 ? "is" : "are"} not in it. Keep one and reject the rest.
+                </Notice>
+              )}
+              {notFound.length > 0 && (
                 <Notice tone="error" title="Some approved changes are not in your CV">
-                  We could not find the line {cv.unplaced.length === 1 ? "this change replaces" : "these changes replace"}:{" "}
-                  {cv.unplaced.map((change) => `“${change.after}”`).join(", ")}. Reject {cv.unplaced.length === 1 ? "it" : "them"}, then
-                  answer the question again for a new suggestion.
+                  We could not find the CV line {notFound.length === 1 ? "this change replaces" : "these changes replace"}:{" "}
+                  {notFound.map((change) => `“${change.before ?? change.after}”`).join(", ")}. Reject the change, then answer the question again for a
+                  new suggestion.
                 </Notice>
               )}
               {cv.overLimit.length > 0 && (
                 <Notice tone="info" title="Your CV shows six skills, four tools and four certificates at most">
                   {cv.overLimit.map((line) => `“${line}”`).join(", ")} did not fit. Reject another change to make room.
+                </Notice>
+              )}
+              {cv.leftInProfile.length > 0 && (
+                <Notice tone="info" title="Some of your skills are not on this CV">
+                  To keep it short, it shows the six main skills and four tools that fit this job best. These stay in your profile:{" "}
+                  {cv.leftInProfile.join(", ")}.
                 </Notice>
               )}
               <CvPreview cv={cv} />

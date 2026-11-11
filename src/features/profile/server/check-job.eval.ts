@@ -48,6 +48,9 @@ function expectOnBrand(match: MatchResult) {
 describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample ads", () => {
   it.each(cases)("$name, job $number ($title)", async ({ name, number, job: expected, neverMet: lacking }) => {
     const job = await parseJob(expected.description, { url: null });
+    // No sample ad asks for a registration body, so one here was guessed, such as "DVLA" from a driving licence, and
+    // would reach the tailor prompts unseen (#421).
+    expect(job.role?.registration ?? "", `role ${JSON.stringify(job.role)}`).toBe("");
 
     // The ad is read correctly.
     expect(job.company.toLowerCase()).toBe(expected.company.toLowerCase());
@@ -83,6 +86,12 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     // The role the ad describes, read once for every feature (#398).
     expect(job.role?.registration).toMatch(/NMC/);
     expect(job.role?.level).toMatch(/Band 6/i);
+    // The role never takes the criterion's place. found() would also count "NMC revalidation", so the criterion is
+    // looked for itself: without it, a nurse whose CV doesn't show NMC registration gets no gap and no question (#421).
+    expect(
+      job.requirements.essential.some((item) => /\bNMC\b/.test(item) && /regist/i.test(item)),
+      "the NMC registration criterion stays a requirement",
+    ).toBe(true);
 
     expect(kept.length, `missing: ${criteria.filter((criterion) => !kept.includes(criterion)).join("; ")}`).toBeGreaterThanOrEqual(18);
     for (const criterion of ["Understanding of clinical governance and incident reporting", "Knowledge of safeguarding adults and children procedures"]) {

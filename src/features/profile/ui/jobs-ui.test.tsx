@@ -4,7 +4,7 @@ import type { Job, MatchResult } from "@/shared/contracts";
 import { brand } from "@/shared/brand";
 import { personas } from "@/shared/sample-data";
 import { formatSalary, jobFacts } from "./format";
-import { JobChecker, JobForm, ProfileFirst } from "./job-checker";
+import { AdBox, JobChecker, JobForm, ProfileFirst } from "./job-checker";
 import { fitLabel, MatchReport } from "./match-report";
 
 // Render checks for the jobs page: they catch crashes and missing content.
@@ -155,6 +155,25 @@ describe("JobForm", () => {
     expect(text(html)).not.toContain("Get the ad");
     expect(text(html)).toContain("the profile you approved for Reza Karimi");
     expect(text(html)).toContain("Check my fit");
+  });
+
+  it("shows the person specification hint under the ad box, in a live region the box names (#420)", () => {
+    // Pasted without a link, so the ad itself names the NHS employer: a Band alone is not enough (#469).
+    const nhsAd = "Staff Nurse, Band 5, Castlefold NHS Trust. Main duties of the job: care for patients on the ward.";
+    const box = (ad: string) =>
+      renderToStaticMarkup(<AdBox hint="Paste the whole ad." ad={ad} link="" disabled={false} onChange={noop} />);
+    const describedBy = (html: string) => html.match(/<textarea[^>]*aria-describedby="([^"]*)"/)?.[1].split(" ") ?? [];
+
+    const withHint = box(nhsAd);
+    const hintId = withHint.match(/<div aria-live="polite"><p id="([^"]+)"[^>]*>NHS ads often keep/)?.[1];
+    expect(hintId, "the hint inside the live region").toBeDefined();
+    expect(describedBy(withHint)).toContain(hintId);
+    expect(describedBy(withHint)).toHaveLength(2);
+
+    // With the criteria in the ad, the live region stays, empty, for the hint to appear in.
+    const withCriteria = box(`${nhsAd}\nEssential criteria\n- NMC registration`);
+    expect(withCriteria).toContain('<div aria-live="polite"></div>');
+    expect(describedBy(withCriteria)).toHaveLength(1);
   });
 
   it("keeps an empty live region under each button, where the wait shows on screen (issue #235)", () => {

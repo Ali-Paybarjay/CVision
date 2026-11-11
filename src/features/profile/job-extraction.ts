@@ -126,9 +126,12 @@ export function checkAdText(raw: unknown): AdTextCheck {
     };
   }
   if (text.length > MAX_AD_CHARACTERS) {
+    // The size and the limit, and what to keep: a whole NHS PDF pasted under the ad goes over, and "only the ad"
+    // would have the user delete the very criteria the match needs (#420).
+    const count = (characters: number) => characters.toLocaleString("en-GB");
     return {
       ok: false,
-      message: "This is longer than a job ad usually is. Paste only the ad itself, not the whole web page.",
+      message: `This is ${count(text.length)} characters, and we can read up to ${count(MAX_AD_CHARACTERS)}. Keep the ad and what the employer asks for.`,
     };
   }
   return { ok: true, text };
