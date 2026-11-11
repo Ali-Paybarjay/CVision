@@ -20,9 +20,9 @@ export async function tailorModelAccess(): Promise<ModelAccess> {
  * What still works at the daily limit, which the limit's own message does not say (#314): nothing below needs the model.
  * A no to a gap question is kept too, so where questions can be answered `whatStillWorksOnQuestions` says so.
  */
-export const whatStillWorks = "You can still approve the changes you have, download your CV and open the employer's site.";
+export const whatStillWorks = "You can still approve the changes you have, download your CV and apply.";
 export const whatStillWorksOnQuestions =
-  "You can still answer No to a question, approve the changes you have, download your CV and open the employer's site.";
+  "You can still answer No to a question, approve the changes you have, download your CV and apply.";
 
 /**
  * The message the user sees when the model fails: at the daily limit its own message and then what still works

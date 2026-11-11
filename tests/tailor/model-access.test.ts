@@ -37,8 +37,11 @@ describe("modelFailureMessage", () => {
     expect(modelFailureMessage(error, "write the gap questions", "", "You can still answer No.")).toBe("You have reached today's limit. Try again tomorrow. You can still answer No.");
   });
 
-  it("names only things that need no model, in our voice", () => {
-    for (const text of [whatStillWorks, whatStillWorksOnQuestions]) expect(findBrandProblems(text)).toEqual([]);
+  it("names only things that need no model, in our voice, and no employer's site a pasted ad may not have (#468)", () => {
+    for (const text of [whatStillWorks, whatStillWorksOnQuestions]) {
+      expect(findBrandProblems(text)).toEqual([]);
+      expect(text).not.toContain("employer");
+    }
   });
 
   it("logs only the reason for any other failure, and shows the fallback", () => {

@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ChangeCard } from "@/app/tailor/change-card";
-import { GapCard, type GapPrompt } from "@/app/tailor/gap-card";
+import { GapCard, waitNote, waitsForModel, type GapPrompt } from "@/app/tailor/gap-card";
+import { findBrandProblems } from "@/features/tailor/brand-check";
 import type { TailoringChange } from "@/shared/contracts";
 import { GapHelp } from "@/app/tailor/gap-help";
 import { personas } from "@/shared/sample-data";
@@ -94,5 +95,23 @@ describe("the gap help", () => {
     expect(html).toContain('aria-label="Why we ask these questions"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("What is a gap?");
+  });
+});
+
+describe("the note while an answer waits for the model (#468)", () => {
+  it("shows for a yes, a typed no and the No button on a gap", () => {
+    expect(waitsForModel("sara-gap-3", "I used Git at work.")).toBe(true);
+    expect(waitsForModel("sara-gap-3", "No, not yet.")).toBe(true);
+    expect(waitsForModel("sara-gap-3", null)).toBe(true);
+  });
+
+  it("does not show for the No button on a Make it stronger question, which needs no model", () => {
+    expect(waitsForModel("stronger-ab12cd34", null)).toBe(false);
+    expect(waitsForModel("stronger-ab12cd34", "I ran it for 120 stores.")).toBe(true);
+  });
+
+  it("is true for a yes and a no alike, in our voice", () => {
+    expect(waitNote).toBe("Writing a suggestion from your answer. This can take up to 30 seconds.");
+    expect(findBrandProblems(waitNote)).toEqual([]);
   });
 });
