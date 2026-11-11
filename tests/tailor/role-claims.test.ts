@@ -137,16 +137,15 @@ describe("the holes the rule 14 review found in the Band and NMC check (#432)", 
       const answers = [{ gapId: gap.id, question: "", answer: "Yes", hasExperience: true }];
       expect(roleClaimAdded(nmcClaim, { profile: unregistered.profile, gaps: [gap], answers, role })).toBe("NMC");
     });
+    it("an NMC line after a bare \"Yes\" to the NMC gap: a yes counts only by its own words (#464)", () => {
+      const sources = { profile: unregistered.profile, gaps: unregistered.match.gaps, role };
+      for (const hasExperience of [true, false]) {
+        expect(roleClaimAdded(nmcLine, { ...sources, answers: [{ gapId: "clinical-gap-nmc", question: "", answer: "Yes", hasExperience }] })).toBe("NMC");
+      }
+    });
   });
 
   describe("kept", () => {
-    it("an NMC line after a typed \"Yes\" to the NMC gap, but not after a no", () => {
-      const answer = { gapId: "clinical-gap-nmc", question: "", answer: "Yes" };
-      const sources = { profile: unregistered.profile, gaps: unregistered.match.gaps, role };
-      expect(roleClaimAdded(nmcLine, { ...sources, answers: [{ ...answer, hasExperience: true }] })).toBeNull();
-      expect(roleClaimAdded(nmcLine, { ...sources, answers: [{ ...answer, hasExperience: false }] })).toBe("NMC");
-    });
-
     it.each(["NMC", "Nursing and Midwifery Council"])("an NMC line with a certificate issued by %s", (issuer) => {
       const profile = { ...unregistered.profile, certifications: [{ name: "Registered Nurse (Adult)", issuer }] };
       expect(roleClaimAdded(fromCv(lateShifts, "NMC-registered adult nurse coordinating late shifts"), { ...unregisteredSources, profile })).toBeNull();
@@ -165,6 +164,98 @@ describe("the holes the rule 14 review found in the Band and NMC check (#432)", 
     it("Leah's Band 5 under a role of Band 5/6", () => {
       const sources = { ...leahSources, role: { ...role, level: "Band 5/6" } };
       expect(roleClaimAdded({ ...plain, after: "Band 5 staff nurse leading late shifts" }, sources)).toBeNull();
+    });
+  });
+});
+
+describe("a yes counts only by its own words, and wishes, other people and spellings are read right (#464)", () => {
+  const leah = clinicalFixtures;
+  const nmcLine = fromCv(lateShifts, "Registered Nurse (Adult), NMC registered, coordinating late shifts with the nurse in charge");
+  const unregistered = unregisteredFixtures;
+  const gap = (id: string, requirement: string) => ({ id, requirement, importance: "essential" as const, kind: "missing" as const, detail: "" });
+  const yes = (gapId: string, answer: string) => [{ gapId, question: "", answer, hasExperience: true }];
+  const nmcSources = (requirement: string, answer: string) => {
+    const asked = gap("asked", requirement);
+    return { profile: unregistered.profile, gaps: [asked], answers: yes(asked.id, answer), role };
+  };
+
+  describe("rejected", () => {
+    it("NMC after a due-to-qualify answer to \"Current NMC registration, or due to qualify within six months\"", () => {
+      expect(roleClaimAdded(nmcClaim, nmcSources("Current NMC registration, or due to qualify within six months", "I'm a final-year student nurse and qualify in March."))).toBe("NMC");
+    });
+
+    it("NMC after a chosen Band 5 option to \"NMC registered nurse with post-registration experience at Band 5\"", () => {
+      expect(roleClaimAdded(nmcClaim, nmcSources("NMC registered nurse with post-registration experience at Band 5", "I completed my BSc in Adult Nursing in 2022."))).toBe("NMC");
+    });
+
+    it("Band 6 after Leah's acting-up answer to \"Previous Band 6 experience or experience of acting up\"", () => {
+      const asked = gap("asked", "Previous Band 6 experience or experience of acting up");
+      const sources = { profile: leah.profile, gaps: [asked], answers: yes(asked.id, "I acted up as nurse in charge on nights."), role };
+      expect(roleClaimAdded(band6Claim, sources)).toBe("Band 6");
+    });
+
+    it("HCPC after a GBC answer to \"HCPC registration as a Practitioner Psychologist, or eligibility for GBC with the BPS\"", () => {
+      const asked = gap("asked", "HCPC registration as a Practitioner Psychologist, or eligibility for GBC with the BPS");
+      const sources = { profile: unregistered.profile, gaps: [asked], answers: yes(asked.id, "I am eligible for GBC with the BPS."), role: { ...role, registration: "HCPC" } };
+      expect(roleClaimAdded(fromCv(lateShifts, "HCPC registered practitioner coordinating late shifts"), sources)).toBe("HCPC");
+    });
+
+    it("NMC rewritten from a line about other nurses", () => {
+      expect(roleClaimAdded(fromCv("Worked alongside NMC registered nurses on the ward", "NMC registered nurse on the ward"), { ...nmcSources("x", "x"), answers: [] })).toBe("NMC");
+    });
+
+    it("Band 6 rewritten from a line about the nurse in charge", () => {
+      const sources = { profile: leah.profile, gaps: [], answers: [], role };
+      expect(roleClaimAdded(fromCv("Support the Band 6 nurse in charge with handover", "As a Band 6 nurse, led handover"), sources)).toBe("Band 6");
+    });
+
+    it.each(["Seeking Band 6 roles", "NMC registration pending"])("a wish is no support: %s", (wish) => {
+      const profile = { ...unregistered.profile, followUpAnswers: [{ id: "f1", question: "Anything else?", answer: wish, answeredAt: "2026-11-01T10:00:00.000Z" }] };
+      expect(roleClaimAdded(wish.startsWith("NMC") ? nmcClaim : band6Claim, { profile, gaps: [], answers: [], role })).toBe(wish.startsWith("NMC") ? "NMC" : "Band 6");
+    });
+
+    it.each(["Band 5-6", "Bands 5 and 6", "Band 5 to 6", "Band 5 or 6"])("Band 6 under a role of %s", (level) => {
+      expect(roleClaimAdded(band6Claim, { profile: leah.profile, gaps: [], answers: [], role: { ...role, level } })).toBe("Band 6");
+    });
+
+    it("Band 6 acted up into, in a duty", () => {
+      const profile = { ...leah.profile, experience: [{ ...leah.profile.experience[0], duties: ["Acted up into a Band 6 role on nights"] }] };
+      expect(roleClaimAdded(band6Claim, { profile, gaps: [], answers: [], role })).toBe("Band 6");
+    });
+
+    it("Band 6 from Ward B6 in the line it rewrites", () => {
+      const sources = { profile: leah.profile, gaps: [], answers: [], role };
+      expect(roleClaimAdded(fromCv("Cared for patients on Ward B6", "As a Band 6 nurse, cared for patients on Ward B6"), sources)).toBe("Band 6");
+    });
+  });
+
+  describe("kept", () => {
+    it("a summary rewrite that keeps the wish to progress to a Band 6 role", () => {
+      const after = "Adult nurse with three years in acute medicine, keen to progress to a Band 6 role";
+      expect(roleClaimAdded(fromCv(leah.profile.summary, after), { profile: leah.profile, gaps: [], answers: [], role })).toBeNull();
+    });
+
+    it("an NMC line when the yes itself says NMC registered", () => {
+      expect(roleClaimAdded(nmcLine, nmcSources("Current NMC registration", "Yes, I have been NMC registered since 2021."))).toBeNull();
+    });
+
+    it("an NMC line with a certificate issued by the Nursing & Midwifery Council", () => {
+      const profile = { ...unregistered.profile, certifications: [{ name: "Registered Nurse (Adult)", issuer: "Nursing & Midwifery Council" }] };
+      expect(roleClaimAdded(nmcClaim, { profile, gaps: [], answers: [], role })).toBeNull();
+    });
+
+    it.each([
+      ["Promoted to Band 6 in 2024", "achievements"],
+      ["Appointed as a Band 6 sister in 2024", "duties"],
+    ])("a Band 6 the CV says they were given: %s", (line, field) => {
+      const profile = { ...leah.profile, experience: [{ ...leah.profile.experience[0], [field]: [line] }] };
+      expect(roleClaimAdded(band6Claim, { profile, gaps: [], answers: [], role })).toBeNull();
+    });
+
+    it("a Band 6 in a title as (B6), and a Ward B6 in a suggestion that claims no Band", () => {
+      const profile = { ...leah.profile, experience: [{ ...leah.profile.experience[0], title: "Senior Staff Nurse (B6)" }] };
+      expect(roleClaimAdded(band6Claim, { profile, gaps: [], answers: [], role })).toBeNull();
+      expect(roleClaimAdded(fromCv(lateShifts, "Coordinated late shifts on Ward B6"), { profile: leah.profile, gaps: [], answers: [], role })).toBeNull();
     });
   });
 });
