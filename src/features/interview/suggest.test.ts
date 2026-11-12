@@ -241,6 +241,9 @@ describe("the rules every suggested answer passes", () => {
     const us = sample("q1");
     us.sampleAnswer += " I analyzed the results.";
     expect(messages(us)).toContain("Use UK spelling.");
+    const verb = sample("q1");
+    verb.followUpTips[0].tip += " Practise saying it aloud.";
+    expect(messages(verb)).toContain('Never use the verb "practise" in any form or spelling: write prepare, rehearse or work through instead.');
     const banned = sample("q1");
     banned.points[0].text += " The result was guaranteed.";
     expect(messages(banned)).toContain("Uses a phrase the brand bans.");
@@ -344,7 +347,7 @@ describe("the suggest stage", () => {
       "Cleaned and joined weekly sales data from 120 stores using SQL and Python",
       "Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes",
     ]);
-    expect(provenance).toMatchObject({ stage: "suggest", prompt: "interview-suggest", version: "1.0.0" });
+    expect(provenance).toMatchObject({ stage: "suggest", prompt: "interview-suggest", version: "1.1.0" });
     expect(usage?.estimated).toBe(true);
   });
 
@@ -384,7 +387,7 @@ describe("the suggest stage", () => {
     const { suggestion, usage, provenance } = await suggestAnswer(ended, "q1", inputs, { requester: { userId: "u1" } });
     expect(suggestion.fallback).toBe(true);
     expect(usage).toMatchObject({ stage: "suggest", inputTokens: 900, estimated: false });
-    expect(provenance?.version).toBe("1.0.0");
+    expect(provenance?.version).toBe("1.1.0");
     expect(track).toHaveBeenCalledWith(suggestionFallbackEvent, { questionType: "cv-deep-dive", focus: "verify-claim", reason }, { userId: "u1" });
   });
 

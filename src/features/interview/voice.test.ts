@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as ai from "@/shared/ai";
 import { addAnswer, applyFollowUpDecision, askQuestion } from "./engine/session";
 import { analyseStep, evaluateAnswer, generateStep, reviewStep } from "./engine/stages";
-import { evaluationProblems, genericFeedbackHits, reportProblems, usSpellingHits } from "./engine/checks";
+import { evaluationProblems, genericFeedbackHits, practiseVerbHits, reportProblems, usSpellingHits } from "./engine/checks";
 import { fixtures } from "./fixtures";
 import { dataAnalystSara } from "./fixtures/data-analyst-sara";
 import { processEngineer } from "./fixtures/process-engineer";
 import { inputsFor } from "./test-support";
+
+const PRACTISE_VERB = 'Never use the verb "practise" in any form or spelling: write prepare, rehearse or work through instead.';
 
 const sample = processEngineer.answers.q1;
 const context = { lookForIds: ["q1-l1", "q1-l2", "q1-l3", "q1-l4"], mainAnswer: sample.main, followUpAnswer: null, followUpAsked: false };
@@ -25,6 +27,14 @@ describe("voice helpers", () => {
     expect(usSpellingHits("You said “I optimized the pipeline” but gave no figure.")).toEqual([]);
     expect(usSpellingHits("For a Data Center Technician role, name the cooling standard.", "Data Center Technician")).toEqual([]);
     expect(usSpellingHits("For a Data Center Technician role, analyze the cooling.", "Data Center Technician")).toEqual(["analyze"]);
+  });
+
+  it("finds the verb practise in any form or spelling, never the noun", () => {
+    expect(practiseVerbHits("Practise a few balances out loud, as you practised before.")).toEqual(["practise", "practised"]);
+    expect(practiseVerbHits("You practiced this, so keep practicing.")).toEqual(["practiced", "practicing"]);
+    expect(practiseVerbHits("In practice, the practices in your practice run were sound.")).toEqual([]);
+    expect(practiseVerbHits('You said "I practised the handover" but gave no date.')).toEqual([]);
+    expect(practiseVerbHits("A practising accountant signs it off.", "Practising accountant (ACCA)")).toEqual([]);
   });
 
   it("finds generic praise and advice", () => {
@@ -49,6 +59,15 @@ describe("answer feedback", () => {
     const centre = { ...sample.evaluation, strengths: ["You named the cooling checks a Data Center Technician runs first."] };
     expect(evaluationProblems(centre, { ...context, quotable: "Data Center Technician" }).map((p) => p.message)).not.toContain(
       "Use UK spelling in the feedback.",
+    );
+  });
+
+  it("rejects the verb practise, but not one the answer uses", () => {
+    expect(messages({ ...sample.evaluation, improvement: "Practise a few balances out loud." })).toContain(PRACTISE_VERB);
+    const own = { ...sample.evaluation, weaknesses: ["You practised the start-up once but gave no result."] };
+    expect(messages(own)).toContain(PRACTISE_VERB);
+    expect(evaluationProblems(own, { ...context, mainAnswer: `${sample.main} I practised the start-up once.` }).map((p) => p.message)).not.toContain(
+      PRACTISE_VERB,
     );
   });
 
@@ -108,6 +127,11 @@ describe("report", () => {
     const found = reportProblems({ ...report, priorities }, reportContext).map((p) => p.message);
     expect(found).toContain("Priorities must be specific to this job and these answers: no generic advice.");
     expect(found).toContain("Use UK spelling in the report.");
+  });
+
+  it("rejects the verb practise in the report", () => {
+    const priorities = [{ ...report.priorities[0], detail: `${report.priorities[0].detail} Practise it aloud twice.` }, ...report.priorities.slice(1)];
+    expect(reportProblems({ ...report, priorities }, reportContext).map((p) => p.message)).toContain(PRACTISE_VERB);
   });
 
   it("accepts a US spelling the role or an answer uses", () => {
