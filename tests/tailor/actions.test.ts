@@ -94,7 +94,15 @@ describe("answerGap", () => {
   });
 
   describe("a no in the user's own words counts as the No button (#245)", () => {
-    it.each(["No", "No, I have never used Power BI", "No, I don't have advanced Excel", "I don't have a CSCS card yet", "Not yet. I am still studying for a BSc in Computer Science"])(
+    it.each([
+      "No",
+      "No, I have never used Power BI",
+      "No, I don't have advanced Excel",
+      "I don't have a CSCS card yet",
+      "Not yet. I am still studying for a BSc in Computer Science",
+      "I'm not using Power BI yet.",
+      "Not used Power BI yet.",
+    ])(
       "%s adds nothing and shows a next step",
       async (typed) => {
         const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, chosen: typed, typed: true });
@@ -103,7 +111,14 @@ describe("answerGap", () => {
       },
     );
 
-    it.each(["I used Power BI at work.", "No problem, I used Power BI for three years.", "I don't just use Tableau, Power BI too.", "No-code Power BI reports for the sales team."])(
+    it.each([
+      "I used Power BI at work.",
+      "No problem, I used Power BI for three years.",
+      "I don't just use Tableau, Power BI too.",
+      "No-code Power BI reports for the sales team.",
+      "I'm not sure, but I used Power BI on placement.",
+      "I'm not just a Power BI user, I built the reports.",
+    ])(
       "%s stays a yes, but its words are for the model to read and never become the skill by themselves",
       async (typed) => {
         const result = await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, chosen: typed, typed: true });

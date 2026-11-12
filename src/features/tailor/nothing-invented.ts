@@ -161,10 +161,34 @@ function withoutOthers(text: string, term: string): string {
   const name = `\\(?${escaped(term)}\\)?`;
   const people = "nurses|staff|colleagues|doctors|midwives|practitioners|professionals|clinicians|nurse in charge|sister|charge nurse";
   const forOthers = new RegExp(
-    `\\b(?:alongside|with|under|support(?:ed|ing)?|assist(?:ed|ing)?|help(?:ed|ing)?|shadow(?:ed|ing)?)\\s+(?:the\\s+|a\\s+|an\\s+|other\\s+)?${name}|${name}\\s+(?:registered\\s+)?(?:${people})\\b`,
+    // "Registered with the NMC" is the user's own registration, so "with" after registered or registration is not about others.
+    `\\b(?:alongside|(?<!\\bregist(?:ered|ration)\\s)with|under|support(?:ed|ing)?|assist(?:ed|ing)?|help(?:ed|ing)?|shadow(?:ed|ing)?)\\s+(?:the\\s+|a\\s+|an\\s+|other\\s+)?${name}|${name}\\s+(?:registered\\s+)?(?:${people})\\b`,
     "g",
   );
   return text.replace(forOthers, " ");
+}
+
+/**
+ * A clause about a registration the user does not hold now: not yet, once they qualify, pending, lapsed, approved
+ * programmes, pre-registration, students and trainees (#483). Student and trainee only when no plural noun follows
+ * within two words, so "mentors student nurses" stays; plan, hope, aim and intend only with "to", so "care plans" stays.
+ */
+const notHeldNow = new RegExp(
+  String.raw`\b(?:not|no|never|yet|until|once|will|eligible|expect(?:s|ed|ing)?|(?:hop(?:e|es|ing)|plan(?:s|ning)?|aim(?:s|ing)?|intend(?:s|ing)?) to|pending|await(?:s|ed|ing)?|due|lapsed|expired|approved|exams?|leads? to|leading to|(?:on|upon) (?:qualifying|completion)|pre-registration|re-registration|registration assessment|(?:student|trainee)(?! (?:[a-z-]+ )?[a-z-]+s\b))\b|n't\b|'ll\b`,
+);
+
+/**
+ * Without the registration term in every clause of a supporting line that says it is not held now (#483): "I'm not NMC
+ * registered yet", "eligible for NMC registration in September", "my NMC registration lapsed". Only for a registration,
+ * only on the side of the support: at worst a true line stays out.
+ */
+function heldNow(line: string, { term, kind }: RoleTerm): string {
+  if (kind !== "registration") return line;
+  const name = new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`, "g");
+  return line
+    .split(/(?<=[,;.])/)
+    .map((clause) => (notHeldNow.test(clause) ? clause.replace(name, " ") : clause))
+    .join("");
 }
 
 /** A Band the user was given: "Promoted to Band 6 in 2023", "Appointed as a Band 6 sister". Acting up is not one. */
@@ -178,10 +202,12 @@ function promotedTo(line: string, term: string): string {
  * user gave about themselves supports (#422, #432, #464). Both sides are read in one spelling, and a term named only as
  * something wanted never counts, on either side.
  * - Support for a Band or grade: their job titles (with "(B6)"), and a duty or achievement that says they were
- *   promoted or appointed to it. For a registration: their job titles, skills and certificates, name and issuer. The
- *   summary does not count ("Looking for a Band 6 role" is a wish), nor do other duties.
+ *   promoted or appointed to it. For a registration: their job titles, skills and certificates, name and issuer, and
+ *   a summary or degree line that says they are registered (#466). Other duties never count.
  * - For both: the line the change rewrites, unless it names the term for someone else ("alongside NMC registered
- *   nurses"), their follow-up answers, and the words of each yes answer. A yes counts only by its own words, not by
+ *   nurses"), their follow-up answers, and the words of each yes answer.
+ * - For a registration, every supporting line except titles, skills and certificates loses each clause that says it is
+ *   not held now (heldNow, #483): "I'm not NMC registered yet", "eligible for NMC registration", "pre-registration". A yes counts only by its own words, not by
  *   the requirement it answers: "I qualify in March" is a yes to the NMC gap, not NMC registration (#464). So a bare
  *   "Yes" supports nothing, which at worst leaves out a true line.
  */
@@ -194,10 +220,12 @@ export function roleClaimAdded(change: ProposedChange, sources: EvidenceSources)
 
 /**
  * A line that says the user is registered, outside the lines registration support usually comes from: their summary and
- * their degree (#466). Only with "register", "registered" or "registration", and without "not" or "not yet" before it,
- * so "NMC approved" on a degree, or "not yet NMC registered", is no support.
+ * their degree (#466, #483). Only with "register", "registered" or "registration", not "pre-registration", and without
+ * "not" before it, so "NMC approved" on a degree is no support. A clause that says the registration is not held now
+ * has already lost its term in heldNow.
  */
-const saysRegistered = (line: string) => /\bregist(?:er|ered|ration)\b/.test(line) && !/\bnot\b[^,;.]*\bregist(?:er|ered|ration)\b/.test(line);
+const saysRegistered = (line: string) =>
+  /(?<!\bpre-)\bregist(?:er|ered|ration)\b/.test(line) && !/\bnot\b[^,;.]*\bregist(?:er|ered|ration)\b/.test(line);
 
 /** Whether something the user gave about themselves supports the term: see roleClaimAdded for what counts. */
 function supportedRoleTerm(roleTerm: RoleTerm, before: string, { profile, answers }: EvidenceSources): boolean {
@@ -208,18 +236,19 @@ function supportedRoleTerm(roleTerm: RoleTerm, before: string, { profile, answer
   const shared = [
     ...profile.followUpAnswers.map((item) => item.answer),
     ...answers.filter((answer) => answer.hasExperience).map((answer) => ownWords(answer.answer)),
-  ].map((line) => oneSpelling(line));
+  ].map((line) => heldNow(oneSpelling(line), roleTerm));
   const own =
     kind === "level"
       ? [...titles, ...profile.experience.flatMap((job) => [...job.duties, ...job.achievements]).map((line) => promotedTo(oneSpelling(line), term))]
       : [
           ...titles,
           ...[...profile.skills, ...profile.certifications.flatMap((item) => [item.name, item.issuer ?? ""])].map((line) => oneSpelling(line)),
+          // Not about others, held now, and about being registered (#483). Titles skip withoutOthers: "Band 6 Sister" is their own.
           ...[profile.summary, ...profile.education.flatMap((item) => [item.qualification, item.subject ?? ""])]
-            .map((line) => oneSpelling(line))
+            .map((line) => heldNow(withoutOthers(oneSpelling(line), term), roleTerm))
             .filter(saysRegistered),
         ];
-  return [withoutOthers(before, term), ...own, ...shared].some((line) => has(withoutJobsWanted(line, roleTerm), term));
+  return [heldNow(withoutOthers(before, term), roleTerm), ...own, ...shared].some((line) => has(withoutJobsWanted(line, roleTerm), term));
 }
 
 /** "I am a", "As a", "I have worked as a", "I hold", "my": the ways a letter says something is the person's own. */

@@ -85,13 +85,14 @@ function namesSeveral(requirement: string): boolean {
 }
 
 /**
- * True when the words the user wrote start by saying they have not done it, e.g. "No", "Not yet. I am still studying"
- * or "I don't have a CSCS card yet". Not "No problem, I ran it" or "I don't just use Excel".
+ * True when the words the user wrote start by saying they have not done it, e.g. "No", "Not yet. I am still studying",
+ * "I don't have a CSCS card yet", "I'm not NMC registered yet" or "Not used Power BI yet" (#483). Not "No problem, I ran
+ * it", "I don't just use Excel" or "I'm not sure, but I used it".
  */
 function saysNo(text: string): boolean {
   const answer = text.trim().toLowerCase().replace(/[’]/g, "'");
-  if (/^(no problem|no doubt|not only|not just|i (don't|do not) (just|only))\b/.test(answer)) return false;
-  return /^(no(?!-)|nope|nah|not yet|not really|none)\b|^never (used|done|had|worked|held)\b|^i (have not|haven't|havent|have never|haven't ever|do not|don't|dont|did not|didn't|didnt|never)\b/.test(answer);
+  if (/^(no problem|no doubt|not only|not just|i (don't|do not) (just|only)|(i'm|i am) not (sure|only|just))\b/.test(answer)) return false;
+  return /^(no(?!-)|nope|nah|not yet|not really|none)\b|^never (used|done|had|worked|held)\b|^i (have not|haven't|havent|have never|haven't ever|do not|don't|dont|did not|didn't|didnt|never)\b|^(i'm|i am)( still)? not\b|^not\b[^.,;]*\byet\b/.test(answer);
 }
 
 /** The next step for a "no" when the model gives none, or cannot be asked. */
