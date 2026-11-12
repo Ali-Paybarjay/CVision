@@ -7,7 +7,7 @@ import { personas } from "@/shared/sample-data";
 import { nothingInventedCases } from "./nothing-invented.cases";
 
 describe.skipIf(!getAiProvider())("Nothing invented (live)", () => {
-  it.each(nothingInventedCases)("$name", async ({ persona, answers, forbidden, sample }) => {
+  it.each(nothingInventedCases)("$name", async ({ persona, answers, forbidden, notFirstWords, sample }) => {
     const { profile, jobs, match } = personas[persona];
     const proposal = await askForProposal({ profile, job: jobs[0], match, answers, sample });
 
@@ -19,6 +19,8 @@ describe.skipIf(!getAiProvider())("Nothing invented (live)", () => {
       for (const word of forbidden) {
         expect(after.includes(word) && !before.includes(word), `"${word}" added in: ${change.after}`).toBe(false);
       }
+      const firstWord = after.trim().split(/\s+/)[0];
+      expect(notFirstWords.includes(firstWord), `starts with "${firstWord}" for work done only in part: ${change.after}`).toBe(false);
     }
   });
 });
