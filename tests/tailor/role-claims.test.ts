@@ -259,3 +259,74 @@ describe("a yes counts only by its own words, and wishes, other people and spell
     });
   });
 });
+
+describe("NMC is supported only by a line that says the user holds it now (#483)", () => {
+  const base = unregisteredFixtures.profile;
+  const careFor = fromCv("Care for up to eight acutely unwell patients on a 32-bed acute medical unit", "As an NMC registered nurse, care for up to eight acutely unwell patients");
+  const check = (profile: typeof base, change = careFor, extra: Partial<{ answers: { gapId: string; question: string; answer: string; hasExperience: boolean }[]; registration: string }> = {}) =>
+    roleClaimAdded(change, { profile, gaps: unregisteredFixtures.match.gaps, answers: extra.answers ?? [], role: { ...role, registration: extra.registration ?? role.registration } });
+  const withSummary = (summary: string) => ({ ...base, summary });
+  const withDegree = (qualification: string) => ({ ...base, education: [{ ...base.education[0], qualification }] });
+  const followUp = (answer: string) => ({ ...base, followUpAnswers: [{ id: "f1", question: "Anything else?", answer, answeredAt: "2026-11-01T10:00:00.000Z" }] });
+
+  describe("rejected", () => {
+    it.each([
+      "Healthcare assistant working alongside NMC registered nurses on a busy acute ward.",
+      "Final-year pre-registration student nurse on an NMC-approved programme.",
+      "Final-year adult nursing student, eligible for NMC registration in September 2027.",
+      "Student nurse with NMC registration from September 2027.",
+      "Return to practice nurse; my NMC registration lapsed in 2019.",
+    ])("after a summary that only talks about registration: %s", (summary) => {
+      expect(check(withSummary(summary))).toBe("NMC");
+    });
+
+    it.each(["BSc (Hons) Adult Nursing (pre-registration), NMC approved", "BSc (Hons) Adult Nursing (leads to NMC registration)"])("after the degree %s", (degree) => {
+      expect(check(withDegree(degree))).toBe("NMC");
+    });
+
+    it("when the HCA summary is itself rewritten", () => {
+      const summary = "Healthcare assistant working alongside NMC registered nurses on a busy acute ward.";
+      expect(check(withSummary(summary), fromCv(summary, "NMC registered nurse on a busy acute ward."))).toBe("NMC");
+    });
+
+    it("from a line that says not yet, and from a follow-up answer that says no", () => {
+      expect(check(base, fromCv("Adult nurse, not yet NMC registered.", "NMC registered adult nurse."))).toBe("NMC");
+      expect(check(followUp("No, I'm not NMC registered yet."))).toBe("NMC");
+    });
+
+    it("GPhC after a registration assessment, in the summary or in a yes", () => {
+      const gphc = fromCv("Care for up to eight acutely unwell patients on a 32-bed acute medical unit", "As a GPhC registered pharmacist, check prescriptions");
+      expect(check(withSummary("Pre-registration trainee pharmacist preparing for the GPhC registration assessment in June."), gphc, { registration: "GPhC" })).toBe("GPhC");
+      const answers = [{ gapId: "x", question: "", answer: "I sit the GPhC registration assessment in June.", hasExperience: true }];
+      expect(check(base, gphc, { answers, registration: "GPhC" })).toBe("GPhC");
+    });
+
+    it("after a certificate that says pending, and HCPC from eligible for HCPC registration", () => {
+      expect(check({ ...base, certifications: [{ name: "NMC registration (pending)" }] })).toBe("NMC");
+      const hcpc = fromCv("Care for up to eight acutely unwell patients on a 32-bed acute medical unit", "As an HCPC registered practitioner, care for patients");
+      expect(check(withSummary("Psychology graduate, eligible for HCPC registration."), hcpc, { registration: "HCPC" })).toBe("HCPC");
+    });
+  });
+
+  describe("kept", () => {
+    it.each([
+      "NMC registered adult nurse with three years on an acute unit.",
+      "NMC-registered adult nurse with three years on an acute unit.",
+      "Adult nurse (NMC) with two years' post-registration experience.",
+      "Registered with the NMC since 2021, working on an acute unit.",
+      "NMC registered nurse who mentors student nurses on placement.",
+      "NMC registered adult nurse experienced in patient assessment and IV therapy.",
+    ])("a summary that says they hold it: %s", (summary) => {
+      expect(check(withSummary(summary))).toBeNull();
+    });
+
+    it("a degree with NMC registration, and Leah's certificate", () => {
+      expect(check(withDegree("BSc (Hons) Adult Nursing, NMC registration 2022"))).toBeNull();
+      expect(check(clinicalFixtures.profile)).toBeNull();
+    });
+
+    it.each(["NMC registration pending", "Awaiting my NMC PIN, expected in May"])("%s is still a wish, not support", (wish) => {
+      expect(check(followUp(wish))).toBe("NMC");
+    });
+  });
+});

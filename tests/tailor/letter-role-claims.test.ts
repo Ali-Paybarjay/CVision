@@ -136,3 +136,37 @@ describe("the letter's check takes out only a claim in the first person (#466)",
     expect(await createCoverLetter(request)).not.toHaveProperty("note");
   });
 });
+
+describe("the letter after an answer or a line that says the user is not registered now (#483)", () => {
+  const nmcGap = "clinical-gap-nmc";
+
+  it("takes out the NMC sentence, with a note, after a yes that says not yet", async () => {
+    const answers = [{ gapId: nmcGap, question: "Do you hold current NMC registration?", answer: "I'm not NMC registered yet, I qualify in March.", hasExperience: true }];
+    writeCoverLetter.mockResolvedValue(letter(applying, `${nmc} ${ivTherapy}`));
+    const result = await createCoverLetter({ ...request, answers });
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      expect(result.text).not.toContain("NMC registered");
+      expect(result.note).toContain("“NMC”");
+    }
+  });
+
+  it("takes out the NMC sentence after No, not yet, with a pre-registration summary", async () => {
+    data.fixtures = { ...unregisteredFixtures, profile: { ...unregisteredFixtures.profile, summary: "Final-year pre-registration student nurse on an NMC-approved programme." } };
+    writeCoverLetter.mockResolvedValue(letter(applying, `${nmc} ${ivTherapy}`));
+    const result = await createCoverLetter(request);
+    expect(result.ok && result.text).not.toContain("NMC registered");
+  });
+
+  it.each([
+    "Healthcare assistant working alongside NMC registered nurses on a busy acute ward.",
+    "Final-year pre-registration student nurse on an NMC-approved programme.",
+    "Final-year adult nursing student, eligible for NMC registration in September 2027.",
+    "Student nurse with NMC registration from September 2027.",
+    "Return to practice nurse; my NMC registration lapsed in 2019.",
+  ])("finds the NMC claim in a letter for a summary of %s", (summary) => {
+    const { job, match, answers } = unregisteredFixtures;
+    const profile = { ...unregisteredFixtures.profile, summary };
+    expect(letterRoleClaim("As an NMC registered nurse, I give IV therapy.", job.title, { profile, gaps: match.gaps, answers, role: job.role })).toBe("NMC");
+  });
+});

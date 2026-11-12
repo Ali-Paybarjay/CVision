@@ -44,3 +44,27 @@ describe("answerGap after a yes that is not registration (#464)", () => {
     }
   });
 });
+
+describe("answerGap after an answer that says the user is not registered now (#483)", () => {
+  it.each([
+    ["I'm not NMC registered yet, I qualify in March.", "I qualify in March"],
+    ["Not NMC registered yet.", "Not NMC registered yet"],
+    ["I'll be NMC registered in March.", "NMC registered in March"],
+    ["I expect to be NMC registered by May.", "NMC registered by May"],
+    ["I'm a student nurse and get my NMC PIN in March.", "get my NMC PIN in March"],
+    ["I completed an NMC-approved BSc in Adult Nursing in 2022.", "BSc in Adult Nursing"],
+  ])("keeps no NMC line after %s, typed or tapped", async (answer, evidence) => {
+    askModel.mockResolvedValue(proposal(evidence));
+    for (const request of [{ answer: "", chosen: answer, typed: true }, { answer: "", chosen: answer }]) {
+      const result = await answerGap({ jobId: unregisteredFixtures.job.id, gapId, hasExperience: true, ...request });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.changes.map((change) => change.after), answer).toEqual([]);
+    }
+  });
+
+  it.each(["I'm not NMC registered yet, I qualify in March.", "Not NMC registered yet."])("reads a typed %s as a no", async (answer) => {
+    askModel.mockResolvedValue(proposal("NMC"));
+    const result = await answerGap({ jobId: unregisteredFixtures.job.id, gapId, hasExperience: true, answer: "", chosen: answer, typed: true });
+    expect(result).toMatchObject({ ok: true, hasExperience: false, changes: [] });
+  });
+});
