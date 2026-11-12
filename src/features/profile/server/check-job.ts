@@ -74,6 +74,9 @@ export async function matchJob(
   job: Job,
   options: { requester?: Requester } = {},
 ): Promise<{ match: MatchResult; judged: JudgedRequirement[]; unsupported: string[] }> {
+  // Nothing to judge, as when every requirement is a condition of the job (#222): no request to the model.
+  if (jobRequirements(job).length === 0) return buildMatchResult(job, profile, { requirements: [], reasoning: "" });
+
   const assessment = await askModel({
     feature: "profile-match",
     prompt: await matchPrompt(profile, job),

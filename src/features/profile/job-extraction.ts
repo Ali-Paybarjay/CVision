@@ -1,6 +1,17 @@
 import { z } from "zod";
-import { ContractTypeSchema, HoursSchema, JobRoleSchema, JobSchema, WorkModeSchema, type Job, type JobRole, type Salary } from "@/shared/contracts";
+import {
+  ContractTypeSchema,
+  HoursSchema,
+  JobConditionKindSchema,
+  JobRoleSchema,
+  JobSchema,
+  WorkModeSchema,
+  type Job,
+  type JobRole,
+  type Salary,
+} from "@/shared/contracts";
 import { uniqueLines } from "./cv-extraction";
+import { jobConditions } from "./job-conditions";
 
 // A pasted job ad becomes a Job in two parts: the model reads the facts (title, pay, requirements…),
 // and the code adds what the model must not touch: the id, the ad text as pasted, the link and the source.
@@ -43,6 +54,8 @@ export const JobExtractionSchema = z.object({
   }),
   /** Each part empty when the ad does not say (#398). */
   role: JobRoleSchema,
+  /** The requirements that are conditions of the job, each copied from `requirements` (#222). */
+  conditions: z.array(z.object({ requirement: z.string(), kind: JobConditionKindSchema })),
 });
 export type JobExtraction = z.infer<typeof JobExtractionSchema>;
 
@@ -56,6 +69,11 @@ export function jobFromExtraction(
   const desirable = uniqueLines(extraction.requirements.desirable)
     .filter((line) => !listed.has(line.toLowerCase()))
     .slice(0, MAX_DESIRABLE);
+  // Only conditions that are one of the kept requirements word for word: any other stays an ordinary requirement (#222).
+  const conditions = jobConditions({
+    requirements: { essential, desirable },
+    conditions: extraction.conditions.map((condition) => ({ ...condition, requirement: condition.requirement.trim() })),
+  });
 
   return JobSchema.parse({
     id: details.id,
@@ -71,6 +89,7 @@ export function jobFromExtraction(
     url: details.url,
     source: "pasted",
     ...roleFrom(extraction.role),
+    conditions,
   });
 }
 
@@ -99,6 +118,7 @@ export function extractionFromJob(job: Job): JobExtraction {
     workMode: job.workMode,
     requirements: job.requirements,
     role: job.role ?? noRole,
+    conditions: jobConditions(job),
   };
 }
 

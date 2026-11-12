@@ -1,10 +1,17 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { askModel } from "@/shared/ai";
 import { cleanModelText } from "@/shared/clean-text";
 import { personas } from "@/shared/sample-data";
 import { JobExtractionSchema } from "../job-extraction";
 import { MatchAssessmentSchema, profileEvidenceLines } from "../match";
 import { jobPrompt, matchJob, matchPrompt, parseJob, sampleJobFor } from "./check-job";
+
+// askModel as it is, counted, so a test can see when no request was made.
+vi.mock("@/shared/ai", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/shared/ai")>();
+  return { ...original, askModel: vi.fn(original.askModel) };
+});
 
 const emmaJob = personas.emma.jobs[1];
 
@@ -57,6 +64,15 @@ describe("jobPrompt", () => {
 
     expect(prompt).toContain('"PROBITY" is "Probity"');
     expect(prompt).toContain("Never let such a note take the place of a criterion.");
+  });
+
+  it("marks the conditions of the job by kind, never a registration, qualification or skill (#222)", async () => {
+    const prompt = await jobPrompt("A job ad.");
+
+    expect(prompt).toContain("## Marking the conditions");
+    expect(prompt).toContain("copy its `requirement` exactly as you wrote it in `requirements`");
+    for (const kind of ['"credential"', '"working"', '"sensitive"']) expect(prompt).toContain(kind);
+    expect(prompt).toContain("registration with a professional body (for example NMC, GMC or HCPC)");
   });
 
   it("puts the ad inside its own section, so text in it can't close the section early", async () => {
@@ -173,6 +189,27 @@ describe("matchPrompt", () => {
 });
 
 describe("matchJob in mock mode", () => {
+  it("leaves the job's conditions out of the request, numbering the rest without gaps (#222)", async () => {
+    const job = personas.daniel.jobs[1];
+
+    const prompt = await matchPrompt(personas.daniel.profile, job);
+
+    expect(job.requirements.essential).toContain("Full UK driving licence");
+    expect(prompt).not.toMatch(/E\d \(essential\): Full UK driving licence/);
+    expect(prompt).toContain("E3 (essential): Commercial awareness");
+    expect(prompt).not.toContain("E4 (essential)");
+  });
+
+  it("asks no model when every requirement is a condition (#222)", async () => {
+    const job = { ...personas.daniel.jobs[1], requirements: { essential: ["Full UK driving licence"], desirable: [] } };
+    vi.mocked(askModel).mockClear();
+
+    const { match } = await matchJob(personas.daniel.profile, job);
+
+    expect(askModel).not.toHaveBeenCalled();
+    expect(match.reasoning).toContain("Everything this ad asks for is a licence, a check or a working condition");
+  });
+
   it("matches the job by simple rules, quoting only real profile lines", async () => {
     const { profile, jobs } = personas.reza;
 

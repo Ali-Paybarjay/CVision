@@ -248,3 +248,108 @@ describe("assessByRules (the mock answer)", () => {
     expect(requirements.find((answer) => answer.id === "E1")?.status).toBe("unclear");
   });
 });
+
+describe("the job's conditions (#222)", () => {
+  // The fictional Area Operations Manager ad of the 31 October check: four skills and six conditions.
+  const adA: Job = {
+    ...saraJob,
+    requirements: {
+      essential: [
+        "Experience leading large retail teams",
+        "KPI reporting to senior leadership",
+        "Strong health and safety knowledge",
+        "Full clean driving licence",
+        "Willingness to travel within the UK and internationally",
+        "Weekend and night shift cover when needed",
+        "Enhanced DBS check",
+        "Able to lift up to 25kg",
+      ],
+      desirable: ["CSCS card", "Stock control experience"],
+    },
+    conditions: [
+      { requirement: "Full clean driving licence", kind: "credential" },
+      { requirement: "Willingness to travel within the UK and internationally", kind: "working" },
+      { requirement: "Weekend and night shift cover when needed", kind: "working" },
+      { requirement: "Enhanced DBS check", kind: "sensitive" },
+      { requirement: "Able to lift up to 25kg", kind: "sensitive" },
+      { requirement: "CSCS card", kind: "credential" },
+    ],
+  };
+  const daniel = personas.daniel.profile;
+
+  it("leaves them out of the requirements to judge, numbered without gaps", () => {
+    expect(jobRequirements(adA).map((requirement) => `${requirement.id} ${requirement.text}`)).toEqual([
+      "E1 Experience leading large retail teams",
+      "E2 KPI reporting to senior leadership",
+      "E3 Strong health and safety knowledge",
+      "D1 Stock control experience",
+    ]);
+  });
+
+  it("keeps them out of the score, the strengths, the gaps and the uncovered list, and counts only the rest", () => {
+    const assessment: MatchAssessment = {
+      requirements: [
+        { id: "E1", status: "met", evidence: lineId(daniel, daniel.experience[0].duties[0]), detail: "" },
+        { id: "E2", status: "unclear", evidence: "", detail: "" },
+        { id: "E3", status: "missing", evidence: "", detail: "" },
+        { id: "D1", status: "missing", evidence: "", detail: "" },
+        // An answer for a condition is ignored: there is no D2 to judge.
+        { id: "D2", status: "met", evidence: lineId(daniel, daniel.experience[0].duties[0]), detail: "" },
+      ],
+      reasoning: "",
+    };
+
+    const { match } = buildMatchResult(adA, daniel, assessment);
+
+    // (3 + 1.5) out of (3 × 3 + 1): the six conditions don't count.
+    expect(match.score).toBe(45);
+    expect(match.strengths.map((strength) => strength.requirement)).toEqual(["Experience leading large retail teams"]);
+    expect(match.gaps.map((gap) => gap.requirement)).toEqual([
+      "KPI reporting to senior leadership",
+      "Strong health and safety knowledge",
+      "Stock control experience",
+    ]);
+    expect(match.uncoveredRequirements).toEqual(["Strong health and safety knowledge", "Stock control experience"]);
+    expect(match.reasoning).toMatch(/^Your profile clearly shows 1 of the 3 essential requirements and 0 of the 1 desirable ones\./);
+  });
+
+  it("says why there is no score when every requirement is a condition, never that the ad looks incomplete", () => {
+    const job: Job = {
+      ...saraJob,
+      requirements: { essential: ["Full UK driving licence", "Enhanced DBS check"], desirable: ["Willing to work weekends"] },
+    };
+
+    const { match, judged } = buildMatchResult(job, daniel, { requirements: [], reasoning: "A strong fit." });
+
+    expect(judged).toEqual([]);
+    expect(match.score).toBe(0);
+    expect([match.strengths, match.gaps, match.uncoveredRequirements]).toEqual([[], [], []]);
+    expect(match.reasoning).toBe(
+      "Everything this ad asks for is a licence, a check or a working condition, so there is nothing to score against your experience. Check each one below before you apply.",
+    );
+    expect(match.reasoning).not.toContain("pasted the whole ad");
+    expect(summariseMatch([], 3)).toBe(match.reasoning);
+  });
+
+  it("scores a requirement as before when the model marked it in other words", () => {
+    const job: Job = {
+      ...saraJob,
+      requirements: { essential: ["Strong SQL", "Full clean UK driving licence"], desirable: [] },
+      conditions: [{ requirement: "Full UK driving licence", kind: "credential" }],
+    };
+
+    expect(jobRequirements(job).map((requirement) => requirement.text)).toEqual(["Strong SQL", "Full clean UK driving licence"]);
+    const { match } = buildMatchResult(job, sara, assessByRules(sara, job));
+    expect(match.gaps.map((gap) => gap.requirement)).toContain("Full clean UK driving licence");
+  });
+
+  it("leaves them out of the mock answer too, through the word list for a job read before they were marked", () => {
+    const danielJob = personas.daniel.jobs[1];
+
+    const { match } = buildMatchResult(danielJob, daniel, assessByRules(daniel, danielJob));
+
+    expect([...match.strengths.map((item) => item.requirement), ...match.gaps.map((gap) => gap.requirement)]).not.toContain(
+      "Full UK driving licence",
+    );
+  });
+});

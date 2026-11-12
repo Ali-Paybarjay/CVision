@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Gap, Job, MatchResult } from "@/shared/contracts";
+import type { Gap, Job, JobConditionKind, MatchResult } from "@/shared/contracts";
 import { Button, ButtonLink, Card, CheckIcon, Notice, WarningIcon } from "@/shared/ui";
 import type { SaveState } from "../job-actions";
+import { conditionGroups, type ConditionGroup } from "../job-conditions";
 import { jobFacts } from "./format";
 import { SignInNotice } from "./upload-step";
 
@@ -23,6 +24,7 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
   const hasRequirements = match.strengths.length + match.gaps.length > 0;
   const essentialGaps = match.gaps.filter((gap) => gap.importance === "essential");
   const desirableGaps = match.gaps.filter((gap) => gap.importance === "desirable");
+  const conditions = conditionGroups(job);
   // /tailor reads the job from the user's account, or in the demo from the sample data (see checkJobAction).
   // A job that wasn't saved isn't in either, so the button would open a different job.
   const canTailor = saved === "saved" || (demo !== null && saved !== "failed");
@@ -108,6 +110,8 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         </Card>
       )}
 
+      {conditions.length > 0 && <ConditionsCard groups={conditions} />}
+
       {saved === "signed-out" && <SignInNotice title="Sign in to keep this job" next="/jobs" />}
       {saved === "failed" && (
         <Notice tone="warning" title="This job isn’t saved to your account">
@@ -166,6 +170,37 @@ function GapList({ title, gaps }: { title: string; gaps: Gap[] }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+const conditionTitles: Record<JobConditionKind, string> = {
+  credential: "Licences and cards",
+  working: "Working conditions",
+  sensitive: "For you to check",
+};
+
+/** The job's conditions, such as a driving licence or night shifts, apart from the score (#222). */
+function ConditionsCard({ groups }: { groups: ConditionGroup[] }) {
+  return (
+    <Card>
+      <h3 className="text-xl">Other things this job asks for</h3>
+      <p className="mt-2 max-w-[65ch] text-text-muted">
+        We don’t count these in your score. Check each one before you apply.
+      </p>
+      {groups.map((group) => (
+        <div key={group.kind} className="mt-5">
+          <h4 className="text-sm font-semibold text-text-muted">{conditionTitles[group.kind]}</h4>
+          <ul className="mt-3 flex list-disc flex-col gap-2 pl-5">
+            {group.items.map((item) => (
+              <li key={item.requirement}>
+                {item.requirement}
+                {item.desirable && <span className="text-text-muted"> (desirable)</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </Card>
   );
 }
 

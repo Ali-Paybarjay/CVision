@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MatchResultSchema, type Gap, type Job, type MatchResult, type Profile, type Strength } from "@/shared/contracts";
+import { jobConditions } from "./job-conditions";
 import { formatPeriod } from "./ui/format";
 
 // A match is judged one requirement at a time. The model (or, in mock mode, simple rules) says whether the
@@ -68,10 +69,16 @@ export type Importance = "essential" | "desirable";
 /** One requirement of the job, numbered E1, E2… (essential) and D1, D2… (desirable) for the model. */
 export type JobRequirement = { id: string; text: string; importance: Importance };
 
+/**
+ * The requirements a match judges and scores. The job's conditions (#222), such as a driving licence or night shifts,
+ * are left out: they are not in the score, the strengths or the gaps, and /jobs shows them apart.
+ */
 export function jobRequirements(job: Job): JobRequirement[] {
+  const conditions = new Set(jobConditions(job).map((condition) => condition.requirement));
+  const scored = (texts: string[]) => texts.filter((text) => !conditions.has(text));
   return [
-    ...job.requirements.essential.map((text, index) => ({ id: `E${index + 1}`, text, importance: "essential" as const })),
-    ...job.requirements.desirable.map((text, index) => ({ id: `D${index + 1}`, text, importance: "desirable" as const })),
+    ...scored(job.requirements.essential).map((text, index) => ({ id: `E${index + 1}`, text, importance: "essential" as const })),
+    ...scored(job.requirements.desirable).map((text, index) => ({ id: `D${index + 1}`, text, importance: "desirable" as const })),
   ];
 }
 
@@ -157,7 +164,10 @@ export function buildMatchResult(
     strengths,
     uncoveredRequirements: judged.filter((item) => item.status === "missing").map((item) => item.text),
     gaps,
-    reasoning: complete && unsupported.length === 0 && modelReasoning ? modelReasoning : summariseMatch(judged),
+    reasoning:
+      judged.length > 0 && complete && unsupported.length === 0 && modelReasoning
+        ? modelReasoning
+        : summariseMatch(judged, jobConditions(job).length),
   });
   return { match, judged, unsupported };
 }
@@ -175,8 +185,14 @@ export function matchScore(judged: Pick<JudgedRequirement, "importance" | "statu
   return Math.round((100 * earned) / total);
 }
 
-/** A plain explanation of the score, written from the judged requirements alone. */
-export function summariseMatch(judged: Pick<JudgedRequirement, "text" | "importance" | "status">[]): string {
+/**
+ * A plain explanation of the score, written from the judged requirements alone. `conditions`: how many of the ad's
+ * requirements are conditions, left out of the score (#222).
+ */
+export function summariseMatch(judged: Pick<JudgedRequirement, "text" | "importance" | "status">[], conditions = 0): string {
+  if (judged.length === 0 && conditions > 0) {
+    return "Everything this ad asks for is a licence, a check or a working condition, so there is nothing to score against your experience. Check each one below before you apply.";
+  }
   if (judged.length === 0) {
     return "We couldn’t find a list of requirements in this ad, so there is nothing to score yet. Check that you pasted the whole ad.";
   }

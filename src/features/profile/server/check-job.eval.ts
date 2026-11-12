@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getAiProvider } from "@/shared/ai";
 import { brand } from "@/shared/brand";
-import { JobSchema, ProfileSchema, type Job, type MatchResult, type Profile } from "@/shared/contracts";
+import { JobSchema, ProfileSchema, type Job, type JobConditionKind, type MatchResult, type Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import clinicalJob from "../../../../sample-data/clinical/job.json";
 import clinicalProfile from "../../../../sample-data/clinical/profile.json";
@@ -38,6 +38,83 @@ function found(expected: string, requirements: string[]): boolean {
   return requirements.some((requirement) => mainWords(requirement).some((word) => words.includes(word)));
 }
 
+/** The kind the job reader gave the requirement matching `pattern`, or null when that requirement is no condition. */
+function conditionKind(job: Job, pattern: RegExp): JobConditionKind | null {
+  const requirement = [...job.requirements.essential, ...job.requirements.desirable].find((item) => pattern.test(item));
+  expect(requirement, `a requirement matching ${pattern} in ${JSON.stringify(job.requirements)}`).toBeDefined();
+  return job.conditions?.find((condition) => condition.requirement === requirement)?.kind ?? null;
+}
+
+// The two fictional ads of the 31 October check on #222: skills mixed with licences, working conditions and checks.
+const conditionAds: { name: string; ad: string; expected: [RegExp, JobConditionKind | null][] }[] = [
+  {
+    name: "Area Operations Manager",
+    ad: `Area Operations Manager
+Brackenmoor Home & Garden Ltd
+Birmingham, West Midlands · Permanent · Full-time · £42,000 to £46,000 a year
+
+About the role
+You will look after six of our garden centres across the West Midlands, working with each store manager to hit sales and service targets.
+
+Essential
+- Experience leading large retail teams
+- KPI reporting to senior leadership
+- Strong health and safety knowledge
+- Full clean driving licence
+- Willingness to travel within the UK and internationally
+- Weekend and night shift cover when needed
+- Enhanced DBS check
+- Able to lift up to 25kg
+
+Desirable
+- CSCS card
+- Stock control experience
+
+How to apply
+Send your CV and a short cover letter. Closing date: 30 November 2026.`,
+    expected: [
+      [/leading large retail teams/i, null],
+      [/KPI/i, null],
+      [/health and safety/i, null],
+      [/driving licence/i, "credential"],
+      [/travel/i, "working"],
+      [/weekend|night/i, "working"],
+      [/DBS/i, "sensitive"],
+      [/lift/i, "sensitive"],
+      [/CSCS/i, "credential"],
+      [/stock control/i, null],
+    ],
+  },
+  {
+    name: "Regional Store Support Manager",
+    ad: `Regional Store Support Manager
+Larkfield Outdoor Stores
+Coventry, West Midlands · Permanent · Full-time · £40,000 a year
+
+About the role
+You will support twelve stores across the Midlands on opening, refits and new-starter training.
+
+Essential
+- Full UK driving licence
+- Willingness to travel across the Midlands, with occasional overnight stays
+- Multi-site retail management experience
+- P&L management
+
+Desirable
+- Counterbalance forklift licence
+
+How to apply
+Apply through our careers page. Closing date: 15 December 2026.`,
+    expected: [
+      [/driving licence/i, "credential"],
+      [/travel/i, "working"],
+      [/multi-site/i, null],
+      [/P&L/i, null],
+      [/forklift/i, "credential"],
+    ],
+  },
+];
+
 function expectOnBrand(match: MatchResult) {
   const text = [match.reasoning, ...match.gaps.map((gap) => gap.detail)].join("\n").toLowerCase();
   for (const phrase of brand.bannedPhrases) expect(text).not.toContain(phrase.toLowerCase());
@@ -72,6 +149,23 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     }
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
     expectOnBrand(match);
+
+    // The only condition in the sample ads is Daniel's driving licence (#222), and it is never scored.
+    const conditions = (job.conditions ?? []).map((condition) => `${condition.kind}: ${condition.requirement}`);
+    if (name === "daniel" && number === 2) {
+      expect(conditionKind(job, /driving licen[cs]e/i), `conditions ${JSON.stringify(conditions)}`).toBe("credential");
+      const scored = [...match.strengths.map((item) => item.requirement), ...match.gaps.map((gap) => gap.requirement)];
+      expect(scored.join("\n")).not.toMatch(/driving/i);
+    } else {
+      expect(conditions, "no condition in this ad").toEqual([]);
+    }
+  });
+
+  it.each(conditionAds)("marks each condition of the $name ad with its kind, and no skill (#222)", async ({ ad, expected }) => {
+    const job = await parseJob(ad, { url: null });
+    console.log(`${job.title}: ${JSON.stringify(job.conditions)}`);
+
+    for (const [pattern, kind] of expected) expect(conditionKind(job, pattern), `${pattern}`).toBe(kind);
   });
 
   it("keeps every criterion of a long NHS person specification (#397)", async () => {
@@ -92,6 +186,9 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
       job.requirements.essential.some((item) => /\bNMC\b/.test(item) && /regist/i.test(item)),
       "the NMC registration criterion stays a requirement",
     ).toBe(true);
+    // A registration is the job itself, not a condition: it stays in the score (#222).
+    const registration = job.requirements.essential.find((item) => /\bNMC\b/.test(item) && /regist/i.test(item));
+    expect(job.conditions?.map((condition) => condition.requirement), "the NMC registration is no condition").not.toContain(registration);
 
     expect(kept.length, `missing: ${criteria.filter((criterion) => !kept.includes(criterion)).join("; ")}`).toBeGreaterThanOrEqual(18);
     for (const criterion of ["Understanding of clinical governance and incident reporting", "Knowledge of safeguarding adults and children procedures"]) {
