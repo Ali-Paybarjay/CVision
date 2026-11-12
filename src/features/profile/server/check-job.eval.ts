@@ -5,6 +5,8 @@ import { JobSchema, ProfileSchema, type Job, type MatchResult, type Profile } fr
 import { personas, type PersonaName } from "@/shared/sample-data";
 import clinicalJob from "../../../../sample-data/clinical/job.json";
 import clinicalProfile from "../../../../sample-data/clinical/profile.json";
+import processJob from "../../../../sample-data/process-engineer/job.json";
+import processProfile from "../../../../sample-data/process-engineer/profile.json";
 import { matchJob, parseJob } from "./check-job";
 
 // Prompt evals for prompts/profile-job.md and prompts/profile-match.md: real requests to the model, so they cost money.
@@ -43,6 +45,14 @@ function expectOnBrand(match: MatchResult) {
   for (const phrase of brand.bannedPhrases) expect(text).not.toContain(phrase.toLowerCase());
   // The score is worked out in code, so the reasoning must not give a number of its own.
   expect(match.reasoning).not.toMatch(/\d+\s*(%|percent|out of 100|\/\s*100)/i);
+  // One word for what is judged: the match reads the profile, not the CV (#188).
+  expect(text).not.toMatch(/\byour cv\b/i);
+}
+
+/** The score and the gaps in the order Tailor asks about them, for the before and after in a PR (#188). */
+function logMatch(label: string, match: MatchResult) {
+  const gaps = [...match.gaps].sort((a, b) => Number(b.importance === "essential") - Number(a.importance === "essential"));
+  console.log(`${label}: score ${match.score}; gaps ${gaps.map((gap) => `[${gap.importance} ${gap.kind}] ${gap.requirement}`).join(" | ")}`);
 }
 
 describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample ads", () => {
@@ -72,6 +82,7 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     }
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
     expectOnBrand(match);
+    logMatch(`${name}, job ${number}`, match);
   });
 
   it("keeps every criterion of a long NHS person specification (#397)", async () => {
@@ -111,6 +122,57 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     for (const lacking of [/V300|prescrib/i, /arterial blood gas/i, /advanced life support/i]) {
       expect(match.strengths.map((item) => item.requirement).join("\n")).not.toMatch(lacking);
     }
+  });
+
+  // #188: a fictional water and wastewater ad and an oil and gas process engineer (sample-data/process-engineer), with
+  // requirements in a paragraph ("likely to have", "would be ideal") and a bullet that asks for five different things.
+  it("reads requirements from a paragraph and splits a bullet of different things (#188)", async () => {
+    const job = await parseJob(JobSchema.parse(processJob).description, { url: null });
+    const { essential, desirable } = job.requirements;
+    console.log(`Job reader: essential ${JSON.stringify(essential)}; desirable ${JSON.stringify(desirable)}`);
+
+    // The paragraph's softer words make its requirements desirable, and none is left out.
+    for (const paragraph of [/\bDSEAR\b/, /\bCOMAH\b/, /anaerobic digestion|thermal hydrolysis|nutrient removal/i]) {
+      expect(desirable.some((item) => paragraph.test(item)), `desirable ${paragraph}`).toBe(true);
+      expect(essential.some((item) => paragraph.test(item)), `essential ${paragraph}`).toBe(false);
+    }
+    // Different things a CV could show one without the other become separate items.
+    const parts = [/fee proposals?/i, /P&IDs?/i, /plant layouts?/i, /\bGA\b|general arrangement/i];
+    const items = parts.map((part) => essential.findIndex((item) => part.test(item)));
+    expect(items, `items holding ${parts.join(", ")}`).not.toContain(-1);
+    expect(new Set(items).size, "each part in an item of its own").toBe(parts.length);
+    // Alternatives for one thing stay one item.
+    const modelling = essential.filter((item) => /BioWin|GPS-X/i.test(item));
+    expect(modelling, "BioWin or GPS-X").toHaveLength(1);
+    expect(modelling[0]).toMatch(/BioWin.*GPS-X/i);
+  });
+
+  it("counts a requirement with several parts as met only when the profile shows them all (#188)", async () => {
+    const whole = "Development of fee proposals, creation of P&IDs, plant layouts, GA drawings, and energy and mass balances";
+    const job = JobSchema.parse({ ...processJob, requirements: { essential: [whole], desirable: [] } });
+    const { match } = await matchJob(ProfileSchema.parse(processProfile), job);
+
+    // The profile shows the P&IDs and the balances, but not the fee proposals, the plant layouts or the GA drawings.
+    expect(match.strengths, "listed as met").toEqual([]);
+    expect(match.gaps[0]?.kind).toBe("unclear");
+    expect(match.gaps[0]?.detail).toMatch(/fee proposals|plant layouts|GA/i);
+  });
+
+  it("matches the process engineer as card #188's acceptance list expects", async () => {
+    const { match, unsupported } = await matchJob(ProfileSchema.parse(processProfile), JobSchema.parse(processJob));
+    logMatch("Process engineer", match);
+    expect(unsupported, "strengths with no profile line behind them").toEqual([]);
+
+    const met = match.strengths.map((item) => item.requirement);
+    expect(met).toEqual(expect.arrayContaining(["Creation of P&IDs", "Energy and mass balances"]));
+    for (const lacking of [/BioWin/, /chairing/i, /Chartered/, /fee proposals/i, /plant layouts/i, /GA drawings/, /OPEX/, /DSEAR|COMAH/, /anaerobic/i]) {
+      expect(met.join("\n"), `${lacking} listed as met`).not.toMatch(lacking);
+    }
+    // Half evidence is "unclear", never "missing": both have profile lines that point towards them.
+    for (const partly of ["Leading teams to deliver to programme and budget", "Acting as the process designer in HAZOP studies"]) {
+      expect(match.gaps.find((gap) => gap.requirement === partly)?.kind, partly).toBe("unclear");
+    }
+    expectOnBrand(match);
   });
 
   it("reads an ad as data, not instructions", async () => {
