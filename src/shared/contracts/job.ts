@@ -34,6 +34,26 @@ export const JobRoleSchema = z.object({
 });
 export type JobRole = z.infer<typeof JobRoleSchema>;
 
+/**
+ * What kind of condition a requirement is (#222). "credential": a licence or card, such as a driving licence or a CSCS
+ * card. "working": a working condition, such as travel, night shifts or an own car. "sensitive": something the app
+ * never asks about or stores, such as right to work, a DBS check or lifting heavy loads.
+ */
+export const JobConditionKindSchema = z.enum(["credential", "working", "sensitive"]);
+export type JobConditionKind = z.infer<typeof JobConditionKindSchema>;
+
+/**
+ * One of the job's requirements that is a condition of the job rather than a skill or experience (#222). The match
+ * leaves it out of the score and shows it apart. Professional registrations, degrees and specialist certificates are
+ * never conditions: the CV shows them.
+ */
+export const JobConditionSchema = z.object({
+  /** One of `requirements.essential` or `requirements.desirable`, word for word. */
+  requirement: z.string().min(1),
+  kind: JobConditionKindSchema,
+});
+export type JobCondition = z.infer<typeof JobConditionSchema>;
+
 /** A job ad turned into data (Shayan builds it from the pasted text). */
 export const JobSchema = z.object({
   id: IdSchema,
@@ -64,5 +84,11 @@ export const JobSchema = z.object({
   eligibility: JobEligibilitySchema.optional(),
   /** What kind of role the ad describes. Missing on jobs read before this field existed, or when the ad says nothing. */
   role: JobRoleSchema.optional(),
+  /**
+   * The requirements that are conditions of the job (#222): licences and cards, working conditions and sensitive ones.
+   * Written by profile-job (Shayan's job reader); read by the match and /jobs, and later Tailor. An empty list: the ad
+   * has none. Missing on jobs read before this field existed.
+   */
+  conditions: z.array(JobConditionSchema).optional(),
 });
 export type Job = z.infer<typeof JobSchema>;
