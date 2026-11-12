@@ -64,6 +64,17 @@ export function QuestionsStep({ questions, more, gapStates, gapCard, onFinished 
         </Button>
       </div>
 
+      {/* After one answer, here or under "More ways", the user can stop: before, they had to skip each question to the
+          last one to see their CV (#488). */}
+      {[...questions, ...more].some(isAnswered) && !isLast && (
+        <div className="flex flex-col items-start gap-2 rounded-md bg-canvas px-4 py-3">
+          <Button onClick={onFinished}>Review your tailored CV now</Button>
+          {answered < questions.length && (
+            <p className="text-sm text-text-muted">The questions you haven’t answered stay here, so you can come back to them.</p>
+          )}
+        </div>
+      )}
+
       {more.length > 0 && (
         <details className="border-t border-line pt-4">
           <summary className="cursor-pointer font-semibold text-accent">More ways to strengthen your CV ({more.length})</summary>

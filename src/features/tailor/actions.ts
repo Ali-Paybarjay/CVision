@@ -12,7 +12,7 @@ import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { findBrandProblems, type BrandProblem } from "./brand-check";
 import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, roleClaimsNote, withoutRoleClaims, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
-import { defaultGapQuestion, isStrongerGap, questionGaps } from "./gap-questions";
+import { defaultGapQuestion, isStrongerGap, questionGaps, strengthRole } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
 import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
@@ -21,7 +21,7 @@ import { modelFailureMessage, tailorModelAccess, whatStillWorksOnQuestions } fro
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
 import { savedCvLayout } from "./saved-cv";
 import { getMyTailoredCv, saveTailoredCv } from "./server/tailored-cvs";
-import { buildTailoredCv, fitsCv } from "./tailored-cv";
+import { buildTailoredCv, fitsCv, roleForNewLine } from "./tailored-cv";
 import { MAX_ANSWERS, MAX_CHANGES, type GapAnswer, type NextStep } from "./types";
 
 // Anyone can call a Server Action, so every input is checked before use.
@@ -43,6 +43,11 @@ const AnswerGapSchema = z.object({
   chosen: z.string().trim().min(1).max(300).optional(),
   /** True when `chosen` is what the user wrote, not an option they tapped. */
   typed: z.boolean().optional(),
+  /**
+   * The question the user saw, so the answer is read as a reply to it (#444). One longer than the cover letter takes
+   * is left out, never the reason an answer fails: the plain question for the gap is used instead.
+   */
+  question: z.string().trim().min(1).max(500).optional().catch(undefined),
   /** The user's answers to the job's other gaps, so a "no" there still counts here (Nothing invented). */
   earlierAnswers: z.array(EarlierAnswerSchema).max(MAX_ANSWERS).optional(),
 });
@@ -158,15 +163,19 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
       profile,
       job,
       match: { ...match, gaps: [gap] },
-      answers: [{ gapId, question: defaultGapQuestion(gap).question, answer, hasExperience }],
+      answers: [{ gapId, question: parsed.data.question ?? defaultGapQuestion(gap).question, answer, hasExperience }],
       context: { gaps: match.gaps.filter((item) => item.id !== gapId), answers: earlier },
       sample: sampleForGap(jobId, gapId).proposal,
       requester: access.requester,
     });
 
-    // A change whose `before` is not a line of this CV could never be placed, so it is not offered at all.
+    // A change whose `before` is not a line of this CV could never be placed, so it is not offered at all. Nor is a new
+    // work line for a strength that would sit under another role than the strength's line: "About 15" names no role,
+    // so it would go under the most recent one (#444).
     const forGap = result.changes.filter((change) => change.gapId === gapId);
-    const changes = forGap.filter((change) => fitsCv(profile, change));
+    const home = isStrongerGap(gap) ? strengthRole(profile, gap) : -1;
+    const elsewhere = (change: TailoringChange) => home >= 0 && change.section === "experience" && change.before === null && roleForNewLine(profile, change) !== home;
+    const changes = forGap.filter((change) => fitsCv(profile, change) && !elsewhere(change));
     const removed = result.removed.length + forGap.length - changes.length;
     const nextSteps = hasExperience ? [] : result.nextSteps.filter((step) => step.gapId === gapId);
     let hint: string | null = null;
@@ -182,8 +191,9 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
       });
       changes.push(...kept.map((item) => ({ ...item, id: randomUUID(), jobId: job.id, status: "proposed" as const })));
       if (changes.length === 0) {
+        // Asking for a number right after the user typed one reads as if the page did not read it (#444).
         hint =
-          gap.kind === "unclear"
+          gap.kind === "unclear" && !typed
             ? "Your CV already mentions this. To make that line stronger, add a detail such as a number or an example. This is optional."
             : namesSeveral(gap.requirement) && !typed
               ? "Tell us which one you have used, and we will add it. This is optional."

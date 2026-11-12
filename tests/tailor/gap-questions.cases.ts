@@ -69,7 +69,7 @@ const imaging = (() => {
       { requirement: "Installation and commissioning of CT systems", evidence: "Installed CT scanners in NHS hospitals" },
       { requirement: "Preventive maintenance of imaging equipment", evidence: "Planned maintenance on CT and X-ray rooms" },
       { requirement: "Fault diagnosis to component level", evidence: "Fault finding on site" },
-      { requirement: "Electrical safety testing to IEC 62353", evidence: "Skills: Electrical safety testing" },
+      { requirement: "Electrical safety testing to IEC 62353", evidence: "Electrical safety testing" },
       { requirement: "Customer applications training", evidence: "Trained radiographers on new systems" },
       { requirement: "Full UK driving licence", evidence: "Full UK driving licence" },
     ],
