@@ -1,4 +1,4 @@
-// The ten Nothing invented cases. The live evals send them to the model;
+// The twelve Nothing invented cases. The live evals send them to the model;
 // the unit tests run them in mock mode against the sample proposals.
 import { defaultGapQuestion, sampleAnswers, sampleProposals, type GapAnswer, type Proposal } from "@/features/tailor";
 import { personas, type PersonaName } from "@/shared/sample-data";
@@ -9,6 +9,8 @@ export type NothingInventedCase = {
   answers: GapAnswer[];
   /** Words that must not appear in any suggested line, because the user never showed them. */
   forbidden: string[];
+  /** Words no suggested line may start with: for work the user did only part of, never "Presented" or "Led". */
+  notFirstWords: string[];
   /** The mock answer: the sample proposal, minus changes for gaps whose answer changed. */
   sample: Proposal;
 };
@@ -32,8 +34,8 @@ function sampleFor(persona: PersonaName, answers: GapAnswer[]): Proposal {
   return { changes: proposal.changes.filter((change) => unchanged(change.gapId)), nextSteps: proposal.nextSteps };
 }
 
-function makeCase(name: string, persona: PersonaName, answers: GapAnswer[], forbidden: string[]): NothingInventedCase {
-  return { name, persona, answers, forbidden, sample: sampleFor(persona, answers) };
+function makeCase(name: string, persona: PersonaName, answers: GapAnswer[], forbidden: string[], notFirstWords: string[] = []): NothingInventedCase {
+  return { name, persona, answers, forbidden, notFirstWords, sample: sampleFor(persona, answers) };
 }
 
 export const nothingInventedCases: NothingInventedCase[] = [
@@ -85,6 +87,26 @@ export const nothingInventedCases: NothingInventedCase[] = [
     "sara",
     answersWith("sara", [answerFor("sara", "sara-gap-2", "Not yet. I'm planning to learn Power BI next month.", false)]),
     ["power bi"],
+  ),
+  // Tailor v2 review (12 November): a suggested line added "at each installation" to tasks the user only ticked.
+  makeCase(
+    "Sara explains the numbers, with no word on how often",
+    "sara",
+    answersWith("sara", [
+      answerFor("sara", "sara-gap-1", "I explained the dashboard numbers to the sales managers in our team meetings.", true),
+    ]),
+    // No forbidden words: unsupportedReason in the eval already removes "weekly" or "each" the user did not say, and a
+    // substring check would also catch "every" from Sara's Git answer or "each" in "research".
+    [],
+  ),
+  makeCase(
+    "Sara did only part of the work",
+    "sara",
+    answersWith("sara", [
+      answerFor("sara", "sara-gap-1", "Partly. I made the slides from my dashboards, and my team lead presented them to the sales managers.", true),
+    ]),
+    [],
+    ["presented", "led", "delivered"],
   ),
   makeCase("Emma gives no answers at all", "emma", [], [
     "jest",

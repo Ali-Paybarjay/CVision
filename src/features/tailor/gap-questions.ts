@@ -38,8 +38,36 @@ export function skillGaps(gaps: Gap[]): Gap[] {
   return gaps.filter((gap) => !notAboutSkills.test(gap.requirement));
 }
 
-/** CV lines a strength cannot be made stronger from: a degree, a certificate or a language is held or not (#440). */
-const heldOrNot = new Set(["education", "certification", "language"]);
+/** CV lines an answer can make stronger in place: the line itself is rewritten (#444). */
+const changedInPlace = new Set(["summary", "skill", "duty", "achievement"]);
+
+/**
+ * The CV lines a strength can be made stronger from (#444): a line an answer rewrites in place, or the most recent role,
+ * which a new work line goes under when the answer names no other. Not a project, volunteering, an older role or a
+ * follow-up answer: a new line from one would sit under the wrong role. Not a degree, a certificate or a language
+ * either: those are held or not (#440).
+ */
+function linesToMakeStronger(profile: Profile): Set<string> {
+  const lines = profileEvidenceLines(profile);
+  const latestRole = lines.find((line) => line.kind === "role");
+  return new Set(lines.flatMap((line) => (changedInPlace.has(line.kind) || line === latestRole ? [normalise(line.text)] : [])));
+}
+
+/** The CV line a "Make it stronger" gap quotes, as strongerGaps wrote it into its detail. */
+function strengthLine(gap: Pick<Gap, "detail">): string | null {
+  return /^Already shown by: "([\s\S]*)"$/.exec(gap.detail)?.[1] ?? null;
+}
+
+/**
+ * For a "Make it stronger" gap, the role whose line it quotes, as an index into `profile.experience`; -1 for a summary
+ * or skill line. A new work line for it must go under that role (#444).
+ */
+export function strengthRole(profile: Profile, gap: Pick<Gap, "detail">): number {
+  const line = strengthLine(gap);
+  if (line === null) return -1;
+  const text = normalise(line);
+  return profile.experience.findIndex((role) => [`${role.title} at ${role.company}`, ...role.duties, ...role.achievements].some((item) => normalise(item) === text));
+}
 
 /** A number of years, which the CV's dates already show, or a trait too vague to answer (#440). */
 const nothingToAdd =
@@ -53,10 +81,14 @@ const nothingToAdd =
 export const asksIfVerified =
   /\b(is|are|was|were|has|have)\s+(it|they|your\b[^?]{0,100}?)\s+(been\s+)?([\w-]+\s+|\w+-)?(accredited|recogni[sz]ed|verified)(\s+(by|as|in|with|for)\b[^?]*)?\?\s*$|\bequivalent to an? (uk|british)\b/i;
 
-/** A plain yes-or-no question for one gap, used as the mock answer and as a fallback. */
+/**
+ * A plain question for one gap, used as the mock answer and when the page sends none. A "Make it stronger" gap is one
+ * the CV already shows, so its question never says the CV does not (#444).
+ */
 export function defaultGapQuestion(gap: Gap): GapQuestion {
-  const question =
-    gap.kind === "missing"
+  const question = isStrongerGap(gap)
+    ? `The job asks for “${gap.requirement}”, and your CV shows it. Can you add a detail, such as a number or a result?`
+    : gap.kind === "missing"
       ? `The job asks for “${gap.requirement}”. Have you done this?`
       : `The job asks for “${gap.requirement}”, and your CV does not show it clearly. Have you done this?`;
   return { gapId: gap.id, question };
@@ -77,7 +109,7 @@ function shortHash(text: string): string {
 
 /**
  * "Make it stronger": requirements the CV already meets, as gaps of kind "unclear" whose detail quotes the CV line
- * or follow-up answer that shows it.
+ * that shows it, only when an answer can change that line or add one under its role (see linesToMakeStronger).
  * A same-field CV meets almost everything, so without these a pilot got only two questions (7 Nov). The model asks
  * about the ones whose line gives no scale, scope, systems or result. A no to one of them never counts as "not done".
  */
@@ -87,11 +119,11 @@ export function strongerGaps(job: Job, match: MatchResult, profile: Profile): Ga
   if (gaps.length >= questionTarget) return [];
   const asked = new Set(gaps.map((gap) => normalise(gap.requirement)));
   const essential = new Set(job.requirements.essential.map(normalise));
-  const fixedLines = new Set(profileEvidenceLines(profile).flatMap((line) => (heldOrNot.has(line.kind) ? [normalise(line.text)] : [])));
+  const changeable = linesToMakeStronger(profile);
   const seen = new Set<string>();
   return match.strengths.flatMap((strength) => {
     const requirement = normalise(strength.requirement);
-    const fixed = notAboutSkills.test(strength.requirement) || nothingToAdd.test(strength.requirement) || fixedLines.has(normalise(strength.evidence));
+    const fixed = notAboutSkills.test(strength.requirement) || nothingToAdd.test(strength.requirement) || !changeable.has(normalise(strength.evidence));
     if (fixed || asked.has(requirement) || seen.has(requirement)) return [];
     seen.add(requirement);
     return [

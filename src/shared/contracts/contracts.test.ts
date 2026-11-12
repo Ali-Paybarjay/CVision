@@ -281,6 +281,23 @@ describe("Job", () => {
   });
 });
 
+describe("MatchResult: the lines behind an unclear gap (#188)", () => {
+  const match = MatchResultSchema.parse(readJson("sara", "match.json"));
+  const withEvidence = (evidence: unknown) => ({ ...match, gaps: [{ ...match.gaps[0], evidence }, ...match.gaps.slice(1)] });
+
+  it("is valid without evidence, and with one to three profile lines", () => {
+    expect(match.gaps[0]).not.toHaveProperty("evidence");
+    const lines = ["Built Tableau dashboards for the regional sales team", "Presented weekly results to store managers"];
+    expect(MatchResultSchema.parse(withEvidence(lines)).gaps[0].evidence).toEqual(lines);
+    expect(MatchResultSchema.parse(withEvidence(["a", "b", "c"])).gaps[0].evidence).toHaveLength(3);
+  });
+
+  it("rejects more than three lines and an empty line", () => {
+    expect(MatchResultSchema.safeParse(withEvidence(["a", "b", "c", "d"])).success).toBe(false);
+    expect(MatchResultSchema.safeParse(withEvidence([""])).success).toBe(false);
+  });
+});
+
 describe("TailoringChange", () => {
   it("is valid without a stretch note and with one", () => {
     expect(TailoringChangeSchema.parse(change)).toEqual(change);

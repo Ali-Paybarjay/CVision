@@ -280,6 +280,94 @@ export function letterRoleClaim(sentence: string, jobTitle: string, sources: Evi
   );
 }
 
+/**
+ * Words that make the work sound wider or more frequent than the user said (#487). In the Tailor v2 review (12
+ * November), a field service engineer ticked three network tasks and the suggested line added "at each installation".
+ * Both tailor prompts list the same words (tests/tailor/nothing-invented.test.ts checks it).
+ */
+export const scopeWords = [
+  "each",
+  "every",
+  "all",
+  "always",
+  "regularly",
+  "routinely",
+  "daily",
+  "weekly",
+  "monthly",
+  "consistently",
+  "sole",
+  "solely",
+  "single-handedly",
+  "independently",
+  "entire",
+  "entirely",
+  "whole",
+  "extensive",
+  "extensively",
+];
+
+const scopeWord = new RegExp(`(?<![a-z0-9])(?:${scopeWords.map(escaped).join("|")})(?![a-z0-9])`, "g");
+
+/** A tap is saved as "Yes, I have done this at work: <the requirement>." (actions.ts). That part is the ad's words. */
+const tapPrefix = /^yes, i have done this (?:at work|in study or on my own): /;
+
+/**
+ * What the user said themselves in an answer or a quote from one: without the requirement a tap repeats, without a
+ * quote of the ad's words alone, and without a clause that denies something ("I don't manage all 45 staff").
+ */
+function ownWordsIn(text: string, requirement: string): string {
+  let said = normalise(text);
+  if (requirement && requirement.includes(said)) return "";
+  const tap = said.match(tapPrefix);
+  if (tap) {
+    said = said.slice(tap[0].length);
+    if (requirement) {
+      let index = 0;
+      while (index < said.length && said[index] === requirement[index]) index += 1;
+      said = said.slice(index);
+    } else {
+      const end = said.indexOf(". ");
+      said = end >= 0 ? said.slice(end + 2) : "";
+    }
+  }
+  return said
+    .split(/[,;.]/)
+    .filter((clause) => !/\b(?:not|never|no)\b|n't\b/.test(clause))
+    .join(" ");
+}
+
+/**
+ * The first such word the change adds, or null. A word counts as said when the line it rewrites has it, or the user's
+ * own words in its evidence or their answer to the same gap, so "after every analysis step" from an answer may stay.
+ * At worst a true line stays out. Exported for its test.
+ */
+export function scopeWordAdded(change: ProposedChange, sources: EvidenceSources): string | null {
+  const gap = sources.gaps.find((item) => item.id === change.gapId);
+  const requirement = gap ? normalise(gap.requirement) : "";
+  const answers = change.gapId ? sources.answers.filter((item) => item.gapId === change.gapId).map((item) => ownWordsIn(item.answer, requirement)) : [];
+  const said = new Set([normalise(change.before ?? ""), ownWordsIn(change.evidence, requirement), ...answers].flatMap((text) => text.match(scopeWord) ?? []));
+  return normalise(change.after).match(scopeWord)?.find((word) => !said.has(word)) ?? null;
+}
+
+/** An answer that says the user did only part of the work. */
+const partly = /\b(?:partly|partially|only part|part of it|some of it)\b/;
+/** Verbs that claim the whole of a piece of work. */
+const wholeWorkVerbs = new Set(["led", "designed", "built", "created", "developed", "managed", "delivered", "owned", "ran", "headed", "directed", "launched"]);
+
+/**
+ * The verb a change starts with when it claims the whole of work the user said they did only part of, or null: a
+ * "Partly" answer gives "Contributed to the design of…", never "Designed…". A line that already starts with that verb
+ * keeps it. Exported for its test.
+ */
+export function wholeWorkClaimed(change: ProposedChange, sources: EvidenceSources): string | null {
+  if (!change.gapId) return null;
+  const answers = sources.answers.filter((item) => item.gapId === change.gapId).map((item) => normalise(item.answer));
+  if (!answers.some((answer) => partly.test(answer))) return null;
+  const first = normalise(change.after).split(" ")[0];
+  return wholeWorkVerbs.has(first) && first !== normalise(change.before ?? "").split(" ")[0] ? first : null;
+}
+
 /** Why a change breaks Nothing invented, or null when it is supported. */
 export function unsupportedReason(change: ProposedChange, sources: EvidenceSources): string | null {
   const lines = change.evidenceSource === "cv" ? cvLines(sources.profile) : answerLines(sources);
@@ -314,6 +402,16 @@ export function unsupportedReason(change: ProposedChange, sources: EvidenceSourc
   const claim = roleClaimAdded(change, sources);
   if (claim) {
     return `It adds "${claim}", which only the job ad says.`;
+  }
+
+  const scope = scopeWordAdded(change, sources);
+  if (scope) {
+    return `It adds "${scope}", which makes the work sound wider or more frequent than the user said.`;
+  }
+
+  const whole = wholeWorkClaimed(change, sources);
+  if (whole) {
+    return `It starts with "${whole}", but the user said they did only part of this work.`;
   }
 
   return null;

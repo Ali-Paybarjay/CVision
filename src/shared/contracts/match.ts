@@ -17,6 +17,11 @@ export const GapSchema = z.object({
   /** Why it is a gap: missing from the CV, or present but vague (no numbers, no example). */
   kind: z.enum(["missing", "unclear"]),
   detail: z.string(),
+  /**
+   * For an "unclear" gap only: up to three Profile lines that partly show it, copied word for word by code
+   * from the line ids the model points at (the model never writes them). Absent for "missing" gaps (#188).
+   */
+  evidence: z.array(z.string().min(1)).max(3).optional(),
 });
 export type Gap = z.infer<typeof GapSchema>;
 

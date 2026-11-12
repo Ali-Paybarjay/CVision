@@ -75,10 +75,12 @@ describe("a degree, certificate or language the CV shows is never a Make it stro
     expect(stronger(requirement, evidence)).toEqual([]);
   });
 
+  const dutyLine = "Cleaned and joined weekly sales data from 120 stores using SQL and Python";
+
   it.each(["At least 3 years' experience in process design", "5+ years in field service", "A positive attitude", "Enthusiasm for data", "Self-motivated", "Willingness to learn", "Team player"])(
     "leaves out %s, which the CV's dates show or no answer can add to",
     (requirement) => {
-      expect(stronger(requirement, "A fictional duty line")).toEqual([]);
+      expect(stronger(requirement, dutyLine)).toEqual([]);
     },
   );
 
@@ -91,7 +93,7 @@ describe("a degree, certificate or language the CV shows is never a Make it stro
     "Working with children aged 0-5 years",
     "Fault diagnosis to component level",
   ])("still makes %s stronger when a work line shows it", (requirement) => {
-    expect(stronger(requirement, "A fictional duty line")).toHaveLength(1);
+    expect(stronger(requirement, dutyLine)).toHaveLength(1);
   });
 
   it("still asks about an unclear degree gap, since a degree in another subject or a lower one is a real gap", () => {
@@ -168,6 +170,37 @@ describe("the gap questions prompt", () => {
   });
 });
 
+describe("Make it stronger only asks about a line an answer can change in its place (#444)", () => {
+  const { profile, jobs, match } = personas.sara;
+  const full = {
+    ...profile,
+    projects: [{ name: "Bus delays dashboard", details: ["Mapped bus delays across Greater Manchester in Python"] }],
+    volunteering: [{ role: "Volunteer maths tutor", organisation: "Moss Side Library", details: ["Tutored GCSE maths students every Saturday"] }],
+  };
+  const stronger = (evidence: string) => strongerGaps(jobs[0], { ...match, strengths: [{ requirement: "Working with data", evidence }] }, full);
+
+  it.each([
+    ["a summary sentence", "Data science graduate with hands-on experience cleaning and analysing retail sales data in Python and SQL."],
+    ["a skill", "Statistics"],
+    ["a duty of the most recent role", "Built Tableau dashboards for the regional sales team"],
+    ["an achievement", "Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes"],
+    ["a duty of an older role, rewritten in its place", "Trained four new starters"],
+    ["the most recent role, where a new line goes", "Data Analyst Intern at Northgate Retail Insights"],
+  ])("asks about %s", (_, evidence) => {
+    expect(stronger(evidence)).toHaveLength(1);
+  });
+
+  it.each([
+    ["a project", "Mapped bus delays across Greater Manchester in Python"],
+    ["volunteering", "Tutored GCSE maths students every Saturday"],
+    ["an older role, as a new line would go under the most recent one", "Customer Assistant (part-time) at Greenway Foods"],
+    ["a follow-up answer", profile.followUpAnswers[0].answer],
+    ["text that is no line of the CV", "Skills: Python (pandas), R; MSc Data Science"],
+  ])("never asks about %s", (_, evidence) => {
+    expect(stronger(evidence)).toEqual([]);
+  });
+});
+
 describe("Make it stronger: questions from strengths, up to five in all", () => {
   const { profile, jobs, match } = personas.sara;
   const job = jobs[0];
@@ -175,11 +208,11 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
   it("turns each strength into an unclear gap that quotes its CV line, with importance from the ad", () => {
     const stronger = strongerGaps(job, {
       ...match,
-      strengths: [...match.strengths, { requirement: "Healthcare or NHS data", evidence: "Analysed A&E waiting times for my MSc" }],
+      strengths: [...match.strengths, { requirement: "Healthcare or NHS data", evidence: "Automated a weekly stock report, cutting preparation time from 4 hours to 30 minutes" }],
     }, profile);
+    // "Python or R for analysis" quotes "Skills: Python (pandas), R; MSc Data Science", which is no line of the CV (#444).
     expect(stronger.map(({ requirement, importance, kind }) => [requirement, importance, kind])).toEqual([
       ["Strong SQL", "essential", "unclear"],
-      ["Python or R for analysis", "essential", "unclear"],
       ["Dashboards in Power BI or Tableau", "essential", "unclear"],
       ["Healthcare or NHS data", "desirable", "unclear"],
     ]);
@@ -194,10 +227,10 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
 
   it("gives a strength the same short id whatever its spelling, so stored questions still find it", () => {
     const [first] = strongerGaps(job, match, profile);
-    const [again] = strongerGaps(job, { ...match, strengths: [{ requirement: "  strong   SQL. ", evidence: "Another line" }] }, profile);
+    const [again] = strongerGaps(job, { ...match, strengths: [{ requirement: "  strong   SQL. ", evidence: "SQL" }] }, profile);
     expect(first.id).toMatch(/^stronger-[0-9a-f]{8}$/);
     expect(again.id).toBe(first.id);
-    expect(strongerGaps(job, { ...match, strengths: [{ requirement: "Strong Python", evidence: "x" }] }, profile)[0].id).not.toBe(first.id);
+    expect(strongerGaps(job, { ...match, strengths: [{ requirement: "Strong Python", evidence: "Python (pandas)" }] }, profile)[0].id).not.toBe(first.id);
   });
 
   it("leaves out job conditions, strengths already asked about as gaps, and repeats", () => {
@@ -205,16 +238,16 @@ describe("Make it stronger: questions from strengths, up to five in all", () => 
       ...match,
       strengths: [
         { requirement: "Full UK driving licence", evidence: "Full UK driving licence" },
-        { requirement: "Power BI", evidence: "Skills: Power BI" },
-        { requirement: "Strong SQL", evidence: "Skills: SQL" },
-        { requirement: "strong sql", evidence: "SQL again" },
+        { requirement: "Power BI", evidence: "Tableau" },
+        { requirement: "Strong SQL", evidence: "SQL" },
+        { requirement: "strong sql", evidence: "Cleaned and joined weekly sales data from 120 stores using SQL and Python" },
       ],
     }, profile);
     expect(stronger.map((gap) => gap.requirement)).toEqual(["Strong SQL"]);
   });
 
   it("lists the match's gaps first, then the strengths", () => {
-    expect(questionGaps(job, match, profile).map((gap) => gap.id.replace(/-[0-9a-f]{8}$/, ""))).toEqual(["sara-gap-1", "sara-gap-2", "sara-gap-3", "stronger", "stronger", "stronger"]);
+    expect(questionGaps(job, match, profile).map((gap) => gap.id.replace(/-[0-9a-f]{8}$/, ""))).toEqual(["sara-gap-1", "sara-gap-2", "sara-gap-3", "stronger", "stronger"]);
   });
 
   const a = (id: string, importance: Gap["importance"] = "essential") => ({ ...gap(id, `Requirement ${id}`), importance });
