@@ -14,6 +14,7 @@ import { CvOverview } from "./cv-overview";
 import { CvPreview } from "./cv-preview";
 import { CvSuggestions } from "./cv-suggestions";
 import { DownloadBar } from "./download-bar";
+import { FinalCheck } from "./final-check";
 import { GapCard, type GapPrompt, type GapState } from "./gap-card";
 import { unreachableMessage } from "./messages";
 import { QuestionsStep } from "./questions-step";
@@ -327,6 +328,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
             status={statuses[5]}
             icon={<DownloadIcon />}
           >
+            <FinalCheck cv={cv} onReview={() => goTo(3)} />
             <DownloadBar jobId={job.id} changes={changes} letter={approvedLetter} onGoToLetter={() => goTo(4)} />
             <ApplyPanel jobId={job.id} jobUrl={jobUrl} coverLetter={approvedLetter?.approved ? approvedLetter.text : null} onApplied={() => setApplied(true)} />
           </TailorStep>

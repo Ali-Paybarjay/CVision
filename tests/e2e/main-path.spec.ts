@@ -116,12 +116,16 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   const approveGap = gap.getByRole("button", { name: "Approve", exact: true });
   await expect(approveGap.first()).toBeVisible();
   await approveGap.first().click();
+  // After one answer the CV is a click away, without skipping the other questions (#488).
+  await expect(page.getByRole("button", { name: "Review your tailored CV now" })).toBeVisible();
   await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
   await expect(page.getByText("✓ Approved: 2")).toBeVisible();
   await expect(tailoredLines).toHaveCount(2);
 
   // Step 5 leads on to interview practice for the same job, as a secondary link beside Apply.
   await page.getByRole("button", { name: /^5\. Download and apply/ }).click();
+  // The final check sits above the downloads and never stops them (#489).
+  await expect(page.getByRole("heading", { name: "Final check" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Start interview practice" })).toHaveAttribute("href", "/interview?job=sara-job-1");
 });
 
