@@ -84,8 +84,8 @@ const application: Application = {
   nextStep: null,
 };
 
-/** Sara's first job without the two new fields. */
-const job = JobSchema.omit({ deadline: true, eligibility: true, role: true }).parse((readJson("sara", "jobs.json") as unknown[])[0]);
+/** Sara's first job without the optional fields. */
+const job = JobSchema.omit({ deadline: true, eligibility: true, role: true, conditions: true }).parse((readJson("sara", "jobs.json") as unknown[])[0]);
 
 const change: TailoringChange = {
   id: "c1",
@@ -255,6 +255,28 @@ describe("Job", () => {
       { sponsorship: "offered", quotes: [] },
     ]) {
       expect(JobSchema.safeParse({ ...job, eligibility }).success, JSON.stringify(eligibility)).toBe(false);
+    }
+  });
+
+  it("is valid without conditions, with none and with each kind (#222)", () => {
+    expect(JobSchema.parse(job)).not.toHaveProperty("conditions");
+    expect(JobSchema.parse({ ...job, conditions: [] }).conditions).toEqual([]);
+    const conditions = [
+      { requirement: "Full UK driving licence", kind: "credential" },
+      { requirement: "Willingness to travel across the UK", kind: "working" },
+      { requirement: "Enhanced DBS check", kind: "sensitive" },
+    ];
+    expect(JobSchema.parse({ ...job, conditions }).conditions).toEqual(conditions);
+  });
+
+  it("rejects a condition with an empty requirement, an unknown kind or a missing part", () => {
+    for (const condition of [
+      { requirement: "", kind: "credential" },
+      { requirement: "Full UK driving licence", kind: "licence" },
+      { requirement: "Full UK driving licence" },
+      { kind: "working" },
+    ]) {
+      expect(JobSchema.safeParse({ ...job, conditions: [condition] }).success, JSON.stringify(condition)).toBe(false);
     }
   });
 });
