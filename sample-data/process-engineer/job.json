@@ -1,0 +1,39 @@
+{
+  "id": "process-job-1",
+  "title": "Senior Process Engineer – Water and Wastewater",
+  "company": "Halden Water Engineering",
+  "location": "Leeds or Manchester",
+  "salary": {
+    "min": 55000,
+    "max": 65000,
+    "currency": "GBP",
+    "period": "year",
+    "isEstimate": false
+  },
+  "contractType": "permanent",
+  "hours": "full-time",
+  "workMode": "hybrid",
+  "description": "Senior Process Engineer – Water and Wastewater\nHalden Water Engineering\nLeeds or Manchester · Hybrid · Permanent · Full-time · £55,000 to £65,000 a year\n\nAbout the team\nOur water team designs treatment works for water companies and industrial clients across the north of England, from first options studies to detailed design and commissioning support.\n\nWhat you'll do\nYou will lead the process design of municipal and industrial wastewater treatment works, from optioneering to detailed design, and guide junior engineers in our Leeds and Manchester offices. The successful candidates are likely to have design experience of some of the following: fixed and suspended growth systems, anaerobic digestion, thermal hydrolysis, nutrient removal, disinfection and solids filtration. Knowledge of DSEAR and COMAH would be ideal, as several of our sites store biogas and treatment chemicals.\n\nYou will work closely with our civil, mechanical and electrical engineers, and present your designs to clients.\n\nWhat you'll bring\n- Process modelling with BioWin or GPS-X\n- Experience chairing HAZOP sessions\n- Chartered membership of a professional institution, such as IChemE or CIWEM\n- Development of fee proposals, creation of P&IDs, plant layouts, GA drawings, and energy and mass balances\n- Leading teams to deliver to programme and budget\n- Feasibility studies and OPEX/CAPEX estimates\n- Acting as the process designer in HAZOP studies\n\nWhat we offer\nHybrid working, 27 days' holiday plus bank holidays, a pension with up to 8% employer contribution, and paid membership of one professional body.\n\nThis is a fictional job advert written for CVision's tests. The company does not exist.",
+  "requirements": {
+    "essential": [
+      "Process modelling with BioWin or GPS-X",
+      "Experience chairing HAZOP sessions",
+      "Chartered membership of a professional institution, such as IChemE or CIWEM",
+      "Development of fee proposals",
+      "Creation of P&IDs",
+      "Plant layouts",
+      "GA drawings",
+      "Energy and mass balances",
+      "Leading teams to deliver to programme and budget",
+      "Feasibility studies and OPEX/CAPEX estimates",
+      "Acting as the process designer in HAZOP studies"
+    ],
+    "desirable": [
+      "Design experience of fixed and suspended growth systems, anaerobic digestion, thermal hydrolysis, nutrient removal, disinfection and solids filtration",
+      "Knowledge of DSEAR",
+      "Knowledge of COMAH"
+    ]
+  },
+  "url": null,
+  "source": "pasted"
+}
