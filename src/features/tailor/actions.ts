@@ -15,11 +15,13 @@ import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLos
 import { defaultGapQuestion, isStrongerGap, questionGaps, strengthRole } from "./gap-questions";
 import { enforceNothingInvented } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
-import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
+import { sampleCvSuggestionsFor, sampleForGap, sampleSummaryFor } from "./samples";
 import { letterHead } from "./letter-state";
 import { modelFailureMessage, tailorModelAccess, whatStillWorksOnQuestions } from "./server/model-access";
 import { getMyJob, getMyMatch, getMyProfile } from "./server/my-data";
 import { savedCvLayout } from "./saved-cv";
+import { writeSummary } from "./summary";
+import { isAllowedDescription, MAX_OWN_WORDS, type DescribeAs } from "./summary-options";
 import { getMyTailoredCv, saveTailoredCv } from "./server/tailored-cvs";
 import { buildTailoredCv, fitsCv, roleForNewLine } from "./tailored-cv";
 import { MAX_ANSWERS, MAX_CHANGES, type GapAnswer, type NextStep } from "./types";
@@ -235,6 +237,44 @@ export async function suggestCvChanges(jobId: string): Promise<SuggestCvResult> 
     return { ok: true, changes: result.changes };
   } catch (error) {
     return { ok: false, message: modelFailureMessage(error, "suggest changes from the CV", "We could not suggest changes just now. Try again in a moment.") };
+  }
+}
+
+const DescribeAsSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("summary") }),
+  z.object({ kind: z.literal("title"), title: z.string().min(1).max(200) }),
+  z.object({ kind: z.literal("own"), words: z.string().trim().min(1).max(MAX_OWN_WORDS) }),
+]);
+
+export type WriteSummaryResult =
+  | { ok: true; change: TailoringChange }
+  /** `fits`: the user's summary already fits this job, so there is nothing to change. */
+  | { ok: false; message: string; fits?: true };
+
+/**
+ * The professional summary for one job (#16), written once the user has said how it should describe them: the way
+ * their summary does now, a job title from their CV, or their own words. It waits for their approval like any change.
+ */
+export async function writeSummaryForJob(jobId: string, describeAs: DescribeAs): Promise<WriteSummaryResult> {
+  const parsed = z.object({ jobId: z.string().min(1).max(100), describeAs: DescribeAsSchema }).safeParse({ jobId, describeAs });
+  if (!parsed.success) return { ok: false, message: "We could not read your choice. Choose a title, or type your own." };
+
+  const access = await tailorModelAccess();
+  if (!access.allowed) return { ok: false, message: access.message };
+
+  const [profile, job, match] = await Promise.all([getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
+  if (!profile || !job || !match) return { ok: false, message: "We could not find this job. Open it again from your jobs." };
+  if (!isAllowedDescription(profile, parsed.data.describeAs)) {
+    return { ok: false, message: "Choose one of the titles from your CV, or type your own." };
+  }
+
+  try {
+    const result = await writeSummary({ profile, job, match, describeAs: parsed.data.describeAs, sample: sampleSummaryFor(job.id), requester: access.requester });
+    if (result.change) return { ok: true, change: result.change };
+    if (result.removed.length > 0) return { ok: false, message: "We could not write a summary that holds only what your CV says. Try another title, or keep yours." };
+    return { ok: false, message: "Your summary already fits this job, so there is nothing to change.", fits: true };
+  } catch (error) {
+    return { ok: false, message: modelFailureMessage(error, "write the summary", "We could not write your summary just now. Try again in a moment.") };
   }
 }
 

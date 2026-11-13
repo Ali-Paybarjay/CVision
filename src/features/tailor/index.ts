@@ -3,6 +3,8 @@ export { askGapQuestions, asksIfVerified, defaultGapQuestion, gapQuestionsPrompt
 export { askForProposal, proposeChanges, suggestFromCv, type ProposeInput, type SuggestInput } from "./propose-changes";
 export { enforceNothingInvented, roleClaimAdded, unsupportedReason, type EvidenceSources } from "./nothing-invented";
 export { sampleAnswers, sampleCvSuggestions, sampleProposals } from "./samples";
+export { adTitleAdded, writeSummary, type SummaryInput, type SummaryResult } from "./summary";
+export { defaultDescribeAs, isAllowedDescription, summaryOptions, type DescribeAs } from "./summary-options";
 export * from "./types";
 export { findBrandProblems, type BrandProblem } from "./brand-check";
 export {

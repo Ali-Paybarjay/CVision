@@ -188,7 +188,8 @@ export const sampleProposals: Record<PersonaName, Proposal> = {
 
 /**
  * The mock suggestions made from the CV alone, before any question: each persona's summary, rewritten for the job
- * with a fact from one of their own CV lines (the evidence), and main skills their lines show.
+ * with a fact from one of their own CV lines (the evidence), and main skills their lines show. The summary goes to the
+ * summary card (`sampleSummaryFor`), the rest to the suggestions from the CV (`sampleCvSuggestionsFor`).
  */
 export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
   sara: {
@@ -399,8 +400,19 @@ export const sampleCvSuggestions: Record<PersonaName, Proposal> = {
   },
 };
 
-/** The mock CV suggestions for a sample job; any other job gets none in mock mode. */
-export function sampleCvSuggestionsFor(jobId: string): Proposal {
+function sampleFor(jobId: string): Proposal {
   const name = (Object.keys(personas) as PersonaName[]).find((key) => personas[key].match.jobId === jobId);
   return name ? sampleCvSuggestions[name] : { changes: [], nextSteps: [] };
+}
+
+/** The mock CV suggestions for a sample job, without its summary, which the summary card writes; any other job gets none in mock mode. */
+export function sampleCvSuggestionsFor(jobId: string): Proposal {
+  const sample = sampleFor(jobId);
+  return { ...sample, changes: sample.changes.filter((change) => change.section !== "summary") };
+}
+
+/** The mock summary for a sample job (#16): the same one whatever description the user chose. */
+export function sampleSummaryFor(jobId: string): Proposal {
+  const sample = sampleFor(jobId);
+  return { ...sample, changes: sample.changes.filter((change) => change.section === "summary") };
 }

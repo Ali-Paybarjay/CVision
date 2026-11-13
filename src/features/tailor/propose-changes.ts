@@ -67,7 +67,7 @@ export type SuggestInput = {
 
 /**
  * Suggested changes made from the CV alone, before the user answers anything: lines of their CV rewritten for the
- * job, and the main skills (such as Communication, never a tool) its lines show, up to six in all. Every change quotes a CV line
+ * job (never the summary, which `writeSummary` writes), and the main skills (such as Communication, never a tool) its lines show, up to six in all. Every change quotes a CV line
  * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap counted as not confirmed. That check removes a change that adds a missing gap's requirement, or the ad's registration or Band (#422); the rest of the ad is kept out by the prompt and the evals.
  */
 export async function suggestFromCv({ profile, job, match, sample, requester }: SuggestInput): Promise<TailoringProposal> {
@@ -78,7 +78,12 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
     job: jobForPrompt(job, { withAd: true }),
     strengths: JSON.stringify(match.strengths, null, 2),
     missing: JSON.stringify(match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement), null, 2),
-    lines: JSON.stringify(Object.fromEntries(sections.map((section) => [section, sectionLines(profile, section)])), null, 2),
+    // Without the summary: the summary card writes it, once the user has said how to be described (#16).
+    lines: JSON.stringify(
+      Object.fromEntries(sections.filter((section) => section !== "summary").map((section) => [section, sectionLines(profile, section)])),
+      null,
+      2,
+    ),
     skillsToAdd: String(room),
     mainSkills: bigSixSkills.join(", "),
     actionVerbs: actionVerbs.join(", "),
@@ -86,7 +91,7 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
   const proposal = await askModel({ feature: "tailor-suggest", prompt, schema: ProposalSchema, sample, requester });
 
   const cvChanges = proposal.changes
-    .filter((change) => change.evidenceSource === "cv" && fitsCv(profile, change))
+    .filter((change) => change.section !== "summary" && change.evidenceSource === "cv" && fitsCv(profile, change))
     .map((change) => ({ ...change, gapId: undefined }));
   // A new line is only ever a main skill the CV lacks in its skills list, and only up to six in all.
   const known = new Set(profile.skills.map((skill) => skill.trim().toLowerCase()));
