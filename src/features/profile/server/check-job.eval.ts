@@ -76,13 +76,14 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
 
     // The match points at real profile lines and claims nothing the persona lacks.
     const { match, unsupported } = await matchJob(personas[name].profile, job);
+    // Logged before the checks, so a failing persona still shows its score and gaps.
+    logMatch(`${name}, job ${number}`, match);
     expect(unsupported, "strengths with no profile line behind them").toEqual([]);
     for (const strength of match.strengths) {
       for (const pattern of lacking) expect(strength.requirement, `"${strength.requirement}" listed as met`).not.toMatch(pattern);
     }
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
     expectOnBrand(match);
-    logMatch(`${name}, job ${number}`, match);
   });
 
   it("keeps every criterion of a long NHS person specification (#397)", async () => {
