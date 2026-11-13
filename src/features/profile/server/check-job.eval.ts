@@ -40,6 +40,15 @@ function found(expected: string, requirements: string[]): boolean {
   return requirements.some((requirement) => mainWords(requirement).some((word) => words.includes(word)));
 }
 
+/** The main words either side of "or" in a requirement such as "Construction or property experience", or null. */
+function alternatives(expected: string): [string, string] | null {
+  const [left, right] = expected.split(/\s+or\s+/i);
+  if (right === undefined) return null;
+  const before = mainWords(left).at(-1);
+  const after = mainWords(right)[0];
+  return before && after ? [before, after] : null;
+}
+
 function expectOnBrand(match: MatchResult) {
   const text = [match.reasoning, ...match.gaps.map((gap) => gap.detail)].join("\n").toLowerCase();
   for (const phrase of brand.bannedPhrases) expect(text).not.toContain(phrase.toLowerCase());
@@ -72,6 +81,13 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     }
     for (const requirement of expected.requirements.desirable) {
       expect(found(requirement, job.requirements.desirable), `desirable "${requirement}" in ${JSON.stringify(job.requirements)}`).toBe(true);
+    }
+    // "Construction or property experience" asks for either one, so splitting it would count one gap twice (#188).
+    const read = [...job.requirements.essential, ...job.requirements.desirable];
+    for (const requirement of [...expected.requirements.essential, ...expected.requirements.desirable]) {
+      const pair = alternatives(requirement);
+      if (!pair) continue;
+      expect(read.some((item) => pair.every((word) => mainWords(item).includes(word))), `"${requirement}" kept whole in ${JSON.stringify(job.requirements)}`).toBe(true);
     }
 
     // The match points at real profile lines and claims nothing the persona lacks.
