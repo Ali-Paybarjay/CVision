@@ -9,6 +9,7 @@ import type { Job, Profile, TailoringChange } from "@/shared/contracts";
 import { Button, Card, Notice } from "@/shared/ui";
 import { ApplyPanel } from "./apply-panel";
 import { ChangeCard, type LineNote } from "./change-card";
+import { ChooseAnotherJob } from "./choose-another-job";
 import { CoverLetterPanel } from "./cover-letter-panel";
 import { CvOverview } from "./cv-overview";
 import { CvPreview } from "./cv-preview";
@@ -177,6 +178,23 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
 
   return (
     <>
+    {/* The title comes first, above the overview, so the way back to the list is seen at once and a screen reader,
+        which starts at the focused heading, reaches it next (#462). The page's notice stays right under it (#468). */}
+    <header className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 ref={heading} tabIndex={-1} className="text-xl">
+          Tailor your CV
+        </h1>
+        <StatusPill status={applied ? "completed" : "in-progress"} />
+      </div>
+      <h2 className="text-3xl leading-tight sm:text-4xl">{job.title}</h2>
+      <p className="text-text-muted">{job.company} · Job application</p>
+      <ChooseAnotherJob />
+      {label && <p className="w-fit rounded-full border border-line px-2 py-0.5 text-xs text-text-muted">{label}</p>}
+    </header>
+
+    {notice && <Notice tone="info">{notice}</Notice>}
+
     <CvOverview
       cv={cv}
       tracker={
@@ -198,20 +216,6 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       onReview={() => goTo(3)}
     />
     <Card className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-        <header className="flex flex-col gap-3 border-b border-line pb-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 ref={heading} tabIndex={-1} className="text-xl">
-              Tailor your CV
-            </h1>
-            <StatusPill status={applied ? "completed" : "in-progress"} />
-          </div>
-          <h2 className="text-3xl leading-tight sm:text-4xl">{job.title}</h2>
-          <p className="text-text-muted">{job.company} · Job application</p>
-          {label && <p className="w-fit rounded-full border border-line px-2 py-0.5 text-xs text-text-muted">{label}</p>}
-        </header>
-
-        {notice && <Notice tone="info">{notice}</Notice>}
-
         {saveNote && <Notice tone="info">{saveNote}</Notice>}
 
         <div className="flex flex-col divide-y divide-line">
