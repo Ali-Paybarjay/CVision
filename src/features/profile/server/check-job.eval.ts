@@ -115,11 +115,15 @@ Apply through our careers page. Closing date: 15 December 2026.`,
   },
 ];
 
-function expectOnBrand(match: MatchResult) {
+function expectOnBrand(match: MatchResult, profile: Profile) {
   const text = [match.reasoning, ...match.gaps.map((gap) => gap.detail)].join("\n").toLowerCase();
   for (const phrase of brand.bannedPhrases) expect(text).not.toContain(phrase.toLowerCase());
-  // The score is worked out in code, so the reasoning must not give a number of its own.
-  expect(match.reasoning).not.toMatch(/\d+\s*(%|percent|out of 100|\/\s*100)/i);
+  // The score is worked out in code, so the reasoning must not give a number of its own. A percentage quoted from the
+  // profile, such as Daniel's stock loss "from 2.1% to 1.3%", is evidence, not a score.
+  expect(match.reasoning).not.toMatch(/\d+\s*(out of 100|\/\s*100)/i);
+  const percentages = [...match.reasoning.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|per ?cent)/gi)].map(([, figure]) => `${figure}%`);
+  const quoted = JSON.stringify(profile);
+  expect(percentages.filter((figure) => !quoted.includes(figure)), "a percentage that isn't in the profile").toEqual([]);
 }
 
 describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample ads", () => {
@@ -148,7 +152,7 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
       for (const pattern of lacking) expect(strength.requirement, `"${strength.requirement}" listed as met`).not.toMatch(pattern);
     }
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
-    expectOnBrand(match);
+    expectOnBrand(match, personas[name].profile);
 
     // The only condition in the sample ads is Daniel's driving licence (#222), and it is never scored.
     const conditions = (job.conditions ?? []).map((condition) => `${condition.kind}: ${condition.requirement}`);
