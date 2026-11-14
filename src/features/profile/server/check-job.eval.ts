@@ -49,11 +49,14 @@ function alternatives(expected: string): [string, string] | null {
   return before && after ? [before, after] : null;
 }
 
-function expectOnBrand(match: MatchResult) {
+function expectOnBrand(match: MatchResult, profile: Profile) {
   const text = [match.reasoning, ...match.gaps.map((gap) => gap.detail)].join("\n").toLowerCase();
   for (const phrase of brand.bannedPhrases) expect(text).not.toContain(phrase.toLowerCase());
-  // The score is worked out in code, so the reasoning must not give a number of its own.
-  expect(match.reasoning).not.toMatch(/\d+\s*(%|percent|out of 100|\/\s*100)/i);
+  // The score is worked out in code, so the reasoning must not give a number of its own. A figure quoted from the
+  // profile, such as Daniel's "stock loss from 2.1% to 1.3%", is evidence, not a score.
+  const quoted = JSON.stringify(profile);
+  const figures = match.reasoning.match(/\d+(?:\.\d+)?\s*(?:%|percent|out of 100|\/\s*100)/gi) ?? [];
+  expect(figures.filter((figure) => !quoted.includes(figure)), "a score in the reasoning").toEqual([]);
   // One word for what is judged: the match reads the profile, not the CV (#188).
   expect(text).not.toMatch(/\byour cv\b/i);
 }
@@ -99,7 +102,7 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
       for (const pattern of lacking) expect(strength.requirement, `"${strength.requirement}" listed as met`).not.toMatch(pattern);
     }
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
-    expectOnBrand(match);
+    expectOnBrand(match, personas[name].profile);
   });
 
   it("keeps every criterion of a long NHS person specification (#397)", async () => {
@@ -189,7 +192,7 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     for (const partly of ["Leading teams to deliver to programme and budget", "Acting as the process designer in HAZOP studies"]) {
       expect(match.gaps.find((gap) => gap.requirement === partly)?.kind, partly).toBe("unclear");
     }
-    expectOnBrand(match);
+    expectOnBrand(match, ProfileSchema.parse(processProfile));
   });
 
   it("reads an ad as data, not instructions", async () => {
