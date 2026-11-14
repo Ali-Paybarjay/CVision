@@ -48,7 +48,7 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
   - "credential": a licence or card the person holds, for example "Full UK driving licence", "CSCS card", "SIA licence" or "Counterbalance forklift licence";
   - "working": what the job asks of the person's time or place, for example travel, overnight stays, night, evening or weekend shifts, on-call cover, flexible hours, relocation or having their own car;
   - "sensitive": right to work, a visa or nationality; a DBS check, a criminal record or penalty points; security clearance or vetting; and health or physical demands, such as lifting heavy loads or standing for long periods.
-- Never mark these as conditions, as the CV shows them: registration with a professional body (for example NMC, GMC or HCPC) or a licence to practise, a degree or other qualification, a specialist certificate or course (for example PRINCE2, ALS or a CIPD qualification), and any skill, tool or experience, such as "Experience operating a forklift".
+- Never mark these as conditions, as the CV shows them: registration with a professional body (for example NMC, GMC or HCPC), a degree or other qualification, a specialist certificate or course (for example PRINCE2, ALS or a CIPD qualification), and any skill, tool or experience, such as "Experience operating a forklift".
 
 <job_ad>
 {{ad}}
