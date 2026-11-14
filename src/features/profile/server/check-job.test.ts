@@ -165,6 +165,13 @@ describe("matchPrompt", () => {
     expect(prompt).toContain("A lower one, or a different one with a similar name or from the same body, leaves the requirement");
   });
 
+  it("checks each part of a requirement on its own, so one line that shows one part never makes it met (#188)", async () => {
+    const prompt = await matchPrompt(personas.sara.profile, personas.sara.jobs[0]);
+
+    expect(prompt).toContain("Check each part on its own: a line that shows budgeting says nothing about forecasting");
+    expect(prompt).toContain('the requirement is "unclear", even when one line shows a part well');
+  });
+
   it("sends numbered requirements and profile lines, but never the name or contact details", async () => {
     const { profile, jobs } = personas.sara;
 
