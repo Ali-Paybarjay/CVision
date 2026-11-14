@@ -42,8 +42,11 @@ const conditionWords: [JobConditionKind, RegExp[]][] = [
   [
     "credential",
     [
-      /\bdriv(?:ing|er['’]?s?) licen[cs]e\b|\b(?:full|clean)(?: clean| full)?(?: UK)?(?: manual)? licen[cs]e\b|\b(?:HGV|LGV|C\+E|Class [12]) licen[cs]e\b|\bab(?:le|ility) to drive\b/i,
-      /\bCSCS\b|\bSIA\b|\bCPCS\b|\bfork[- ]?lift\b|\bFLT\b|\bcounterbalance\b/i,
+      // A "full licence" is a driving licence, but "a full licence to practise" is a professional registration.
+      /\bdriv(?:ing|er['’]?s?) licen[cs]e\b|\b(?:full|clean)(?: clean| full)?(?: UK)?(?: manual)? licen[cs]e\b(?! to practi[cs]e)|\b(?:HGV|LGV|C\+E|Class [12]) licen[cs]e\b|\bab(?:le|ility) to drive\b/i,
+      /\bCSCS\b|\bSIA\b|\bCPCS\b/i,
+      // A forklift licence or certificate, never experience operating a forklift: the CV shows that.
+      /\b(?:fork[- ]?lift|FLT|counterbalance|reach truck)\b.*\b(?:licen[cs]es?|certificat\w*|tickets?)\b|\b(?:licen[cs]es?|certificat\w*|tickets?)\b.*\b(?:fork[- ]?lift|FLT|counterbalance|reach truck)\b/i,
     ],
   ],
   [

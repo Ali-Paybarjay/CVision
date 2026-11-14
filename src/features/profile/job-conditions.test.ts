@@ -11,6 +11,7 @@ describe("conditionsByWords (the backup for jobs read before the model marked co
     ["Full UK driving licence", "credential"],
     ["CSCS card", "credential"],
     ["Counterbalance forklift licence", "credential"],
+    ["Forklift licence", "credential"],
     ["SIA door supervisor licence", "credential"],
     ["Willingness to travel within the UK and internationally", "working"],
     ["Willingness to travel across the Midlands, with occasional overnight stays", "working"],
@@ -38,6 +39,10 @@ describe("conditionsByWords (the backup for jobs read before the model marked co
     "Relocation coordination for new starters",
     "Experience in the travel industry",
     "Current NMC registration",
+    // The nurse's sample ad (#399): a prescribing qualification, not a licence like a driving licence.
+    "Registered independent prescriber (V300) with a full licence to practise",
+    "Experience operating a forklift",
+    "Counterbalance forklift experience",
     "Degree in a numerate subject",
     "PRINCE2 or Agile training",
     "Strong health and safety knowledge",

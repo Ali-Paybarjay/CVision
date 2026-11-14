@@ -220,6 +220,9 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     // A registration is the job itself, not a condition: it stays in the score (#222).
     const registration = job.requirements.essential.find((item) => /\bNMC\b/.test(item) && /regist/i.test(item));
     expect(job.conditions?.map((condition) => condition.requirement), "the NMC registration is no condition").not.toContain(registration);
+    // So is the V300 prescriber line, although it ends "with a full licence to practise".
+    const marked = (job.conditions ?? []).map((condition) => condition.requirement).join("\n");
+    expect(marked, `conditions ${JSON.stringify(job.conditions)}`).not.toMatch(/V300|prescrib|to practi[cs]e/i);
 
     expect(kept.length, `missing: ${criteria.filter((criterion) => !kept.includes(criterion)).join("; ")}`).toBeGreaterThanOrEqual(18);
     for (const criterion of ["Understanding of clinical governance and incident reporting", "Knowledge of safeguarding adults and children procedures"]) {
