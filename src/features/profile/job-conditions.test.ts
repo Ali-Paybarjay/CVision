@@ -79,6 +79,37 @@ describe("jobConditions", () => {
     ];
     expect(jobConditions({ requirements, conditions })).toEqual([{ requirement: "Full UK driving licence", kind: "credential" }]);
   });
+
+  it("drops a credential mark on a professional registration, so it stays scored, and keeps real conditions", () => {
+    const registrations = [
+      "Full GMC registration with a licence to practise",
+      "Current NMC registration",
+      "Registration with the Health and Care Professions Council",
+      "Registered independent prescriber (V300) with a full licence to practise",
+      // Each caught by one part of the guard alone, so losing a part fails this test.
+      "Full licence to practise",
+      "Licensed to practise in the UK",
+      "Current practising certificate",
+      "Current professional registration",
+      "SSSC registration",
+      "Registered with the General Osteopathic Council",
+      "Social Work England registration",
+      "Registered with the Pharmaceutical Society of Northern Ireland",
+      "Gas Safe registered",
+      "Non-medical prescribing qualification",
+    ];
+    const kept = [
+      { requirement: "Full UK driving licence", kind: "credential" as const },
+      { requirement: "SIA door supervisor licence", kind: "credential" as const },
+      { requirement: "Personal licence holder", kind: "credential" as const },
+      { requirement: "Registration with the DBS Update Service", kind: "sensitive" as const },
+      { requirement: "Declare any prescribed medication that affects driving", kind: "sensitive" as const },
+      { requirement: "No NMC fitness to practise sanctions", kind: "sensitive" as const },
+    ];
+    const conditions = [...registrations.map((requirement) => ({ requirement, kind: "credential" as const })), ...kept];
+
+    expect(jobConditions({ requirements: { essential: conditions.map(({ requirement }) => requirement), desirable: [] }, conditions })).toEqual(kept);
+  });
 });
 
 describe("conditionGroups", () => {

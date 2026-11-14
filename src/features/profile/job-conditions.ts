@@ -8,9 +8,26 @@ import type { Job, JobCondition, JobConditionKind } from "@/shared/contracts";
 type Requirements = Pick<Job, "requirements" | "conditions">;
 
 /**
+ * The words of a professional registration, a licence to practise or a prescribing qualification. None is a licence
+ * or card like a driving licence, and the job reader is told never to mark one; if it marks one as a credential
+ * anyway, the mark is dropped so the criterion stays scored. Otherwise a nurse whose profile doesn't show NMC
+ * registration would get no gap and no question (#421), and Tailor would never ask about the licence to practise
+ * (#401). A registration in other words, such as "Registered Midwife", is left to the job reader. A check about a
+ * registration, such as fitness to practise sanctions, keeps a mark of another kind.
+ */
+const professionalRegistration = [
+  /\blicen[cs](?:e|es|ed) to practi[cs]e\b|\bpracti[cs]ing (?:licen[cs]e|certificate)s?\b|\bprofessional registration\b/i,
+  // The UK's statutory registers, by initials or name, and Gas Safe, which Tailor asks about like one (#401). Never GCC
+  // (also a Gulf driving licence) or PSNI (also the police).
+  /\b(?:NMC|GMC|HCPC|GPhC|GDC|GOC|GOsC|SSSC|NISCC)\b|\b(?:Nursing (?:and|&) Midwifery|General (?:Medical|Dental|Optical|Pharmaceutical|Osteopathic|Chiropractic)|Health (?:and|&) Care Professions|Scottish Social Services|Northern Ireland Social Care) Council\b|\bSocial (?:Work England|Care Wales)\b|\bPharmaceutical Society of Northern Ireland\b|\bGas[- ]?Safe\b/i,
+  // A prescribing qualification, never "prescribed" as in medication.
+  /\bprescrib(?:e|er|ers|ing)\b/i,
+];
+
+/**
  * The job's conditions, each one of its requirements word for word. A condition the model wrote in other words than
- * any requirement is dropped, so that requirement stays scored as before. A job without `conditions` was read before
- * the model marked them: the word list decides.
+ * any requirement is dropped, so that requirement stays scored as before, and so is a professional registration marked
+ * as a credential. A job without `conditions` was read before the model marked them: the word list decides.
  */
 export function jobConditions(job: Requirements): JobCondition[] {
   const requirements = [...job.requirements.essential, ...job.requirements.desirable];
@@ -18,10 +35,10 @@ export function jobConditions(job: Requirements): JobCondition[] {
 
   const listed = new Set(requirements);
   const seen = new Set<string>();
-  return job.conditions.filter(({ requirement }) => {
+  return job.conditions.filter(({ requirement, kind }) => {
     if (!listed.has(requirement) || seen.has(requirement)) return false;
     seen.add(requirement);
-    return true;
+    return !(kind === "credential" && professionalRegistration.some((pattern) => pattern.test(requirement)));
   });
 }
 

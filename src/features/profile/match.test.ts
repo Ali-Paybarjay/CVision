@@ -354,6 +354,19 @@ describe("the job's conditions (#222)", () => {
     expect(match.gaps.map((gap) => gap.requirement)).toContain("Full clean UK driving licence");
   });
 
+  it("scores a professional registration as before even when the model marked it", () => {
+    const job: Job = {
+      ...saraJob,
+      requirements: { essential: ["Current NMC registration", "Enhanced DBS check"], desirable: [] },
+      conditions: [
+        { requirement: "Current NMC registration", kind: "credential" },
+        { requirement: "Enhanced DBS check", kind: "sensitive" },
+      ],
+    };
+
+    expect(jobRequirements(job).map((requirement) => requirement.text)).toEqual(["Current NMC registration"]);
+  });
+
   it("leaves them out of the mock answer too, through the word list for a job read before they were marked", () => {
     const danielJob = personas.daniel.jobs[1];
 

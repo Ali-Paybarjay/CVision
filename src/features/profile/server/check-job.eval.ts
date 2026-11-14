@@ -1,3 +1,4 @@
+import { APIConnectionError, APIError } from "@anthropic-ai/sdk/core/error";
 import { describe, expect, it } from "vitest";
 import { getAiProvider } from "@/shared/ai";
 import { brand } from "@/shared/brand";
@@ -7,10 +8,42 @@ import clinicalJob from "../../../../sample-data/clinical/job.json";
 import clinicalProfile from "../../../../sample-data/clinical/profile.json";
 import processJob from "../../../../sample-data/process-engineer/job.json";
 import processProfile from "../../../../sample-data/process-engineer/profile.json";
-import { matchJob, parseJob } from "./check-job";
+import { matchJob as matchJobOnce, parseJob as parseJobOnce } from "./check-job";
 
 // Prompt evals for prompts/profile-job.md and prompts/profile-match.md: real requests to the model, so they cost money.
 // Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY).
+
+// The provider can turn requests away for a few seconds, longer than the SDK's own two quick retries inside askModel:
+// in run 43531003448 three tests failed with "429 ... temporarily rate-limited upstream" within about 6 s, and the next
+// request passed. So each call here is made again after such an error, and only then: a refusal, an answer that
+// doesn't fit the schema (AskModelError) or a failed check is never retried. A call that needs every retry waits
+// 5 + 10 + 20 s, plus about 2 s for each refused call and the time of the answer. That fits the 120 s testTimeout for
+// one call but not always for two, so the sample-ad tests, which call the model twice, get 240 s.
+const RETRY_DELAYS_MS = [5_000, 10_000, 20_000];
+
+/** A rate limit (429), an overload (529) or another server error, a request timeout, or a connection that failed. */
+function isTransient(error: unknown): error is APIError {
+  if (error instanceof APIConnectionError) return true;
+  if (!(error instanceof APIError) || error.status === undefined) return false;
+  return error.status === 408 || error.status === 409 || error.status === 429 || error.status >= 500;
+}
+
+/** Calls the model once, and again after each transient provider error, logging every retry. */
+async function withRetries<T>(label: string, request: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request();
+    } catch (error) {
+      if (attempt >= RETRY_DELAYS_MS.length || !isTransient(error)) throw error;
+      const delay = RETRY_DELAYS_MS[attempt];
+      console.warn(`${label}: ${error.constructor.name} ${error.status ?? "(no response)"}, retry ${attempt + 1} of ${RETRY_DELAYS_MS.length} in ${delay / 1000} s`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+const parseJob: typeof parseJobOnce = (adText, options) => withRetries("parseJob", () => parseJobOnce(adText, options));
+const matchJob: typeof matchJobOnce = (profile, job, options) => withRetries("matchJob", () => matchJobOnce(profile, job, options));
 
 /** Requirements each persona clearly lacks: the match must never list them as strengths (Nothing invented). */
 const neverMet: Record<PersonaName, [RegExp[], RegExp[]]> = {
@@ -119,6 +152,8 @@ Apply through our careers page. Closing date: 15 December 2026.`,
     expected: [
       [/driving licence/i, "credential"],
       [/travel/i, "working"],
+      // Whole or split off from the travel, the overnight stays are a condition, never a scored requirement.
+      [/overnight/i, "working"],
       [/multi-site/i, null],
       [/P&L/i, null],
       [/forklift/i, "credential"],
@@ -181,7 +216,7 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
     expectOnBrand(match, personas[name].profile);
 
-    // The only condition in the sample ads is Daniel's driving licence (#222), and it is never scored.
+    // Only Daniel's second sample ad has conditions (#222): its driving licence is one, and it is never scored.
     const conditions = (job.conditions ?? []).map((condition) => `${condition.kind}: ${condition.requirement}`);
     if (name === "daniel" && number === 2) {
       expect(conditionKind(job, /driving licen[cs]e/i), `conditions ${JSON.stringify(conditions)}`).toBe("credential");
@@ -190,7 +225,7 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     } else {
       expect(conditions, "no condition in this ad").toEqual([]);
     }
-  });
+  }, 240_000);
 
   it.each(conditionAds)("marks each condition of the $name ad with its kind, and no skill (#222)", async ({ ad, expected }) => {
     const job = await parseJob(ad, { url: null });
@@ -233,14 +268,16 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
   it("counts a nurse's Band 5 acute medical role as evidence of acute experience (#399)", async () => {
     const job = JobSchema.parse(clinicalJob);
     const { match, unsupported } = await matchJob(ProfileSchema.parse(clinicalProfile), job);
+    // Logged before the checks, so a failing run still shows the score and each gap's kind.
+    logMatch("Nurse", match);
 
     expect(unsupported, "strengths with no profile line behind them").toEqual([]);
     const acute = "Post-registration experience at Band 5 in an acute medical setting";
     const gap = match.gaps.find((item) => item.requirement === acute);
     expect(gap?.kind, `"${acute}" is ${gap ? gap.kind : "met"}`).not.toBe("missing");
-    // A role line is never evidence of a named skill the CV does not show.
+    // A role line is never evidence of a named skill the CV does not show. A failure shows the line taken as proof.
     for (const lacking of [/V300|prescrib/i, /arterial blood gas/i, /advanced life support/i]) {
-      expect(match.strengths.map((item) => item.requirement).join("\n")).not.toMatch(lacking);
+      expect(match.strengths.map((item) => item.requirement).join("\n"), `strengths ${JSON.stringify(match.strengths)}`).not.toMatch(lacking);
     }
   });
 
