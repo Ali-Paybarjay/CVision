@@ -113,7 +113,7 @@ describe("buildMatchResult", () => {
       ["gap-3", "Healthcare or NHS data", "desirable", "missing"],
       ["gap-4", "Git", "desirable", "missing"],
     ]);
-    expect(match.gaps[1].detail).toBe("Tableau is on your CV; Power BI is not.");
+    expect(match.gaps[1].detail).toBe("Tableau is on your profile; Power BI is not.");
     expect(match.gaps[2].detail).toBe("Nothing in your profile shows this yet.");
     expect(match.uncoveredRequirements).toEqual(["Power BI", "Healthcare or NHS data", "Git"]);
   });
@@ -153,6 +153,17 @@ describe("buildMatchResult", () => {
 
     expect(match.gaps[0]).toMatchObject({ requirement: "Clear communication with non-technical stakeholders", kind: "unclear" });
     expect(match.reasoning).not.toBe(assessment.reasoning);
+  });
+
+  it("says \"your profile\", never \"your CV\", whatever the model wrote (#188)", () => {
+    const assessment = saraAssessment();
+    assessment.reasoning = "Your CV shows SQL. State your stakeholder work explicitly in your CV.";
+
+    const { match } = buildMatchResult(saraJob, sara, assessment);
+
+    expect(match.reasoning).toBe("Your profile shows SQL. State your stakeholder work explicitly in your profile.");
+    expect(match.gaps[0].detail).toBe("Your profile doesn’t say how you explained results.");
+    expect(JSON.stringify(match)).not.toMatch(/\byour cv\b/i);
   });
 
   it("ignores answers for requirements the job doesn't have", () => {

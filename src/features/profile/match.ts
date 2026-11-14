@@ -114,6 +114,11 @@ const defaultDetail = {
   unchecked: "We couldn’t check this one against your profile.",
 } as const;
 
+/** The match judges the profile, so its text says "your profile", never "your CV", whatever the model wrote (#188). */
+function sayProfile(text: string): string {
+  return text.replace(/\b(y)our cv\b/gi, (_phrase, y: string) => `${y}our profile`);
+}
+
 /**
  * Turns the model's answer into a MatchResult. A "met" with no real profile line behind it becomes an
  * "unclear" gap (and is listed in `unsupported`, for the prompt evals). If anything had to be corrected,
@@ -141,7 +146,7 @@ export function buildMatchResult(
       unsupported.push(requirement.text);
       return { ...requirement, status: "unclear", detail: defaultDetail.noEvidence };
     }
-    return { ...requirement, status: answer.status, evidence, detail: answer.detail.trim() || defaultDetail[answer.status] };
+    return { ...requirement, status: answer.status, evidence, detail: sayProfile(answer.detail.trim()) || defaultDetail[answer.status] };
   });
 
   const strengths: Strength[] = judged.flatMap((item) =>
@@ -156,7 +161,7 @@ export function buildMatchResult(
       kind: item.status === "missing" ? "missing" : "unclear",
       detail: item.detail,
     }));
-  const modelReasoning = assessment.reasoning.trim();
+  const modelReasoning = sayProfile(assessment.reasoning.trim());
 
   const match = MatchResultSchema.parse({
     jobId: job.id,

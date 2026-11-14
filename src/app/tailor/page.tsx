@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { JobListItem } from "@/features/profile/ui/job-list-item";
 import { askGapQuestions, defaultGapQuestion, questionGaps, skillGaps } from "@/features/tailor/gap-questions";
 import { keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
 import { modelFailureMessage, tailorModelAccess, whatStillWorksOnQuestions } from "@/features/tailor/server/model-access";
-import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobs } from "@/features/tailor/server/my-data";
+import { getMyDataSource, getMyJob, getMyMatch, getMyProfile, listMyJobIdsOnDashboard, listMyJobs } from "@/features/tailor/server/my-data";
 import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { ButtonLink, Card, Notice, Page, PathSteps, wideFrame } from "@/shared/ui";
+import { ChooseAnotherJob } from "./choose-another-job";
 import { TailorSignIn, tailorStart } from "./tailor-sign-in";
 import { TailorWaitNote } from "./tailor-wait-note";
 import { TailorWorkspace } from "./tailor-workspace";
@@ -119,6 +121,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
     return (
       <Frame>
         {header}
+        <ChooseAnotherJob />
         <Notice tone="info" title="We have not compared your profile with this job yet">
           Check how your profile matches this job first, then come back to tailor your CV.
         </Notice>
@@ -175,8 +178,9 @@ function webLink(url: string | null): string | null {
   return url && /^https?:\/\//i.test(url) ? url : null;
 }
 
+/** The user's jobs, each with Delete, except one on their dashboard because they applied for it (#462). */
 async function JobPicker() {
-  const jobs = await listMyJobs();
+  const [jobs, onDashboard] = await Promise.all([listMyJobs(), listMyJobIdsOnDashboard()]);
   if (jobs.length === 0) {
     return (
       <Notice tone="info" title="Add a job first">
@@ -189,11 +193,13 @@ async function JobPicker() {
       <h2 className="text-xl">Which job is this CV for?</h2>
       <ul className="mt-4 flex flex-col gap-3">
         {jobs.map((job) => (
-          <li key={job.id}>
-            <Link href={`/tailor?job=${encodeURIComponent(job.id)}`} className="text-accent underline underline-offset-4">
-              {job.title} at {job.company}
-            </Link>
-          </li>
+          <JobListItem
+            key={job.id}
+            jobId={job.id}
+            name={`${job.title} at ${job.company}`}
+            href={`/tailor?job=${encodeURIComponent(job.id)}`}
+            onDashboard={onDashboard.includes(job.id)}
+          />
         ))}
       </ul>
     </Card>

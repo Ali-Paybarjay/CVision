@@ -89,12 +89,16 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   // suggests changes from the CV straight away, then asks a question per gap (#191).
   await page.goto("/tailor");
   await expect(page.getByRole("heading", { name: "Which job is this CV for?" })).toBeVisible();
+  // Each job can be deleted from the list, so it doesn't fill up with jobs the user has finished with (#462).
+  await expect(page.getByRole("button", { name: "Delete Junior Data Analyst at Pennine Health Analytics" })).toBeVisible();
   await page.getByRole("link", { name: "Junior Data Analyst at Pennine Health Analytics" }).click();
 
   await expect(page).toHaveURL(/\/tailor\?job=sara-job-1$/);
   await expect(page.getByText("Sample data · mock mode")).toBeVisible();
   // The heading takes focus when the workspace arrives, so a screen reader says the page is ready (#419).
   await expect(page.getByRole("heading", { level: 1, name: "Tailor your CV" })).toBeFocused();
+  // A way back to the list, for a user who picked the wrong job (#462).
+  await expect(page.getByRole("link", { name: "← Choose another job" })).toHaveAttribute("href", "/tailor");
 
   // Suggestions from the CV come without any question, and wait for the user: nothing goes in until they approve.
   await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();

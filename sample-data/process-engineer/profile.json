@@ -1,0 +1,75 @@
+{
+  "id": "process-engineer-profile",
+  "fullName": "Owen Pritchard",
+  "contact": {
+    "email": "owen.pritchard@example.com",
+    "phone": "07700 900412",
+    "location": "Aberdeen"
+  },
+  "summary": "Senior process engineer with 12 years in upstream oil and gas, from concept studies to commissioning. I develop PFDs and P&IDs, build mass and energy balances and take part in HAZOP studies.",
+  "skills": [
+    "Process simulation in Aspen HYSYS",
+    "PFD and P&ID development",
+    "Mass and energy balances",
+    "Delivering process design packages in accordance with established standards for safety, cost, quality and timelines",
+    "Led and mentored small teams of graduate engineers",
+    "Equipment sizing: separators, heat exchangers, pumps and compressors"
+  ],
+  "experience": [
+    {
+      "title": "Senior Process Engineer",
+      "company": "Brodie Offshore Engineering",
+      "location": "Aberdeen",
+      "startDate": "2019-03",
+      "endDate": null,
+      "duties": [
+        "Lead process engineer for brownfield gas compression and dehydration projects on North Sea platforms",
+        "Drew the PFDs and P&IDs for a 40 MMSCFD gas dehydration unit",
+        "Took part in the dehydration unit's HAZOP study as a process team member",
+        "Built mass and energy balances in Aspen HYSYS for compression, dehydration and produced water systems",
+        "Supported feasibility studies for two subsea tie-backs, including equipment lists for the cost estimates"
+      ],
+      "achievements": [
+        "Cut flaring on one platform by 18% by redesigning its flash gas recovery"
+      ]
+    },
+    {
+      "title": "Process Engineer",
+      "company": "Kestrel Energy Services",
+      "location": "Great Yarmouth",
+      "startDate": "2013-09",
+      "endDate": "2019-02",
+      "duties": [
+        "Sized separators, heat exchangers, pumps and relief valves for onshore gas terminals",
+        "Wrote process descriptions, datasheets and operating philosophies",
+        "Checked vendor documents against the process datasheets"
+      ],
+      "achievements": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Northbrook",
+      "qualification": "MEng",
+      "subject": "Chemical Engineering",
+      "grade": "2:1",
+      "startDate": "2009-09",
+      "endDate": "2013-06"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "BOSIET offshore safety training",
+      "issuer": "OPITO",
+      "year": 2023
+    }
+  ],
+  "preferences": {
+    "salary": null,
+    "location": "",
+    "workModes": [],
+    "contractTypes": [],
+    "hours": []
+  },
+  "followUpAnswers": []
+}
