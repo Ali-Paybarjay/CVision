@@ -4,8 +4,8 @@ import { formatPeriod } from "./ui/format";
 
 // A match is judged one requirement at a time. The model (or, in mock mode, simple rules) says whether the
 // profile shows each requirement and points at the profile line that proves it, by the line's id. The code
-// then copies that line word for word as the evidence, so a strength can only ever quote what the user wrote
-// (Nothing invented). The score is worked out in code, so the same answers always give the same score.
+// then copies that line word for word as the evidence, so a strength, or a gap the profile partly shows, can only
+// ever quote what the user wrote (Nothing invented). The score is worked out in code, so the same answers always give the same score.
 
 export type EvidenceKind =
   | "summary"
@@ -83,7 +83,10 @@ export const RequirementAssessmentSchema = z.object({
   /** The requirement's id, e.g. "E1". */
   id: z.string(),
   status: RequirementStatusSchema,
-  /** The id of the profile line that shows it, e.g. "L4"; empty when there is none. */
+  /**
+   * The id of the profile line that shows it, e.g. "L4"; for "unclear", up to three lines that partly show it, e.g.
+   * "L3, L9" (#188); empty when there is none.
+   */
   evidence: z.string(),
   /** For "unclear" and "missing": what the profile doesn't show, in one sentence to the user. */
   detail: z.string(),
@@ -97,8 +100,16 @@ export const MatchAssessmentSchema = z.object({
 });
 export type MatchAssessment = z.infer<typeof MatchAssessmentSchema>;
 
-/** One requirement after checking: what was decided and, when met, the profile line that proves it. */
-export type JudgedRequirement = JobRequirement & { status: RequirementStatus; evidence?: EvidenceLine; detail: string };
+/**
+ * One requirement after checking: what was decided and, when met, the profile line that proves it. When it is
+ * "unclear", `partly` holds up to three profile lines that partly show it (#188).
+ */
+export type JudgedRequirement = JobRequirement & {
+  status: RequirementStatus;
+  evidence?: EvidenceLine;
+  partly?: EvidenceLine[];
+  detail: string;
+};
 
 const defaultDetail = {
   unclear: "Your profile touches on this, but doesn’t show it clearly.",
@@ -133,13 +144,21 @@ export function buildMatchResult(
       complete = false;
       return { ...requirement, status: "unclear", detail: defaultDetail.unchecked };
     }
-    const evidence = lines.get(normaliseId(answer.evidence));
+    const shown = evidenceLines(answer.evidence, lines);
+    const evidence = shown[0];
     if (answer.status === "met") {
       if (evidence) return { ...requirement, status: "met", evidence, detail: "" };
       unsupported.push(requirement.text);
       return { ...requirement, status: "unclear", detail: defaultDetail.noEvidence };
     }
-    return { ...requirement, status: answer.status, evidence, detail: sayProfile(answer.detail.trim()) || defaultDetail[answer.status] };
+    return {
+      ...requirement,
+      status: answer.status,
+      evidence,
+      // A "missing" requirement never quotes the profile, whatever ids the model gave (#188).
+      ...(answer.status === "unclear" && shown.length > 0 && { partly: shown.slice(0, 3) }),
+      detail: sayProfile(answer.detail.trim()) || defaultDetail[answer.status],
+    };
   });
 
   const strengths: Strength[] = judged.flatMap((item) =>
@@ -153,6 +172,7 @@ export function buildMatchResult(
       importance: item.importance,
       kind: item.status === "missing" ? "missing" : "unclear",
       detail: item.detail,
+      ...(item.partly && { evidence: item.partly.map((line) => line.text) }),
     }));
   const modelReasoning = sayProfile(assessment.reasoning.trim());
 
@@ -217,6 +237,15 @@ function normaliseId(id: string): string {
   return id.trim().toUpperCase();
 }
 
+/**
+ * The profile lines behind the model's line ids ("L4", or "L3, L9" for an unclear requirement), in its order. Ids
+ * that aren't in the profile are dropped, and a line given twice counts once, so the model can never add a line.
+ */
+function evidenceLines(ids: string, lines: Map<string, EvidenceLine>): EvidenceLine[] {
+  const found = ids.split(/[\s,;]+/).flatMap((id) => lines.get(normaliseId(id)) ?? []);
+  return found.filter((line, index) => found.findIndex((other) => other.text === line.text) === index);
+}
+
 function splitSentences(text: string): string[] {
   return text.split(/(?<=[.!?])\s+(?=[A-Z0-9“"‘'(])/u);
 }
@@ -266,8 +295,11 @@ export function assessByRules(profile: Profile, job: Job): MatchAssessment {
       const proof = lines.find((line) => found(line, (words, hits) => hits === words.length));
       if (proof) return { id: requirement.id, status: "met" as const, evidence: proof.id, detail: "" };
 
-      const related = lines.find((line) => found(line, (words, hits) => hits * 2 > words.length));
-      if (related) return { id: requirement.id, status: "unclear" as const, evidence: related.id, detail: defaultDetail.unclear };
+      const related = lines.filter((line) => found(line, (words, hits) => hits * 2 > words.length)).slice(0, 3);
+      if (related.length > 0) {
+        const ids = related.map((line) => line.id).join(", ");
+        return { id: requirement.id, status: "unclear" as const, evidence: ids, detail: defaultDetail.unclear };
+      }
 
       return { id: requirement.id, status: "missing" as const, evidence: "", detail: defaultDetail.missing };
     }),
