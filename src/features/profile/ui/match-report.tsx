@@ -66,7 +66,7 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         {hasRequirements && (
           <p className="mt-3 max-w-[65ch] text-sm text-text-muted">
             How the score works: essential requirements count three times as much as desirable ones. A requirement
-            your profile shows clearly counts in full, and one it only touches on counts half.
+            your profile shows clearly counts in full, and one marked “{gapLabel.unclear}” counts half.
           </p>
         )}
       </Card>
@@ -147,6 +147,12 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
   );
 }
 
+/** What each kind of gap is called on the page (#188): a word, so the kind never rests on colour alone. */
+export const gapLabel: Record<Gap["kind"], string> = {
+  unclear: "Partly shown",
+  missing: "Not shown yet",
+};
+
 function GapList({ title, gaps }: { title: string; gaps: Gap[] }) {
   if (gaps.length === 0) return null;
   return (
@@ -155,15 +161,41 @@ function GapList({ title, gaps }: { title: string; gaps: Gap[] }) {
         {title} ({gaps.length})
       </h4>
       <ul className="mt-3 flex flex-col gap-4">
-        {gaps.map((gap) => (
-          <li key={gap.id} className="flex gap-3">
-            <WarningIcon className="mt-0.5 size-5 shrink-0 text-warning" />
-            <div className="min-w-0">
-              <p className="font-semibold">{gap.requirement}</p>
-              <p className="mt-1 text-sm text-text-muted">{gap.detail}</p>
-            </div>
-          </li>
-        ))}
+        {gaps.map((gap) => {
+          // Only a gap the profile partly shows quotes it, and only lines the code copied from the profile (#188).
+          const lines = gap.kind === "unclear" ? (gap.evidence ?? []) : [];
+          return (
+            <li key={gap.id} className="flex gap-3">
+              <WarningIcon className="mt-0.5 size-5 shrink-0 text-warning" />
+              <div className="min-w-0">
+                <p className="font-semibold">{gap.requirement}</p>
+                <p className="mt-1">
+                  <span className="inline-flex rounded-md bg-warning-bg px-2 py-0.5 text-[12.5px] font-semibold text-warning">
+                    {gapLabel[gap.kind]}
+                  </span>
+                </p>
+                <p className="mt-1 text-sm text-text-muted">{gap.detail}</p>
+                {lines.length === 1 && (
+                  <p className="mt-1 text-sm text-text-muted">
+                    From your profile: <q className="break-words">{lines[0]}</q>
+                  </p>
+                )}
+                {lines.length > 1 && (
+                  <>
+                    <p className="mt-1 text-sm text-text-muted">From your profile:</p>
+                    <ul className="mt-1 flex flex-col gap-1 text-sm text-text-muted">
+                      {lines.map((line) => (
+                        <li key={line}>
+                          <q className="break-words">{line}</q>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
