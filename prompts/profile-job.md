@@ -41,6 +41,7 @@ You are reading a job ad that a job seeker pasted into CVision, a UK job-applica
 ## Marking the conditions
 
 - A condition stays in `requirements` like any other requirement. `conditions` only marks it: copy its `requirement` exactly as you wrote it in `requirements`.
+- Go through every requirement, desirable as well as essential, and mark each one that is a condition: a desirable condition is still a condition.
 - `kind` is one of:
   - "credential": a licence or card the person holds, for example "Full UK driving licence", "CSCS card", "SIA licence" or "Counterbalance forklift licence";
   - "working": what the job asks of the person's time or place, for example travel, overnight stays, night, evening or weekend shifts, on-call cover, flexible hours, relocation or having their own car;
