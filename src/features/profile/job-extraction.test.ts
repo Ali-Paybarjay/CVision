@@ -10,6 +10,7 @@ import {
   parseAdUrl,
   type JobExtraction,
 } from "./job-extraction";
+import { jobConditions } from "./job-conditions";
 
 const allJobs = Object.values(personas).flatMap((persona) => persona.jobs);
 
@@ -23,6 +24,7 @@ const extraction: JobExtraction = {
   workMode: "hybrid",
   requirements: { essential: ["Strong SQL", "Python or R"], desirable: ["Power BI"] },
   role: { discipline: "", specialty: "", level: "", registration: "" },
+  conditions: [],
 };
 
 describe("jobFromExtraction", () => {
@@ -55,10 +57,53 @@ describe("jobFromExtraction", () => {
     });
   });
 
-  it("gives the facts of every sample job back unchanged", () => {
+  it("gives the facts of every sample job back unchanged, with the conditions the word list finds", () => {
     for (const job of allJobs) {
-      expect(jobFromExtraction(extractionFromJob(job), { id: job.id, adText: job.description, url: job.url })).toEqual(job);
+      expect(jobFromExtraction(extractionFromJob(job), { id: job.id, adText: job.description, url: job.url })).toEqual({
+        ...job,
+        conditions: jobConditions(job),
+      });
     }
+    // The mock answer for Daniel's second ad marks its licence, so the demo shows the conditions box.
+    expect(extractionFromJob(personas.daniel.jobs[1]).conditions).toEqual([{ requirement: "Full UK driving licence", kind: "credential" }]);
+  });
+
+  it("keeps the conditions the model marked on a kept requirement, word for word (#222)", () => {
+    const job = jobFromExtraction(
+      {
+        ...extraction,
+        requirements: { essential: ["Strong SQL", "Full UK driving licence"], desirable: ["Willing to work weekends"] },
+        conditions: [
+          { requirement: " Full UK driving licence ", kind: "credential" },
+          { requirement: "Willing to work weekends", kind: "working" },
+          { requirement: "Full UK driving licence", kind: "working" },
+        ],
+      },
+      { id: "j", adText: "ad", url: null },
+    );
+
+    expect(job.conditions).toEqual([
+      { requirement: "Full UK driving licence", kind: "credential" },
+      { requirement: "Willing to work weekends", kind: "working" },
+    ]);
+  });
+
+  it("drops a condition that is not one of the requirements, so that requirement stays scored (#222)", () => {
+    const job = jobFromExtraction(
+      {
+        ...extraction,
+        requirements: { essential: ["Strong SQL", "Full clean UK driving licence"], desirable: [] },
+        conditions: [
+          { requirement: "Full UK driving licence", kind: "credential" },
+          { requirement: "", kind: "sensitive" },
+          { requirement: "Enhanced DBS check", kind: "sensitive" },
+        ],
+      },
+      { id: "j", adText: "ad", url: null },
+    );
+
+    expect(job.conditions).toEqual([]);
+    expect(job.requirements.essential).toEqual(["Strong SQL", "Full clean UK driving licence"]);
   });
 
   it("fills in a missing title or company instead of failing", () => {

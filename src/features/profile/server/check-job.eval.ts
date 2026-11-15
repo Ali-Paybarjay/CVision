@@ -1,16 +1,49 @@
+import { APIConnectionError, APIError } from "@anthropic-ai/sdk/core/error";
 import { describe, expect, it } from "vitest";
 import { getAiProvider } from "@/shared/ai";
 import { brand } from "@/shared/brand";
-import { JobSchema, ProfileSchema, type Job, type MatchResult, type Profile } from "@/shared/contracts";
+import { JobSchema, ProfileSchema, type Job, type JobConditionKind, type MatchResult, type Profile } from "@/shared/contracts";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import clinicalJob from "../../../../sample-data/clinical/job.json";
 import clinicalProfile from "../../../../sample-data/clinical/profile.json";
 import processJob from "../../../../sample-data/process-engineer/job.json";
 import processProfile from "../../../../sample-data/process-engineer/profile.json";
-import { matchJob, parseJob } from "./check-job";
+import { matchJob as matchJobOnce, parseJob as parseJobOnce } from "./check-job";
 
 // Prompt evals for prompts/profile-job.md and prompts/profile-match.md: real requests to the model, so they cost money.
 // Run with `npm run eval` (needs ANTHROPIC_API_KEY or OPENROUTER_API_KEY).
+
+// The provider can turn requests away for a few seconds, longer than the SDK's own two quick retries inside askModel:
+// in run 43531003448 three tests failed with "429 ... temporarily rate-limited upstream" within about 6 s, and the next
+// request passed. So each call here is made again after such an error, and only then: a refusal, an answer that
+// doesn't fit the schema (AskModelError) or a failed check is never retried. A call that needs every retry waits
+// 5 + 10 + 20 s, plus about 2 s for each refused call and the time of the answer. That fits the 120 s testTimeout for
+// one call but not always for two, so the sample-ad tests, which call the model twice, get 240 s.
+const RETRY_DELAYS_MS = [5_000, 10_000, 20_000];
+
+/** A rate limit (429), an overload (529) or another server error, a request timeout, or a connection that failed. */
+function isTransient(error: unknown): error is APIError {
+  if (error instanceof APIConnectionError) return true;
+  if (!(error instanceof APIError) || error.status === undefined) return false;
+  return error.status === 408 || error.status === 409 || error.status === 429 || error.status >= 500;
+}
+
+/** Calls the model once, and again after each transient provider error, logging every retry. */
+async function withRetries<T>(label: string, request: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request();
+    } catch (error) {
+      if (attempt >= RETRY_DELAYS_MS.length || !isTransient(error)) throw error;
+      const delay = RETRY_DELAYS_MS[attempt];
+      console.warn(`${label}: ${error.constructor.name} ${error.status ?? "(no response)"}, retry ${attempt + 1} of ${RETRY_DELAYS_MS.length} in ${delay / 1000} s`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+const parseJob: typeof parseJobOnce = (adText, options) => withRetries("parseJob", () => parseJobOnce(adText, options));
+const matchJob: typeof matchJobOnce = (profile, job, options) => withRetries("matchJob", () => matchJobOnce(profile, job, options));
 
 /** Requirements each persona clearly lacks: the match must never list them as strengths (Nothing invented). */
 const neverMet: Record<PersonaName, [RegExp[], RegExp[]]> = {
@@ -48,6 +81,85 @@ function alternatives(expected: string): [string, string] | null {
   const after = mainWords(right)[0];
   return before && after ? [before, after] : null;
 }
+
+/** The kind the job reader gave the requirement matching `pattern`, or null when that requirement is no condition. */
+function conditionKind(job: Job, pattern: RegExp): JobConditionKind | null {
+  const requirement = [...job.requirements.essential, ...job.requirements.desirable].find((item) => pattern.test(item));
+  expect(requirement, `a requirement matching ${pattern} in ${JSON.stringify(job.requirements)}`).toBeDefined();
+  return job.conditions?.find((condition) => condition.requirement === requirement)?.kind ?? null;
+}
+
+// The two fictional ads of the 31 October check on #222: skills mixed with licences, working conditions and checks.
+const conditionAds: { name: string; ad: string; expected: [RegExp, JobConditionKind | null][] }[] = [
+  {
+    name: "Area Operations Manager",
+    ad: `Area Operations Manager
+Brackenmoor Home & Garden Ltd
+Birmingham, West Midlands · Permanent · Full-time · £42,000 to £46,000 a year
+
+About the role
+You will look after six of our garden centres across the West Midlands, working with each store manager to hit sales and service targets.
+
+Essential
+- Experience leading large retail teams
+- KPI reporting to senior leadership
+- Strong health and safety knowledge
+- Full clean driving licence
+- Willingness to travel within the UK and internationally
+- Weekend and night shift cover when needed
+- Enhanced DBS check
+- Able to lift up to 25kg
+
+Desirable
+- CSCS card
+- Stock control experience
+
+How to apply
+Send your CV and a short cover letter. Closing date: 30 November 2026.`,
+    expected: [
+      [/leading large retail teams/i, null],
+      [/KPI/i, null],
+      [/health and safety/i, null],
+      [/driving licence/i, "credential"],
+      [/travel/i, "working"],
+      [/weekend|night/i, "working"],
+      [/DBS/i, "sensitive"],
+      [/lift/i, "sensitive"],
+      [/CSCS/i, "credential"],
+      [/stock control/i, null],
+    ],
+  },
+  {
+    name: "Regional Store Support Manager",
+    ad: `Regional Store Support Manager
+Larkfield Outdoor Stores
+Coventry, West Midlands · Permanent · Full-time · £40,000 a year
+
+About the role
+You will support twelve stores across the Midlands on opening, refits and new-starter training.
+
+Essential
+- Full UK driving licence
+- Willingness to travel across the Midlands, with occasional overnight stays
+- Multi-site retail management experience
+- P&L management
+
+Desirable
+- Counterbalance forklift licence
+
+How to apply
+Apply through our careers page. Closing date: 15 December 2026.`,
+    expected: [
+      [/driving licence/i, "credential"],
+      [/travel/i, "working"],
+      // Whole or split off from the travel, the overnight stays are a condition, never a scored requirement.
+      [/overnight/i, "working"],
+      [/multi-site/i, null],
+      [/P&L/i, null],
+      [/forklift/i, "credential"],
+    ],
+  },
+];
 
 function expectOnBrand(match: MatchResult, profile: Profile) {
   const text = [match.reasoning, ...match.gaps.map((gap) => gap.detail)].join("\n").toLowerCase();
@@ -103,6 +215,23 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
     }
     if (number === 1) expect(match.strengths.length, "each persona's first job is a good fit").toBeGreaterThan(0);
     expectOnBrand(match, personas[name].profile);
+
+    // Only Daniel's second sample ad has conditions (#222): its driving licence is one, and it is never scored.
+    const conditions = (job.conditions ?? []).map((condition) => `${condition.kind}: ${condition.requirement}`);
+    if (name === "daniel" && number === 2) {
+      expect(conditionKind(job, /driving licen[cs]e/i), `conditions ${JSON.stringify(conditions)}`).toBe("credential");
+      const scored = [...match.strengths.map((item) => item.requirement), ...match.gaps.map((gap) => gap.requirement)];
+      expect(scored.join("\n")).not.toMatch(/driving/i);
+    } else {
+      expect(conditions, "no condition in this ad").toEqual([]);
+    }
+  }, 240_000);
+
+  it.each(conditionAds)("marks each condition of the $name ad with its kind, and no skill (#222)", async ({ ad, expected }) => {
+    const job = await parseJob(ad, { url: null });
+    console.log(`${job.title}: ${JSON.stringify(job.conditions)}`);
+
+    for (const [pattern, kind] of expected) expect(conditionKind(job, pattern), `${pattern}`).toBe(kind);
   });
 
   it("keeps every criterion of a long NHS person specification (#397)", async () => {
@@ -123,6 +252,12 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
       job.requirements.essential.some((item) => /\bNMC\b/.test(item) && /regist/i.test(item)),
       "the NMC registration criterion stays a requirement",
     ).toBe(true);
+    // A registration is the job itself, not a condition: it stays in the score (#222).
+    const registration = job.requirements.essential.find((item) => /\bNMC\b/.test(item) && /regist/i.test(item));
+    expect(job.conditions?.map((condition) => condition.requirement), "the NMC registration is no condition").not.toContain(registration);
+    // So is the V300 prescriber line, although it ends "with a full licence to practise".
+    const marked = (job.conditions ?? []).map((condition) => condition.requirement).join("\n");
+    expect(marked, `conditions ${JSON.stringify(job.conditions)}`).not.toMatch(/V300|prescrib|to practi[cs]e/i);
 
     expect(kept.length, `missing: ${criteria.filter((criterion) => !kept.includes(criterion)).join("; ")}`).toBeGreaterThanOrEqual(18);
     for (const criterion of ["Understanding of clinical governance and incident reporting", "Knowledge of safeguarding adults and children procedures"]) {
@@ -133,14 +268,16 @@ describe.skipIf(!getAiProvider())("profile-job and profile-match on the sample a
   it("counts a nurse's Band 5 acute medical role as evidence of acute experience (#399)", async () => {
     const job = JobSchema.parse(clinicalJob);
     const { match, unsupported } = await matchJob(ProfileSchema.parse(clinicalProfile), job);
+    // Logged before the checks, so a failing run still shows the score and each gap's kind.
+    logMatch("Nurse", match);
 
     expect(unsupported, "strengths with no profile line behind them").toEqual([]);
     const acute = "Post-registration experience at Band 5 in an acute medical setting";
     const gap = match.gaps.find((item) => item.requirement === acute);
     expect(gap?.kind, `"${acute}" is ${gap ? gap.kind : "met"}`).not.toBe("missing");
-    // A role line is never evidence of a named skill the CV does not show.
+    // A role line is never evidence of a named skill the CV does not show. A failure shows the line taken as proof.
     for (const lacking of [/V300|prescrib/i, /arterial blood gas/i, /advanced life support/i]) {
-      expect(match.strengths.map((item) => item.requirement).join("\n")).not.toMatch(lacking);
+      expect(match.strengths.map((item) => item.requirement).join("\n"), `strengths ${JSON.stringify(match.strengths)}`).not.toMatch(lacking);
     }
   });
 
