@@ -29,7 +29,8 @@ test("the home page says what CVision does and leads to Tailor my CV to a job", 
   await expect(page.getByRole("main").getByRole("link", { name: "Check my CV in 2 minutes" })).toBeVisible();
   await page.getByRole("main").getByRole("link", { name: "Tailor my CV to a job" }).click();
 
-  await expect(page).toHaveURL(/\/sign-up$/);
+  // Sign-up, then the profile, also from the confirmation email (#507).
+  await expect(page).toHaveURL(/\/sign-up\?next=%2Fprofile$/);
   await expect(page.getByRole("heading", { level: 1, name: "Create your free account" })).toBeVisible();
 });
 

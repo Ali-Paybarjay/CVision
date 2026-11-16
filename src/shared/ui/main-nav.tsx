@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { trackHomeCtaClick } from "@/shared/analytics/actions";
 import { brand } from "@/shared/brand";
-import { navItems } from "@/shared/navigation";
+import { navItems, signUpThenProfile } from "@/shared/navigation";
 import { ButtonLink } from "./button";
 import { cn } from "./cn";
 import { CloseIcon, MenuIcon } from "./icons";
@@ -119,7 +119,7 @@ export function MainNav({ signedIn, signOut }: { signedIn: boolean; signOut?: Re
         )}
         {showGetStarted && (
           <ButtonLink
-            href="/sign-up"
+            href={signUpThenProfile}
             size="compact"
             onClick={() => {
               if (pathname === "/") trackHomeCtaClick({ cta: "get_started", placement: "header" }).catch(() => {});

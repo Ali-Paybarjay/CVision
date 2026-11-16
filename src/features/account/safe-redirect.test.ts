@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { signUpThenProfile } from "@/shared/navigation";
 import { safeRedirectPath, withNext } from "./safe-redirect";
 
 describe("safeRedirectPath", () => {
@@ -48,5 +49,10 @@ describe("withNext", () => {
 
   it("leaves the default destination out", () => {
     expect(withNext("/sign-up", "/dashboard")).toBe("/sign-up");
+  });
+
+  // @/shared writes this one out, as it reads nothing from @/features (#507).
+  it("gives the same address as signUpThenProfile in @/shared", () => {
+    expect(withNext("/sign-up", "/profile")).toBe(signUpThenProfile);
   });
 });

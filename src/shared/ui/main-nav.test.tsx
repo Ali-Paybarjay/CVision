@@ -39,7 +39,8 @@ describe("top menu (#177)", () => {
     const html = renderToStaticMarkup(<MainNav signedIn={false} />);
     const { links, menu } = layout(html);
 
-    expect(html).toContain(`>${brand.cta.primary}</a>`);
+    // Sign-up, then the profile, also from the confirmation email (#507).
+    expect(html.match(/<a href="\/sign-up\?next=%2Fprofile"[^>]*>([^<]*)<\/a>/)?.[1]).toBe(brand.cta.primary);
     expect(links).toContain("lg:flex");
     expect(links).not.toContain("md:flex");
     expect(menu).toContain("lg:hidden");
