@@ -25,7 +25,6 @@ import { Button, Card, cn, ErrorIcon, Field, Input, Notice, Textarea, WarningIco
 import { ConsentBox } from "./consent-box";
 import { useFocusHeading } from "./focus-heading";
 import { MonthYearField } from "./month-year-field";
-import { Steps } from "./steps";
 
 /** Where the details on this page come from: a CV just read, the user typing them in by hand, or the saved profile. */
 export type ReviewSource = "cv" | "manual" | "saved";
@@ -150,7 +149,6 @@ export function ReviewStep({
 
   return (
     <section aria-labelledby="review-heading" className="flex flex-col gap-8">
-      {fromCv && <Steps current={1} />}
       <div>
         <h2 id="review-heading" ref={headingRef} tabIndex={-1} className="text-2xl">
           {source === "manual" ? "Add your details" : "Check your details"}

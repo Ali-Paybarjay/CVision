@@ -111,7 +111,7 @@ describe("profile screens", () => {
     expect(html).toContain("Keep my current profile");
   });
 
-  it("offers someone with no CV to fill in their details by hand, as the second choice after the upload", () => {
+  it("offers someone with no CV to fill in their details by hand, once, before the upload", () => {
     const html = renderToStaticMarkup(
       <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} onStartManual={noop} />,
     );
@@ -119,13 +119,13 @@ describe("profile screens", () => {
 
     expect(words).toContain("No CV to upload?");
     expect(html).toMatch(/<button type="button"[^>]*>Fill in my details<\/button>/);
-    // The card with the details stays after the upload, as the second choice.
-    expect(words.lastIndexOf("No CV to upload?")).toBeGreaterThan(words.indexOf("Read my CV"));
+    // The card at the end of the page said it again, after Read my CV (#504): now the line under the heading is the one.
+    expect(words.lastIndexOf("Fill in my details")).toBeLessThan(words.indexOf("Read my CV"));
     // Read my CV stays the page's one main button.
     expect(html.match(/bg-cta/g)).toHaveLength(1);
   });
 
-  // #204: on a phone the card is a long scroll away, so the way in for someone without a CV is under the heading too.
+  // #204: on a phone the end of the page is a long scroll away, so the way in for someone without a CV is under the heading.
   it("shows someone with no CV their way in right under the heading", () => {
     const html = renderToStaticMarkup(
       <UploadStep replacing={false} demoMode={false} storage="account" focusHeading={false} onExtracted={noop} onStartManual={noop} />,
@@ -136,8 +136,8 @@ describe("profile screens", () => {
 
     expect(shortcut).toBeGreaterThan(heading);
     expect(shortcut).toBeLessThan(words.indexOf("Your CV"));
-    // Two ways in, one action: both are "Fill in my details", and neither is Coral.
-    expect(html.match(/>Fill in my details<\/button>/g)).toHaveLength(2);
+    // One way in, and it isn't Coral (#504).
+    expect(html.match(/>Fill in my details<\/button>/g)).toHaveLength(1);
   });
 
   it("offers no second choice when the page doesn't ask for one", () => {
@@ -564,13 +564,30 @@ describe("profile screens", () => {
     expect(text(bar).trim()).toBe("Approve and save Cancel");
   });
 
-  it("builds a profile in two steps: upload, then check and approve", () => {
-    const html = text(
-      renderToStaticMarkup(<UploadStep replacing={false} demoMode={false} storage="browser" focusHeading={false} onExtracted={noop} />),
+  // The page's steps bar (Profile › Check a job › Tailored CV) is the only one: a second bar for the upload and the
+  // check sat right under it (#504).
+  it("has no steps bar of its own on the upload or on the check of a CV just read", () => {
+    const upload = renderToStaticMarkup(
+      <UploadStep replacing={false} demoMode={false} storage="browser" focusHeading={false} onExtracted={noop} />,
+    );
+    const profile = personas.emma.profile;
+    const check = renderToStaticMarkup(
+      <ReviewStep
+        draft={draftFromProfile(profile)}
+        base={profile}
+        source="cv"
+        storage="account"
+        demo={null}
+        truncated={false}
+        focusHeading={false}
+        onSave={noop}
+        onCancel={noop}
+      />,
     );
 
-    expect(html).toContain("1 Upload your CV 2 Check your details");
-    expect(html).not.toContain("Add the detail");
+    expect(upload).not.toContain('aria-label="Steps"');
+    expect(check).not.toContain('aria-label="Steps"');
+    expect(text(upload)).not.toContain("Add the detail");
   });
 
   function overview(saved: SavedProfile, storage: "account" | "browser", persistent = true) {
