@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
+import { brand } from "@/shared/brand";
 import { Button, Field, Input, Notice } from "@/shared/ui";
 import { signIn, signUp, type AuthFormState } from "./actions";
 import { FullReloadField, useFullReloadAction } from "./full-reload";
@@ -31,13 +32,7 @@ export function AuthForm({
   // A pilot asked to see the password while typing it (8 November).
   const [showPassword, setShowPassword] = useState(false);
 
-  if (state.checkEmail) {
-    return (
-      <Notice tone="success" title="Check your email">
-        We sent a link to {state.checkEmail}. Open it to finish creating your account.
-      </Notice>
-    );
-  }
+  if (state.checkEmail) return <CheckEmailNotice email={state.checkEmail} next={next} />;
 
   return (
     <form action={action} className="flex flex-col gap-5">
@@ -97,6 +92,36 @@ export function AuthForm({
         </Link>
       </p>
     </form>
+  );
+}
+
+/**
+ * After Create account, until the user opens the link in the email (#507): who sends it, and a way on for a mistyped
+ * address or a link already opened. Exported for its test.
+ */
+export function CheckEmailNotice({ email, next }: { email: string; next: string }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <Notice tone="success" title="Check your email">
+        We sent a link to {email}. Open it to finish creating your account. It comes from {brand.contactEmail} and can
+        take a few minutes. If it isn’t in your inbox, look in your spam or junk folder.
+      </Notice>
+      <div className="flex flex-col gap-2 text-sm text-text-muted">
+        <p>
+          Wrong address?{" "}
+          {/* A plain link, so the page loads afresh with an empty form: Link would keep this notice on the same page. */}
+          <a href={withNext("/sign-up", next)} className="font-semibold text-accent hover:underline">
+            Use a different email
+          </a>
+        </p>
+        <p>
+          Already opened the link?{" "}
+          <Link href={withNext("/sign-in", next)} className="font-semibold text-accent hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 }
 

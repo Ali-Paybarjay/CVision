@@ -37,7 +37,8 @@ describe("home page calls to action (#177)", () => {
     expect(brand.cta.primary).not.toMatch(/free/i);
     expect(brand.cta.cvCheckAction).not.toMatch(/free/i);
 
-    const primary = html.match(/<a href="\/sign-up"([^>]*)>([^<]*)<\/a>/);
+    // Sign-up, then the profile, also from the confirmation email (#507).
+    const primary = html.match(/<a href="\/sign-up\?next=%2Fprofile"([^>]*)>([^<]*)<\/a>/);
     expect(primary?.[2]).toBe(brand.cta.primary);
     expect(primary?.[1]).toContain('aria-describedby="hero-cta-note"');
     expect(textOf(html, "hero-cta-note")).toBe(brand.cta.primaryNote);

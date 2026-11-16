@@ -1,6 +1,7 @@
 import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { trackHomeCtaClick } from "@/shared/analytics/actions";
 import { brand } from "@/shared/brand";
+import { signUpThenProfile } from "@/shared/navigation";
 import { CheckIcon, CvPaper, FitLine, MatchMarker, RequirementList, SectionLabel, StatusChip, TrackedButtonLink, wideFrame } from "@/shared/ui";
 import { ad, cv, example, matchRows, requirementGroups, type Evidence } from "./_home/sara-example";
 
@@ -18,7 +19,7 @@ export default function HomePage() {
           <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.hero.subline}</p>
           <div className="mt-8">
             <TrackedButtonLink
-              href="/sign-up"
+              href={signUpThenProfile}
               variant="primary"
               className="w-full sm:w-auto"
               aria-describedby="hero-cta-note"

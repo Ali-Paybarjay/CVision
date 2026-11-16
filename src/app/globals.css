@@ -133,6 +133,11 @@
     outline-offset: 2px;
   }
 
+  /* Skip to main content focuses the page's main (#507): the whole page needs no ring. */
+  main:focus {
+    outline: none;
+  }
+
   /* Tailwind 4 gives buttons the plain arrow, so on a computer only links showed they can be clicked (#277).
      A control that is disabled, or aria-disabled while it saves (#154), keeps the arrow. */
   :where(button, [role="button"], summary, select, input:is([type="checkbox"], [type="radio"], [type="file"])):not(:disabled, [aria-disabled="true"]) {

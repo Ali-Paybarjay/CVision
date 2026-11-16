@@ -12,3 +12,9 @@ export const navItems = [
 
 // Pages linked from the footer on every page.
 export const footerItems = [{ href: "/privacy", label: "Privacy" }] as const;
+
+/**
+ * Where "Tailor my CV to a job" sends a signed-out visitor: sign-up, then their profile, also from the confirmation
+ * email (#507). It is withNext("/sign-up", "/profile") written out, because @/shared reads nothing from @/features.
+ */
+export const signUpThenProfile = "/sign-up?next=%2Fprofile";

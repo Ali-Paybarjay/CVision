@@ -37,7 +37,7 @@ test("on a phone the header button and the logo close the open menu on the next 
   await menuButton.click();
   await expect(menu).toBeVisible();
   await header.getByRole("link", { name: "Tailor my CV to a job" }).click();
-  await expect(page).toHaveURL(/\/sign-up$/);
+  await expect(page).toHaveURL(/\/sign-up\?next=%2Fprofile$/);
   await expect(menu).toBeHidden();
 
   await menuButton.click();

@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { brand } from "@/shared/brand";
 import { signIn, signOut, signUp } from "./actions";
-import { AuthForm, ShowPasswordButton } from "./auth-form";
+import { AuthForm, CheckEmailNotice, ShowPasswordButton } from "./auth-form";
 
 const { createSupabaseServerClient, redirect, auth } = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
@@ -15,8 +16,9 @@ vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ origin: "https://cvision.test" }) }));
 vi.mock("next/link", () => ({
+  // Marked, so a test can tell Next's Link from a plain link, which loads a new page.
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
-    <a href={href} {...props}>
+    <a href={href} data-next-link="" {...props}>
       {children}
     </a>
   ),
@@ -50,6 +52,17 @@ describe("signIn", () => {
     auth.signInWithPassword.mockResolvedValue({ error: new Error("Invalid login credentials") });
     expect(await signIn({}, form({ next: "/interview?job=1" }))).toEqual({
       error: "That email and password do not match an account.",
+    });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  // Signing in before the link in the email is opened once said the password was wrong (#507).
+  it("says the email isn't confirmed yet, and how to get a new link", async () => {
+    const error = Object.assign(new Error("Email not confirmed"), { code: "email_not_confirmed" });
+    auth.signInWithPassword.mockResolvedValue({ error });
+    expect(await signIn({}, form({ next: "/profile" }))).toEqual({
+      error:
+        "Your email isn’t confirmed yet. Open the link we sent you, then sign in. If the link has expired, create your account again to get a new one.",
     });
     expect(redirect).not.toHaveBeenCalled();
   });
@@ -162,5 +175,24 @@ describe("AuthForm", () => {
   it("links to the other form plainly without a return address", () => {
     const html = renderToStaticMarkup(<AuthForm mode="sign-up" />);
     expect(html).toContain('href="/sign-in"');
+  });
+});
+
+describe("CheckEmailNotice (#507)", () => {
+  const html = renderToStaticMarkup(<CheckEmailNotice email="sara@example.com" next="/profile" />);
+  const words = html.replace(/<[^>]+>/g, "");
+
+  it("says who sends the email, how long it can take and where else to look", () => {
+    expect(words).toContain(
+      `We sent a link to sara@example.com. Open it to finish creating your account. It comes from ${brand.contactEmail} and can take a few minutes. If it isn’t in your inbox, look in your spam or junk folder.`,
+    );
+  });
+
+  it("offers a different email and Sign in, both keeping the return address", () => {
+    expect(words).toContain("Wrong address? Use a different email");
+    expect(words).toContain("Already opened the link? Sign in");
+    // A plain link: only a new page brings back the empty form.
+    expect(html).toMatch(/<a href="\/sign-up\?next=%2Fprofile" class="[^"]*">Use a different email<\/a>/);
+    expect(html).toMatch(/<a href="\/sign-in\?next=%2Fprofile" data-next-link=""[^>]*>Sign in<\/a>/);
   });
 });
