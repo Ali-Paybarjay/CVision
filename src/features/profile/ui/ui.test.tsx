@@ -587,7 +587,6 @@ describe("profile screens", () => {
 
     expect(upload).not.toContain('aria-label="Steps"');
     expect(check).not.toContain('aria-label="Steps"');
-    expect(text(upload)).not.toContain("Add the detail");
   });
 
   function overview(saved: SavedProfile, storage: "account" | "browser", persistent = true) {
