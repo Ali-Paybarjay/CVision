@@ -179,9 +179,9 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
               </Notice>
             ))}
 
-          {/* Secondary on purpose: the Tailor button under the result (brand.cta.primary) is the page’s one Coral button. */}
+          {/* Coral: the form's one main action. The result replaces the form, so the Tailor button under it is the one Coral button on that screen. */}
           <div>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" variant="primary" disabled={pending}>
               {pending ? "Checking your CV…" : "Check my CV"}
             </Button>
             {/* On screen, not only for screen readers, so the wait doesn't look like nothing is happening (issue #235). */}

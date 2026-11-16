@@ -20,6 +20,7 @@ import {
 import type { SampleAnswers } from "./_practice/flow";
 import { practisedOn } from "./_practice/ui";
 import { BackLink } from "@/features/profile/ui/back-link";
+import { NoJobsYet } from "./no-jobs";
 import { InterviewPractice } from "./practice";
 
 export const metadata: Metadata = { title: "Interview practice" };
@@ -57,7 +58,11 @@ function Frame({ job, mock = false, wide = false, children }: { job?: Job; mock?
         <nav aria-label="Breadcrumb" className="text-sm text-text-muted">
           <ol className="flex flex-wrap items-center gap-x-2">
             <li>
-              <Link href="/jobs" className="text-accent underline underline-offset-2 hover:text-text">
+              {/* 44 px tall, as the path links on Jobs and Tailor (path-steps.tsx), not 17 px right under Back (#502). */}
+              <Link
+                href="/jobs"
+                className="inline-flex min-h-11 items-center text-accent underline underline-offset-2 hover:text-text"
+              >
                 Check a job
               </Link>
             </li>
@@ -192,13 +197,7 @@ async function InterviewView({ searchParams }: Pick<PageProps<"/interview">, "se
 }
 
 function JobList({ jobs, practised }: { jobs: Job[]; practised: PracticeResult[] }) {
-  if (jobs.length === 0) {
-    return (
-      <Notice tone="info" title="No jobs yet">
-        Add a job ad on the Check a job page, then come back here for interview practice.
-      </Notice>
-    );
-  }
+  if (jobs.length === 0) return <NoJobsYet />;
   return (
     <section>
       <h2 className="text-xl">Which interview are you preparing for?</h2>

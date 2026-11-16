@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { CvCheckResult } from "@/shared/contracts";
 import { carriedCvFor, carryFromCheck } from "@/shared/carried-cv";
-import { CvCheckReport, newCheck } from "./cv-check-form";
+import { CvCheckForm, CvCheckReport, newCheck } from "./cv-check-form";
 
 // Render checks for the result of a CV check: where its main button leads and what the next step says.
 
@@ -88,6 +88,17 @@ describe("CvCheckReport with an uploaded CV", () => {
     expect(render(false, file)).toContain("You’ll upload your CV once more after you create your account");
     expect(render(true, file)).not.toContain("You’ll upload your CV once more");
     expect(render(false, null)).not.toContain("You’ll upload your CV once more");
+  });
+});
+
+// "Check my CV" is the form's main action, Coral like "Read my CV" and "Check my fit" (#502). The result replaces the
+// form, so the Tailor button under the result stays the one Coral button on that screen (test above).
+describe("CvCheckForm", () => {
+  it("has one Coral button, the Check my CV submit button", () => {
+    const html = renderToStaticMarkup(<CvCheckForm demoMode={false} />);
+
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
+    expect(html).toMatch(/<button type="submit" class="[^"]*bg-cta[^"]*"[^>]*>Check my CV<\/button>/);
   });
 });
 

@@ -31,5 +31,10 @@ test("Interview has Back above the job's breadcrumb", async ({ page }) => {
   await page.goto("/interview?job=sara-job-1");
   const back = page.getByRole("main").getByRole("link", { name: "Back" });
   await expect(back).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toBeVisible();
+  const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(breadcrumb).toBeVisible();
+
+  // Right under Back, so it is as easy to tap: 44 px, as the path links on Jobs and Tailor (#502).
+  const box = await breadcrumb.getByRole("link", { name: "Check a job" }).boundingBox();
+  expect(box?.height).toBeGreaterThanOrEqual(44);
 });
