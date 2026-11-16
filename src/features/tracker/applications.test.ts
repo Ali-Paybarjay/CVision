@@ -5,15 +5,19 @@ import { loadTracker } from "./applications";
 import { closingDate, isClosed, nextStepDue, openAndClosed, suggestClosing } from "./model";
 import { sampleApplications, sampleApplicationsOn } from "./sample";
 
-const { getCurrentUser, createSupabaseServerClient, listPracticeSummaries } = vi.hoisted(() => ({
+const { getCurrentUser, createSupabaseServerClient, listPracticeSummaries, getMyProfile, listMyJobs } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   listPracticeSummaries: vi.fn(),
+  getMyProfile: vi.fn(),
+  listMyJobs: vi.fn(),
 }));
 vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
 vi.mock("@/shared/supabase/server", () => ({ createSupabaseServerClient }));
 // Marzieh's store, tested in src/features/interview: the latest finished practice per job, [] on any error.
 vi.mock("@/features/interview/server/session-store", () => ({ listPracticeSummaries }));
+// Shayan's reads, tested in src/features/profile: the user's profile or null, and their jobs newest first.
+vi.mock("@/features/profile/my-data", () => ({ getMyProfile, listMyJobs }));
 
 type Row = Record<string, unknown>;
 type Tables = { jobs: Row[]; applications: Row[]; tailored_cvs?: Row[] };
@@ -57,6 +61,8 @@ const ad = {
 };
 const job = (id: string, title: string, company: string, owner = userId) => ({ id, user_id: owner, data: { ...ad, id, title, company } });
 const row = (data: Application, createdAt: string, owner = userId) => ({ id: data.id, job_id: data.jobId, user_id: owner, created_at: createdAt, data });
+// A job as listMyJobs gives it.
+const checked = (id: string, title: string, company = "Etherow Freight") => ({ ...ad, id, title, company });
 
 const older: Application = { id: "app-1", jobId: "job-1", date: "2026-10-10", status: "interview", nextStep: "Prepare" };
 const newer: Application = { id: "app-2", jobId: "job-2", date: "2026-10-20", status: "applied", nextStep: null };
@@ -70,6 +76,9 @@ beforeEach(() => {
   getCurrentUser.mockResolvedValue({ id: userId, email: null });
   createSupabaseServerClient.mockImplementation(async () => fakeSupabase(tables, userId));
   listPracticeSummaries.mockResolvedValue([]);
+  getMyProfile.mockResolvedValue(personas.sara.profile);
+  // Both jobs have an application, so neither is in progress.
+  listMyJobs.mockResolvedValue([checked("job-2", "Graduate Data Analyst", "Irwell Energy"), checked("job-1", "Junior Data Analyst", "Pennine Health Analytics")]);
 });
 
 afterEach(() => {
@@ -84,6 +93,8 @@ describe("loadTracker", () => {
         { application: newer, job: { title: "Graduate Data Analyst", company: "Irwell Energy" }, hasAd: true },
         { application: older, job: { title: "Junior Data Analyst", company: "Pennine Health Analytics" }, hasAd: true },
       ],
+      hasProfile: true,
+      inProgress: [],
     });
   });
 
@@ -99,8 +110,55 @@ describe("loadTracker", () => {
 
   it("is empty for a new user", async () => {
     tables.applications = [];
+    getMyProfile.mockResolvedValue(null);
+    listMyJobs.mockResolvedValue([]);
 
-    expect(await loadTracker(today)).toEqual({ kind: "account", items: [] });
+    expect(await loadTracker(today)).toEqual({ kind: "account", items: [], hasProfile: false, inProgress: [] });
+  });
+
+  it("lists the jobs with no application as in progress, newest first and five at most (#506)", async () => {
+    listMyJobs.mockResolvedValue([
+      checked("job-8", "Data Engineer"),
+      checked("job-2", "Graduate Data Analyst", "Irwell Energy"),
+      checked("job-7", "BI Developer"),
+      checked("job-6", "Reporting Analyst"),
+      checked("job-1", "Junior Data Analyst", "Pennine Health Analytics"),
+      checked("job-5", "Insight Analyst"),
+      checked("job-4", "Data Officer"),
+      checked("job-3", "Data Assistant"),
+    ]);
+    tables.tailored_cvs = [
+      { id: "cv-1", job_id: "job-7", user_id: userId },
+      { id: "cv-2", job_id: "job-2", user_id: userId },
+    ];
+
+    const tracker = await loadTracker(today);
+
+    expect(tracker.kind === "account" && tracker.inProgress.map((job) => job.id)).toEqual(["job-8", "job-7", "job-6", "job-5", "job-4"]);
+    expect(tracker.kind === "account" && tracker.inProgress.slice(0, 2)).toEqual([
+      { id: "job-8", title: "Data Engineer", company: "Etherow Freight", hasCv: false },
+      { id: "job-7", title: "BI Developer", company: "Etherow Freight", hasCv: true },
+    ]);
+    // One read of the saved CVs covers the applications too.
+    expect(tracker.kind === "account" && tracker.items.map((item) => [item.application.id, item.hasCv])).toEqual([
+      ["app-2", true],
+      ["app-1", undefined],
+    ]);
+  });
+
+  it("marks a job in progress that has a saved CV when there are no applications yet (#506)", async () => {
+    tables.applications = [];
+    tables.tailored_cvs = [{ id: "cv-1", job_id: "job-1", user_id: userId }];
+
+    expect(await loadTracker(today)).toEqual({
+      kind: "account",
+      items: [],
+      hasProfile: true,
+      inProgress: [
+        { id: "job-2", title: "Graduate Data Analyst", company: "Irwell Energy", hasCv: false },
+        { id: "job-1", title: "Junior Data Analyst", company: "Pennine Health Analytics", hasCv: true },
+      ],
+    });
   });
 
   it("skips a row that does not match the contract", async () => {
@@ -205,6 +263,8 @@ describe("loadTracker", () => {
     getCurrentUser.mockResolvedValue(null);
 
     expect(await loadTracker(today)).toEqual({ kind: "signed-out" });
+    expect(getMyProfile).not.toHaveBeenCalled();
+    expect(listMyJobs).not.toHaveBeenCalled();
   });
 
   it("shows Sara's sample applications while Supabase is not connected", async () => {
@@ -212,6 +272,9 @@ describe("loadTracker", () => {
 
     expect(await loadTracker(today)).toEqual({ kind: "sample", items: sampleApplications });
     expect(getCurrentUser).not.toHaveBeenCalled();
+    // The sample stays as it was (#506): no profile or jobs, which would be the sample persona's.
+    expect(getMyProfile).not.toHaveBeenCalled();
+    expect(listMyJobs).not.toHaveBeenCalled();
   });
 
   it("dates the sample for the day it is shown", async () => {

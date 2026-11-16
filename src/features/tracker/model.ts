@@ -20,6 +20,12 @@ export type TrackedApplication = {
   hasCv?: boolean;
 };
 
+/**
+ * A job the user has checked but not added to their applications yet, under Jobs in progress (#506). `hasCv` is true
+ * when a CV and cover letter are saved for it, as on an application's row.
+ */
+export type JobInProgress = Pick<Job, "id" | "title" | "company"> & { hasCv: boolean };
+
 /** The interview page, which opens the job's latest practice report when it has one. */
 export function interviewPath(jobId: string): string {
   return `/interview?job=${encodeURIComponent(jobId)}`;
@@ -28,6 +34,11 @@ export function interviewPath(jobId: string): string {
 /** Nazanin's read-only page of the CV and cover letter saved for a job when they were downloaded or sent (#207). */
 export function savedCvPath(jobId: string): string {
   return `/tailor/saved?job=${encodeURIComponent(jobId)}`;
+}
+
+/** Nazanin's Tailor page for one job, where the user carries on tailoring their CV for it. */
+export function tailorPath(jobId: string): string {
+  return `/tailor?job=${encodeURIComponent(jobId)}`;
 }
 
 /** An interview score as the report itself shows it: one decimal place, so 4 reads 4.0. */
