@@ -37,6 +37,10 @@ const CredentialsSchema = z.object({
 
 const notConnected = "Accounts are not switched on yet. Try again once the team has connected the database.";
 
+// Signing in before the link in the email is opened (#507). The way to a new link is the one /sign-in/link-expired gives.
+const notConfirmed =
+  "Your email isn’t confirmed yet. Open the link we sent you, then sign in. If the link has expired, create your account again to get a new one.";
+
 function readCredentials(formData: FormData) {
   const result = CredentialsSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
   if (result.success) return { credentials: result.data };
@@ -81,6 +85,7 @@ export async function signIn(_: AuthFormState, formData: FormData): Promise<Auth
   if (!supabase) return { error: notConnected };
 
   const { error } = await supabase.auth.signInWithPassword(credentials);
+  if (error?.code === "email_not_confirmed") return { error: notConfirmed };
   if (error) return { error: "That email and password do not match an account." };
 
   return arriveAt(formData, readNext(formData));
