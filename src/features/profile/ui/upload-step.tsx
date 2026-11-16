@@ -10,7 +10,6 @@ import type { ExtractResponse } from "../server/extract-request";
 import { pageAccountField } from "../server/same-account";
 import { ConsentBox } from "./consent-box";
 import { useFocusHeading } from "./focus-heading";
-import { Steps } from "./steps";
 
 export type ExtractSuccess = Extract<ExtractResponse, { ok: true }>;
 
@@ -116,12 +115,12 @@ export function UploadStep({
 
   return (
     <section aria-labelledby="upload-heading" className="flex flex-col gap-6">
-      <Steps current={0} />
       <h2 id="upload-heading" ref={headingRef} tabIndex={-1} className="text-2xl">
         {newCv ? "Upload a new CV" : "Upload your CV"}
       </h2>
 
-      {/* On a phone the card at the end is a long scroll away, so someone without a CV sees their way in here first (#204). */}
+      {/* Someone without a CV sees their way in here, on a phone's first screen (#204). It is the only one: a card at
+          the end of the page said the same again (#504). */}
       {onStartManual && (
         <p className="-mt-3 flex flex-wrap items-center gap-x-2 text-text-muted">
           No CV to upload?
@@ -204,21 +203,6 @@ export function UploadStep({
           </div>
         </form>
       </Card>
-
-      {onStartManual && (
-        <Card aria-labelledby="manual-heading">
-          <h3 id="manual-heading" className="text-xl">
-            No CV to upload?
-          </h3>
-          <p className="mt-2 text-text-muted">
-            Fill in your details yourself instead: your work history, volunteering, education, projects, certificates,
-            languages and skills. Nothing is saved until you approve it.
-          </p>
-          <Button className="mt-4" onClick={onStartManual} disabled={pending}>
-            Fill in my details
-          </Button>
-        </Card>
-      )}
     </section>
   );
 }
