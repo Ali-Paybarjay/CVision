@@ -77,6 +77,8 @@ test("step 2: paste a job ad, see the match and go on to tailoring", async ({ pa
   await page.getByRole("button", { name: "Check my fit" }).click();
 
   await expect(page.getByRole("heading", { level: 2, name: job.title })).toBeVisible();
+  // The way on to tailoring is on the phone's screen as soon as the report shows, in a bar at the bottom (#503).
+  await expect(page.getByRole("link", { name: "Tailor my CV for this job" })).toBeInViewport();
   await expect(page.getByText(job.company, { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Tailor my CV for this job" })).toHaveAttribute(
     "href",

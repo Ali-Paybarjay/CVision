@@ -2,9 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import type { Gap, Job, JobConditionKind, MatchResult } from "@/shared/contracts";
-import { Button, ButtonLink, Card, CheckIcon, Notice, WarningIcon } from "@/shared/ui";
+import { Button, ButtonLink, Card, CheckIcon, InfoIcon, Notice, WarningIcon } from "@/shared/ui";
 import type { SaveState } from "../job-actions";
 import { conditionGroups, type ConditionGroup } from "../job-conditions";
+import { defaultDetail } from "../match";
 import { jobFacts } from "./format";
 import { SignInNotice } from "./upload-step";
 
@@ -73,6 +74,15 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         )}
       </Card>
 
+      {/* A pilot tailored for a job far from their field and found the questions no use (#338): say so in amber under
+          the score, so it is read before the Tailor button, which stays on screen (#503). */}
+      {canTailor && hasRequirements && fitLabel(match.score) === "Several gaps" && (
+        <Notice tone="warning" title="This job is a long way from your profile">
+          It asks for a lot your profile doesn’t show yet. Tailoring only rewords what you’ve told us, so it can’t fill
+          those gaps. You can still tailor your CV for it, or check a job closer to your experience.
+        </Notice>
+      )}
+
       {hasRequirements && (
         <Card>
           <h3 className="text-xl">Where you already match</h3>
@@ -120,21 +130,19 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         </Notice>
       )}
 
-      {/* A pilot tailored for a job far from his field and found the questions no use (#338): say so before Tailor,
-          in amber so it isn't missed. */}
-      {canTailor && hasRequirements && fitLabel(match.score) === "Several gaps" && (
-        <Notice tone="warning" title="This job is a long way from your profile">
-          It asks for a lot your profile doesn’t show yet. Tailoring only rewords what you’ve told us, so it can’t fill
-          those gaps. You can still tailor your CV for it, or check a job closer to your experience.
-        </Notice>
+      {/*
+        On a phone the report is about two screens long, so the way on to Tailor stays on screen while it scrolls under
+        it, like the profile's Approve bar (#362). At the end of the report the bar settles above the other two links.
+      */}
+      {canTailor && (
+        <div className="sticky bottom-0 z-10 border-t border-line bg-canvas py-3 [:root:has(&)]:scroll-pb-28">
+          <ButtonLink href={`/tailor?job=${encodeURIComponent(job.id)}`} variant="primary" className="w-full sm:w-auto">
+            Tailor my CV for this job
+          </ButtonLink>
+        </div>
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        {canTailor && (
-          <ButtonLink href={`/tailor?job=${encodeURIComponent(job.id)}`} variant="primary">
-            Tailor my CV for this job
-          </ButtonLink>
-        )}
         <Button onClick={onCheckAnother}>Check another job</Button>
         {job.url && (
           <a
@@ -157,6 +165,12 @@ export const gapLabel: Record<Gap["kind"], string> = {
   missing: "Not shown yet",
 };
 
+/** Only an essential gap is amber (#503): with every gap amber, the report read like a list of errors. */
+const gapLook: Record<Gap["importance"], { Icon: typeof WarningIcon; icon: string; label: string }> = {
+  essential: { Icon: WarningIcon, icon: "text-warning", label: "bg-warning-bg text-warning" },
+  desirable: { Icon: InfoIcon, icon: "text-text-muted", label: "border border-line text-text-muted" },
+};
+
 function GapList({ title, gaps }: { title: string; gaps: Gap[] }) {
   if (gaps.length === 0) return null;
   return (
@@ -168,17 +182,20 @@ function GapList({ title, gaps }: { title: string; gaps: Gap[] }) {
         {gaps.map((gap) => {
           // Only a gap the profile partly shows quotes it, and only lines the code copied from the profile (#188).
           const lines = gap.kind === "unclear" ? (gap.evidence ?? []) : [];
+          const look = gapLook[gap.importance];
           return (
             <li key={gap.id} className="flex gap-3">
-              <WarningIcon className="mt-0.5 size-5 shrink-0 text-warning" />
+              <look.Icon className={`mt-0.5 size-5 shrink-0 ${look.icon}`} />
               <div className="min-w-0">
                 <p className="font-semibold">{gap.requirement}</p>
                 <p className="mt-1">
-                  <span className="inline-flex rounded-md bg-warning-bg px-2 py-0.5 text-[12.5px] font-semibold text-warning">
+                  <span className={`inline-flex rounded-md px-2 py-0.5 text-[12.5px] font-semibold ${look.label}`}>
                     {gapLabel[gap.kind]}
                   </span>
                 </p>
-                <p className="mt-1 text-sm text-text-muted">{gap.detail}</p>
+                {/* The stock sentence only repeats "Not shown yet" (#503). One the model wrote can say more, such as
+                    which tool the profile shows instead, so it stays. */}
+                {gap.detail !== defaultDetail.missing && <p className="mt-1 text-sm text-text-muted">{gap.detail}</p>}
                 {lines.length === 1 && (
                   <p className="mt-1 text-sm text-text-muted">
                     From your profile: <q className="break-words">{lines[0]}</q>
