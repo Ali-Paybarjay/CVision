@@ -4,8 +4,8 @@ import { SignOutButton } from "@/features/account/sign-out-button";
 import { brand } from "@/shared/brand";
 import { InAppHistory } from "@/shared/in-app-history";
 import { SiteFooter, SiteHeader } from "@/shared/ui";
-import { inter } from "./fonts/inter";
 import "./globals.css";
+import { inter } from "./fonts/inter";
 
 export const metadata: Metadata = {
   title: { default: brand.name, template: `%s | ${brand.name}` },
