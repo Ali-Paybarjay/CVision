@@ -86,3 +86,28 @@ test("a shared link shows CVision's picture", async ({ page, request }) => {
   expect(picture.ok()).toBe(true);
   expect(picture.headers()["content-type"]).toBe("image/png");
 });
+
+// A keyboard user can pass the header's links (#507). Next keeps the pages visited before hidden in the document, so on
+// the next page it must be that page's main that takes the focus, not the first one.
+test("the first Tab reaches Skip to main content, over the header, and Enter focuses the page's main", async ({ page }) => {
+  await page.goto("/");
+  const skip = page.getByRole("link", { name: "Skip to main content" });
+
+  await page.keyboard.press("Tab");
+  await expect(skip).toBeFocused();
+  // Nothing from the header is drawn over it.
+  const onTop = await skip.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return top !== null && element.contains(top);
+  });
+  expect(onTop, "Skip to main content is on top").toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main")).toBeFocused();
+
+  await page.getByRole("main").getByRole("link", { name: "Check my CV in 2 minutes" }).click();
+  await expect(page).toHaveURL(/\/cv-check$/);
+  await skip.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main")).toBeFocused();
+});

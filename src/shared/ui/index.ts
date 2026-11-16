@@ -15,6 +15,7 @@ export { RequirementList, type Requirement, type RequirementGroup } from "./requ
 export { SectionLabel } from "./section-label";
 export { SiteFooter } from "./site-footer";
 export { SiteHeader } from "./site-header";
+export { SkipLink } from "./skip-link";
 export { StatusChip, type RequirementStatus } from "./status-chip";
 export { TrackedButtonLink } from "./tracked-button-link";
 export { WaitNote } from "./wait-note";

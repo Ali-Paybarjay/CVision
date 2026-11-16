@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { SignOutButton } from "@/features/account/sign-out-button";
 import { brand } from "@/shared/brand";
 import { InAppHistory } from "@/shared/in-app-history";
-import { SiteFooter, SiteHeader } from "@/shared/ui";
+import { SiteFooter, SiteHeader, SkipLink } from "@/shared/ui";
 import "./globals.css";
 
 // Inter lives in the repo (fonts/, SIL Open Font License in fonts/OFL.txt), so no build downloads it from Google:
@@ -30,6 +30,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en-GB" className={`${inter.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
+        {/* First, so Tab reaches it before the header's links (#507). */}
+        <SkipLink />
         {/* It reads the page's address, which a prerendered page only knows at request time, so it waits in Suspense. */}
         <Suspense fallback={null}>
           <InAppHistory />
