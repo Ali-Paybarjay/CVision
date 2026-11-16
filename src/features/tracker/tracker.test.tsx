@@ -98,4 +98,15 @@ describe("jobs in progress", () => {
     expect(html).toContain('href="/tailor?job=job-1"');
     expect(html).not.toContain("bg-cta");
   });
+
+  it("leave the one Coral button to Build your profile while there is no profile (#506)", async () => {
+    const html = await render({ hasProfile: false, inProgress: [junior] });
+
+    expect(html).toMatch(/<a href="\/profile" class="[^"]*bg-cta[^"]*">Build your profile<\/a>/);
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
+    expect(html).toContain('href="/tailor?job=job-1"');
+    // A job is checked, but there is no profile and no CV saved for it: only step 2 is done.
+    expect(html).toMatch(/Paste a job ad\.<\/h3><p[^>]*><svg[\s\S]*?<\/svg>Done<\/p>/);
+    expect(html.match(/>Done</g)).toHaveLength(1);
+  });
 });
