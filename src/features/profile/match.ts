@@ -118,7 +118,7 @@ export type JudgedRequirement = JobRequirement & {
   detail: string;
 };
 
-const defaultDetail = {
+export const defaultDetail = {
   unclear: "Your profile touches on this, but doesn’t show it clearly.",
   missing: "Nothing in your profile shows this yet.",
   noEvidence: "We couldn’t find where your profile shows this.",
