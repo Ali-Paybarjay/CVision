@@ -73,3 +73,16 @@ test("each hero button says what you get, with Free only in the small line under
   await check.click();
   await expect(page).toHaveURL(/\/cv-check$/);
 });
+
+// A link to the site shows its picture in WhatsApp, Telegram and LinkedIn (#507). In CI the picture's address is on the
+// live site (metadataBase), so only its path is checked; the picture itself comes from this server.
+test("a shared link shows CVision's picture", async ({ page, request }) => {
+  await page.goto("/");
+  const image = await page.locator('meta[property="og:image"]').getAttribute("content");
+  expect(image && new URL(image).pathname).toBe("/opengraph-image.png");
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
+
+  const picture = await request.get("/opengraph-image.png");
+  expect(picture.ok()).toBe(true);
+  expect(picture.headers()["content-type"]).toBe("image/png");
+});

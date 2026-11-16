@@ -17,9 +17,13 @@ const inter = localFont({
   display: "swap",
 });
 
+// Link previews in WhatsApp, Telegram and LinkedIn show opengraph-image.png, at its full address on the live site
+// (#507). Next adds each page's own title and description as og: and twitter: tags, and summary_large_image.
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cvision-eta.vercel.app"),
   title: { default: brand.name, template: `%s | ${brand.name}` },
   description: brand.tagline,
+  openGraph: { type: "website", siteName: brand.name, locale: "en_GB" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
