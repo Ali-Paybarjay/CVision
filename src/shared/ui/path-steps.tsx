@@ -14,13 +14,14 @@ const pathSteps = [
 /**
  * Where the user is on the main path, at the top of Profile, Jobs and Tailor (#238). A pilot asked "what should I do
  * now?" on these pages: this shows the three pages in order, the current one in bold, and the next one after it.
- * It is one short line with no numbers or circles, so on a phone it fits on one line and it doesn't echo the pages'
- * own numbered steps below it (Profile's two, Tailor's five). Each step is a page, so the current one carries
- * aria-current="page", not "step", which those inner steps use. A step before the current one is a link with a dotted
- * underline as well as colour, so it doesn't rely on colour alone and isn't mistaken for the header's solid underline
- * under the current page. "Check a job" is the Jobs page's own name, and differs from Tailor's inner "Job" step. The
- * "›" ends each step but the last, so a line that wraps at large text sizes starts with a step, not a separator. It
- * shows order, not progress: a step before the current one is not marked done, since the page can't always know.
+ * It is one short line with no numbers or circles, so on a phone it fits on one line and it doesn't echo Tailor's own
+ * five numbered steps below it (Profile has had no steps of its own since #514). Each step is a page, so the current
+ * one carries aria-current="page", not "step", which Tailor's steps use. A step before the current one is a link with
+ * a dotted underline as well as colour, so it doesn't rely on colour alone and isn't mistaken for the header's solid
+ * underline under the current page. "Check a job" is the Jobs page's own name, and differs from Tailor's inner "Job"
+ * step. The "›" ends each step but the last, so a line that wraps at large text sizes starts with a step, not a
+ * separator. It shows order, not progress: a step before the current one is not marked done, since the page can't
+ * always know.
  */
 export function PathSteps({ current }: { current: 1 | 2 | 3 }) {
   return (
