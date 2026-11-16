@@ -7,7 +7,8 @@
  */
 export function SkipLink() {
   return (
-    // The href only puts the link in the Tab order: a click never follows it (focusMain).
+    // The href only puts the link in the Tab order: once the page's script has loaded, a click never follows it
+    // (focusMain). A click before that only adds #main to the address, as no element has that id.
     <a
       href="#main"
       onClick={focusMain}
