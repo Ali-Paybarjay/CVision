@@ -12,7 +12,7 @@ vi.mock("@/shared/ai", async (original) => ({
   }),
 }));
 
-const { askGapQuestions, proposeChanges, suggestFromCv, writeCoverLetter } = await import("@/features/tailor");
+const { askGapQuestions, proposeChanges, suggestFromCv, writeCoverLetter, writeSummary } = await import("@/features/tailor");
 const { jobForPrompt } = await import("@/features/tailor/job-for-prompt");
 const { clinicalFixtures } = await import("./clinical-fixture");
 
@@ -22,13 +22,14 @@ const withRole = { ...clinicalFixtures.job, role };
 // The same job as read before the role field existed.
 const job: Job = { ...withRole, role: undefined };
 const empty: Proposal = { changes: [], nextSteps: [] };
-const features = ["tailor-gap-questions", "tailor-propose", "tailor-suggest", "tailor-cover-letter"];
+const features = ["tailor-gap-questions", "tailor-propose", "tailor-suggest", "tailor-cover-letter", "tailor-summary"];
 
 async function sendAll(target: Job) {
   await askGapQuestions({ profile, job: target, match });
   await proposeChanges({ profile, job: target, match, answers: [], sample: empty });
   await suggestFromCv({ profile, job: target, match, sample: empty });
   await writeCoverLetter({ profile, job: target, changes: [], answers: [] });
+  await writeSummary({ profile, job: target, match, describeAs: { kind: "summary" }, sample: empty });
 }
 
 describe("the tailor prompts read the job's role (#404)", () => {

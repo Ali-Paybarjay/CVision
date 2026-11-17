@@ -19,6 +19,7 @@ import { FinalCheck } from "./final-check";
 import { GapCard, type GapPrompt, type GapState } from "./gap-card";
 import { unreachableMessage } from "./messages";
 import { QuestionsStep } from "./questions-step";
+import { SummaryCard } from "./summary-card";
 import { DocumentIcon, DownloadIcon, JobIcon, LetterIcon, QuestionIcon, StatusPill, StepTracker, TailorStep, type StepStatus } from "./tailor-step";
 
 export type { GapPrompt };
@@ -153,8 +154,14 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
     />
   );
 
-  const fromCv = changes.filter((change) => !change.gapId);
+  // The summary card holds the summaries written for this job; a summary from an answer stays with its question (#16).
+  const isSummary = (change: TailoringChange) => !change.gapId && change.section === "summary";
+  const summaries = changes.filter(isSummary);
+  const fromCv = changes.filter((change) => !change.gapId && !isSummary(change));
   const fromAnswers = changes.filter((change) => change.gapId);
+  // A new summary takes the place of one still waiting for a decision; an approved or rejected one stays.
+  const onSummary = (change: TailoringChange) =>
+    changeList((current) => [...current.filter((item) => !(isSummary(item) && item.status === "proposed")), change]);
 
   const answeredCount = questions.filter((prompt) => gapStates[prompt.gap.id]?.phase === "answered").length;
   const statusOf = (step: Step, completed: boolean, started: boolean): StepStatus =>
@@ -256,6 +263,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
               <span className="font-semibold">✓ Approved: {counts.approved}</span> · ✕ Rejected: {counts.rejected} · Waiting: {counts.waiting}. Only
               approved changes go into your CV.
             </p>
+            <SummaryCard jobId={job.id} profile={profile} changes={summaries} onWritten={onSummary} onDecide={update} lineNoteOf={lineNoteOf} />
             {fromAnswers.length > 0 && (
               <section className="flex flex-col gap-4" aria-labelledby="from-answers-heading">
                 <h4 id="from-answers-heading" className="font-semibold">

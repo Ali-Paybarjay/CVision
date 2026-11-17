@@ -21,6 +21,7 @@ export function ChangeCard({
   onDecide,
   role,
   lineNote,
+  showSection = true,
 }: {
   change: TailoringChange;
   onDecide: (change: TailoringChange) => Promise<void>;
@@ -28,6 +29,8 @@ export function ChangeCard({
   role?: { role: string; named: boolean };
   /** After an approval to a line that already had one: on the new change, "replaced"; on the earlier one, "sent-back" (#465). */
   lineNote?: LineNote;
+  /** False inside a card that already names the section, such as the summary card (#16). */
+  showSection?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(change.after);
@@ -54,7 +57,7 @@ export function ChangeCard({
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-line p-4">
-      <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">{sectionNames[change.section]}</p>
+      {showSection && <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">{sectionNames[change.section]}</p>}
 
       <CvPaper as="div" className="text-sm">
         {change.before?.trim() ? (

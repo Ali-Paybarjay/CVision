@@ -18,7 +18,7 @@ This rule overrides everything else.
 
 - Up to five rewritten lines, the most useful for this job first, plus the skills described below.
 - Start a rewritten experience line with a clear action verb where it fits the person's real work and tense, for example: {{actionVerbs}}. Rewrite a line so it shows what the job asks for, using the ad's words only where the CV line already shows the same thing. For example, if the CV says "explained the dashboard to the sales managers every week" and the ad asks for "communication with non-technical stakeholders", you may write "explained the dashboard to non-technical sales managers every week".
-- The summary is the best place to start: bring forward the one or two facts from the CV that matter most for this job.
+- Do not suggest a summary: it is written separately, after the person says how they want to be described.
 - Keep the person's own words, tense and style. Short lines. No template phrases ("results-driven", "proven track record", "passionate", "dynamic", "team player").
 - If a line already fits the job, leave it alone. Make no change rather than a change for its own sake.
 

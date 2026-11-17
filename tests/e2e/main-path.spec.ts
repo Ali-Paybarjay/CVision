@@ -115,6 +115,20 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(page.getByText("✓ Approved: 1")).toBeVisible();
   await expect(tailoredLines).toHaveCount(1);
 
+  // The summary comes first and is written only once the user says how it should describe them (#16).
+  const summary = page.getByRole("region", { name: "Professional summary" });
+  await expect(summary.getByRole("radio", { name: "As my summary says now" })).toBeChecked();
+  await summary.getByRole("radio", { name: "In my own words" }).check();
+  await expect(summary.getByRole("button", { name: "Write my summary" })).toBeDisabled();
+  await summary.getByRole("radio", { name: "As my summary says now" }).check();
+  await summary.getByRole("button", { name: "Write my summary" }).click();
+  const approveSummary = summary.getByRole("button", { name: "Approve", exact: true });
+  await approveSummary.click();
+  await expect(approveSummary).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("✓ Approved: 2")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(2);
+  await expect(summary.getByRole("button", { name: "Try another title" })).toBeVisible();
+
   // A gap is answered in the user's own words, one question at a time.
   await page.getByRole("button", { name: /^2\. Questions about your experience/ }).click();
   const gap = page.getByRole("region", { name: "2. Questions about your experience" }).getByRole("article").filter({ visible: true });
@@ -126,8 +140,8 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   // After one answer the CV is a click away, without skipping the other questions (#488).
   await expect(page.getByRole("button", { name: "Review your tailored CV now" })).toBeVisible();
   await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
-  await expect(page.getByText("✓ Approved: 2")).toBeVisible();
-  await expect(tailoredLines).toHaveCount(2);
+  await expect(page.getByText("✓ Approved: 3")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(3);
 
   // Step 5 leads on to interview practice for the same job, as a secondary link beside Apply.
   await page.getByRole("button", { name: /^5\. Download and apply/ }).click();
