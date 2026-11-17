@@ -27,7 +27,7 @@ describe("PathSteps", () => {
     expect(text(html)).not.toMatch(/Step \d/);
   });
 
-  // The pages' own steps (Profile's two, Tailor's five) use aria-current="step"; each step here is a page.
+  // Tailor's own five steps use aria-current="step"; each step here is a page.
   it("marks the current step as the current page, once, and says which comes next", () => {
     const html = renderToStaticMarkup(<PathSteps current={2} />);
     expect(html).toMatch(/aria-current="page"[^>]*>Check a job/);
