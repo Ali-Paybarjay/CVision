@@ -119,8 +119,12 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
     page.getByRole("complementary", { name: "Your CV for this job" }).getByText("The highlight is only on this page, not in your download."),
   ).toBeVisible();
 
-  // A gap is answered in the user's own words, one question at a time.
-  await page.getByRole("button", { name: /^2\. Questions about your experience/ }).click();
+  // A gap is answered in the user's own words, one question at a time, opened from the overview above the steps.
+  await page.getByRole("button", { name: "Answer this question" }).click();
+  // The open step has one Coral button, for its main task: Save answer (#500).
+  const coral = page.locator(".bg-cta").filter({ visible: true });
+  await expect(coral).toHaveCount(1);
+  await expect(coral).toHaveText("Save answer");
   const gap = page.getByRole("region", { name: "2. Questions about your experience" }).getByRole("article").filter({ visible: true });
   await gap.getByRole("textbox", { name: "Your answer" }).fill("I explained my dashboards to the regional sales team every Monday.");
   await gap.getByRole("button", { name: "Save answer" }).click();

@@ -33,9 +33,7 @@ export function CvOverview({ cv, tracker, nextQuestion, suggestion, onAnswer, on
             <>
               <p>{nextQuestion}</p>
               <div>
-                <Button variant="quiet" onClick={onAnswer} className="min-h-11 px-0">
-                  Answer this question
-                </Button>
+                <Button onClick={onAnswer}>Answer this question</Button>
               </div>
             </>
           ) : (
@@ -71,9 +69,7 @@ export function CvOverview({ cv, tracker, nextQuestion, suggestion, onAnswer, on
                   </span>
                 </p>
                 <div>
-                  <Button variant="quiet" onClick={onReview} className="min-h-11 px-0">
-                    Review suggestions
-                  </Button>
+                  <Button onClick={onReview}>Review suggestions</Button>
                 </div>
               </>
             ) : (

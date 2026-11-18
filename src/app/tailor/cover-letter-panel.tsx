@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { Fragment, useTransition } from "react";
 import { createCoverLetter } from "@/features/tailor/actions";
 import { findBrandProblems } from "@/features/tailor/brand-check";
 import {
@@ -31,19 +31,35 @@ type CoverLetterPanelProps = {
   setLetter: (letter: LetterState | null) => void;
 };
 
-/** The top of the letter as the template lays it out; added to the file too, so the user does not edit it here. */
+/**
+ * The top of the letter as the template lays it out; added to the file too, so the user does not edit it here. On a
+ * phone each contact detail has a line of its own, so a line never ends in a lone "|" (#500); the file is unchanged.
+ */
 function LetterHeading({ head }: { head: LetterHead }) {
   return (
     <div className="mb-4">
       <p className="text-center text-base font-bold">{head.fullName}</p>
       {head.contact.map((line) => (
         <p key={line} className="text-center">
-          {line}
+          {line.split(" | ").map((part, index) => (
+            <Fragment key={index}>
+              {index > 0 && <span className="hidden sm:inline"> | </span>}
+              <span className="block sm:inline">{part}</span>
+            </Fragment>
+          ))}
         </p>
       ))}
       <p className="mt-2 text-right">{head.date}</p>
     </div>
   );
+}
+
+/** What the letter is written from, naming only what there is: never "the 0 changes you approved" (#500). */
+function writtenFrom(approvedCount: number, answered: boolean): string {
+  const changes = `the ${approvedCount} ${approvedCount === 1 ? "change" : "changes"} you approved`;
+  if (approvedCount > 0 && answered) return `Written only from your CV, ${changes} and your own answers.`;
+  if (approvedCount > 0) return `Written only from your CV and ${changes}.`;
+  return answered ? "Written only from your CV and your own answers." : "Written only from your CV.";
 }
 
 /** Write the cover letter for this job, keep, remove or edit each paragraph, then approve it. */
@@ -77,8 +93,7 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-text-muted">
-        Written only from your CV, the {approvedCount} {approvedCount === 1 ? "change" : "changes"} you approved and your own answers.
-        Keep, remove or edit each paragraph, then approve the letter.
+        {writtenFrom(approvedCount, answers.length > 0)} Keep, remove or edit each paragraph, then approve the letter.
       </p>
 
       {letter?.error && <Notice tone="error">{letter.error}</Notice>}
@@ -134,12 +149,14 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
 
       <div className="flex flex-wrap items-center gap-3">
         {!letter?.approved && (
-          <Button onClick={write} disabled={pending}>
+          // One Coral at a time (#500): Write my cover letter until there is a letter, then Approve cover letter.
+          <Button variant={letter?.text ? "secondary" : "primary"} onClick={write} disabled={pending}>
             {pending ? "Writing your letter…" : letter?.text ? "Write it again" : "Write my cover letter"}
           </Button>
         )}
         {letter?.text && !letter.approved && (
           <Button
+            variant="primary"
             onClick={() => draft && setLetter({ text: joinLetter(draft), approved: true, basis, draft })}
             disabled={pending || !draft || !canApprove(draft)}
           >
