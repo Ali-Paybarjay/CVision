@@ -91,6 +91,15 @@ export function AuthForm({
       <Button type="submit" variant="primary" disabled={disabled || pending}>
         {pending ? text.pending : text.submit}
       </Button>
+      {/* A user had no way back into their account without the password (18 November, #524). */}
+      {mode === "sign-in" && (
+        <p className="text-sm text-text-muted">
+          Forgot your password?{" "}
+          <Link href={withNext("/sign-in/forgot", next)} className="font-semibold text-accent hover:underline">
+            Reset it
+          </Link>
+        </p>
+      )}
       <p className="text-sm text-text-muted">
         {text.switchText}{" "}
         <Link href={withNext(text.switchHref, next)} className="font-semibold text-accent hover:underline">
