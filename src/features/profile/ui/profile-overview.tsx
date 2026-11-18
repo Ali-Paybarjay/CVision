@@ -122,16 +122,21 @@ export function ProfileOverview({
       {/* The CV check left the signed-in menu, so it sits next to the CV it is about. It looks at the CV on its own,
           not at a job ad, which is what tells it apart from Check a job. */}
       <Card aria-labelledby="cv-check-heading">
-        <h2 id="cv-check-heading" className="text-xl">
-          Is your CV ready for UK employers?
-        </h2>
-        <p className="mt-2 text-text-muted">
-          The CV check looks at your CV on its own, not at a job ad, and shows what to fix first. It doesn’t change
-          your profile.
-        </p>
-        <ButtonLink href="/cv-check" className="mt-4">
-          Check my CV
-        </ButtonLink>
+        <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 id="cv-check-heading" className="text-xl">
+              Is your CV ready for UK employers?
+            </h2>
+            <p className="mt-2 text-text-muted">
+              The CV check looks at your CV on its own, not at a job ad, and shows what to fix first. It doesn’t
+              change your profile.
+            </p>
+            <ButtonLink href="/cv-check" className="mt-4">
+              Check my CV
+            </ButtonLink>
+          </div>
+          <ScoreRing />
+        </div>
       </Card>
 
       <Card>
@@ -234,6 +239,38 @@ export function ProfileOverview({
         )}
       </Card>
     </section>
+  );
+}
+
+/**
+ * The CV check's score ring, before a check. The check keeps no result, so Profile has no score to show: an empty
+ * ring with a question mark, never a made-up number (Honest CV Promise). The score out of 100 appears in the check.
+ */
+function ScoreRing() {
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1 self-center">
+      <div className="relative size-28" aria-hidden="true">
+        <svg viewBox="0 0 100 100" className="size-full">
+          <circle cx="50" cy="50" r="46" className="fill-fit" />
+          {/* Dotted, not a partial arc: an arc would read as a low score. */}
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray="0.1 9.9"
+            className="stroke-accent"
+          />
+        </svg>
+        <span className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-3xl font-bold leading-none text-accent">?</span>
+          <span className="mt-1 text-xs text-text-muted">/ 100</span>
+        </span>
+      </div>
+      <span className="text-xs font-semibold text-text-muted">Not checked yet</span>
+    </div>
   );
 }
 
