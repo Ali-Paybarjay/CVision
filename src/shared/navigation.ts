@@ -6,8 +6,10 @@ export const navItems = [
   // "Check a job", as the page title and the path steps say: a pilot read "Jobs" as a job search (8 November).
   { href: "/jobs", label: "Check a job" },
   { href: "/tailor", label: "Tailor" },
-  { href: "/cv-check", label: "CV check" },
   { href: "/interview", label: "Interview" },
+  // The free CV check is the way in for visitors. A signed-in user reaches it from Profile and the dashboard, so the
+  // menu keeps only their path (profile, job ad, tailored CV, interview) and two "check" pages don't sit side by side.
+  { href: "/cv-check", label: "CV check", visitorOnly: true },
 ] as const;
 
 // Pages linked from the footer on every page.

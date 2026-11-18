@@ -647,6 +647,30 @@ describe("profile screens", () => {
     expect(words.indexOf("Upload a new CV")).toBeLessThan(words.indexOf("What you’re looking for"));
   });
 
+  // The CV check left the signed-in menu, so the saved profile links to it, after the profile and before the
+  // preferences, as a plain link: the next step stays the one Coral button.
+  it("links to the CV check from the saved profile, named by its own question", () => {
+    const html = renderToStaticMarkup(
+      <ProfileOverview
+        saved={fromBrowser(stored("sara"))}
+        storage="browser"
+        persistent
+        focusHeading={false}
+        onEdit={noop}
+        onUploadNew={noop}
+        onDelete={async () => null}
+        onSavePreferences={async () => null}
+      />,
+    );
+    const words = text(html);
+
+    expect(html).toMatch(/<a href="\/cv-check" class="(?![^"]*bg-cta)[^"]*">Check my CV<\/a>/);
+    expect(words).toContain("Is your CV ready for UK employers?");
+    expect(words).toContain("not at a job ad");
+    expect(words.indexOf("Upload a new CV")).toBeLessThan(words.indexOf("Is your CV ready for UK employers?"));
+    expect(words.indexOf("Is your CV ready for UK employers?")).toBeLessThan(words.indexOf("What you’re looking for"));
+  });
+
   it("counts volunteering, projects and languages in the summary when the profile has them (#227)", () => {
     const profile = {
       ...personas.emma.profile,

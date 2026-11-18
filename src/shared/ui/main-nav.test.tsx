@@ -34,6 +34,35 @@ describe("Sign out in the top menu (#328)", () => {
   });
 });
 
+describe("CV check in the top menu", () => {
+  /** The page links in the inline list, in order. */
+  function pageLinks(html: string) {
+    const list = html.match(/<ul class="[^"]*">(.*?)<\/ul>/)?.[1] ?? "";
+    return [...list.matchAll(/<a href="([^"]*)"/g)].map((match) => match[1]);
+  }
+
+  it("signed in: only the user's path, with no CV check beside Check a job", () => {
+    expect(pageLinks(renderToStaticMarkup(<MainNav signedIn />))).toEqual([
+      "/dashboard",
+      "/profile",
+      "/jobs",
+      "/tailor",
+      "/interview",
+    ]);
+  });
+
+  it("signed out: the free CV check stays in the menu, after the path", () => {
+    expect(pageLinks(renderToStaticMarkup(<MainNav signedIn={false} />))).toEqual([
+      "/dashboard",
+      "/profile",
+      "/jobs",
+      "/tailor",
+      "/interview",
+      "/cv-check",
+    ]);
+  });
+});
+
 describe("top menu (#177)", () => {
   it("signed out: makes room for the call to action by moving the page links into the Menu below 1024px", () => {
     const html = renderToStaticMarkup(<MainNav signedIn={false} />);
