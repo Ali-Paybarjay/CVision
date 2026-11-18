@@ -133,6 +133,12 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await page.getByRole("button", { name: /^5\. Download and apply/ }).click();
   // The final check sits above the downloads and never stops them (#489).
   await expect(page.getByRole("heading", { name: "Final check" })).toBeVisible();
+  // PDF is the first row; Word sits under it as links (#498).
+  await expect(page.getByRole("button", { name: "Download CV (PDF)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download CV (Word)" })).toBeVisible();
+  // The sample ad has a link, so Apply opens it; "I’ve applied" is only for an ad with no link (#498).
+  await expect(page.getByRole("link", { name: "Open the ad on example.com" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /I’ve applied/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Start interview practice" })).toHaveAttribute("href", "/interview?job=sara-job-1");
 });
 
