@@ -125,7 +125,7 @@
 
 - [ ] بدون ورود به حساب، «Upload a file» را با `sara.docx` امتحان کن و «Check my CV» را بزن. امتیاز آمادگی و «How to fix it» در کمتر از دو دقیقه می‌آید.
 - [ ] یک بار هم متن رزومه را بچسبان. نتیجه همان‌قدر روشن است.
-- [ ] در کارت «Next: tailor your CV to a job»، «Tailor my CV to a job» مهمان را به ثبت‌نام و بعد Profile، و کاربر واردشده را مستقیم به Profile می‌برد.
+- [ ] در کارت «Next: tailor your CV to a job»، «Tailor my CV to a job» مهمان را به ثبت‌نام و بعد Profile می‌برد، کاربر واردشده‌ای را که هنوز Profile ندارد با همان فایل چک‌شده به Profile، و کاربر واردشده‌ای را که Profile دارد به «Check a job» (`/jobs`) (#548).
 
 ### دادهٔ من (`/dashboard/your-data`): آخر از همه
 

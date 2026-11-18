@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { brand } from "@/shared/brand";
 import { personas, type PersonaName } from "@/shared/sample-data";
 import { consentPoints, cvConsent, manualConsent, manualConsentPoints } from "../consent";
 import { extractionFromProfile } from "../cv-extraction";
@@ -664,20 +665,31 @@ describe("profile screens", () => {
     );
     const words = text(html);
 
-    expect(html).toMatch(/<a href="\/cv-check" class="(?![^"]*bg-cta)[^"]*">Check my CV<\/a>/);
-    expect(words).toContain("Is your CV ready for UK employers?");
+    // One action, one name: the brand's question and button, as on the home page (#548).
+    expect(html).toMatch(new RegExp(`<a href="/cv-check" class="(?![^"]*bg-cta)[^"]*">${brand.cta.cvCheckAction}</a>`));
+    expect(html).toContain(`<h2 id="cv-check-heading" class="text-xl">${brand.cta.cvCheckQuestion}</h2>`);
     expect(words).toContain("not at a job ad");
-    expect(words.indexOf("Upload a new CV")).toBeLessThan(words.indexOf("Is your CV ready for UK employers?"));
-    expect(words.indexOf("Is your CV ready for UK employers?")).toBeLessThan(words.indexOf("What you’re looking for"));
+    expect(words.indexOf("Upload a new CV")).toBeLessThan(words.indexOf(brand.cta.cvCheckQuestion));
+    expect(words.indexOf(brand.cta.cvCheckQuestion)).toBeLessThan(words.indexOf("What you’re looking for"));
+  });
+
+  // The check asks for the CV again rather than reading the saved profile, so the card says so (#548).
+  it("says the CV check needs the CV uploaded or pasted, and leaves the profile as it is", () => {
+    const words = overview(fromBrowser(stored("sara")), "browser");
+    const card = words.slice(words.indexOf(brand.cta.cvCheckQuestion), words.indexOf("What you’re looking for"));
+
+    expect(card).toContain("Upload or paste your CV and see what to fix first.");
+    expect(card).toContain("doesn’t change your profile");
   });
 
   // The CV check keeps no result, so the ring beside it shows no score: a made-up number would break the Honest CV
-  // Promise.
-  it("shows the CV check's score ring empty, with no number", () => {
+  // Promise. "Not checked yet" was wrong right after a check, so its line is true either way (#548).
+  it("shows the CV check's score ring empty, with no number, and a line that is true before and after a check", () => {
     const words = overview(fromBrowser(stored("sara")), "browser");
     const card = words.slice(words.indexOf("Is your CV ready"), words.indexOf("What you’re looking for"));
 
-    expect(card).toContain("Not checked yet");
+    expect(card).toContain("Your score shows in the check. We don’t save it.");
+    expect(card).not.toContain("Not checked yet");
     expect(card).toMatch(/\?\s+\/ 100/);
     expect(card).not.toMatch(/\d+\s*%|\b\d{1,2}\s*\/\s*100/);
   });

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { yourDataPath } from "@/features/account/data-rights-paths";
+import { brand } from "@/shared/brand";
 import type { JobPreferences } from "@/shared/contracts";
 import { consentPurpose, type ProfileStorageKind } from "../consent";
 import { describePreferences, noteLines } from "../preferences";
@@ -120,19 +121,20 @@ export function ProfileOverview({
       </Card>
 
       {/* The CV check left the signed-in menu, so it sits next to the CV it is about. It looks at the CV on its own,
-          not at a job ad, which is what tells it apart from Check a job. */}
+          not at a job ad, which is what tells it apart from Check a job. It doesn't read the saved profile: it asks
+          for the CV again, so the text says so (#548). Question and button are the brand's, as on the home page. */}
       <Card aria-labelledby="cv-check-heading">
         <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h2 id="cv-check-heading" className="text-xl">
-              Is your CV ready for UK employers?
+              {brand.cta.cvCheckQuestion}
             </h2>
             <p className="mt-2 text-text-muted">
-              The CV check looks at your CV on its own, not at a job ad, and shows what to fix first. It doesn’t
-              change your profile.
+              Upload or paste your CV and see what to fix first. The check looks at your CV on its own, not at a job
+              ad, and doesn’t change your profile.
             </p>
             <ButtonLink href="/cv-check" className="mt-4">
-              Check my CV
+              {brand.cta.cvCheckAction}
             </ButtonLink>
           </div>
           <ScoreRing />
@@ -243,8 +245,9 @@ export function ProfileOverview({
 }
 
 /**
- * The CV check's score ring, before a check. The check keeps no result, so Profile has no score to show: an empty
- * ring with a question mark, never a made-up number (Honest CV Promise). The score out of 100 appears in the check.
+ * The CV check's score ring, empty. The check keeps no result, so Profile has no score to show: an empty ring with a
+ * question mark, never a made-up number (Honest CV Promise). The score out of 100 appears in the check. Its line is
+ * true whether or not the user has checked their CV: "Not checked yet" was wrong right after a check (#548).
  */
 function ScoreRing() {
   return (
@@ -269,7 +272,9 @@ function ScoreRing() {
           <span className="mt-1 text-xs text-text-muted">/ 100</span>
         </span>
       </div>
-      <span className="text-xs font-semibold text-text-muted">Not checked yet</span>
+      <span className="max-w-40 text-center text-xs font-semibold text-text-muted">
+        Your score shows in the check. We don’t save it.
+      </span>
     </div>
   );
 }
