@@ -32,7 +32,8 @@ export default function SignUpPage({ searchParams }: PageProps<"/sign-up">) {
 async function SignUpForm({ searchParams, disabled }: Pick<PageProps<"/sign-up">, "searchParams"> & { disabled: boolean }) {
   const { next } = await searchParams;
   const destination = safeRedirectPath(next);
-  // Someone already signed in, say from the home page's main button, gets their account instead of the form (#328).
+  // Someone already signed in, say from an old or shared sign-up link, gets their account instead of the form (#328).
+  // The home page's main button sends them to /jobs instead (#528).
   const user = disabled ? null : await getCurrentUser();
   if (user) return <SignedInNotice mode="sign-up" email={user.email} next={destination} />;
   return <AuthForm mode="sign-up" disabled={disabled} next={destination} />;
