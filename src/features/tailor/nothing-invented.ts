@@ -167,16 +167,17 @@ function withoutJobsWanted(text: string, { term, kind }: RoleTerm): string {
 
 /**
  * Without the places that name the term for someone else: "alongside NMC registered nurses", "support the Band 6 nurse
- * in charge", and after a plural such as nurses or staff, "nurses registered with the NMC", "staff regulated by the
- * HCPC" and "registered nurses (NMC)" (#526). "Registered nurse (NMC)" is their own.
+ * in charge", "tasks from NMC-registered nurses", and after a plural such as nurses or staff, "nurses registered with
+ * the NMC", "staff regulated by the HCPC" and "registered nurses (NMC)" (#526). "Registered nurse (NMC)" is their own.
  */
 function withoutOthers(text: string, term: string): string {
   const name = `\\(?${escaped(term)}\\)?`;
   const people = "nurses|staff|colleagues|doctors|midwives|practitioners|professionals|clinicians|nurse in charge|sister|charge nurse";
   const plural = "nurses|staff|colleagues|doctors|midwives|practitioners|professionals|clinicians";
   const forOthers = new RegExp(
-    // "Registered with the NMC" is the user's own registration, so "with" after registered or registration is not about others.
-    `\\b(?:alongside|(?<!\\bregist(?:ered|ration)\\s)with|under|support(?:ed|ing)?|assist(?:ed|ing)?|help(?:ed|ing)?|shadow(?:ed|ing)?)\\s+(?:the\\s+|a\\s+|an\\s+|other\\s+)?${name}|${name}\\s+(?:registered\\s+)?(?:${people})\\b` +
+    // "Registered with the NMC", "regulated by the NMC" and "my PIN from the NMC" are the user's own registration, so
+    // with, by or from after them is not about others.
+    `\\b(?:alongside|(?<!\\b(?:regist(?:ered|ration)|regulated|pin)\\s)(?:with|by|from)|under|support(?:ed|ing)?|assist(?:ed|ing)?|help(?:ed|ing)?|shadow(?:ed|ing)?)\\s+(?:the\\s+|a\\s+|an\\s+|other\\s+)?${name}|${name}[\\s-]+(?:registered[\\s-]+)?(?:${people})\\b` +
       `|\\b(?:${plural})\\s+(?:(?:who|that)\\s+(?:are|were)\\s+)?(?:registered|regulated)\\s+(?:with|by)\\s+(?:the\\s+)?${name}|\\b(?:${plural})\\s+\\(${escaped(term)}\\)`,
     "g",
   );
@@ -184,64 +185,111 @@ function withoutOthers(text: string, term: string): string {
 }
 
 /**
- * A clause about a registration the user does not hold now: not yet, pending, lapsed, pre-registration, students and
- * trainees (#483). Student and trainee only when no plural noun follows within two words, so "mentors student nurses"
- * stays; plan, hope, aim and intend only with "to", so "care plans" stays. Words that say so only next to the
- * registration, such as no, will and approved, are in notHeldNear (#526).
+ * A clause about a registration the user does not hold now: not yet, pending, lapsed, no longer, pre-registration,
+ * students and trainees (#483), and a first-person future or condition (#526): "until I receive my NMC PIN", "once I
+ * have my NMC PIN", "I will apply to the NMC", "who will be on the NMC register", "due to receive my NMC PIN". Student
+ * and trainee only when no plural noun follows within two words, so "mentors student nurses" stays; plan, hope, aim
+ * and intend only with "to", so "care plans" stays; re-registration not when it is done ("re-registration after Return
+ * to Practice"). Words that say so only next to the registration, such as no, will and approved, are in nearNotHeld.
  */
 const notHeldNow = new RegExp(
-  String.raw`\b(?:not|never|yet|eligible|expect(?:s|ed|ing)?|(?:hop(?:e|es|ing)|plan(?:s|ning)?|aim(?:s|ing)?|intend(?:s|ing)?) to|pending|await(?:s|ed|ing)?|lapsed|expired|leads? to|leading to|(?:on|upon) (?:qualifying|completion)|pre-registration|re-registration|registration assessment|(?:student|trainee)(?! (?:[a-z-]+ )?[a-z-]+s\b))\b|n't\b`,
+  String.raw`\b(?:not|never|yet|no longer|eligible|expect(?:s|ed|ing)?|(?:hop(?:e|es|ing)|plan(?:s|ning)?|aim(?:s|ing)?|intend(?:s|ing)?) to|pending|await(?:s|ed|ing)?|lapsed|expired|leads? to|leading to|(?:on|upon) (?:qualifying|completion)|pre-registration|re-registration(?! (?:after|following|completed|in \d))|registration assessment|(?:student|trainee)(?! (?:[a-z-]+ )?[a-z-]+s\b))\b|n't\b` +
+    String.raw`|\b(?:until|once)\s+(?:i|i've|i'm|i am|my|we)\b|\bi(?:'ll|\s+will)\b` +
+    String.raw`|\bwill\s+(?:(?:hopefully|soon|then|also)\s+)?(?:be\s+(?:on|added|registered)|join(?:ing)?|apply(?:ing)?|sit(?:ting)?|receive|get|register|qualify)\b` +
+    String.raw`|\bdue\s+to\s+(?:receive|sit|finish|complete|join|register|be|get|qualify|take)\b`,
 );
 
 /** Words that say a registration is not held now only next to it (#526), up to two words before it ("will be NMC registered")… */
 const beforeRegistration = "will|once|until|due|approved|exams?|working towards";
-/** …or right after it ("NMC registration in progress", "NMC approved", "NMC Test of Competence", "NMC registration will come through"). */
-const afterRegistration =
-  "will|should|would|once|until|due|approved|exams?|applied|submitted|processing|in progress|in process|test of competence|cbt|osce";
+/** …or right after it ("NMC registration in progress", "NMC approved", "NMC registration will come through", "is being processed")… */
+const afterRegistration = "will|should|would|once|due|approved|exams?|applied|submitted|processing|processed|in progress|in process";
+/** …or right after the body's own name, never after "registered" ("NMC CBT", "NMC OSCE"; not "NMC registered CBT therapist"). */
+const afterBody = "test of competence|cbt|osce";
 /** Adjectives "no" may take before the registration: "no current UK NMC registration". */
 const noAdjectives = "current|active|valid|live|uk|british|full";
+/** Words that may sit between a word such as "will" and "register…": "will be registered", "working towards full registration". */
+const fillers = "be|been|being|get|getting|have|has|my|the|a|an|on|with|to|join|joining|for|full|fully|formal|formally|uk|current";
+/** NMC nouns that are not the registration: "preparing for my NMC revalidation", "applied the NMC Code", "NMC recordable V300". */
+const notRegistration = "revalidation|code|standards?|recordable|guidance|approved|council";
+const months = "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec";
 
 /**
- * Whether a clause says the registration is not held now with a word next to the term or to "register…" (#526):
- * - up to two words before it ("will be NMC registered", "working towards registration"); applying, applied, preparing
- *   or submitted only with for, to or towards ("Preparing for NMC registration", "Applied to the NMC in May"); "in the
- *   process of registering"; and a test right before it ("Test of Competence (CBT) (NMC)", from a certificate's issuer);
- * - "no", perhaps with adjectives, one word before it ("no current UK registration with the NMC");
- * - right after it, perhaps after "application", "pin", "is" or "was" ("NMC registration in progress", "NMC
- *   application in process", "NMC registration was submitted", "NMC registration will come through in May");
- * - "until" up to three words after it, none of them valid or expires: a registration that has ended ("NMC registered
- *   nurse until I moved to Dubai").
- * So "NMC registered nurse with no gaps in practice", "NMC registered nurse who will work nights", "NMC registered
- * nurse who applied the NMC Code", "Qualified CBT therapist and NMC registered nurse" and "NMC registered nurse (PIN
- * valid until 2027)" keep their NMC.
+ * Where a clause says the registration is not held now with words next to it (#526). The match covers the term where
+ * it names it, so blanking it leaves the clause's other "NMC registered":
+ * - up to two words before the term, or only fillers before "register…" ("will be NMC registered", "working towards
+ *   registration"; not "working towards SCPHN registration"); applying, applied, preparing or submitted (my
+ *   application) for, to or towards a registration or the body ("Preparing for NMC registration", "applied to join the
+ *   NMC register", "Applied to the NMC in May"; not "preparing for my NMC revalidation"); "in the process of
+ *   registering"; then or can before join or register ("then register with the NMC");
+ * - "no", perhaps with adjectives, one word before it ("no current UK registration with the NMC", "no PIN from the NMC");
+ * - right after it, perhaps after "application", "pin" and up to three of is, was, currently, being ("NMC registration in
+ *   progress", "my NMC application is being processed"); a test right after the body's name ("NMC CBT");
+ * - "until" up to three words after it, then a year before this one: a registration that has ended ("Registered with
+ *   the NMC until 2019"). "PIN active until 2028" and "registered until 2027" are still held.
+ * "Register…" takes the body's name next to it: "NMC registration", "registered with the NMC", "PIN from the NMC".
  */
-function notHeldNear(clause: string, term: string): boolean {
-  const it = `(?:${escaped(term)}|regist(?:er|ered|ering|ers|ration))`;
-  const between = (words: number) => String.raw`[\s()/:-]+(?:[a-z0-9']+[\s()/:-]+){0,${words}}`;
-  const before =
-    `(?:(?<![a-z0-9'])no(?:\\s+(?:${noAdjectives}))*${between(1)}` +
-    `|(?:(?<![a-z0-9'])(?:${beforeRegistration})|'ll)${between(2)}` +
-    `|(?<![a-z0-9'])(?:applying|applied|preparing|submitted)\\s+(?:for|to|towards)${between(1)}` +
-    `|(?<![a-z0-9'])in\\s+(?:the\\s+)?process\\s+of${between(1)}` +
-    `|(?<![a-z0-9'])(?:test of competence|cbt|osce)[\\s()/:-]+)${it}(?![a-z0-9])`;
-  const after = `(?<![a-z0-9])${it}(?:\\s+(?:application|pin))?(?:\\s+(?:is|was|currently|now|still))?[\\s()/:-]+(?:${afterRegistration})(?![a-z0-9])`;
-  const ended = `(?<![a-z0-9])${it}(?![a-z0-9])(?:[\\s()/:-]+(?!valid\\b|expir)[a-z0-9']+){0,3}[\\s()/:-]+until(?![a-z0-9])`;
-  return new RegExp(`${before}|${after}|${ended}`).test(clause);
+function nearNotHeld(term: string): RegExp {
+  const body = escaped(term);
+  const register = String.raw`(?:${body}[\s-]+)?(?:re-?)?(?:regist(?:er|ered|ering|ers|ration)|pin)(?:\s+(?:with|by|on|to|from)\s+(?:the\s+)?${body})?`;
+  const it = String.raw`(?:${register}|${body})(?![a-z0-9])`;
+  const words = (count: number) => String.raw`[\s()/:-]+(?:[a-z0-9']+[\s()/:-]+){0,${count}}`;
+  const filled = String.raw`[\s()/:-]+(?:(?:${fillers})[\s()/:-]+){0,3}`;
+  const start = "(?<![a-z0-9'])";
+  const before = [
+    String.raw`${start}no(?:\s+(?:${noAdjectives}))*${words(1)}${it}`,
+    String.raw`(?:${start}(?:${beforeRegistration})|'ll)(?:${words(2)}${body}(?![a-z0-9])|${filled}${register}(?![a-z0-9]))`,
+    String.raw`${start}(?:applying|applied|preparing|submitted)(?:\s+my\s+application)?\s+(?:for|to|towards)\s+(?:join\s+)?(?:(?:the|my|an?)\s+)?(?:${register}(?![a-z0-9])|${body}(?![a-z0-9])(?![\s-]+(?:${notRegistration})\b))`,
+    String.raw`${start}in\s+(?:the\s+)?process\s+of${filled}${register}(?![a-z0-9])`,
+    String.raw`${start}(?:then|can|could)\s+(?:join|register)\s+(?:with\s+)?(?:the\s+)?${it}`,
+  ];
+  const after = String.raw`(?<![a-z0-9])${it}(?:\s+(?:application|pin))?(?:\s+(?:is|was|currently|now|still|being)){0,3}[\s()/:-]+(?:${afterRegistration})(?![a-z0-9])|(?<![a-z0-9])${body}[\s()/:-]+(?:${afterBody})(?![a-z0-9])`;
+  const ended = String.raw`(?<![a-z0-9])${it}(?:[\s()/:-]+[a-z0-9']+){0,3}[\s()/:-]+until\s+(?:(?:${months})[a-z]*\s+|\d{1,2}/)?((?:19|20)\d\d)\b`;
+  return new RegExp([...before, after, ended].map((part) => `(?:${part})`).join("|"), "g");
+}
+
+/** The places a clause still says the user holds the registration: "NMC registered", "registered with the NMC", "(NMC)". */
+function heldPhrase(term: string): RegExp {
+  const body = escaped(term);
+  return new RegExp(String.raw`(${body}[\s-]+regist(?:ered|ration)\b|regist(?:ered|ration)\s+(?:with|by)\s+(?:the\s+)?${body}(?![a-z0-9])|\(${body}\))|(?<![a-z0-9])${body}(?![a-z0-9])`, "g");
 }
 
 /**
- * Without the registration term in every clause of a supporting line that says it is not held now (#483): "I'm not NMC
- * registered yet", "eligible for NMC registration in September", "my NMC registration lapsed", "NMC registration in
- * progress" (#526). Only for a registration, only on the side of the support: at worst a true line stays out.
+ * Without the registration term in each clause of a supporting line that says it is not held now (#483): "I'm not NMC
+ * registered yet", "eligible for NMC registration in September", "my NMC registration lapsed", "until I receive my NMC
+ * PIN" (#526). A clause that says so only next to the term, as nearNotHeld reads it, loses those words, and keeps the
+ * term only where it still says they hold it: "passed the NMC CBT and has been NMC registered since 2023" keeps "NMC
+ * registered", "Sitting my NMC exams and I know the NMC Code" keeps nothing. Only for a registration, only on the side
+ * of the support: at worst a true line stays out.
  */
 function heldNow(line: string, { term, kind }: RoleTerm): string {
   if (kind !== "registration") return line;
-  const name = new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`, "g");
   return line
     .split(/(?<=[,;.])/)
-    .map((clause) => (notHeldNow.test(clause) || notHeldNear(clause, term) ? clause.replace(name, " ") : clause))
+    .map((clause) => heldInClause(clause, term) ?? clause)
     .join("");
 }
+
+/** The clause as heldNow leaves it, or null when nothing in it says the registration is not held now. */
+function heldInClause(clause: string, term: string): string | null {
+  if (notHeldNow.test(clause)) return clause.replace(new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`, "g"), " ");
+  let found = false;
+  // `until` with a year counts only for a year before this one: "until 2019" has ended, "until 2028" has not.
+  const rest = clause.replace(nearNotHeld(term), (match: string, year: string | undefined) => {
+    if (year !== undefined && Number(year) >= new Date().getFullYear()) return match;
+    found = true;
+    return " ";
+  });
+  return found ? rest.replace(heldPhrase(term), (match: string, held?: string) => (held ? match : " ")) : null;
+}
+
+/** Whether any clause of a line says the registration is not held now, or is wanted: "Registration pending" (#526). */
+const saysNotHeld = (line: string, term: string) =>
+  /\b(?:pending|awaiting|expected)\b/.test(line) || line.split(/[,;.]/).some((clause) => heldInClause(clause, term) !== null);
+
+/** A test, never a registration: "NMC Test of Competence (CBT) passed", "OSCE passed", "OET Nursing (Grade B)" (#526). */
+const namesTest = /\b(?:test of competence|cbt|osce|oet|ielts)\b/;
+/** A skill about the test, not CBT as a therapy: "Passed the CBT for NMC registration", but not "NMC registered CBT practitioner". */
+const testSkill = /\b(?:test of competence|osce|oet|ielts)\b|\b(?:passed|sat|sitting|booked)\b[^,;.]*\bcbt\b|\bcbt\b[^,;.]*\b(?:passed|for\s+(?:the\s+)?(?:[a-z]+\s+)?regist)/;
 
 /** A Band the user was given: "Promoted to Band 6 in 2023", "Appointed as a Band 6 sister". Acting up is not one. */
 function promotedTo(line: string, term: string): string {
@@ -295,11 +343,15 @@ function supportedRoleTerm(roleTerm: RoleTerm, before: string, { profile, answer
       ? [...titles, ...profile.experience.flatMap((job) => [...job.duties, ...job.achievements]).map((line) => promotedTo(oneSpelling(line), term))]
       : [
           ...titles,
-          // Held now too (#526): "NMC Test of Competence (CBT) passed" or "Preparing for NMC registration" is no
-          // registration. A certificate is read with its issuer, so a test the NMC set is none either.
-          ...[...profile.skills, ...profile.certifications.map((item) => (item.issuer ? `${item.name} (${item.issuer})` : item.name))].map((line) =>
-            heldNow(oneSpelling(line), roleTerm),
-          ),
+          // Held now too (#526): "Preparing for NMC registration" is no registration, and nor is a skill about a test.
+          ...profile.skills.map((line) => oneSpelling(line)).map((line) => (testSkill.test(line) ? "" : heldNow(line, roleTerm))),
+          // A certificate's name, held now, and its issuer on its own, unless the name names a test ("OSCE passed",
+          // issued by the NMC) or says it is not held ("Registration pending").
+          ...profile.certifications.flatMap((item) => {
+            const name = oneSpelling(item.name);
+            if (namesTest.test(name)) return [];
+            return [heldNow(name, roleTerm), saysNotHeld(name, term) ? "" : oneSpelling(item.issuer ?? "")];
+          }),
           // Not about others, held now, and about being registered (#483). Titles skip withoutOthers: "Band 6 Sister" is their own.
           ...[profile.summary, ...profile.education.flatMap((item) => [item.qualification, item.subject ?? ""])]
             .map((line) => heldNow(withoutOthers(oneSpelling(line), term), roleTerm))

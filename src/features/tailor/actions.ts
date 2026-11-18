@@ -13,7 +13,7 @@ import { findBrandProblems, type BrandProblem } from "./brand-check";
 import { coverLetterText, declinedRequirements, inventedTerms, nothingMoreToAdd, roleClaimsNote, withoutRoleClaims, withoutSentencesNaming, writeCoverLetter } from "./cover-letter";
 import { blocksToFile, cvBlocks, exportFileName, letterBlocks, mimeTypes, pdfLosesLetters, type Block, type ExportDocument, type ExportFormat } from "./export";
 import { defaultGapQuestion, isStrongerGap, questionGaps, strengthRole } from "./gap-questions";
-import { enforceNothingInvented } from "./nothing-invented";
+import { enforceNothingInvented, requirementTerms } from "./nothing-invented";
 import { proposeChanges, suggestFromCv } from "./propose-changes";
 import { sampleCvSuggestionsFor, sampleForGap } from "./samples";
 import { letterHead } from "./letter-state";
@@ -90,21 +90,60 @@ function namesSeveral(requirement: string): boolean {
 }
 
 /**
+ * Words after "I'm not" that name a registration, licence, check, qualification or Band: "I'm not NMC registered, but
+ * I worked as a staff nurse in India" is still a no to the registration (#526).
+ */
+const credentialWords =
+  /regist|licen[cs]|certif|qualified|chartered|accredit|checked|cleared|clearance|vetted|\bdbs\b|\bdriv(?:er|ing)\b|\bvisa\b|right to work|sponsor|\bpin\b|\b(?:nmc|hcpc|gmc|gphc|gdc|cscs|sia|cpcs)\b|\b(?:band|grade)\s*\d/;
+
+/** Words of a requirement that do not say what it is about: "Experience managing a team" is about managing a team. */
+const plainWords = new Set(
+  "experience experienced ability able knowledge understanding awareness skills skill proven strong good excellent demonstrable demonstrated evidence working work using use used with and the for including such within other any all from into willing willingness effective relevant previous similar setting settings environment role roles level high own new also well both least years year plus have has must can will should would are was were been this that these who which what when where how per via"
+    .split(" "),
+);
+
+/**
+ * Whether the words name the requirement (#526): one of its parts, as requirementTerms gives them, or one of its own
+ * words. In a long requirement only a name counts, a word with a capital or a digit such as "Power", "NMC" or
+ * "SystmOne", so "I'm not the ward manager" does not name "Experience coordinating a ward or unit shift…".
+ */
+function namesRequirement(words: string, requirement: string): boolean {
+  const said = ` ${words.replace(/[^a-z0-9+#]+/g, " ")} `;
+  const plain = (text: string) => text.toLowerCase().replace(/[^a-z0-9+#]+/g, " ").trim();
+  const all = requirement.split(/[^A-Za-z0-9+#]+/).filter(Boolean);
+  const names = all.filter((word, index) => word.length >= 3 && !plainWords.has(word.toLowerCase()) && (all.length <= 3 || index === 0 || /[A-Z0-9]/.test(word)));
+  return [...requirementTerms(requirement).map(plain), ...names.map(plain)].some((part) => part !== "" && said.includes(` ${part} `));
+}
+
+/** Doing verbs, past and present: "I supervised", "I supervise", "I do supervise", "I've regularly acted as nurse in charge". */
+const didVerbs =
+  "supervis(?:ed|e|es)|train(?:ed|s)?|mentor(?:ed|s)?|led|leads?|manag(?:ed|e|es)|ran|runs?|coordinat(?:ed|e|es)|cover(?:ed|s)?|organi[sz](?:ed|e|es)|deliver(?:ed|s)?|taught|teach(?:es)?|us(?:ed|e|es)|handl(?:ed|e|es)|oversaw|oversees?|built|builds?|design(?:ed|s)?|develop(?:ed|s)?|creat(?:ed|e|es)|wrote|writes?|act(?:ed|s)?\\s+(?:as|up)";
+
+/** What the user says they do or did after "but" or "however", perhaps after a short opening: "in my last job I led…". */
+const did = new RegExp(
+  `^(?:(?:in|at|during|on|when|while)\\b[^,;]{0,40}?,?\\s+)?(?:i|i've)\\s+(?:(?:have|do|did|also|often|regularly|already|still|now|sometimes|usually|frequently|always|personally|actually)\\s+)*(?:${didVerbs})\\b`,
+);
+
+/**
  * True when the words the user wrote start by saying they have not done it, e.g. "No", "Not yet. I am still studying",
  * "I don't have a CSCS card yet", "I'm not NMC registered yet" or "Not used Power BI yet" (#483). Not "No problem, I ran
  * it", "I don't just use Excel", "I'm not sure, but I used it" or "I'm not a manager, but I supervised three new
- * starters" (#526): after "I'm not …, but" or "however", only something the user says they did is a yes. Still a no:
- * "I'm not NMC registered yet, but I qualify in March", "I'm not a Power BI user, but I'd like to learn it", "I'm not
- * certified, but I can learn", "I'm not NMC registered, but I have applied" and "I'm not familiar with Jira, however
- * we used Trello".
+ * starters" (#526): after "I'm not …, but", "however" or "; however", only a doing verb ("I supervised", "I lead", "I
+ * do supervise") is a yes, and only when the "I'm not" part names neither a credential nor the requirement. Still a
+ * no: "I'm not NMC registered, but I worked as a staff nurse in India", "I'm not a Power BI user, but I used Tableau"
+ * to "Power BI", "I'm not trained in phlebotomy, but I watched colleagues do it", "I'm not a Power BI user, but I'd
+ * like to learn it", "I'm not NMC registered yet, but I qualify in March" and "I'm not familiar with Jira, however we
+ * used Trello".
  */
-function saysNo(text: string): boolean {
+function saysNo(text: string, requirement: string): boolean {
   const answer = text.trim().toLowerCase().replace(/[’]/g, "'");
   if (/^(no problem|no doubt|not only|not just|i (don't|do not) (just|only)|(i'm|i am) not (sure|only|just))\b/.test(answer)) return false;
-  const notBut = answer.match(/^(?:i'm|i am) not\b([^;]*?)\b(?:but|however)\b[\s,]*(.*)$/);
-  const did =
-    /^(?:i|i've|i have)\s+(?:also\s+|often\s+|regularly\s+|already\s+)?(?!(?:applied|registered|enrolled|need|needed|wanted|hoped|planned|intended)\b)(?:[a-z]+ed|led|ran|built|taught|wrote|made|did|took|gave|held|kept|oversaw|won|sold|set up|spent)\b/;
-  if (notBut && /[a-z]/.test(notBut[1]) && !/\byet\b/.test(notBut[1]) && did.test(notBut[2])) return false;
+  const notBut = answer.match(/^(?:i'm|i am) not\b([^;]*?)(?:;\s*)?\b(?:but|however)\b[\s,]*(.*)$/);
+  if (notBut) {
+    const [, negated, rest] = notBut;
+    const plainNo = !/[a-z]/.test(negated) || /\byet\b/.test(negated) || credentialWords.test(negated) || namesRequirement(negated, requirement);
+    if (!plainNo && did.test(rest)) return false;
+  }
   return /^(no(?!-)|nope|nah|not yet|not really|none)\b|^never (used|done|had|worked|held)\b|^i (have not|haven't|havent|have never|haven't ever|do not|don't|dont|did not|didn't|didnt|never)\b|^(i'm|i am)( still)? not\b|^not\b[^.,;]*\byet\b/.test(answer);
 }
 
@@ -133,8 +172,6 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
   const detail = parsed.data.answer.trim();
   const chosen = parsed.data.chosen;
   const typed = parsed.data.typed === true && chosen !== undefined;
-  // A "no" in the user's own words counts as the No button does, so every guard against adding it applies.
-  const hasExperience = parsed.data.hasExperience && !(typed && saysNo(chosen));
 
   const [access, profile, job, match] = await Promise.all([tailorModelAccess(), getMyProfile({ jobId }), getMyJob(jobId), getMyMatch(jobId)]);
   // The match's gaps and the strengths to make stronger: every gap a question on the page can be about.
@@ -144,6 +181,8 @@ export async function answerGap(input: AnswerGapInput): Promise<AnswerGapResult>
     // A user whose session ended reads the sample data, where a real job's gap is missing: they need to sign in again.
     return { ok: false, message: access.allowed ? "We could not find this job. Open it again from your jobs." : access.message };
   }
+  // A "no" in the user's own words counts as the No button does, so every guard against adding it applies.
+  const hasExperience = parsed.data.hasExperience && !(typed && saysNo(chosen, gap.requirement));
   // A no to a strength means "nothing more to add": its answer never says they have not done what the CV shows.
   const answer = !hasExperience
     ? (typed ? chosen : detail) || (isStrongerGap(gap) ? nothingToAdd : "I haven't done this.")

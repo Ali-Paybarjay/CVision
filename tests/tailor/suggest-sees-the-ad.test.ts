@@ -37,6 +37,15 @@ describe("which prompts see the whole job ad (#403)", () => {
     expect(sent.get("tailor-suggest")).toContain(`## Not on the CV\n\n${JSON.stringify([...missing, "Full UK driving licence"], null, 2)}`);
   });
 
+  it("does not list a condition the CV shows in other words (#526)", async () => {
+    const conditions = ["Full UK driving licence", "Enhanced DBS check", "Shift work, including nights, weekends and bank holidays"];
+    const job = { ...jobs[0], requirements: { ...jobs[0].requirements, essential: [...jobs[0].requirements.essential, ...conditions] } };
+    const shown = { ...profile, skills: [...profile.skills, "Full clean UK driving licence", "Enhanced DBS (2024)", "Worked 12-hour day and night shifts"] };
+    await suggestFromCv({ profile: shown, job, match, sample: empty });
+    const missing = match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement);
+    expect(sent.get("tailor-suggest")).toContain(`## Not on the CV\n\n${JSON.stringify(missing, null, 2)}`);
+  });
+
   it("keeps the ad text out of tailor-propose, which runs for every answer", async () => {
     await proposeChanges({ profile, job: jobs[0], match, answers: [], sample: empty });
     const prompt = sent.get("tailor-propose");

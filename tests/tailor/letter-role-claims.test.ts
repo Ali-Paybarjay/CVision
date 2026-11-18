@@ -196,3 +196,46 @@ describe("the letter after a test, other people's registration, or a true regist
     expect(claim({ ...base, summary: "NMC registered nurse with no gaps in practice since 2019." })).toBeNull();
   });
 });
+
+describe("the letter after the second #526 review", () => {
+  const { job, match } = unregisteredFixtures;
+  const sentence = "As an NMC registered nurse, I give IV therapy.";
+  const base = unregisteredFixtures.profile;
+  const claim = (profile: typeof base, answers: { gapId: string; question: string; answer: string; hasExperience: boolean }[] = []) =>
+    letterRoleClaim(sentence, job.title, { profile, gaps: match.gaps, answers, role: job.role });
+  const yes = (answer: string) => [{ gapId: "clinical-gap-nmc", question: "", answer, hasExperience: true }];
+  const followUp = (answer: string) => ({ ...base, followUpAnswers: [{ id: "f1", question: "Anything else?", answer, answeredAt: "2026-11-01T10:00:00.000Z" }] });
+
+  it.each([
+    "I can work as a registered nurse once I have my NMC PIN.",
+    "Due to receive my NMC PIN in June.",
+    "Working as a healthcare assistant until I get my NMC PIN in June.",
+    "I will hopefully receive my NMC PIN in June.",
+    "I'm due to sit my OSCE in June and then register with the NMC.",
+    "I passed the CBT and will sit the OSCE before I can join the NMC register.",
+    "Due to finish my NMC registration in May.",
+    "Still no PIN from the NMC.",
+    "My NMC application is being processed.",
+  ])("takes out the NMC sentence after a yes or a follow-up answer that says the registration is still to come: %s", (answer) => {
+    expect(claim(base, yes(answer))).toBe("NMC");
+    expect(claim(followUp(answer))).toBe("NMC");
+  });
+
+  it.each([
+    ["the summary of a nurse no longer on the register", { ...base, summary: "Former staff nurse, no longer on the NMC register, now working as a care coordinator." }],
+    ["the summary of an HCA who takes tasks from NMC-registered nurses", { ...base, summary: "Healthcare assistant on a busy surgical ward, taking delegated tasks from NMC-registered nurses." }],
+    ["the certificate OSCE passed, issued by the NMC", { ...base, certifications: [{ name: "OSCE passed", issuer: "Nursing and Midwifery Council" }] }],
+    ["the certificate OET Nursing, accepted by the NMC", { ...base, certifications: [{ name: "OET Nursing (Grade B), accepted by the NMC" }] }],
+  ])("takes out the NMC sentence after %s", (_, profile) => {
+    expect(claim(profile)).toBe("NMC");
+  });
+
+  it.each([
+    ["Leah's certificate with when revalidation is due", { ...clinicalFixtures.profile, certifications: [{ name: "Registered Nurse (Adult) – revalidation due March 2027", issuer: "Nursing and Midwifery Council" }] }],
+    ["a summary with the NMC CBT and NMC registered since", { ...base, summary: "Internationally educated nurse who passed the NMC CBT and OSCE in 2022 and has been NMC registered since March 2023" }],
+    ["a summary with NMC revalidation", { ...base, summary: "NMC registered nurse currently preparing for NMC revalidation in March 2027" }],
+    ["a summary of an NMC registered CBT therapist", { ...base, summary: "NMC Registered CBT Therapist and mental health nurse." }],
+  ])("keeps the NMC sentence after %s", (_, profile) => {
+    expect(claim(profile)).toBeNull();
+  });
+});

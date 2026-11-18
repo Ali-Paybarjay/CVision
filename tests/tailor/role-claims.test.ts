@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { enforceNothingInvented, roleClaimAdded, unsupportedReason, type Proposal } from "@/features/tailor";
 import type { ProposedChange } from "@/features/tailor/types";
 import { clinicalFixtures, unregisteredFixtures } from "./clinical-fixture";
@@ -448,5 +448,182 @@ describe("the Honest CV guards read a registration the user does not hold, and o
     it("a line that ends with the NMC registration still due", () => {
       expect(check(base, { ...careFor, after: "Healthcare assistant on an acute ward, NMC registration due in May" })).toBeNull();
     });
+  });
+});
+
+describe("the second #526 review: a registration still to come, a test, or a true one with other words about the NMC", () => {
+  const base = unregisteredFixtures.profile;
+  const careFor = fromCv("Care for up to eight acutely unwell patients on a 32-bed acute medical unit", "As an NMC registered nurse, care for up to eight acutely unwell patients");
+  const check = (profile: typeof base, change = careFor, answers: { gapId: string; question: string; answer: string; hasExperience: boolean }[] = []) =>
+    roleClaimAdded(change, { profile, gaps: unregisteredFixtures.match.gaps, answers, role });
+  const withSummary = (summary: string) => ({ ...base, summary });
+  const followUp = (answer: string) => ({ ...base, followUpAnswers: [{ id: "f1", question: "Anything else?", answer, answeredAt: "2026-11-01T10:00:00.000Z" }] });
+  const yes = (answer: string) => [{ gapId: "clinical-gap-nmc", question: "", answer, hasExperience: true }];
+  const tap = (text: string) => `Yes, I have done this at work: Registered Nurse (Adult) with current NMC registration. ${text}`;
+  // "Until 2027" is still to come only before 2027, so these tests read the year as 2026.
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-18T12:00:00.000Z"));
+  });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  describe("rejected", () => {
+    it.each([
+      "Overseas registered nurse working as a healthcare assistant until I receive my NMC PIN.",
+      "Newly qualified adult nurse who will be on the NMC register from January 2027.",
+      "Overseas registered nurse (Philippines) who will sit the OSCE and then join the NMC register.",
+      "Registered nurse in Kenya; ready to start once I have passed my OSCE and joined the NMC register.",
+      "Former staff nurse, no longer on the NMC register, now working as a care coordinator.",
+      "Adult nurse trained in India; my NMC registration is currently being processed.",
+      "Healthcare assistant on a busy surgical ward, taking delegated tasks from NMC-registered nurses.",
+    ])("after the summary %s", (summary) => {
+      expect(check(withSummary(summary))).toBe("NMC");
+    });
+
+    const stillToCome = [
+      "I work as a healthcare assistant until I receive my NMC PIN.",
+      "I can only work as an HCA until I get my NMC PIN.",
+      "Once I have my NMC PIN I can start as a staff nurse.",
+      "I will apply to the NMC after I graduate in July.",
+      "I will hopefully receive my NMC PIN in January.",
+      "I can work as a registered nurse once I have my NMC PIN.",
+      "Due to receive my NMC PIN in June.",
+      "Working as a healthcare assistant until I get my NMC PIN in June.",
+      "I'm due to sit my OSCE in June and then register with the NMC.",
+      "I passed the CBT and will sit the OSCE before I can join the NMC register.",
+      "Due to finish my NMC registration in May.",
+      "Still no PIN from the NMC.",
+      "I have no UK PIN from the NMC.",
+      "My NMC application is being processed.",
+      "I have applied to join the NMC register.",
+      "Submitted my application to the NMC in September.",
+      // A near match leaves the term only where it still says they hold it, not in "the NMC Code".
+      "Sitting my NMC exams and I know the NMC Code well.",
+    ];
+    it.each(stillToCome)("after the follow-up answer %s", (answer) => {
+      expect(check(followUp(answer))).toBe("NMC");
+    });
+
+    it.each(stillToCome)("after the yes %s, typed or after a tap", (answer) => {
+      expect(check(base, careFor, yes(answer))).toBe("NMC");
+      expect(check(base, careFor, yes(tap(answer)))).toBe("NMC");
+    });
+
+    it("from the line it rewrites, when that line says until I receive my NMC PIN", () => {
+      const before = "Working as a healthcare assistant until I receive my NMC PIN";
+      expect(check(base, fromCv(before, "NMC registered nurse working as a healthcare assistant"))).toBe("NMC");
+    });
+
+    it.each([
+      [{ name: "OSCE passed", issuer: "Nursing and Midwifery Council" }],
+      [{ name: "CBT passed 2026", issuer: "NMC" }],
+      [{ name: "CBT passed 2021", issuer: "NMC" }],
+      [{ name: "Test of Competence Part 1 (CBT) - passed", issuer: "Pearson VUE for the NMC" }],
+      [{ name: "Test of Competence Part 1 (CBT) – passed", issuer: "Nursing and Midwifery Council" }],
+      [{ name: "Overseas Nurses – OSCE passed", issuer: "NMC" }],
+      [{ name: "OET Nursing (Grade B), accepted by the NMC" }],
+      [{ name: "Registration pending", issuer: "NMC" }],
+      [{ name: "Registered Nurse (Adult) – registered until 2019", issuer: "NMC" }],
+    ])("after the certificate %j: a test, or a registration not held now, is no registration", (certificate) => {
+      expect(check({ ...base, certifications: [certificate] })).toBe("NMC");
+    });
+
+    it("after the skill Passed the CBT for NMC registration", () => {
+      expect(check({ ...base, skills: [...base.skills, "Passed the CBT for NMC registration"] })).toBe("NMC");
+    });
+
+    it("proposeChanges removes the NMC change after a yes that says the PIN is still to come", async () => {
+      const { profile, job, match } = unregisteredFixtures;
+      const answers = yes("I can work as a registered nurse once I have my NMC PIN.");
+      const proposal = await proposeChanges({ profile, job, match, answers, sample: sample(careFor) });
+      expect(proposal.changes).toEqual([]);
+      expect(proposal.removed?.map((item) => item.reason)).toEqual(['It adds "NMC", which only the job ad says.']);
+    });
+  });
+
+  describe("kept", () => {
+    it.each([
+      "Internationally educated nurse who passed the NMC CBT and OSCE in 2022 and has been NMC registered since March 2023",
+      "Adult nurse who completed the NMC OSCE in 2021 and has held NMC registration since 2021",
+      "NMC registered CBT therapist with eight years in community mental health teams",
+      "NMC registered (CBT accredited) mental health nurse with five years in the community",
+      "Mental health nurse delivering CBT (NMC registered since 2018)",
+      "NMC and BABCP registered CBT therapist with ten years in IAPT services",
+      "Senior nurse and NMC registered OSCE examiner at the Castlefold test of competence centre",
+      "NMC registered nurse educator preparing internationally educated nurses for the NMC OSCE",
+      "NMC Registered CBT Therapist and mental health nurse.",
+      "NMC registered OSCE assessor at the test centre.",
+      "NMC registered nurse currently preparing for NMC revalidation in March 2027",
+      "NMC registered nurse who has recently applied for my NMC revalidation",
+      "Registered nurse preparing for my NMC revalidation in March 2027.",
+      "NMC registered adult nurse working towards SCPHN registration in health visiting",
+      "NMC registered nurse working towards registration as a Specialist Community Public Health Nurse",
+      "NMC registered nurse working towards my NMC recordable V300 qualification",
+    ])("a summary that says they hold it, with a test, CBT or other NMC words: %s", (summary) => {
+      expect(check(withSummary(summary))).toBeNull();
+    });
+
+    it.each([
+      "Yes, NMC registered since 2014 and I've applied for my NMC revalidation this month",
+      "Yes, NMC registered since 2018 and currently preparing for my NMC revalidation",
+      "I'm NMC registered and applied to the NMC for my revalidation in March.",
+    ])("the yes %s", (answer) => {
+      expect(check(base, careFor, yes(answer))).toBeNull();
+    });
+
+    it.each([
+      ["certificate", "NMC registration active until March 2028"],
+      ["certificate", "NMC registration - renewed until 2028"],
+      ["skill", "NMC registered until 2028 (revalidated 2025)"],
+      ["skill", "NMC registered (PIN active until 2027)"],
+      ["skill", "NMC registration current until March 2027"],
+      ["skill", "NMC registered CBT practitioner"],
+      ["certificate", "NMC registered nurse (re-registration after Return to Practice, 2023)"],
+    ])("a registration held now, as the %s %s", (field, line) => {
+      const profile = field === "skill" ? { ...base, skills: [...base.skills, line] } : { ...base, certifications: [{ name: line }] };
+      expect(check(profile)).toBeNull();
+    });
+
+    it.each([
+      { name: "Registered Nurse (Adult) – revalidation due March 2027", issuer: "Nursing and Midwifery Council" },
+      { name: "NMC Registration (renewal due 2027)", issuer: "Nursing and Midwifery Council" },
+      { name: "Registered Nurse (Adult), PIN valid until 03/2027", issuer: "NMC" },
+      { name: "NMC Revalidation (next due March 2027)" },
+      { name: "NMC PIN 12A3456E (renewal due 03/2027)" },
+      { name: "Registered Nurse (Adult) – registered until 2027", issuer: "NMC" },
+      { name: "Registered Mental Health Nurse – registration renewed until 2027", issuer: "NMC" },
+      { name: "Registered Nurse (Adult) – revalidated 2024, due again 2027", issuer: "NMC" },
+    ])("a registration certificate with the date it is renewed: %j", (certificate) => {
+      expect(check({ ...base, certifications: [certificate] })).toBeNull();
+    });
+
+    it("Leah's NMC suggestion when her certificate says when revalidation is due", async () => {
+      const { profile, job, match } = clinicalFixtures;
+      const renamed = { ...profile, certifications: [{ name: "Registered Nurse (Adult) – revalidation due March 2027", issuer: "Nursing and Midwifery Council" }] };
+      const change = fromCv(lateShifts, "NMC registered nurse coordinating late shifts with the nurse in charge");
+      const proposal = await suggestFromCv({ profile: renamed, job, match, sample: sample(change) });
+      expect(proposal.changes.map((item) => item.after)).toEqual([change.after]);
+    });
+
+    it("a rewrite of a summary that says NMC registered and preparing for NMC revalidation", async () => {
+      const { profile, job, match } = clinicalFixtures;
+      const summary = "NMC registered nurse preparing for NMC revalidation in 2027, with three years on an acute medical unit.";
+      const own = { ...profile, summary, certifications: [] };
+      const change: ProposedChange = { ...fromCv(summary, "NMC registered adult nurse with three years on an acute medical unit, caring for acutely unwell patients."), section: "summary" };
+      const proposal = await suggestFromCv({ profile: own, job, match, sample: sample(change) });
+      expect(proposal.changes.map((item) => item.after)).toEqual([change.after]);
+    });
+  });
+
+  // The only NMC in these names the test: "NMC OSCE". "Got my PIN" or "on the register" names no body, so it is not
+  // read as NMC registration, and reading it so would let "I passed the NMC OSCE" alone count as one.
+  it.each([
+    "Yes, I passed the NMC CBT and OSCE in 2021 and got my PIN in January 2022",
+    "Yes, I passed the NMC OSCE in 2020 and I'm on the register now",
+    "I passed my NMC OSCE in 2021 and joined the register in January 2022",
+  ])("still leaves out an NMC line after the yes %s", (answer) => {
+    expect(check(base, careFor, yes(answer))).toBe("NMC");
   });
 });

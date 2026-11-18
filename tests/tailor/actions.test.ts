@@ -141,6 +141,78 @@ describe("answerGap", () => {
     );
   });
 
+  describe("after \"I'm not …, but\", only a doing verb is a yes, and never for a credential or the requirement itself (#526)", () => {
+    const answerFor = async (requirement: string, typed: string) => {
+      const { personas } = await import("@/shared/sample-data");
+      const original = personas.sara.match.gaps[1].requirement;
+      personas.sara.match.gaps[1].requirement = requirement;
+      try {
+        return await answerGap({ jobId: "sara-job-1", gapId: "sara-gap-2", answer: "", hasExperience: true, chosen: typed, typed: true });
+      } finally {
+        personas.sara.match.gaps[1].requirement = original;
+      }
+    };
+    const nmc = "Registered Nurse (Adult) with current NMC registration";
+    const coordinating = "Experience coordinating a ward or unit shift in the absence of the nurse in charge";
+    const supervising = "Experience of supervising and teaching students and junior staff";
+
+    it.each([
+      [nmc, "I'm not NMC registered, but I worked as a staff nurse in India for six years."],
+      [nmc, "I am not registered with the NMC, however I qualified as a nurse in Nigeria in 2015."],
+      [nmc, "I'm not on the NMC register, but I passed the CBT in June."],
+      [nmc, "I'm not NMC registered, but I qualified as a nurse in India in 2018."],
+      [nmc, "I'm not on the NMC register, but I passed my OSCE in May."],
+      [nmc, "I'm not NMC registered, but I passed the OSCE"],
+      [nmc, "I'm not a registered nurse, but I completed my nursing degree in 2022"],
+      [nmc, "I'm not a registered nurse, but I worked as a senior carer."],
+      ["HCPC registered physiotherapist", "I'm not HCPC registered, but I completed my BSc Physiotherapy in July."],
+      // A licence or a DBS check is a condition, never a question (#497), so these ask about the work it is for.
+      ["Experience in a care home setting", "I'm not DBS checked, but I volunteered at a care home for a year."],
+      ["Experience visiting customers across the region", "I'm not a UK driver, but I held a licence in Iran for ten years."],
+      ["Power BI", "I'm not a Power BI user, but I used Tableau."],
+      ["Power BI", "I'm not familiar with Power BI, but I built dashboards in Tableau."],
+      ["Jira", "I'm not familiar with Jira, but I used Trello for my coursework."],
+      ["Phlebotomy", "I'm not trained in phlebotomy, but I watched the nurses do it."],
+      ["Phlebotomy", "I'm not trained in phlebotomy, but I watched colleagues do it"],
+      ["Phlebotomy", "I'm not trained, but I booked the course for January"],
+      ["Venepuncture", "I'm not trained in venepuncture, but I observed it on placement"],
+      ["CSCS card", "I'm not CSCS carded, but I passed the health and safety test."],
+      ["SIA door supervisor licence", "I'm not SIA licensed, but I worked as a door supervisor in Spain."],
+      ["Experience with SystmOne", "I'm not experienced with SystmOne, but I used EMIS every shift."],
+      ["Experience with SystmOne", "I'm not experienced with SystmOne, but I watched a training video"],
+      ["NVQ Level 3 in Health and Social Care", "I'm not qualified, but I started the NVQ Level 3 last month"],
+      ["Care Certificate", "I'm not a qualified HCA, but I signed up for the Care Certificate"],
+      ["Experience managing a team", "I'm not a manager, but I asked to shadow one"],
+      ["Counterbalance forklift licence", "I'm not a forklift driver, but I asked my manager for training"],
+      // A Band is a claim of its own, so the yes would count as support for it.
+      [coordinating, "I'm not a Band 6, but I've acted as nurse in charge on nights."],
+      [coordinating, "I'm not a Band 6 yet, but I've regularly acted as nurse in charge on nights"],
+    ])("to %s, %s stays a no", async (requirement, typed) => {
+      const result = await answerFor(requirement, typed);
+      expect(result).toMatchObject({ ok: true, hasExperience: false, changes: [], hint: null });
+      if (result.ok) expect(result.nextSteps.length).toBeGreaterThan(0);
+    });
+
+    it.each([
+      [supervising, "I'm not a manager; however, I have supervised three new starters"],
+      [supervising, "I am not a team leader; however I trained four new HCAs"],
+      [supervising, "I'm not a manager, but I supervise two HCAs on every shift"],
+      [supervising, "I'm not a manager but I do supervise new starters"],
+      [supervising, "I'm not a manager, but in my last job I supervised three new starters"],
+      ["Power BI", "I'm not an expert, but I use Power BI every week for ward reports"],
+      [coordinating, "I'm not a team leader, but I lead the night shift twice a week"],
+      [coordinating, "I'm not the ward manager, but I regularly run the shift as nurse in charge"],
+      ["Experience managing a team", "I'm not a manager, but I supervised three new starters."],
+    ])("to %s, %s is a yes", async (requirement, typed) => {
+      expect(await answerFor(requirement, typed)).toMatchObject({ ok: true, hasExperience: true, nextSteps: [] });
+    });
+
+    it("keeps Power BI off the CV after a no that names Tableau instead", async () => {
+      const result = await answerFor("Power BI", "I'm not a Power BI user, but I used Tableau.");
+      expect(result).toMatchObject({ ok: true, hasExperience: false, changes: [], hint: null });
+    });
+  });
+
   describe("a tap on a ready answer (#245)", () => {
     it.each(["Advanced Excel", "Fluent Welsh", "Expert SQL", "BSc in Computer Science", "Chartered accountant", "CSCS card"])(
       "does not put %s on the CV: a tap does not confirm the level or the qualification",
