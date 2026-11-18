@@ -39,12 +39,14 @@ describe("JobList", () => {
     expect(html).not.toContain("Add a job first");
   });
 
-  it("puts the jobs on the user's dashboard first, together at the top, each group in the order given", () => {
+  it("puts the jobs still in progress first, then the ones on the user's dashboard together, each group in the order given (Marzieh, #519)", () => {
     const tees = job(4, "Tees Valley Rail", true);
-    const html = renderToStaticMarkup(<JobList title={title} jobs={[jobs[0], jobs[2], jobs[1], tees]} empty={empty} />);
+    // Each group is given in the reverse of its id order, so a sort by id or by name, the list as given, or the old
+    // dashboard-first order all fail: only in-progress first, with each group's given order kept, passes.
+    const html = renderToStaticMarkup(<JobList title={title} jobs={[tees, jobs[1], jobs[2], jobs[0]]} empty={empty} />);
 
     const order = [...html.matchAll(/<a href="[^"]*" class="[^"]*">([^<]*)<\/a>/g)].map(([, name]) => name);
-    expect(order).toEqual([jobs[2].name, tees.name, jobs[0].name, jobs[1].name]);
+    expect(order).toEqual([jobs[1].name, jobs[0].name, tees.name, jobs[2].name]);
   });
 
   it("shows what the page shows with no jobs when there are none", () => {

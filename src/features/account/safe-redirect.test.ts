@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { signUpThenProfile } from "@/shared/navigation";
-import { safeRedirectPath, withNext } from "./safe-redirect";
+import { isNewPasswordStep, pastNewPasswordStep, safeRedirectPath, withNext } from "./safe-redirect";
 
 describe("safeRedirectPath", () => {
   it.each([
@@ -31,12 +31,35 @@ describe("safeRedirectPath", () => {
     "evil.com",
     "dashboard",
     " /dashboard",
+    // Resolve to the path "//evil.com", which a browser reads as another site (found in review, 18 November).
+    "/..//evil.com",
+    "/.//evil.com",
+    "/a/..//evil.com",
+    "/%2e%2e//evil.com",
   ])("sends %j back to the dashboard instead of another site", (next) => {
     expect(safeRedirectPath(next)).toBe("/dashboard");
   });
 
   it("uses the given fallback", () => {
     expect(safeRedirectPath("//evil.com", "/")).toBe("/");
+  });
+});
+
+describe("pastNewPasswordStep (#524)", () => {
+  it.each([
+    ["/sign-in/new-password?next=%2Ftailor%3Fjob%3D1", "/tailor?job=1"],
+    ["/sign-in/new-password", "/dashboard"],
+    ["/sign-in/new-password?next=%2Fsign-in%2Fnew-password%3Fnext%3D%252Fprofile", "/profile"],
+    ["/sign-in/new-password?next=%2F%2Fevil.com", "/dashboard"],
+    ["/profile", "/profile"],
+    ["/sign-in?next=%2Fprofile", "/sign-in?next=%2Fprofile"],
+  ])("takes %j on to %j", (next, expected) => {
+    expect(pastNewPasswordStep(next)).toBe(expected);
+  });
+
+  it("knows a failed reset link by its destination", () => {
+    expect(isNewPasswordStep("/sign-in/new-password?next=%2Fprofile")).toBe(true);
+    expect(isNewPasswordStep("/profile")).toBe(false);
   });
 });
 

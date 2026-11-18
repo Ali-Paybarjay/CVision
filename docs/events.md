@@ -23,7 +23,7 @@
 | `tailor.change_rejected` | نازنین | کاربر یک تغییر پیشنهادی را رد کرد | بدون متن رزومه | کارت #49 |
 | `tailor.cover_letter_created` | نازنین | کاورلتر ساخته شد | بدون متن نامه | کارت #50 |
 | `tailor.cv_exported` | نازنین | رزومهٔ اختصاصی دانلود شد | `format`: `pdf` یا `docx` | کارت #51 |
-| `tailor.apply_clicked` | نازنین | دکمهٔ Apply زده شد (لینک رسمی آگهی باز شد) | بدون متن آگهی | کارت #52 |
+| `tailor.apply_clicked` | نازنین | دکمهٔ Apply زده شد (لینک رسمی آگهی باز شد)؛ برای آگهی بی‌لینک، دکمهٔ «I’ve applied» زده شد (#498) | بدون متن آگهی | کارت #52 |
 | `tracker.status_changed` | علی | کاربر وضعیت یک درخواست را در داشبورد عوض کرد | `from` و `to`: وضعیت قبلی و تازه | PR #65 |
 | `interview.session_completed` | مرضیه | تمرین مصاحبه تمام شد و گزارش آماده شد | `sessionId`، `jobId`، `mode`، `questions`، `followUpsAsked`، `overall`، `readiness`، `lowConfidenceAnswers`، `averageAnswerWords`، `durationSeconds` | ثبت می‌شود (#54)؛ فقط برای کاربر واردشده و یک بار برای هر session (#99) |
 | `interview.length_over` | مرضیه | جواب مدل در یک مرحلهٔ مصاحبه یکی از قاعده‌های طول را شکست و با این حال نگه داشته شد (مثلاً `improvement` بیش از ۳ جمله)؛ فقط برای درخواست live کاربر واردشده | `stage` (`review`، `evaluate` یا `suggest`)، `rule` (`question-words`، `follow-up-length`، `quote-words`، `improvement-length`، `sample-answer-words`)، `count`؛ هرگز خود متن | بعد از #112؛ می‌گوید قاعده‌های طول چند بار شکسته می‌شوند |

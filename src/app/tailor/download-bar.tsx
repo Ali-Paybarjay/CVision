@@ -66,25 +66,29 @@ export function DownloadBar({ jobId, changes, letter, onGoToLetter }: DownloadBa
       <h4 id="download-heading" className="font-semibold">
         Download
       </h4>
+      {/* PDF first, as the usual choice. None of these is Coral: Apply is this step's one Coral button (#498). */}
       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
         <Button onClick={() => download("cv", "pdf")} disabled={pending} className="px-2 sm:px-5">
           {label("cv", "pdf", "Download CV (PDF)")}
         </Button>
-        <Button onClick={() => download("cv", "docx")} disabled={pending} className="px-2 sm:px-5">
-          {label("cv", "docx", "Download CV (Word)")}
-        </Button>
         {approvedLetter ? (
-          <>
-            <Button onClick={() => download("cover-letter", "pdf")} disabled={pending} className="px-2 sm:px-5">
-              {label("cover-letter", "pdf", "Download letter (PDF)")}
-            </Button>
-            <Button onClick={() => download("cover-letter", "docx")} disabled={pending} className="px-2 sm:px-5">
-              {label("cover-letter", "docx", "Download letter (Word)")}
-            </Button>
-          </>
+          <Button onClick={() => download("cover-letter", "pdf")} disabled={pending} className="px-2 sm:px-5">
+            {label("cover-letter", "pdf", "Download letter (PDF)")}
+          </Button>
         ) : (
           <Button variant="quiet" onClick={onGoToLetter} className="col-span-2 underline sm:px-0">
             Approve your cover letter to download it
+          </Button>
+        )}
+      </div>
+      {/* Word on a second row, as links, for a user who wants to edit the file. */}
+      <div className="flex flex-wrap gap-x-4">
+        <Button variant="quiet" size="compact" onClick={() => download("cv", "docx")} disabled={pending} className="underline">
+          {label("cv", "docx", "Download CV (Word)")}
+        </Button>
+        {approvedLetter && (
+          <Button variant="quiet" size="compact" onClick={() => download("cover-letter", "docx")} disabled={pending} className="underline">
+            {label("cover-letter", "docx", "Download letter (Word)")}
           </Button>
         )}
       </div>

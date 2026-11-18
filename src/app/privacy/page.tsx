@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: "What CVision keeps about you, where, for how long, who else sees it, and how to download or delete it.",
 };
 
-const lastUpdated = "8 November 2026";
+const lastUpdated = "18 November 2026";
 
 /** The page's sections, in order. The deletion message links to #not-deleted-straight-away, so keep that id. */
 const contents = [
@@ -57,9 +57,9 @@ const whatWeKeep: { title: string; body: React.ReactNode }[] = [
         </p>
         <p>We use these to sign you in.</p>
         <p>
-          We also use your email address to send you account emails, such as the link that confirms it, and, while
-          CVision is in its pilot, to contact you about the pilot: to ask how it went for you or to tell you about a
-          change. We don’t send marketing. To stop pilot emails, email us at{" "}
+          We also use your email address to send you account emails, such as the link that confirms it or lets you
+          choose a new password, and, while CVision is in its pilot, to contact you about the pilot: to ask how it went
+          for you or to tell you about a change. We don’t send marketing. To stop pilot emails, email us at{" "}
           <a href={`mailto:${brand.contactEmail}`} className={link}>
             {brand.contactEmail}
           </a>
@@ -273,8 +273,8 @@ const cookies: { name: string; purpose: string; howLong: string }[] = [
   {
     name: "sb-…-auth-token-code-verifier",
     purpose:
-      "Set while you sign up, so the link in your confirmation email can finish signing you in. Related cookies end in -flow-…-code-verifier and -flows-code-verifier.",
-    howLong: "Usually removed once you confirm your email in this browser. Otherwise it expires after up to 400 days.",
+      "Set while you sign up or ask for a new password, so the link in the email can finish signing you in. Related cookies end in -flow-…-code-verifier and -flows-code-verifier.",
+    howLong: "Usually removed once you open the link from the email in this browser. Otherwise it expires after up to 400 days.",
   },
   {
     name: "cvision-account-deleted",
@@ -464,8 +464,8 @@ export default function PrivacyPage() {
         </p>
         <p>
           We don’t use analytics or advertising cookies, tracking scripts or anything loaded from other websites. Our
-          font is served from our own site, so your browser doesn’t contact Google. If you don’t sign up or sign in, we
-          don’t set any cookies.
+          font is served from our own site, so your browser doesn’t contact Google. If you don’t sign up, sign in or ask
+          for a new password, we don’t set any cookies.
         </p>
         <StorageList title="Cookies" items={cookies} />
         <StorageList title="Browser storage" items={browserStorage} />
