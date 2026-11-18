@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { answerGuide, defaultComposition } from "@/features/interview/config";
 import type { InterviewSession } from "@/features/interview/contracts";
-import { mainAnswer, nextStep, openingView } from "@/features/interview/engine/session";
+import { isSkipped, mainAnswer, nextStep, openingView } from "@/features/interview/engine/session";
 import type { LastReport } from "@/features/interview/server/session-store";
 import { drive, InterviewFlow, runOf, type SampleAnswers } from "./_practice/flow";
 import { ConfirmInPlace } from "./_practice/confirm";
@@ -314,9 +314,9 @@ export function LastPractice({
   );
 }
 
-/** The questions the candidate has sent an answer to in this practice. */
+/** The questions the candidate has sent an answer to in this practice. A skipped question (#530) has none. */
 export function answersGiven(session: InterviewSession | null): number {
-  return session ? session.questions.filter((q) => mainAnswer(session, q.id) !== null).length : 0;
+  return session ? session.questions.filter((q) => mainAnswer(session, q.id) !== null && !isSkipped(session, q.id)).length : 0;
 }
 
 /**

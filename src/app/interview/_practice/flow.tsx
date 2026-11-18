@@ -23,11 +23,14 @@ import {
   askQuestion,
   decisionFor,
   endEarly,
+  endIfSkipped,
   evaluationFor,
   isQuestionFinished,
+  isSkipped,
   missingSuggestionIds,
   nextStep,
   reportQuestionIds,
+  skipQuestion,
   suggestionFor,
   unansweredQuestionIds,
   type Provenance,
@@ -44,10 +47,18 @@ export type SampleAnswers = Record<string, { main: string; followUp: string | nu
 
 const now = () => new Date().toISOString();
 
-/** Asks the next question as soon as the previous one is finished. */
+/**
+ * Asks the next question as soon as the previous one is finished. Once the last one is finished with a question
+ * skipped, the practice ends as "End here" ends it (#530).
+ */
 function advance(session: InterviewSession): InterviewSession {
   const next = nextStep(session);
-  return next.step === "ask" ? askQuestion(session, next.questionId, now(), crypto.randomUUID()) : session;
+  return next.step === "ask" ? askQuestion(session, next.questionId, now(), crypto.randomUUID()) : endIfSkipped(session, now());
+}
+
+/** "Skip this question" (#530): no answer, no follow-up and no request to the model; then the next question, or the end. */
+export function skipAndAdvance(session: InterviewSession, questionId: string): InterviewSession {
+  return advance(skipQuestion(session, questionId, now()));
 }
 
 type WithUsage = { usage?: StageUsage; provenance?: Provenance };
@@ -233,7 +244,7 @@ export function InterviewFlow({
   const suggestFailure = failedSuggestions.length > 0 ? jobs[failedSuggestions[0]] : undefined;
   const reportJob = jobs[`${run}:report`];
   const current = step.step === "answer" || step.step === "decide" ? session.questions.find((q) => q.id === step.questionId) : undefined;
-  const answered = session.questions.filter((q) => isQuestionFinished(session, q.id) && !unanswered.has(q.id)).length;
+  const answered = session.questions.filter((q) => isQuestionFinished(session, q.id) && !unanswered.has(q.id) && !isSkipped(session, q.id)).length;
 
   /** Where each question is, for "Your interview". A failed request keeps its Try again there. */
   const rowState = (question: InterviewQuestion): RowState => {
@@ -244,12 +255,15 @@ export function InterviewFlow({
       return { kind: "current", status };
     }
     if (unanswered.has(id)) {
-      if (suggestionFor(session, id)) return { kind: "unanswered", status: "Not answered · suggested answer ready" };
+      const label = isSkipped(session, id) ? "Skipped" : "Not answered";
+      if (suggestionFor(session, id)) return { kind: "unanswered", status: `${label} · suggested answer ready` };
       const key = `${run}:suggest:${id}`;
       const job = jobs[key];
       if (job?.status === "failed") return { kind: "failed", status: <FailedJob store={store} job={job} jobKey={key} failed="Suggested answer failed" /> };
-      return { kind: "unanswered", status: "Not answered · writing a suggested answer…" };
+      return { kind: "unanswered", status: `${label} · writing a suggested answer…` };
     }
+    // A skipped question is not scored (#530): its suggested answer comes once the practice ends.
+    if (isSkipped(session, id)) return { kind: "unanswered", status: "Skipped" };
     if (!isQuestionFinished(session, id)) return { kind: "upcoming" };
     if (evaluationFor(session, id)) return { kind: "scored" };
     const key = `${run}:evaluate:${id}`;
@@ -447,6 +461,13 @@ function AnswerForm({
       setProblem(error instanceof Error ? error.message : "Could not save your answer.");
     }
   };
+  const skip = () => {
+    try {
+      store.updateSession((session) => skipAndAdvance(session, questionId));
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : "Could not skip this question.");
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -485,7 +506,45 @@ function AnswerForm({
           </Button>
         </div>
       </div>
+      {/* The main question only: once it is answered, its follow-up is part of the same answer's score. */}
+      {kind === "main" && <SkipQuestion hasDraft={hasDraft} onSkip={skip} />}
       {problem && <Notice tone="error">{problem}</Notice>}
+    </div>
+  );
+}
+
+/**
+ * "Skip this question" (#530): a quiet way on for a question the candidate has no answer to, so Coral stays on
+ * "Submit answer". The question is not scored and gets a suggested answer at the end. With an answer half written it
+ * asks in place first, as "Start again" does, so one tap cannot throw the answer away.
+ */
+export function SkipQuestion({ hasDraft, onSkip }: { hasDraft: boolean; onSkip: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  // The question takes focus as it opens (ConfirmInPlace); after "Keep going" or Escape, focus goes back to the button.
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancelled = useRef(false);
+  useEffect(() => {
+    if (!confirming && cancelled.current) trigger.current?.focus();
+  }, [confirming]);
+  const cancel = () => {
+    cancelled.current = true;
+    setConfirming(false);
+  };
+
+  if (confirming) {
+    return (
+      <ConfirmInPlace question="Skip this question?" detail="What you've typed won't be saved." onCancel={cancel}>
+        <Button onClick={onSkip}>Skip this question</Button>
+        <Button onClick={cancel}>Keep going</Button>
+      </ConfirmInPlace>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-3">
+      <Button ref={trigger} variant="quiet" className="px-0" onClick={hasDraft ? () => setConfirming(true) : onSkip}>
+        Skip this question
+      </Button>
+      <p className="text-sm text-text-muted">It won&apos;t be scored. You&apos;ll get a suggested answer for it at the end.</p>
     </div>
   );
 }

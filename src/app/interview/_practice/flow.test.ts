@@ -1,10 +1,11 @@
-// drive() with the real store: the page calls drive again after every change. After "End here" (#205), and the three
-// start-up stages, which get one more go after a failure worth it (#232).
+// drive() with the real store: the page calls drive again after every change. After "End here" (#205), the three
+// start-up stages, which get one more go after a failure worth it (#232), and "Skip this question" (#530).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { nextStep } from "@/features/interview/engine/session";
+import { addAnswer, askQuestion, isSkipped, nextStep } from "@/features/interview/engine/session";
+import { decideFollowUp, evaluateAnswer, suggestAnswer } from "@/features/interview/engine/stages";
 import { dataAnalystSara as fixture } from "@/features/interview/fixtures/data-analyst-sara";
-import { endedSessionFor, readySessionFor } from "@/features/interview/test-support";
-import { drive, retryStartupStage } from "./flow";
+import { endedSessionFor, inputsFor, readySessionFor } from "@/features/interview/test-support";
+import { drive, retryStartupStage, skipAndAdvance } from "./flow";
 import { createPracticeStore, stepProblems, type PracticeStore } from "./store";
 
 // No pause before a start-up stage's second go, so the tests need no fake clock.
@@ -196,5 +197,66 @@ describe("drive after 'End here'", () => {
 
     expect(steps.filter((step) => step === "end")).toHaveLength(1);
     expect(steps.filter((step) => step === "suggest")).toHaveLength(6);
+  });
+});
+
+describe("Skip this question (#530)", () => {
+  /** What the page asked the API for, as "step" or "step:question". */
+  let sent: string[] = [];
+
+  /** The API in mock mode, run by the engine itself, so nothing leaves this computer. */
+  function mockApi() {
+    sent = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      sent.push(body.questionId ? `${body.step}:${body.questionId}` : body.step);
+      if (body.step === "follow-up") return Response.json(await decideFollowUp(body.session, body.questionId));
+      if (body.step === "evaluate") return Response.json(await evaluateAnswer(body.session, body.questionId));
+      if (body.step === "suggest") return Response.json(await suggestAnswer(body.session, body.questionId, inputsFor(fixture)));
+      if (body.step === "end") return Response.json({ ended: true });
+      return Response.json({ error: `Unexpected step ${body.step}` }, { status: 400 });
+    });
+  }
+
+  const atFirst = () => askQuestion(readySessionFor(fixture), "q1", "2026-11-18T20:00:00.000Z", "q1-asked");
+  const sessionIn = (store: PracticeStore) => store.readEnvelope()!.session!;
+
+  it("goes to the next question with no request at all", async () => {
+    mockApi();
+    const store = drivenStore(atFirst());
+    store.updateSession((current) => skipAndAdvance(current, "q1"));
+    await settle();
+
+    expect(sent).toEqual([]);
+    expect(isSkipped(sessionIn(store), "q1")).toBe(true);
+    expect(nextStep(sessionIn(store))).toEqual({ step: "answer", questionId: "q2", kind: "main" });
+  });
+
+  it("ends the practice on the last question: suggested answers for the skipped ones, never a score", async () => {
+    mockApi();
+    const store = drivenStore(atFirst());
+    for (const id of ["q1", "q2", "q3", "q4", "q5", "q6"]) store.updateSession((current) => skipAndAdvance(current, id));
+    await settle();
+
+    expect(sessionIn(store).endedAt).toBeDefined();
+    expect(nextStep(sessionIn(store))).toEqual({ step: "done" });
+    expect([...sent].sort()).toEqual(["end", "suggest:q1", "suggest:q2", "suggest:q3", "suggest:q4", "suggest:q5", "suggest:q6"]);
+  });
+
+  it("ends the same way when the last question is answered after a skip, and scores only that answer", async () => {
+    mockApi();
+    const store = drivenStore(atFirst());
+    for (const id of ["q1", "q2", "q3", "q4", "q5"]) store.updateSession((current) => skipAndAdvance(current, id));
+    // Long enough for the mock interviewer to move on with no follow-up.
+    const text = "I would check the data first, then explain what it shows to the team and what I would do next. ".repeat(9);
+    store.updateSession((current) =>
+      addAnswer(current, { questionId: "q6", kind: "main", text, startedAt: "2026-11-18T20:05:00.000Z", submittedAt: "2026-11-18T20:09:00.000Z", id: "q6-answer" }),
+    );
+    await settle();
+
+    expect(sessionIn(store).endedAt).toBeDefined();
+    expect(nextStep(sessionIn(store))).toEqual({ step: "done" });
+    expect(sent.filter((step) => step.startsWith("follow-up") || step.startsWith("evaluate"))).toEqual(["follow-up:q6", "evaluate:q6"]);
+    expect(sent.filter((step) => step.startsWith("suggest")).sort()).toEqual(["suggest:q1", "suggest:q2", "suggest:q3", "suggest:q4", "suggest:q5"]);
   });
 });

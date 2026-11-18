@@ -1,6 +1,7 @@
 // The end-of-interview feedback report: overall score, priorities, competency map, notes, and for each answer
 // what worked, what cost marks and one specific thing to do next time (prompts/_voice.md: outcome first). After
-// "End here" (#205), answered questions keep the same cards and every other question shows a suggested answer.
+// "End here" (#205), answered questions keep the same cards and every other question shows a suggested answer. A
+// skipped question (#530) is marked "Skipped" and gets a suggested answer, never a score.
 import type { AnswerEvaluation, AnswerSuggestion, InterviewReport, InterviewSession, TechnicalInterviewQuestion } from "@/features/interview/contracts";
 import { readinessLabels } from "@/features/interview/engine/scoring";
 import {
@@ -8,6 +9,7 @@ import {
   evaluationFor,
   followUpAnswer,
   followUpQuestion,
+  isSkipped,
   mainAnswer,
   reportQuestionIds,
   suggestionFor,
@@ -139,6 +141,8 @@ function EndedReport({ session }: { session: InterviewSession }) {
   // The same score the job list and the dashboard show for this practice.
   const overall = endedOverall(session);
   const total = session.questions.length;
+  // "You ended early" is not true of a practice that reached the end with questions skipped (#530).
+  const skipped = session.questions.some((q) => isSkipped(session, q.id));
 
   return (
     <div className="space-y-4">
@@ -152,12 +156,18 @@ function EndedReport({ session }: { session: InterviewSession }) {
               {overall.toFixed(1)}
               <span className="text-lg font-semibold text-text-muted"> / 5</span>
             </p>
-            <p className="mt-3">You ended the practice early. Your answers are scored below, and every other question has a suggested answer built from your profile.</p>
+            <p className="mt-3">
+              {skipped
+                ? "Your answers are scored below, and every question you didn't answer has a suggested answer built from your profile."
+                : "You ended the practice early. Your answers are scored below, and every other question has a suggested answer built from your profile."}
+            </p>
           </>
         ) : (
           <>
             <h2 className="text-xl">Suggested answers from your profile</h2>
-            <p className="mt-2">You ended before answering, so there is no score. Every question below has a suggested answer built from your profile.</p>
+            <p className="mt-2">
+              {`${skipped ? "No question was answered" : "You ended before answering"}, so there is no score. Every question below has a suggested answer built from your profile.`}
+            </p>
           </>
         )}
       </Card>
@@ -167,7 +177,9 @@ function EndedReport({ session }: { session: InterviewSession }) {
       <h2 className="pt-2 text-xl">Question by question</h2>
       {technicalQuestions(session).map((question, index) => {
         const suggestion = suggestionFor(session, question.id);
-        if (suggestion) return <SuggestionCard key={question.id} number={index + 1} question={question} suggestion={suggestion} />;
+        if (suggestion) {
+          return <SuggestionCard key={question.id} number={index + 1} question={question} suggestion={suggestion} skipped={isSkipped(session, question.id)} />;
+        }
         const evaluation = evaluationFor(session, question.id);
         if (!evaluation) return null;
         return (
@@ -252,8 +264,18 @@ export function placeholderParts(text: string): { text: string; placeholder: boo
     .map((part) => ({ text: part, placeholder: /^\[[^\]]+\]$/.test(part) }));
 }
 
-/** An unanswered question after "End here": what to cover, the CV lines behind it and a suggested answer. */
-function SuggestionCard({ number, question, suggestion }: { number: number; question: TechnicalInterviewQuestion; suggestion: AnswerSuggestion }) {
+/** An unanswered or skipped question after "End here": what to cover, the CV lines behind it and a suggested answer. */
+function SuggestionCard({
+  number,
+  question,
+  suggestion,
+  skipped,
+}: {
+  number: number;
+  question: TechnicalInterviewQuestion;
+  suggestion: AnswerSuggestion;
+  skipped: boolean;
+}) {
   const lookFor = (id: string) => question.lookFors.find((l) => l.id === id)?.text;
   const followUp = (id: string) => question.followUps.find((f) => f.id === id)?.text;
 
@@ -263,7 +285,7 @@ function SuggestionCard({ number, question, suggestion }: { number: number; ques
         <h3 className="font-semibold">
           {number}. {question.text}
         </h3>
-        <Status tone="muted">Not answered</Status>
+        <Status tone="muted">{skipped ? "Skipped" : "Not answered"}</Status>
       </div>
 
       {suggestion.fallback && (
