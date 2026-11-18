@@ -107,7 +107,9 @@ export function TailorStep({ id, title, summary, status, icon, open, onToggle, c
             <span className="text-lg font-semibold sm:text-xl">{title}</span>
             {!open && <span className="text-sm font-normal text-text-muted">{summary}</span>}
           </span>
-          <StatusPill status={status} />
+          {/* Said to a screen reader only: the circles above, the tick on a closed finished step and the label beside
+              the title already show it, so a label on every row said it a fourth time (#500). */}
+          <span className="sr-only">, {statusNames[status]}</span>
         </button>
       </h3>
       <div id={panelId} hidden={!open}>
