@@ -114,6 +114,10 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(approveFromCv.first()).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("✓ Approved: 1")).toBeVisible();
   await expect(tailoredLines).toHaveCount(1);
+  // The preview marks the approved line on Fit, and says the highlight is not in the download (#501).
+  await expect(
+    page.getByRole("complementary", { name: "Your CV for this job" }).getByText("The highlight is only on this page, not in your download."),
+  ).toBeVisible();
 
   // A gap is answered in the user's own words, one question at a time.
   await page.getByRole("button", { name: /^2\. Questions about your experience/ }).click();

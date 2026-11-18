@@ -278,7 +278,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
               <h4 id="preview-heading" className="font-semibold">
                 Your CV for this job
               </h4>
-              <p className="text-sm text-text-muted">Highlighted lines are the changes you approved.</p>
+              <p className="text-sm text-text-muted">Highlighted lines are the changes you approved. The highlight is only on this page, not in your download.</p>
               {cv.sameLine.length > 0 && (
                 <Notice tone="error" title="More than one change to the same line">
                   Only one change per line can be on your CV, so {cv.sameLine.map((change) => `“${change.after}”`).join(", ")}{" "}
@@ -303,7 +303,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   {cv.leftInProfile.join(", ")}.
                 </Notice>
               )}
-              <CvPreview cv={cv} />
+              <CvPreview cv={cv} marked />
             </aside>
             <div>
               <Button onClick={() => goTo(4)}>Continue to cover letter</Button>
