@@ -671,6 +671,17 @@ describe("profile screens", () => {
     expect(words.indexOf("Is your CV ready for UK employers?")).toBeLessThan(words.indexOf("What you’re looking for"));
   });
 
+  // The CV check keeps no result, so the ring beside it shows no score: a made-up number would break the Honest CV
+  // Promise.
+  it("shows the CV check's score ring empty, with no number", () => {
+    const words = overview(fromBrowser(stored("sara")), "browser");
+    const card = words.slice(words.indexOf("Is your CV ready"), words.indexOf("What you’re looking for"));
+
+    expect(card).toContain("Not checked yet");
+    expect(card).toMatch(/\?\s+\/ 100/);
+    expect(card).not.toMatch(/\d+\s*%|\b\d{1,2}\s*\/\s*100/);
+  });
+
   it("counts volunteering, projects and languages in the summary when the profile has them (#227)", () => {
     const profile = {
       ...personas.emma.profile,
