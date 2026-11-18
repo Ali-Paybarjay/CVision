@@ -130,9 +130,13 @@ describe("the dashboard's application list", () => {
   });
 
   // A user asked what "Next step" is for (18 November, #521).
-  it("says under Next step that it is the user's own note for this application", () => {
+  it("says under Next step that it is the user's own note, with the example in the hint and none inside the field", () => {
     const form = renderMidSave([withStep(row("1", "applied", "2026-10-20", "Data Analyst"), "Call back")]);
-    expect(text(form)).toContain("Next step A note for yourself: what you’ll do next for this application.");
+    expect(text(form)).toContain(
+      "Next step A note for yourself: what you’ll do next for this application, for example email the recruiter on Friday.",
+    );
+    // The grey example inside the empty field was taken for a saved next step.
+    expect(form.match(/<input[^>]*name="nextStep"[^>]*>/)?.[0]).not.toContain(" placeholder=");
   });
 
   it("shows only the date once the application has been sent, and nothing without a closing date", () => {

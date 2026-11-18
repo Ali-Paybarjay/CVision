@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
+import { flushSync } from "react-dom";
 import { brand } from "@/shared/brand";
 import { Button, Field, Input, Notice } from "@/shared/ui";
 import { signIn, signUp, type AuthFormState } from "./actions";
@@ -76,7 +77,12 @@ export function AuthForm({
             <ShowPasswordButton
               shown={showPassword}
               controls={props.id}
-              onToggle={() => setShowPassword((shown) => !shown)}
+              onToggle={() => {
+                // The field becomes type="text" first, then Safari's own mask is lifted (see revealAutofilledPassword).
+                flushSync(() => setShowPassword((shown) => !shown));
+                const input = document.getElementById(props.id) as HTMLInputElement | null;
+                if (input?.type === "text") revealAutofilledPassword(input);
+              }}
               disabled={disabled}
             />
           </div>
@@ -123,6 +129,26 @@ export function CheckEmailNotice({ email, next }: { email: string; next: string 
       </div>
     </div>
   );
+}
+
+/**
+ * Safari, and every browser on an iPhone, keeps a password it filled in itself (from the Keychain, or its Strong
+ * Password) masked even once the field is type="text": its own stylesheet says `input:-webkit-autofill-and-obscured
+ * { -webkit-text-security: disc !important }`, which no page CSS can undo. A user pressed Show and still saw dots
+ * (18 November, #521). Setting the value from script, to the same value, ends that state in WebKit; nothing else
+ * changes. Elsewhere the selector is unknown and `matches` throws, and type="text" already shows the password.
+ * Exported for its test.
+ */
+export function revealAutofilledPassword(input: Pick<HTMLInputElement, "matches" | "value"> | null): void {
+  if (!input) return;
+  try {
+    if (input.matches(":-webkit-autofill-and-obscured")) {
+      const value = input.value;
+      input.value = value;
+    }
+  } catch {
+    // Not WebKit: nothing to undo.
+  }
 }
 
 /**

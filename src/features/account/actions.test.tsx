@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { brand } from "@/shared/brand";
 import { signIn, signOut, signUp } from "./actions";
-import { AuthForm, CheckEmailNotice, ShowPasswordButton } from "./auth-form";
+import { AuthForm, CheckEmailNotice, revealAutofilledPassword, ShowPasswordButton } from "./auth-form";
 
 const { createSupabaseServerClient, redirect, auth } = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
@@ -149,6 +149,44 @@ describe("full page load after signing in (#350)", () => {
     expect(input).toContain('autoCapitalize="none"');
     expect(input).toContain('autoCorrect="off"');
     expect(input).toContain('spellCheck="false"');
+  });
+
+  // Safari kept a password it had filled in itself masked after Show (18 November, #521).
+  it("lifts Safari's own mask from a password it filled in, and does nothing in other browsers", () => {
+    let sets = 0;
+    const field = (matches: (selector: string) => boolean) => {
+      let value = "secret-pass";
+      return {
+        matches,
+        get value() {
+          return value;
+        },
+        set value(next: string) {
+          sets += 1;
+          value = next;
+        },
+      };
+    };
+
+    const masked = field((selector) => selector === ":-webkit-autofill-and-obscured");
+    revealAutofilledPassword(masked);
+    expect(sets).toBe(1);
+    expect(masked.value).toBe("secret-pass");
+
+    sets = 0;
+    revealAutofilledPassword(field(() => false));
+    expect(sets).toBe(0);
+
+    // Chrome and Firefox don't know the selector and throw: nothing breaks.
+    expect(() =>
+      revealAutofilledPassword(
+        field(() => {
+          throw new SyntaxError("unknown pseudo-class");
+        }),
+      ),
+    ).not.toThrow();
+    expect(sets).toBe(0);
+    expect(() => revealAutofilledPassword(null)).not.toThrow();
   });
 
   // WCAG 2.5.3, Label in Name: the word on the button is in its name, so "click Hide" works with voice control.
