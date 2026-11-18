@@ -52,8 +52,9 @@ export type TailoredCv = {
   /** Projects as the Profile has them: they take no tailoring changes yet. Volunteering is not on the CV in this phase. */
   projects: CvEntry[];
   /**
-   * The Profile's languages, then the spoken languages the CV lists among its skills (#529), each language once unless the
-   * user approved two lines for it. Listed as "Languages" in the last section of the CV, under the certificates.
+   * The Profile's languages, then the spoken languages the CV lists among its skills (#529). A language is listed again only
+   * when the line says more: another level or variety, or a line the user approved beside one they did not change (#543).
+   * Listed as "Languages" in the last section of the CV, under the certificates.
    */
   languages: CvLine[];
   /** Approved changes whose `before` line is not on the CV (or was already changed), so they could not be placed. */
@@ -336,19 +337,25 @@ export function fitsCv(profile: Profile, change: Pick<TailoringChange, "section"
 export function buildTailoredCv(profile: Profile, changes: TailoringChange[], job?: Job): TailoredCv {
   const approved = changes.filter((change) => change.status === "approved");
   const used = new Set<string>();
+  /** The approved change each tailored line came from, so a language knows which line its change rewrote (#543). */
+  const madeBy = new Map<CvLine, TailoringChange>();
+  const tailoredLine = (change: TailoringChange): CvLine => {
+    used.add(change.id);
+    const line = { text: change.after, tailored: true };
+    madeBy.set(line, change);
+    return line;
+  };
 
   /** Swaps a CV line for its approved change, if there is one. */
   const apply = (text: string, section: TailoringChange["section"]): CvLine => {
     const change = approved.find((item) => item.section === section && !used.has(item.id) && item.before !== null && same(item.before, text));
-    if (!change) return { text, tailored: false };
-    used.add(change.id);
-    return { text: change.after, tailored: true };
+    return change ? tailoredLine(change) : { text, tailored: false };
   };
   const added = (section: TailoringChange["section"], max = Infinity): CvLine[] =>
     approved
       .filter((change) => change.section === section && change.before === null && !used.has(change.id))
       .slice(0, max)
-      .map((change) => (used.add(change.id), { text: change.after, tailored: true }));
+      .map(tailoredLine);
 
   const summary = profile.summary.trim() ? apply(profile.summary, "summary") : (added("summary", 1)[0] ?? null);
 
@@ -418,26 +425,31 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
   const allCertificates = [...certifications, ...added("certifications")];
   const certificates = relevantLinesFirst(allCertificates.filter((line) => !isDrivingLicence(line)), job, true);
 
-  // The Profile's languages as they are, then those among the skills, each language once (#529). A repeat is left out, unless
-  // the user approved it: then it takes the place of a line they did not change (You approve everything), or, beside a line
-  // they also approved, it is added. A repeat with a level takes the place of an unchanged line with none, so "Fluent" is
-  // never lost; otherwise the first level stays, the Profile's before the skills'.
-  const languages = (profile.languages ?? []).map((item) => asIs(languageLine(item.name, item.level)));
-  const shownAt = new Map<string, { index: number; level?: string }>(
-    (profile.languages ?? []).map((item, index) => [normalise(item.name), { index, level: item.level }]),
-  );
+  // The Profile's languages as they are, then those among the skills (#529). A language already listed is a repeat. A repeat
+  // that says nothing more, the same text or no level, is left out; one with another level or variety, such as "Chinese
+  // (Cantonese)" beside "Chinese (Mandarin)" or "English (IELTS 7.5)" beside "English (Fluent)", gets a line of its own, so
+  // nothing the user gave is lost (#543). A repeat with a level takes the place of an unchanged line with none, which loses
+  // nothing. An approved line takes the place of an unchanged one only when its change rewrote that very line, or the text
+  // is the same; otherwise it goes beside it, as its card says nothing is removed (#543).
+  type Shown = { line: CvLine; name: string; level?: string };
+  const languages: Shown[] = (profile.languages ?? []).map((item) => ({ line: asIs(languageLine(item.name, item.level)), name: normalise(item.name), level: item.level }));
   for (const line of allSkills) {
+    const before = madeBy.get(line)?.before;
+    const rewrote = (before ? languagesIn(before) : null)?.map((item) => languageLine(item.name, item.level)) ?? [];
     for (const language of languagesIn(line.text) ?? []) {
-      const entry: CvLine = { text: languageLine(language.name, language.level), tailored: line.tailored };
-      const shown = shownAt.get(normalise(language.name));
-      if (!shown) {
-        shownAt.set(normalise(language.name), { index: languages.push(entry) - 1, level: language.level });
-      } else if (!languages[shown.index].tailored && (line.tailored || (!shown.level && language.level))) {
-        languages[shown.index] = entry;
-        shown.level = language.level;
-      } else if (line.tailored && !same(languages[shown.index].text, entry.text)) {
-        languages.push(entry);
+      const entry: Shown = { line: { text: languageLine(language.name, language.level), tailored: line.tailored }, name: normalise(language.name), level: language.level };
+      const repeats = languages.filter((shown) => shown.name === entry.name);
+      const sameText = repeats.find((shown) => same(shown.line.text, entry.line.text));
+      if (sameText) {
+        // The same line twice is listed once, as approved when the user approved it.
+        if (entry.line.tailored) sameText.line = entry.line;
+        continue;
       }
+      const unchanged = repeats.filter((shown) => !shown.line.tailored);
+      const rewritten = entry.line.tailored ? unchanged.find((shown) => rewrote.some((text) => same(text, shown.line.text))) : undefined;
+      const target = rewritten ?? (entry.level ? unchanged.find((shown) => !shown.level) : undefined);
+      if (target) Object.assign(target, entry);
+      else if (repeats.length === 0 || entry.line.tailored || entry.level) languages.push(entry);
     }
   }
 
@@ -453,7 +465,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     certifications: certificates.slice(0, maxCertificates),
     drivingLicences: [...allCertificates, ...allSkills].filter(isDrivingLicence).map(licenceDetail),
     projects: (profile.projects ?? []).map((item) => ({ title: item.name, company: item.organisation ?? "", dates: dateRange(item.startDate, item.endDate), lines: item.details.map(asIs) })),
-    languages,
+    languages: languages.map((item) => item.line),
     unplaced: approved.filter((change) => !used.has(change.id)),
     sameLine: approved.filter((change) => !used.has(change.id) && approved.some((other) => used.has(other.id) && sameTarget(other, change))),
     overLimit: [...leftOut, ...tools.slice(maxTools), ...certificates.slice(maxCertificates)].filter((line) => line.tailored).map((line) => line.text),
@@ -461,8 +473,14 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
   };
 }
 
+/**
+ * A labelled line of the last section, such as "Skills and tools: Excel, SQL, Power BI". `text` is the whole line as the
+ * files print it; `parts` are its items, joined by `separator`, so the preview can put only an approved item on Fit (#543).
+ */
+export type GroupLine = CvLine & { label: string; parts: CvLine[]; separator: string };
+
 /** The last section of the CV: one labelled line each for certificates, languages, driving licences and tools, the same in the preview and the files. */
-export function otherLines(cv: TailoredCv): CvLine[] {
+export function otherLines(cv: TailoredCv): GroupLine[] {
   const groups: [string, CvLine[], string][] = [
     [cvHeadings.certificates, cv.certifications, "; "],
     [cvHeadings.languages, cv.languages, ", "],
@@ -471,5 +489,11 @@ export function otherLines(cv: TailoredCv): CvLine[] {
   ];
   return groups
     .filter(([, lines]) => lines.length > 0)
-    .map(([label, lines, separator]) => ({ label, text: lines.map((line) => line.text).join(separator), tailored: lines.some((line) => line.tailored) }));
+    .map(([label, lines, separator]) => ({
+      label,
+      text: lines.map((line) => line.text).join(separator),
+      tailored: lines.some((line) => line.tailored),
+      parts: lines.map((line) => ({ text: line.text, tailored: line.tailored })),
+      separator,
+    }));
 }
