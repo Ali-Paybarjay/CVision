@@ -69,7 +69,8 @@ export type SuggestInput = {
 /**
  * The job's conditions (#222), such as a driving licence, night shifts or a DBS check, that the match did not judge
  * and no CV line shows, as missing gaps. Since #497 they are not gaps, so without them a CV suggestion could end
- * "…, with a full UK driving licence." (#526). A CV line shows one when it has any of its words, as the check reads them.
+ * "…, with a full UK driving licence." (#526). A CV line shows one when it has one of the parts requirementTerms
+ * gives, as the check reads them: the whole condition, or one side of an "or", a comma or a slash.
  */
 function conditionsNotOnCv(job: Job, match: MatchResult, profile: Profile): Gap[] {
   const judged = new Set([...match.gaps, ...match.strengths].map((item) => item.requirement));

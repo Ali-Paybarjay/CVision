@@ -93,15 +93,18 @@ function namesSeveral(requirement: string): boolean {
  * True when the words the user wrote start by saying they have not done it, e.g. "No", "Not yet. I am still studying",
  * "I don't have a CSCS card yet", "I'm not NMC registered yet" or "Not used Power BI yet" (#483). Not "No problem, I ran
  * it", "I don't just use Excel", "I'm not sure, but I used it" or "I'm not a manager, but I supervised three new
- * starters" (#526). Still a no: "I'm not NMC registered yet, but I qualify in March", and a wish after the but, as in
- * "I'm not a Power BI user, but I'd like to learn it".
+ * starters" (#526): after "I'm not …, but" or "however", only something the user says they did is a yes. Still a no:
+ * "I'm not NMC registered yet, but I qualify in March", "I'm not a Power BI user, but I'd like to learn it", "I'm not
+ * certified, but I can learn", "I'm not NMC registered, but I have applied" and "I'm not familiar with Jira, however
+ * we used Trello".
  */
 function saysNo(text: string): boolean {
   const answer = text.trim().toLowerCase().replace(/[’]/g, "'");
   if (/^(no problem|no doubt|not only|not just|i (don't|do not) (just|only)|(i'm|i am) not (sure|only|just))\b/.test(answer)) return false;
   const notBut = answer.match(/^(?:i'm|i am) not\b([^;]*?)\b(?:but|however)\b[\s,]*(.*)$/);
-  const wish = /^(?:i(?:'d| would) (?:like|love)|i (?:want|hope|plan|intend|aim|will)|i'll|(?:i'm|i am) (?:keen|hoping|planning|going|learning|studying))\b/;
-  if (notBut && /[a-z]/.test(notBut[1]) && !/\byet\b/.test(notBut[1]) && !wish.test(notBut[2])) return false;
+  const did =
+    /^(?:i|i've|i have)\s+(?:also\s+|often\s+|regularly\s+|already\s+)?(?!(?:applied|registered|enrolled|need|needed|wanted|hoped|planned|intended)\b)(?:[a-z]+ed|led|ran|built|taught|wrote|made|did|took|gave|held|kept|oversaw|won|sold|set up|spent)\b/;
+  if (notBut && /[a-z]/.test(notBut[1]) && !/\byet\b/.test(notBut[1]) && did.test(notBut[2])) return false;
   return /^(no(?!-)|nope|nah|not yet|not really|none)\b|^never (used|done|had|worked|held)\b|^i (have not|haven't|havent|have never|haven't ever|do not|don't|dont|did not|didn't|didnt|never)\b|^(i'm|i am)( still)? not\b|^not\b[^.,;]*\byet\b/.test(answer);
 }
 

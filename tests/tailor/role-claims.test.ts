@@ -379,6 +379,31 @@ describe("the Honest CV guards read a registration the user does not hold, and o
     ])("still, after a word next to the registration that says it is not held now: %s", (answer) => {
       expect(check(followUp(answer))).toBe("NMC");
     });
+
+    // From the review of the first #526 fix: a registration still to come, none held now, or one that has ended.
+    it.each([
+      "My NMC registration will come through in May.",
+      "I have no current UK registration with the NMC",
+      "I have no current UK NMC registration",
+      "I'm in the process of registering with the NMC",
+      "My NMC PIN is due in May.",
+      "I am due to join the NMC register in May.",
+    ])("after an answer that says it is not held now: %s", (answer) => {
+      expect(check(followUp(answer))).toBe("NMC");
+    });
+
+    it.each(["NMC registered from 2012 until 2019, now a healthcare assistant.", "NMC registered nurse until I moved to Dubai in 2019."])(
+      "after a summary of a registration that has ended: %s",
+      (summary) => {
+        expect(check(withSummary(summary))).toBe("NMC");
+      },
+    );
+
+    it("a CV change after a yes that says the registration will come through in May", () => {
+      const answers = [{ gapId: "clinical-gap-nmc", question: "", answer: "My NMC registration will come through in May.", hasExperience: true }];
+      const change = { ...careFor, after: "NMC registered adult nurse trained in Kerala." };
+      expect(roleClaimAdded(change, { profile: base, gaps: unregisteredFixtures.match.gaps, answers, role })).toBe("NMC");
+    });
   });
 
   describe("kept", () => {
@@ -398,6 +423,30 @@ describe("the Honest CV guards read a registration the user does not hold, and o
 
     it("a line that keeps the wish to work towards registration with the NMC", () => {
       expect(check(base, { ...careFor, after: "Healthcare assistant working towards registration with the NMC" })).toBeNull();
+    });
+
+    // From the review of the first #526 fix: applied, preparing, submitted, CBT, OSCE and due about something else.
+    it.each([
+      "NMC registered nurse who applied the NMC Code in daily practice.",
+      "NMC registered nurse applying the NMC Code on every shift.",
+      "NMC registered practice assessor preparing students for registration.",
+      "Qualified CBT therapist and NMC registered mental health nurse.",
+      "CBT-trained NMC registered mental health nurse.",
+      "Passed OSCE and NMC registered in 2023.",
+      "NMC registered nurse who submitted my NMC revalidation in 2024.",
+      "NMC registered nurse due back from maternity leave in May.",
+      "NMC registered nurse (PIN valid until 2027).",
+      "Registered with the NMC since 2019 with no restrictions on my registration.",
+    ])("a summary that says they hold it, with other words about the NMC: %s", (summary) => {
+      expect(check(withSummary(summary))).toBeNull();
+    });
+
+    it("a certificate with the NMC PIN and when revalidation is due", () => {
+      expect(check({ ...base, certifications: [{ name: "NMC PIN 12A3456E (revalidation due March 2027)" }] })).toBeNull();
+    });
+
+    it("a line that ends with the NMC registration still due", () => {
+      expect(check(base, { ...careFor, after: "Healthcare assistant on an acute ward, NMC registration due in May" })).toBeNull();
     });
   });
 });

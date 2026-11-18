@@ -187,6 +187,11 @@ describe("the letter after a test, other people's registration, or a true regist
     expect(claim(profile)).toBe("NMC");
   });
 
+  it("takes out the NMC sentence after a yes that says the registration will come through in May", () => {
+    const yes = [{ gapId: "clinical-gap-nmc", question: "", answer: "My NMC registration will come through in May.", hasExperience: true }];
+    expect(letterRoleClaim(sentence, job.title, { profile: base, gaps: match.gaps, answers: yes, role: job.role })).toBe("NMC");
+  });
+
   it("keeps the NMC sentence for a nurse whose summary says NMC registered with no gaps in practice", () => {
     expect(claim({ ...base, summary: "NMC registered nurse with no gaps in practice since 2019." })).toBeNull();
   });

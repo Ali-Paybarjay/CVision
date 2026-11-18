@@ -137,8 +137,8 @@ const wantedNouns = "roles?|posts?|positions?|jobs?|vacanc(?:y|ies)|register|reg
  * Without the places that name the term as something wanted, not held: "looking for a Band 6 role", "seeking Band 6
  * roles", "keen to progress to a Band 6 role", "ready for the Senior Staff Nurse (Band 6) post", "due to join the NMC
  * register", "working towards registration with the NMC" (#526). For a registration, a clause that says it is
- * pending, awaited, due or expected is a wish too: "NMC registration pending". "Acted up into a Band 6 role" is a
- * claim and stays.
+ * pending, awaited or expected, or due next to the registration, is a wish too: "NMC registration pending", "NMC
+ * registration due in May". "Acted up into a Band 6 role" is a claim and stays.
  */
 function withoutJobsWanted(text: string, { term, kind }: RoleTerm): string {
   const name = `\\(?${escaped(term)}\\)?`;
@@ -151,11 +151,17 @@ function withoutJobsWanted(text: string, { term, kind }: RoleTerm): string {
   const result = text.replace(wanted, " ");
   if (kind !== "registration") return result;
   const withBody = new RegExp(`\\b(?:${wanting})\\s+${article}${words}regist(?:er|ered|ration)\\s+(?:with|by|on)\\s+(?:the\\s+)?${name}`, "g");
+  // "Due" only next to the registration (#526): "NMC registration due in May", "My NMC PIN is due", "due to be NMC
+  // registered". Not "NMC registered nurse due back from maternity leave" or "NMC PIN (revalidation due March 2027)".
+  const it = `(?:${escaped(term)}|regist(?:er|ered|ration))`;
+  const dueNear = new RegExp(`(?<![a-z0-9])${it}(?:\\s+(?:application|pin))?(?:\\s+(?:is|was))?\\s+due\\b|\\bdue\\s+(?:[a-z0-9']+\\s+){0,2}${it}(?![a-z0-9])`);
   // "NMC registration pending", "awaiting my NMC PIN, expected in May": the whole clause is about the future.
   return result
     .replace(withBody, " ")
     .split(/(?<=[,;.])/)
-    .map((clause) => (/\b(pending|awaiting|due|expected)\b/.test(clause) ? clause.replace(new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`, "g"), " ") : clause))
+    .map((clause) =>
+      /\b(pending|awaiting|expected)\b/.test(clause) || dueNear.test(clause) ? clause.replace(new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`, "g"), " ") : clause,
+    )
     .join("");
 }
 
@@ -187,25 +193,40 @@ const notHeldNow = new RegExp(
   String.raw`\b(?:not|never|yet|eligible|expect(?:s|ed|ing)?|(?:hop(?:e|es|ing)|plan(?:s|ning)?|aim(?:s|ing)?|intend(?:s|ing)?) to|pending|await(?:s|ed|ing)?|lapsed|expired|leads? to|leading to|(?:on|upon) (?:qualifying|completion)|pre-registration|re-registration|registration assessment|(?:student|trainee)(?! (?:[a-z-]+ )?[a-z-]+s\b))\b|n't\b`,
 );
 
-/** Words that say a registration is not held now only next to it (#526), before it ("will be NMC registered")… */
-const beforeRegistration =
-  "will|once|until|due|approved|exams?|applying|applied|preparing|working towards|submitted|test of competence|cbt|osce";
-/** …or after it ("NMC registration in progress", "NMC approved", "NMC Test of Competence"). */
-const afterRegistration = "once|until|due|approved|exams?|applied|submitted|processing|in progress|in process|test of competence|cbt|osce";
+/** Words that say a registration is not held now only next to it (#526), up to two words before it ("will be NMC registered")… */
+const beforeRegistration = "will|once|until|due|approved|exams?|working towards";
+/** …or right after it ("NMC registration in progress", "NMC approved", "NMC Test of Competence", "NMC registration will come through"). */
+const afterRegistration =
+  "will|should|would|once|until|due|approved|exams?|applied|submitted|processing|in progress|in process|test of competence|cbt|osce";
+/** Adjectives "no" may take before the registration: "no current UK NMC registration". */
+const noAdjectives = "current|active|valid|live|uk|british|full";
 
 /**
- * Whether a clause says the registration is not held now with a word next to the term or to "register…" (#526): up
- * to two words before it ("will be NMC registered", "preparing for the NMC OSCE", "working towards registration"),
- * "no" right before it ("no current NMC registration"), or right after it, perhaps after "application", "is" or "was"
- * ("NMC registration in progress", "NMC application in process", "NMC registration was submitted"). So "NMC registered
- * nurse with no gaps in practice" and "NMC registered nurse who will work nights" keep their NMC.
+ * Whether a clause says the registration is not held now with a word next to the term or to "register…" (#526):
+ * - up to two words before it ("will be NMC registered", "working towards registration"); applying, applied, preparing
+ *   or submitted only with for, to or towards ("Preparing for NMC registration", "Applied to the NMC in May"); "in the
+ *   process of registering"; and a test right before it ("Test of Competence (CBT) (NMC)", from a certificate's issuer);
+ * - "no", perhaps with adjectives, one word before it ("no current UK registration with the NMC");
+ * - right after it, perhaps after "application", "pin", "is" or "was" ("NMC registration in progress", "NMC
+ *   application in process", "NMC registration was submitted", "NMC registration will come through in May");
+ * - "until" up to three words after it, none of them valid or expires: a registration that has ended ("NMC registered
+ *   nurse until I moved to Dubai").
+ * So "NMC registered nurse with no gaps in practice", "NMC registered nurse who will work nights", "NMC registered
+ * nurse who applied the NMC Code", "Qualified CBT therapist and NMC registered nurse" and "NMC registered nurse (PIN
+ * valid until 2027)" keep their NMC.
  */
 function notHeldNear(clause: string, term: string): boolean {
   const it = `(?:${escaped(term)}|regist(?:er|ered|ering|ers|ration))`;
   const between = (words: number) => String.raw`[\s()/:-]+(?:[a-z0-9']+[\s()/:-]+){0,${words}}`;
-  const before = `(?:(?<![a-z0-9'])no${between(1)}|(?:(?<![a-z0-9'])(?:${beforeRegistration})|'ll)${between(2)})${it}(?![a-z0-9])`;
+  const before =
+    `(?:(?<![a-z0-9'])no(?:\\s+(?:${noAdjectives}))*${between(1)}` +
+    `|(?:(?<![a-z0-9'])(?:${beforeRegistration})|'ll)${between(2)}` +
+    `|(?<![a-z0-9'])(?:applying|applied|preparing|submitted)\\s+(?:for|to|towards)${between(1)}` +
+    `|(?<![a-z0-9'])in\\s+(?:the\\s+)?process\\s+of${between(1)}` +
+    `|(?<![a-z0-9'])(?:test of competence|cbt|osce)[\\s()/:-]+)${it}(?![a-z0-9])`;
   const after = `(?<![a-z0-9])${it}(?:\\s+(?:application|pin))?(?:\\s+(?:is|was|currently|now|still))?[\\s()/:-]+(?:${afterRegistration})(?![a-z0-9])`;
-  return new RegExp(`${before}|${after}`).test(clause);
+  const ended = `(?<![a-z0-9])${it}(?![a-z0-9])(?:[\\s()/:-]+(?!valid\\b|expir)[a-z0-9']+){0,3}[\\s()/:-]+until(?![a-z0-9])`;
+  return new RegExp(`${before}|${after}|${ended}`).test(clause);
 }
 
 /**

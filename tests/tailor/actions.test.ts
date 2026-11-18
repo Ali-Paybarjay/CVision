@@ -104,6 +104,14 @@ describe("answerGap", () => {
       "Not used Power BI yet.",
       "I'm not NMC registered yet, but I qualify in March.",
       "I'm not a Power BI user, but I'd like to learn it.",
+      // #526 review: after "but" or "however" only something they did is a yes.
+      "I'm not certified, but I can learn.",
+      "I'm not trained in it, but I could learn quickly.",
+      "I'm not NMC registered, but I have applied.",
+      "I'm not a Power BI user, but my team is.",
+      "I am not familiar with Jira, however we used Trello.",
+      "I'm not a Power BI user, but I've seen it used.",
+      "I'm not trained in it, but I need it for this job.",
     ])(
       "%s adds nothing and shows a next step",
       async (typed) => {
