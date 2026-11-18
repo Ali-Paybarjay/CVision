@@ -61,3 +61,24 @@ describe("a card whose line had another approval (#465)", () => {
     expect(render("proposed", "sent-back")).toContain("Back with your suggestions: you approved another change to this line.");
   });
 });
+
+describe("the decision on a card (#531)", () => {
+  const render = (status: TailoringChange["status"]) => renderToStaticMarkup(<ChangeCard change={{ ...change("Good at problems"), status }} onDecide={async () => {}} />);
+
+  it("offers Change my mind after Approve, and not before", () => {
+    expect(render("approved")).toContain("Change my mind");
+    expect(render("proposed")).not.toContain("Change my mind");
+    expect(render("rejected")).not.toContain("Change my mind");
+  });
+
+  it("names a waiting card Not decided yet, in plain text", () => {
+    const html = render("proposed");
+    expect(html).toContain("Not decided yet");
+    expect(html).not.toContain("Waiting for your decision");
+  });
+
+  it("shows Approved on the Fit tint and Rejected outlined", () => {
+    expect(render("approved")).toMatch(/bg-fit[^"]*text-accent[^>]*>✓ Approved</);
+    expect(render("rejected")).toMatch(/border-line[^"]*text-text-muted[^>]*>✕ Rejected</);
+  });
+});

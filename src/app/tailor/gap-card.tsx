@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { answerGap } from "@/features/tailor/actions";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
-import { Button, Notice, Textarea, WaitNote } from "@/shared/ui";
+import { Button, Notice, SectionLabel, Textarea, WaitNote } from "@/shared/ui";
 import { ChangeCard, type LineNote } from "./change-card";
 import { unreachableMessage } from "./messages";
 
@@ -90,7 +90,9 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
   return (
     <article className="flex flex-col gap-4">
       <div>
-        <p className="text-lg">{prompt.question}</p>
+        {/* A label says this is a question, so it is not read as a line of the CV (#531). */}
+        <SectionLabel>Question</SectionLabel>
+        <p className="mt-1 text-lg">{prompt.question}</p>
         <p className="mt-1 text-sm text-text-muted">
           {gap.importance === "essential" ? "Essential" : "Desirable"} · {gap.requirement}
         </p>
@@ -136,6 +138,7 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
         </div>
       )}
 
+      {changes.length > 0 && <SectionLabel>Suggested from your answer</SectionLabel>}
       {changes.map((change) => (
         <ChangeCard key={change.id} change={change} onDecide={onDecide} role={roleOf?.(change)} lineNote={lineNoteOf?.(change)} />
       ))}

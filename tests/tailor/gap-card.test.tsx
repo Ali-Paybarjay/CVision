@@ -130,3 +130,11 @@ describe("the note while an answer waits for the model (#468)", () => {
     expect(findBrandProblems(waitNote)).toEqual([]);
   });
 });
+
+describe("the question on the gap card (#531)", () => {
+  it("labels the question, so it is not read as Work experience", () => {
+    const html = card({ gap, question: "Have you used Power BI?" });
+    expect(html).toContain("Question");
+    expect(html.indexOf("Question")).toBeLessThan(html.indexOf("Have you used Power BI?"));
+  });
+});

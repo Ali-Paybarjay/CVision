@@ -43,6 +43,7 @@ export function ChangeCard({
     });
   };
 
+  // The status is a word and a colour together (#531): Approved on the Fit tint, Rejected outlined and muted, the rest plain.
   const statusText =
     change.status === "approved"
       ? "✓ Approved"
@@ -50,7 +51,13 @@ export function ChangeCard({
         ? "✕ Rejected"
         : lineNote === "sent-back"
           ? "Back with your suggestions: you approved another change to this line."
-          : "Waiting for your decision";
+          : "Not decided yet";
+  const statusClass =
+    change.status === "approved"
+      ? "rounded-md bg-fit px-2 py-0.5 font-semibold text-accent"
+      : change.status === "rejected"
+        ? "rounded-md border border-line px-2 py-0.5 font-semibold text-text-muted"
+        : "text-text-muted";
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-line p-4">
@@ -116,7 +123,13 @@ export function ChangeCard({
           <Button variant="quiet" onClick={() => setEditing(true)} disabled={pending}>
             Edit
           </Button>
-          <span className="text-sm text-text-muted" aria-live="polite">
+          {/* Undo goes back to the decision before Approve, so the line is not in the CV until it is approved again (#531). */}
+          {change.status === "approved" && (
+            <Button variant="quiet" onClick={() => decide("proposed")} disabled={pending}>
+              Change my mind
+            </Button>
+          )}
+          <span className={`text-sm ${statusClass}`} aria-live="polite">
             {statusText}
           </span>
         </div>
