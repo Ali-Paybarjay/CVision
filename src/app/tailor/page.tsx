@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { JobListItem } from "@/features/profile/ui/job-list-item";
+import { JobList } from "@/features/profile/ui/job-list";
 import { askGapQuestions, defaultGapQuestion, questionGaps, skillGaps } from "@/features/tailor/gap-questions";
 import { keptGapQuestions } from "@/features/tailor/server/gap-questions-store";
 import { modelFailureMessage, tailorModelAccess, whatStillWorksOnQuestions } from "@/features/tailor/server/model-access";
@@ -10,7 +10,7 @@ import { getMySavedChanges } from "@/features/tailor/server/saved-changes";
 import type { GapQuestion } from "@/features/tailor/types";
 import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
-import { ButtonLink, Card, Notice, Page, PathSteps, wideFrame } from "@/shared/ui";
+import { ButtonLink, Notice, Page, PathSteps, wideFrame } from "@/shared/ui";
 import { ChooseAnotherJob } from "./choose-another-job";
 import { TailorSignIn, tailorStart } from "./tailor-sign-in";
 import { TailorWaitNote } from "./tailor-wait-note";
@@ -178,30 +178,26 @@ function webLink(url: string | null): string | null {
   return url && /^https?:\/\//i.test(url) ? url : null;
 }
 
-/** The user's jobs, each with Delete, except one on their dashboard because they applied for it (#462). */
+/**
+ * The user's jobs, each with Delete, except one on their dashboard because they applied for it (#462). A deleted job
+ * leaves the list at once, and "Add a job first" takes its place once the last one goes (#519).
+ */
 async function JobPicker() {
   const [jobs, onDashboard] = await Promise.all([listMyJobs(), listMyJobIdsOnDashboard()]);
-  if (jobs.length === 0) {
-    return (
-      <Notice tone="info" title="Add a job first">
-        Paste a job ad to tailor your CV for it. <Link href="/jobs" className="text-accent underline">Add a job</Link>
-      </Notice>
-    );
-  }
   return (
-    <Card>
-      <h2 className="text-xl">Which job is this CV for?</h2>
-      <ul className="mt-4 flex flex-col gap-3">
-        {jobs.map((job) => (
-          <JobListItem
-            key={job.id}
-            jobId={job.id}
-            name={`${job.title} at ${job.company}`}
-            href={`/tailor?job=${encodeURIComponent(job.id)}`}
-            onDashboard={onDashboard.includes(job.id)}
-          />
-        ))}
-      </ul>
-    </Card>
+    <JobList
+      title="Which job is this CV for?"
+      jobs={jobs.map((job) => ({
+        id: job.id,
+        name: `${job.title} at ${job.company}`,
+        href: `/tailor?job=${encodeURIComponent(job.id)}`,
+        onDashboard: onDashboard.includes(job.id),
+      }))}
+      empty={
+        <Notice tone="info" title="Add a job first">
+          Paste a job ad to tailor your CV for it. <Link href="/jobs" className="text-accent underline">Add a job</Link>
+        </Notice>
+      }
+    />
   );
 }

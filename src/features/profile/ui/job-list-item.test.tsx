@@ -25,7 +25,9 @@ function row(state: JobRowState, onDashboard = false) {
 
 describe("JobListItem", () => {
   it("links to the job and offers to delete it, naming the job for a screen reader", () => {
-    const html = renderToStaticMarkup(<JobListItem jobId="00000000-0000-4000-8000-000000000001" name={name} href={href} onDashboard={false} />);
+    const html = renderToStaticMarkup(
+      <JobListItem jobId="00000000-0000-4000-8000-000000000001" name={name} href={href} onDashboard={false} onDeleted={noop} />,
+    );
 
     expect(html).toContain(`<a href="${href}" class="text-accent underline underline-offset-4">${name}</a>`);
     expect(html).toMatch(/<button[^>]*>Delete<span class="sr-only"> Junior Data Analyst at Pennine Health Analytics<\/span><\/button>/);
@@ -69,11 +71,5 @@ describe("JobListItem", () => {
 
     expect(html).toContain('<p role="alert" class="mt-2 text-sm text-error">We couldn’t delete this job just now. Try again in a minute.</p>');
     expect(html).toContain("Delete job");
-  });
-
-  it("says in place that the job was deleted, with no link to it any more", () => {
-    const html = row({ phase: "deleted" });
-
-    expect(html).toBe(`<li><p role="status" tabindex="-1" class="text-text-muted">Deleted: ${name}</p></li>`);
   });
 });

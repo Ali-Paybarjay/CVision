@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type Ref, type RefObject } from "react";
 import { Button } from "@/shared/ui";
 import { deleteJobAction } from "../job-actions";
 
-/** A job's row: the link alone, the question before deleting (while deleting, or after it failed), or deleted. */
-export type JobRowState = { phase: "idle" } | { phase: "asking"; deleting: boolean; problem: string | null } | { phase: "deleted" };
+/** A job's row: the link alone, or the question before deleting (while deleting, or after it failed). */
+export type JobRowState = { phase: "idle" } | { phase: "asking"; deleting: boolean; problem: string | null };
 
 type JobListItemProps = {
   jobId: string;
@@ -15,6 +15,10 @@ type JobListItemProps = {
   href: string;
   /** The user applied for this job, so it stays on their dashboard and can't be deleted here (#462). */
   onDashboard: boolean;
+  /** The job is gone from the account: the list takes the row away (#519). */
+  onDeleted: () => void;
+  /** The job's link, for the list to move focus to when the row above it is deleted. */
+  linkRef?: Ref<HTMLAnchorElement>;
 };
 
 const unreachable = "We couldn’t reach CVision just now. Try again in a minute.";
@@ -22,19 +26,16 @@ const unreachable = "We couldn’t reach CVision just now. Try again in a minute
 /**
  * One job in a list of the user's jobs, such as Tailor's "Which job is this CV for?", with a way to delete it (#462).
  * The question opens in the row, as "Delete my profile" does on Profile, with the safe choice focused first and Escape
- * as the way back. A deleted job's row says so in place, so the user sees what happened and focus has somewhere to go;
- * the next page that lists the jobs no longer has it.
+ * as the way back. Once the job is deleted, `JobList` takes the row away and says so to a screen reader (#519).
  */
-export function JobListItem({ jobId, name, href, onDashboard }: JobListItemProps) {
+export function JobListItem({ jobId, name, href, onDashboard, onDeleted, linkRef }: JobListItemProps) {
   const [state, setState] = useState<JobRowState>({ phase: "idle" });
   const deleteButton = useRef<HTMLButtonElement>(null);
   const keepButton = useRef<HTMLButtonElement>(null);
-  const deletedNote = useRef<HTMLParagraphElement>(null);
   // Where focus goes once the row changes: back to Delete after "Keep it", to "Keep it" after a failure.
   const focusNext = useRef<"delete" | "keep" | null>(null);
 
   useEffect(() => {
-    if (state.phase === "deleted") deletedNote.current?.focus();
     const target = focusNext.current === "delete" ? deleteButton : focusNext.current === "keep" ? keepButton : null;
     focusNext.current = null;
     target?.current?.focus();
@@ -51,7 +52,7 @@ export function JobListItem({ jobId, name, href, onDashboard }: JobListItemProps
     try {
       const result = await deleteJobAction(jobId);
       if (result.ok) {
-        setState({ phase: "deleted" });
+        onDeleted();
         return;
       }
       problem = result.message;
@@ -71,7 +72,7 @@ export function JobListItem({ jobId, name, href, onDashboard }: JobListItemProps
       onAsk={() => setState({ phase: "asking", deleting: false, problem: null })}
       onCancel={cancel}
       onConfirm={() => void confirm()}
-      refs={{ deleteButton, keepButton, deletedNote }}
+      refs={{ deleteButton, keepButton, link: linkRef }}
     />
   );
 }
@@ -86,7 +87,7 @@ export function JobRow({
   onCancel,
   onConfirm,
   refs,
-}: Omit<JobListItemProps, "jobId"> & {
+}: Omit<JobListItemProps, "jobId" | "onDeleted" | "linkRef"> & {
   state: JobRowState;
   onAsk: () => void;
   onCancel: () => void;
@@ -94,29 +95,19 @@ export function JobRow({
   refs?: {
     deleteButton: RefObject<HTMLButtonElement | null>;
     keepButton: RefObject<HTMLButtonElement | null>;
-    deletedNote: RefObject<HTMLParagraphElement | null>;
+    link?: Ref<HTMLAnchorElement>;
   };
 }) {
   const questionId = useId();
   const nameId = useId();
   const detailId = useId();
 
-  if (state.phase === "deleted") {
-    return (
-      <li>
-        <p ref={refs?.deletedNote} role="status" tabIndex={-1} className="text-text-muted">
-          Deleted: {name}
-        </p>
-      </li>
-    );
-  }
-
   const deleting = state.phase === "asking" && state.deleting;
   return (
     <li className="flex flex-col gap-2">
       {/* Every row as tall as a Delete button, and Delete's text on the right edge, like "On your dashboard". */}
       <div className="flex min-h-11 flex-wrap items-center gap-x-4">
-        <Link href={href} className="text-accent underline underline-offset-4">
+        <Link ref={refs?.link} href={href} className="text-accent underline underline-offset-4">
           {name}
         </Link>
         {onDashboard ? (
