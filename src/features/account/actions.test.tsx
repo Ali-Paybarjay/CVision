@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { brand } from "@/shared/brand";
 import { requestPasswordReset, setNewPassword, signIn, signOut, signUp } from "./actions";
+import { NextSteps } from "@/app/sign-in/link-expired/page";
 import { AuthForm, CheckEmailNotice, revealAutofilledPassword, ShowPasswordButton } from "./auth-form";
 import { ForgotPasswordForm, NewPasswordForm, ResetLinkExpired, ResetLinkSent } from "./password-reset-forms";
 
@@ -281,14 +282,22 @@ describe("requestPasswordReset", () => {
     expect(new URL(auth.resetPasswordForEmail.mock.calls[0][1].redirectTo).searchParams.get("next")).toBe("/sign-in/new-password");
   });
 
+  // A reset link that failed passes the new password page on as next (found in review, 18 November).
+  it("never puts the new password page inside the next link, so the user goes on to their page after saving", async () => {
+    await requestPasswordReset({}, reset({ next: "/sign-in/new-password?next=%2Ftailor%3Fjob%3D1" }));
+    expect(new URL(auth.resetPasswordForEmail.mock.calls[0][1].redirectTo).searchParams.get("next")).toBe(
+      "/sign-in/new-password?next=%2Ftailor%3Fjob%3D1",
+    );
+  });
+
   it("asks for a valid email before sending anything", async () => {
     expect(await requestPasswordReset({}, reset({ email: "not-an-email" }))).toEqual({ fieldError: "Enter a valid email address." });
     expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
   });
 
-  it("says to wait when a link was just sent", async () => {
+  it("says to wait and ask again when a link was just sent", async () => {
     auth.resetPasswordForEmail.mockResolvedValue({ error: { code: "over_email_send_rate_limit", status: 429 } });
-    expect(await requestPasswordReset({}, reset())).toEqual({ error: "We’ve just sent a link. Wait a minute, then try again." });
+    expect(await requestPasswordReset({}, reset())).toEqual({ error: "We can’t send another link just now. Wait a minute, then ask for a new one." });
   });
 
   it("says when the link was not sent, without saying whether the email has an account", async () => {
@@ -337,7 +346,7 @@ describe("setNewPassword", () => {
 
   it("says so when the new password is the old one", async () => {
     auth.updateUser.mockResolvedValue({ error: { code: "same_password" } });
-    expect(await setNewPassword({}, newPassword())).toEqual({ fieldError: "Choose a password you haven’t used for this account before." });
+    expect(await setNewPassword({}, newPassword())).toEqual({ fieldError: "That’s already your password. Choose a different one." });
   });
 });
 
@@ -358,16 +367,16 @@ describe("the password reset forms (#524)", () => {
     expect(html).toContain('href="/sign-in?next=%2Fprofile"');
   });
 
-  it("says the same after sending whether or not the email has an account", () => {
+  it("gives one success message that works whether or not the email has an account", () => {
     const html = renderToStaticMarkup(<ResetLinkSent email="sara@example.com" next="/dashboard" />);
-    expect(html).toContain("If sara@example.com has a CVision account, we’ve sent it a link");
+    expect(html).toContain('If <span class="font-semibold wrap-anywhere">sara@example.com</span> has a CVision account, we’ve sent it a link');
     expect(html).toContain(brand.contactEmail);
     expect(html).toContain('href="/sign-in/forgot"');
   });
 
   it("asks for a new password of at least 8 characters, for the account the link signed in", () => {
     const html = renderToStaticMarkup(<NewPasswordForm email="sara@example.com" next="/profile" />);
-    expect(html).toContain("For sara@example.com");
+    expect(html).toContain('For <span class="font-semibold wrap-anywhere">sara@example.com</span>');
     const field = html.match(/<input[^>]*name="password"[^>]*>/)?.[0] ?? "";
     expect(field).toContain('type="password"');
     expect(field).toContain('autoComplete="new-password"');
@@ -375,9 +384,36 @@ describe("the password reset forms (#524)", () => {
     expect(html).toContain(">Save my new password</button>");
   });
 
-  it("offers a new link when the old one no longer works", () => {
+  it("tells a password manager which account the new password is for, without sending the email with the form", () => {
+    const html = renderToStaticMarkup(<NewPasswordForm email="sara@example.com" next="/profile" />);
+    const username = html.match(/<input[^>]*autoComplete="username"[^>]*>/)?.[0] ?? "";
+    expect(username).toContain('value="sara@example.com"');
+    expect(username).toContain("hidden");
+    expect(username).not.toContain("name=");
+  });
+
+  it("asks for the link from the email when nobody is signed in, and offers a new one", () => {
     const html = renderToStaticMarkup(<ResetLinkExpired next="/profile" />);
-    expect(html).toContain("This link has expired");
+    expect(html).toContain("Open the link from your email first");
+    expect(html).toContain('href="/sign-in/forgot?next=%2Fprofile"');
+  });
+});
+
+describe("/sign-in/link-expired after a link that failed (#524)", () => {
+  it("offers a new reset link as the main button for a failed reset link", () => {
+    const html = renderToStaticMarkup(<NextSteps next="/tailor?job=1" reset />);
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
+    expect(html).toMatch(/<a[^>]*href="\/sign-in\/forgot\?next=%2Ftailor%3Fjob%3D1"[^>]*bg-cta[^>]*>Send me a new link<\/a>/);
+    expect(html).toContain('href="/sign-in?next=%2Ftailor%3Fjob%3D1"');
+    expect(html).not.toContain("Create account");
+    expect(html).not.toContain("/sign-in/new-password");
+  });
+
+  it("keeps Sign in as the main button for a sign-up link", () => {
+    const html = renderToStaticMarkup(<NextSteps next="/profile" />);
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
+    expect(html).toMatch(/<a[^>]*href="\/sign-in\?next=%2Fprofile"[^>]*bg-cta[^>]*>Sign in<\/a>/);
+    expect(html).toContain('href="/sign-up?next=%2Fprofile"');
     expect(html).toContain('href="/sign-in/forgot?next=%2Fprofile"');
   });
 });

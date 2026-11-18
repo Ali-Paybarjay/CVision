@@ -274,7 +274,7 @@ const cookies: { name: string; purpose: string; howLong: string }[] = [
     name: "sb-…-auth-token-code-verifier",
     purpose:
       "Set while you sign up or ask for a new password, so the link in the email can finish signing you in. Related cookies end in -flow-…-code-verifier and -flows-code-verifier.",
-    howLong: "Usually removed once you confirm your email in this browser. Otherwise it expires after up to 400 days.",
+    howLong: "Usually removed once you open the link from the email in this browser. Otherwise it expires after up to 400 days.",
   },
   {
     name: "cvision-account-deleted",
@@ -464,8 +464,8 @@ export default function PrivacyPage() {
         </p>
         <p>
           We don’t use analytics or advertising cookies, tracking scripts or anything loaded from other websites. Our
-          font is served from our own site, so your browser doesn’t contact Google. If you don’t sign up or sign in, we
-          don’t set any cookies.
+          font is served from our own site, so your browser doesn’t contact Google. If you don’t sign up, sign in or ask
+          for a new password, we don’t set any cookies.
         </p>
         <StorageList title="Cookies" items={cookies} />
         <StorageList title="Browser storage" items={browserStorage} />

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { fullReloadField } from "./full-reload-field";
-import { defaultDestination, safeRedirectPath } from "./safe-redirect";
+import { defaultDestination, newPasswordPath, pastNewPasswordStep, safeRedirectPath } from "./safe-redirect";
 
 export type AuthFormState = {
   error?: string;
@@ -100,13 +100,10 @@ export type NewPasswordState = { error?: string; fieldError?: string; expired?: 
 const EmailSchema = z.email("Enter a valid email address.");
 const PasswordSchema = z.string().min(8, "Use at least 8 characters.");
 
-/** Where the reset link lands: /auth/confirm signs the user in, then the page to choose a new password. */
-const newPasswordPath = "/sign-in/new-password";
-
 /**
  * "Forgot your password?" (#524): emails a link that signs the user in and opens the page to choose a new password.
- * The answer is the same whether or not the email has an account (Supabase sends nothing to an unknown address and
- * doesn't say so), so the form never tells anyone which emails have accounts.
+ * After sending, it says the same whether or not the email has an account (Supabase sends nothing to an unknown
+ * address and doesn't say so). Sign up says when an email already has an account (#328), so this hides nothing more.
  */
 export async function requestPasswordReset(_: ResetRequestState, formData: FormData): Promise<ResetRequestState> {
   const email = EmailSchema.safeParse(formData.get("email"));
@@ -115,15 +112,16 @@ export async function requestPasswordReset(_: ResetRequestState, formData: FormD
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { error: notConnected };
 
-  // The page the user was heading to stays with them: after the new password, they go on there.
-  const next = readNext(formData);
+  // The page the user was heading to stays with them: after the new password, they go on there. A failed reset link
+  // passes the new password page itself on as next; that step must not go inside the new link too.
+  const next = pastNewPasswordStep(readNext(formData));
   const landing = next === defaultDestination ? newPasswordPath : `${newPasswordPath}?next=${encodeURIComponent(next)}`;
   const origin = (await headers()).get("origin") ?? "";
   const { error } = await supabase.auth.resetPasswordForEmail(email.data, {
     redirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(landing)}`,
   });
   if (error?.code === "over_email_send_rate_limit" || error?.status === 429) {
-    return { error: "We’ve just sent a link. Wait a minute, then try again." };
+    return { error: "We can’t send another link just now. Wait a minute, then ask for a new one." };
   }
   if (error) return { error: "We couldn’t send the link just now. Try again in a minute." };
   return { sentTo: email.data };
@@ -147,7 +145,7 @@ export async function setNewPassword(_: NewPasswordState, formData: FormData): P
   if (!user) return { expired: true };
 
   const { error } = await supabase.auth.updateUser({ password: password.data });
-  if (error?.code === "same_password") return { fieldError: "Choose a password you haven’t used for this account before." };
+  if (error?.code === "same_password") return { fieldError: "That’s already your password. Choose a different one." };
   if (error?.code === "weak_password") return { fieldError: "Choose a longer or less common password." };
   if (error) return { error: "We couldn’t save your new password. Try again in a minute." };
 

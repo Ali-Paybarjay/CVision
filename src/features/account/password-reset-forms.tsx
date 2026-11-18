@@ -10,8 +10,8 @@ import { FullReloadField, useFullReloadAction } from "./full-reload";
 import { defaultDestination, withNext } from "./safe-redirect";
 
 /**
- * "Forgot your password?" (#524): asks for the email and sends a link. The answer after sending is the same whether
- * or not the email has an account, so the form never tells anyone which emails have accounts.
+ * "Forgot your password?" (#524): asks for the email and sends a link. The success message is the same whether or not
+ * the email has an account.
  */
 export function ForgotPasswordForm({ next = defaultDestination, disabled = false }: { next?: string; disabled?: boolean }) {
   const [state, action, pending] = useActionState<ResetRequestState, FormData>(requestPasswordReset, {});
@@ -43,7 +43,7 @@ export function ResetLinkSent({ email, next }: { email: string; next: string }) 
   return (
     <div className="flex flex-col gap-5">
       <Notice tone="success" title="Check your email">
-        If {email} has a CVision account, we’ve sent it a link to choose a new password. It comes from {brand.contactEmail}{" "}
+        If <span className="font-semibold wrap-anywhere">{email}</span> has a CVision account, we’ve sent it a link to choose a new password. It comes from {brand.contactEmail}{" "}
         and can take a few minutes. If it isn’t in your inbox, look in your spam or junk folder. Open the link in this
         browser.
       </Notice>
@@ -71,7 +71,13 @@ export function NewPasswordForm({ email, next = defaultDestination }: { email: s
   return (
     <form action={action} className="flex flex-col gap-5">
       {state.error && <Notice tone="error">{state.error}</Notice>}
-      {email && <p className="text-text-muted">For {email}</p>}
+      {email && (
+        <p className="text-text-muted">
+          For <span className="font-semibold wrap-anywhere">{email}</span>
+        </p>
+      )}
+      {/* Tells a password manager which account the new password is for. No name, so the form never sends it. */}
+      {email && <input type="email" autoComplete="username" value={email} readOnly hidden />}
       <input type="hidden" name="next" value={next} />
       <FullReloadField />
       <Field label="New password" hint="At least 8 characters." error={state.fieldError}>
@@ -100,13 +106,13 @@ export function NewPasswordForm({ email, next = defaultDestination }: { email: s
   );
 }
 
-/** The reset link didn't sign anyone in: it expired, was used already, or was opened in another browser. */
+/** Nobody is signed in: the page was opened without the link from the email, or that sign-in has ended. */
 export function ResetLinkExpired({ next }: { next: string }) {
   return (
     <div className="flex flex-col gap-5">
-      <Notice tone="warning" title="This link has expired">
-        Password links work once, expire after a while, and only work in the browser where you asked for them. Ask
-        for a new one.
+      <Notice tone="warning" title="Open the link from your email first">
+        This page works after you open the link we emailed you, in this browser. If the link has expired or was used
+        already, ask for a new one.
       </Notice>
       <div>
         <Link

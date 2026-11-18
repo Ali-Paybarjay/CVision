@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { accountsOffNotice } from "@/features/account/account-panel";
 import { ForgotPasswordForm } from "@/features/account/password-reset-forms";
-import { safeRedirectPath } from "@/features/account/safe-redirect";
+import { pastNewPasswordStep, safeRedirectPath } from "@/features/account/safe-redirect";
 import { isSupabaseConfigured } from "@/shared/supabase/env";
 import { Card, Page } from "@/shared/ui";
 
@@ -27,5 +27,5 @@ export default function ForgotPasswordPage({ searchParams }: PageProps<"/sign-in
 
 async function ForgotPasswordFromUrl({ searchParams, disabled }: Pick<PageProps<"/sign-in/forgot">, "searchParams"> & { disabled: boolean }) {
   const { next } = await searchParams;
-  return <ForgotPasswordForm next={safeRedirectPath(next)} disabled={disabled} />;
+  return <ForgotPasswordForm next={pastNewPasswordStep(safeRedirectPath(next))} disabled={disabled} />;
 }

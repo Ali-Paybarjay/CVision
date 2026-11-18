@@ -10,7 +10,8 @@ import { Card, Page } from "@/shared/ui";
 export const metadata: Metadata = { title: "Choose a new password" };
 
 // The link in a "reset your password" email lands here through /auth/confirm, which has signed the user in (#524).
-// Without that sign-in (an expired link, one used already, or one opened in another browser) the page offers a new link.
+// A link that fails goes to /sign-in/link-expired instead; without a sign-in (the page opened on its own, or the
+// session has ended) this page asks for the link from the email.
 export default function NewPasswordPage({ searchParams }: PageProps<"/sign-in/new-password">) {
   const connected = isSupabaseConfigured();
 
