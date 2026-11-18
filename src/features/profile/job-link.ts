@@ -135,6 +135,13 @@ export const linkLimitMessages: Record<LinkLimitReason, string> = {
 };
 
 /**
+ * When the page's request to read the link gets no answer at all, such as a dropped request, a server error or a new
+ * deploy. The server turns every failure of its own into a message above, so this one can't tell why: it doesn't blame
+ * the user's connection, and gives both ways on (#523).
+ */
+export const linkNoAnswerMessage = "We couldn’t get the ad just now. Try again, or copy the ad from the page and paste it below.";
+
+/**
  * Under the ad box, when an NHS ad may have left its criteria in a PDF (#400). Only the criteria: the whole PDF is often
  * longer than the box takes, and cutting it down would cost the very criteria (#420).
  */
