@@ -1,11 +1,11 @@
 // Step 3's preview puts the lines the user approved on Fit, so "Highlighted lines are the changes you approved" is true,
 // and says the highlight is not in the download (#501). Without `marked` (the overview, the saved page) every line
-// stays plain, as in the file.
+// stays plain, as in the file. On a line of the last section, only the approved item is on Fit (#543).
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CvPreview } from "@/app/tailor/cv-preview";
 import { TailorWorkspace } from "@/app/tailor/tailor-workspace";
-import { buildTailoredCv } from "@/features/tailor/tailored-cv";
+import { buildTailoredCv, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 
@@ -63,5 +63,38 @@ describe("the preview anywhere else", () => {
     const html = renderToStaticMarkup(<CvPreview cv={cv} marked />);
     expect(holder(html, after)).toContain("bg-fit");
     expect(html.split("bg-fit").length - 1).toBe(1);
+  });
+});
+
+describe("an approved item on a line of the last section (#543)", () => {
+  const withLastSection = { ...profile, skills: ["Excel", "SQL", "Tableau"], certifications: [{ name: "PRINCE2 Foundation", year: 2023 }], languages: [{ name: "Welsh", level: "Fluent" }] };
+  const added = (section: TailoringChange["section"], text: string): TailoringChange => ({ ...approved, id: `new-${text}`, section, before: null, after: text });
+
+  it.each([
+    ["a tool", "Skills and tools:", added("skills", "Power BI"), ["Excel", "SQL", "Tableau"]],
+    ["a certificate", "Certificates:", added("certifications", "Google Data Analytics Certificate"), ["PRINCE2 Foundation (2023)"]],
+    ["a language", "Languages:", added("skills", "Spanish (Conversational)"), ["Welsh (Fluent)"]],
+  ] as const)("puts only %s the user approved on Fit, not the whole line", (_, label, change, others) => {
+    const html = renderToStaticMarkup(<CvPreview cv={buildTailoredCv(withLastSection, [change], job)} marked />);
+    // Only the approved item is marked, with the screen reader note right after it.
+    expect(html).toMatch(new RegExp(`<mark class="[^"]*bg-fit[^"]*">${change.after.replace(/[()]/g, "\\$&")}</mark><span class="sr-only"> \\(tailored for this job\\)</span>`));
+    expect(html.split("bg-fit").length - 1).toBe(1);
+    // The line itself is plain, and so are the items the user did not change.
+    const line = html.slice(html.indexOf(`<p><strong>${label} </strong>`));
+    expect(line).not.toBe(html);
+    for (const item of others) expect(line.slice(0, line.indexOf("</p>"))).toContain(item);
+    expect(html).not.toMatch(/<mark[^>]*>(Excel|SQL|Tableau|PRINCE2|Welsh)/);
+  });
+
+  it("marks nothing without marked, and the line reads as the file prints it", () => {
+    const cv = buildTailoredCv(withLastSection, [added("skills", "Power BI")], job);
+    const html = renderToStaticMarkup(<CvPreview cv={cv} />);
+    expect(html).not.toContain("<mark");
+    expect(html).not.toContain("bg-fit");
+    expect(html).toContain("(tailored for this job)");
+    const tools = html.slice(html.indexOf("<p><strong>Skills and tools: </strong>"));
+    const file = otherLines(cv).find((line) => line.label === "Skills and tools:");
+    expect(file?.text).toMatch(/^Power BI, /);
+    expect(tools.slice(0, tools.indexOf("</p>")).replace(/<[^>]+>|\(tailored for this job\)/g, "").replace(/\s+,/g, ",").trim()).toBe(`Skills and tools: ${file?.text}`);
   });
 });

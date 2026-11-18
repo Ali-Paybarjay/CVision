@@ -1,4 +1,5 @@
-import { cvHeadings, otherLines, type CvEntry, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
+import { Fragment } from "react";
+import { cvHeadings, otherLines, type CvEntry, type CvLine, type GroupLine, type TailoredCv } from "@/features/tailor/tailored-cv";
 import { CvPaper, FitLine } from "@/shared/ui";
 
 /** A tailored line is on Fit only when the preview is `marked` (step 3 of Tailor, #501); otherwise every line looks the
@@ -14,6 +15,23 @@ function Line({ line, as: Tag = "p", marked = false }: { line: CvLine; as?: "p" 
   );
   if (marked && line.tailored) return <FitLine as={Tag}>{content}</FitLine>;
   return <Tag>{content}</Tag>;
+}
+
+/** A labelled line of the last section, such as "Skills and tools: Excel, SQL, Power BI". With `marked`, only the items the
+ *  user approved are on Fit, never the whole line, so the tools they did not change do not look approved (#543). */
+function GroupedLine({ line, marked }: { line: GroupLine; marked: boolean }) {
+  return (
+    <p>
+      <strong>{line.label} </strong>
+      {line.parts.map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 && line.separator}
+          {marked && part.tailored ? <mark className="box-decoration-clone border-l-2 border-fit-bar bg-fit px-1 text-cv-ink">{part.text}</mark> : part.text}
+          {part.tailored && <span className="sr-only"> (tailored for this job)</span>}
+        </Fragment>
+      ))}
+    </p>
+  );
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
@@ -102,7 +120,7 @@ export function CvPreview({ cv, marked = false }: { cv: TailoredCv; marked?: boo
           <Heading>{cvHeadings.other}</Heading>
           <div className="mt-1 flex flex-col gap-1">
             {other.map((line, index) => (
-              <Line key={index} line={line} marked={marked} />
+              <GroupedLine key={index} line={line} marked={marked} />
             ))}
           </div>
         </>

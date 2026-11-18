@@ -267,6 +267,17 @@ describe("the tailored CV for a job (#216)", () => {
     expect(otherLines(cv).map((line) => `${line.label} ${line.text}`)).toEqual(["Certificates: PRINCE2 Foundation (2023)", "Driving licence: Full UK", "Skills and tools: Excel, Git"]);
   });
 
+  it("keeps the items of a labelled line apart, so only an approved one is marked, and the line's text as before (#543)", () => {
+    const powerBi = change("approved", { id: "bi", section: "skills", before: null, after: "Power BI" });
+    const [tools] = otherLines(buildTailoredCv({ ...profile, skills: ["Excel", "Git"], certifications: [] }, [powerBi], job));
+    expect(tools.text).toBe(tools.parts.map((part) => part.text).join(tools.separator));
+    expect(tools.parts).toEqual([
+      { text: "Power BI", tailored: true },
+      { text: "Excel", tailored: false },
+      { text: "Git", tailored: false },
+    ]);
+  });
+
   it("shows the four tools the ad cares about most, not all of them", () => {
     const asked = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf"];
     const adTools = { ...job, description: "You will use Jira daily.", requirements: { essential: asked, desirable: [] } };
@@ -354,9 +365,22 @@ describe("a spoken language among the skills goes under Languages, not beside th
     expect(last(cv)).toEqual(["Languages: Persian (Native), English (Fluent), French (reading, writing)", "Skills and tools: Excel"]);
   });
 
-  it("lists a language once, with the Profile's level when the Profile already has it", () => {
-    const cv = buildTailoredCv(withSkills(["English (Fluent)", "Spanish (B2)", "spanish", "Excel"], [{ name: "English", level: "Native" }]), []);
-    expect(cv.languages.map((line) => line.text)).toEqual(["English (Native)", "Spanish (B2)"]);
+  it("lists a language once when the repeat says nothing more, and another level on a line of its own (#543)", () => {
+    const cv = buildTailoredCv(withSkills(["English (Native)", "English (Fluent)", "Spanish (B2)", "spanish", "Excel"], [{ name: "English", level: "Native" }]), []);
+    expect(cv.languages.map((line) => line.text)).toEqual(["English (Native)", "English (Fluent)", "Spanish (B2)"]);
+  });
+
+  it("keeps both varieties of a language and both levels the user gave, never dropping one without a word (#543)", () => {
+    const chinese = buildTailoredCv(withSkills(["Chinese (Mandarin)", "Chinese (Cantonese)", "Excel"]), []);
+    expect(chinese.languages.map((line) => line.text)).toEqual(["Chinese (Mandarin)", "Chinese (Cantonese)"]);
+    const english = buildTailoredCv(withSkills(["English (Fluent)", "English (IELTS 7.5)", "Excel"]), []);
+    expect(english.languages.map((line) => line.text)).toEqual(["English (Fluent)", "English (IELTS 7.5)"]);
+    for (const cv of [chinese, english]) {
+      expect(cv.technicalSkills.map((line) => line.text)).toEqual(["Excel"]);
+      expect(cv.leftInProfile).toEqual([]);
+    }
+    // A variety beside the language with no level takes its place, as it loses nothing.
+    expect(buildTailoredCv(withSkills(["Chinese (Mandarin)", "Chinese"], [{ name: "Chinese" }]), []).languages.map((line) => line.text)).toEqual(["Chinese (Mandarin)"]);
   });
 
   it("takes the level from the skills when the Profile's language has none", () => {
@@ -364,13 +388,37 @@ describe("a spoken language among the skills goes under Languages, not beside th
     expect(buildTailoredCv(withSkills(["Welsh", "Welsh (Conversational)"]), []).languages.map((line) => line.text)).toEqual(["Welsh (Conversational)"]);
   });
 
-  it("never drops an approved language the Profile already lists: it takes the place of the unchanged line", () => {
+  it("puts an approved new language line beside the user's own, as its card says nothing is removed (#543)", () => {
     const added = change("approved", { id: "es", section: "skills", before: null, after: "Spanish (Fluent)" });
-    expect(buildTailoredCv(withSkills(["Excel"], [{ name: "Spanish", level: "B1" }]), [added]).languages).toEqual([{ text: "Spanish (Fluent)", tailored: true }]);
+    const inProfile = buildTailoredCv(withSkills(["Excel"], [{ name: "Spanish", level: "B1" }]), [added]);
+    expect(inProfile.languages).toEqual([{ text: "Spanish (B1)", tailored: false }, { text: "Spanish (Fluent)", tailored: true }]);
+    const inSkills = buildTailoredCv(withSkills(["Spanish (B1)", "Excel"]), [added]);
+    expect(inSkills.languages).toEqual([{ text: "Spanish (B1)", tailored: false }, { text: "Spanish (Fluent)", tailored: true }]);
+    // The same text is listed once, as approved; a line with no level gives way, as it loses nothing.
+    const same = change("approved", { id: "es", section: "skills", before: null, after: "Spanish (B1)" });
+    expect(buildTailoredCv(withSkills(["Excel"], [{ name: "Spanish", level: "B1" }]), [same]).languages).toEqual([{ text: "Spanish (B1)", tailored: true }]);
+    expect(buildTailoredCv(withSkills(["Excel"], [{ name: "Spanish" }]), [added]).languages).toEqual([{ text: "Spanish (Fluent)", tailored: true }]);
+    for (const cv of [inProfile, inSkills]) expect([cv.unplaced, cv.overLimit, cv.leftInProfile]).toEqual([[], [], []]);
+  });
+
+  it("lets an approved change take the place of the very language line it rewrote", () => {
     const rewritten = change("approved", { id: "es", section: "skills", before: "Spanish (B1)", after: "Spanish (Fluent)" });
     const cv = buildTailoredCv(withSkills(["Spanish (B1)", "Excel"], [{ name: "Spanish", level: "B1" }]), [rewritten]);
     expect(cv.languages).toEqual([{ text: "Spanish (Fluent)", tailored: true }]);
     expect([cv.unplaced, cv.overLimit]).toEqual([[], []]);
+    // Only the language it rewrote: the user's other lines for the language stay.
+    const twoLines = buildTailoredCv(withSkills(["Spanish (B1)", "Excel"], [{ name: "Spanish", level: "DELE A2" }, { name: "Spanish", level: "B1" }]), [rewritten]);
+    expect(twoLines.languages.map((line) => line.text)).toEqual(["Spanish (DELE A2)", "Spanish (Fluent)"]);
+  });
+
+  it("marks only the language a rewritten line changed, not one it kept as it was (#543)", () => {
+    const rewritten = change("approved", { id: "en", section: "skills", before: "Persian (Native), English (Fluent)", after: "Persian (Native), English (C1)" });
+    const cv = buildTailoredCv(withSkills(["Persian (Native), English (Fluent)", "Excel"]), [rewritten]);
+    expect(cv.languages).toEqual([{ text: "Persian (Native)", tailored: false }, { text: "English (C1)", tailored: true }]);
+    expect([cv.unplaced, cv.overLimit, cv.leftInProfile]).toEqual([[], [], []]);
+    // The Profile's own "Persian (Native)" stays the user's line, not one the change made.
+    const inProfile = buildTailoredCv(withSkills(["Persian (Native), English (Fluent)", "Excel"], [{ name: "Persian", level: "Native" }]), [rewritten]);
+    expect(inProfile.languages).toEqual([{ text: "Persian (Native)", tailored: false }, { text: "English (C1)", tailored: true }]);
   });
 
   it("shows two approved lines for one language, but the same approved line once", () => {
