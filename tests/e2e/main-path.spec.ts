@@ -118,6 +118,14 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(
     page.getByRole("complementary", { name: "Your CV for this job" }).getByText("The highlight is only on this page, not in your download."),
   ).toBeVisible();
+  // A quiet Undo beside the decision takes the change back to not decided yet, and Approve works again (#531).
+  await fromCv.getByRole("button", { name: "Undo your decision" }).click();
+  await expect(approveFromCv.first()).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByText("✓ Approved: 0")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(0);
+  await approveFromCv.first().click();
+  await expect(page.getByText("✓ Approved: 1")).toBeVisible();
+  await expect(tailoredLines).toHaveCount(1);
 
   // A gap is answered in the user's own words, one question at a time, opened from the overview above the steps.
   await page.getByRole("button", { name: "Answer this question" }).click();

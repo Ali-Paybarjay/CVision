@@ -98,9 +98,32 @@ describe("the suggested change card", () => {
     expect(html).toContain("✓ Approved");
   });
 
-  it("has no Undo: Approve and Reject switch the decision", () => {
-    expect(card("approved")).not.toContain("Undo");
-    expect(card("rejected")).not.toContain("Undo");
+  // #308 had no Undo; a user on the live site could not see the way back after Approve, so #531 adds one beside the decision.
+  it("keeps Approve and Reject to switch the decision, and adds Undo only once a decision is made (#531)", () => {
+    expect(card("approved")).toContain(">Undo<");
+    expect(card("rejected")).toContain(">Undo<");
+    expect(card("proposed")).not.toContain("Undo");
+  });
+});
+
+describe("a question with a suggestion under it (#531)", () => {
+  it("labels the suggestion as coming from the answer, above the card that names the CV section", () => {
+    const html = answered([{ ...suggestion("proposed"), section: "experience", before: "Built Tableau dashboards" }]);
+    const label = html.indexOf(">Suggestion from your answer<");
+    expect(label).toBeGreaterThan(html.indexOf("Have you used Power BI?"));
+    expect(label).toBeLessThan(html.indexOf(">Work experience<"));
+    // The kit's small capitals label, set apart from the question by a line.
+    expect(html).toMatch(/<div class="[^"]*border-t border-line[^"]*"><p class="[^"]*uppercase[^"]*">Suggestion from your answer<\/p>/);
+  });
+
+  it("says suggestions when the answer gave more than one", () => {
+    const html = answered([suggestion("proposed"), { ...suggestion("proposed"), id: "c2", after: "DAX" }]);
+    expect(html).toContain(">Suggestions from your answer<");
+  });
+
+  it("has no label while there is no suggestion", () => {
+    expect(answered([])).not.toContain("from your answer");
+    expect(card({ gap, question: "Have you done this?" })).not.toContain("from your answer");
   });
 });
 

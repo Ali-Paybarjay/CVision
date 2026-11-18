@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { answerGap } from "@/features/tailor/actions";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
-import { Button, Notice, Textarea, WaitNote } from "@/shared/ui";
+import { Button, Notice, SectionLabel, Textarea, WaitNote } from "@/shared/ui";
 import { ChangeCard, type LineNote } from "./change-card";
 import { unreachableMessage } from "./messages";
 
@@ -136,9 +136,16 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
         </div>
       )}
 
-      {changes.map((change) => (
-        <ChangeCard key={change.id} change={change} onDecide={onDecide} role={roleOf?.(change)} lineNote={lineNoteOf?.(change)} />
-      ))}
+      {/* Under a line and its own label, so the suggestion reads as what the answer gave, not as the CV's Work experience
+          or another part of the question (#531). */}
+      {changes.length > 0 && (
+        <div className="flex flex-col gap-3 border-t border-line pt-4">
+          <SectionLabel>{changes.length === 1 ? "Suggestion from your answer" : "Suggestions from your answer"}</SectionLabel>
+          {changes.map((change) => (
+            <ChangeCard key={change.id} change={change} onDecide={onDecide} role={roleOf?.(change)} lineNote={lineNoteOf?.(change)} />
+          ))}
+        </div>
+      )}
 
       {state.phase === "answered" && (
         <>
