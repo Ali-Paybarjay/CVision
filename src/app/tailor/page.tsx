@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { JobList } from "@/features/profile/ui/job-list";
 import { askGapQuestions, defaultGapQuestion, questionGaps, skillGaps } from "@/features/tailor/gap-questions";
@@ -12,7 +11,7 @@ import { getAiMode } from "@/shared/ai";
 import type { Job, MatchResult, Profile } from "@/shared/contracts";
 import { ButtonLink, Notice, Page, PathSteps, wideFrame } from "@/shared/ui";
 import { ChooseAnotherJob } from "./choose-another-job";
-import { TailorSignIn, tailorStart } from "./tailor-sign-in";
+import { AddJobFirst, BuildProfileFirst, TailorSignIn, tailorStart } from "./tailor-sign-in";
 import { TailorWaitNote } from "./tailor-wait-note";
 import { TailorWorkspace } from "./tailor-workspace";
 
@@ -81,10 +80,7 @@ async function TailorView({ searchParams }: Pick<PageProps<"/tailor">, "searchPa
   if (!profile) {
     return (
       <Frame>
-        <Notice tone="info" title="Build your profile first">
-          Tailoring starts from the profile you approve. Upload your CV or fill in your details yourself.{" "}
-          <Link href="/profile" className="text-accent underline">Build your profile</Link>
-        </Notice>
+        <BuildProfileFirst />
       </Frame>
     );
   }
@@ -193,11 +189,7 @@ async function JobPicker() {
         href: `/tailor?job=${encodeURIComponent(job.id)}`,
         onDashboard: onDashboard.includes(job.id),
       }))}
-      empty={
-        <Notice tone="info" title="Add a job first">
-          Paste a job ad to tailor your CV for it. <Link href="/jobs" className="text-accent underline">Add a job</Link>
-        </Notice>
-      }
+      empty={<AddJobFirst />}
     />
   );
 }

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { personas } from "@/shared/sample-data";
-import { TailorSignIn, tailorStart } from "./tailor-sign-in";
+import { AddJobFirst, BuildProfileFirst, TailorSignIn, tailorStart } from "./tailor-sign-in";
 
 // A signed-out pilot on Tailor was told "Build your profile first", which sent them round in a circle (#367).
 
@@ -40,5 +40,24 @@ describe("TailorSignIn", () => {
 
   it("comes back to Tailor itself when no job was asked for", () => {
     expect(renderToStaticMarkup(<TailorSignIn jobId={null} />)).toContain('href="/sign-in?next=%2Ftailor"');
+  });
+});
+
+// A signed-in user with no profile, or with no job, saw only a small underlined link (#500).
+describe("Tailor's empty states", () => {
+  it("leads a user with no profile to build one with a Coral button", () => {
+    const html = renderToStaticMarkup(<BuildProfileFirst />);
+
+    expect(html).toContain("Build your profile first");
+    expect(html).toMatch(/<a href="\/profile" class="[^"]*bg-cta[^"]*">Build your profile<\/a>/);
+    expect(html.match(/<a /g)).toHaveLength(1);
+  });
+
+  it("leads a user with no job to paste an ad with a Coral button", () => {
+    const html = renderToStaticMarkup(<AddJobFirst />);
+
+    expect(html).toContain("Add a job first");
+    expect(html).toMatch(/<a href="\/jobs" class="[^"]*bg-cta[^"]*">Paste a job ad<\/a>/);
+    expect(html.match(/<a /g)).toHaveLength(1);
   });
 });
