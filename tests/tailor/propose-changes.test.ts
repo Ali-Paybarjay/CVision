@@ -90,3 +90,25 @@ describe("suggestFromCv offers the six main skills, never tools (#191)", () => {
     expect((await suggestFromCv({ profile, job: sara.jobs[0], match: sara.match, sample })).changes).toEqual([]);
   });
 });
+
+describe("suggestFromCv keeps the job's conditions off a CV that does not show them (#526)", () => {
+  const sara = personas.sara;
+  const licence = "Full UK driving licence";
+  const job = { ...sara.jobs[0], requirements: { ...sara.jobs[0].requirements, essential: [...sara.jobs[0].requirements.essential, licence] } };
+  const line = "Built Tableau dashboards for the regional sales team";
+  const rewrite = (after: string) => ({ section: "experience" as const, before: line, after, evidence: line, evidenceSource: "cv" as const });
+  const withLicence = rewrite(`${line}, with a full UK driving licence.`);
+  const plain = rewrite("Built Tableau dashboards that the regional sales team used");
+
+  it.each([{ conditions: undefined }, { conditions: [{ requirement: licence, kind: "credential" as const }] }])("removes a rewrite that adds a driving licence the CV does not show (%j)", async ({ conditions }) => {
+    const result = await suggestFromCv({ profile: sara.profile, job: { ...job, conditions }, match: sara.match, sample: { changes: [withLicence, plain], nextSteps: [] } });
+    expect(result.changes.map((change) => change.after)).toEqual([plain.after]);
+    expect(result.removed?.map((item) => item.reason)).toEqual(['It adds "full uk driving licence", which the user said they have not done.']);
+  });
+
+  it("keeps it when a CV line shows the licence", async () => {
+    const profile = { ...sara.profile, skills: [...sara.profile.skills, licence] };
+    const result = await suggestFromCv({ profile, job, match: sara.match, sample: { changes: [withLicence], nextSteps: [] } });
+    expect(result.changes.map((change) => change.after)).toEqual([withLicence.after]);
+  });
+});

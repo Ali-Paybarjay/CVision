@@ -102,6 +102,8 @@ describe("answerGap", () => {
       "Not yet. I am still studying for a BSc in Computer Science",
       "I'm not using Power BI yet.",
       "Not used Power BI yet.",
+      "I'm not NMC registered yet, but I qualify in March.",
+      "I'm not a Power BI user, but I'd like to learn it.",
     ])(
       "%s adds nothing and shows a next step",
       async (typed) => {
@@ -118,6 +120,9 @@ describe("answerGap", () => {
       "No-code Power BI reports for the sales team.",
       "I'm not sure, but I used Power BI on placement.",
       "I'm not just a Power BI user, I built the reports.",
+      // #526: what they did after "I'm not …, but" or "however" is a yes.
+      "I'm not a manager, but I supervised three new starters.",
+      "I am not a team leader. However, I trained four new starters.",
     ])(
       "%s stays a yes, but its words are for the model to read and never become the skill by themselves",
       async (typed) => {

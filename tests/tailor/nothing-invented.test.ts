@@ -126,6 +126,18 @@ describe("Nothing invented check", () => {
     expect(scopeWordAdded({ ...change, after: "Carried out safety checks every week" }, { ...sources, answers: [own] })).toBeNull();
   });
 
+  it("counts a short answer as the user's own word, even when the requirement has it too (#526)", () => {
+    const gap = { ...sara.match.gaps[0], requirement: "Produce weekly reports for managers" };
+    const often = { gapId: gap.id, question: "How often did you produce these reports?", answer: "Weekly", hasExperience: true };
+    const sources = { ...saraSources, gaps: [gap], answers: [often] };
+    const line = "Built Tableau dashboards for the regional sales team";
+    const change: ProposedChange = { gapId: gap.id, section: "experience", before: line, after: "Built Tableau dashboards and weekly reports for the regional sales team", evidence: line, evidenceSource: "cv" };
+    expect(scopeWordAdded(change, sources)).toBeNull();
+    expect(unsupportedReason(change, sources)).toBeNull();
+    // An answer that only repeats the whole requirement is still the ad's words.
+    expect(scopeWordAdded(change, { ...sources, answers: [{ ...often, answer: "Produce weekly reports for managers." }] })).toBe("weekly");
+  });
+
   it("does not count a word the user denied", () => {
     const daniel = personas.daniel;
     const answer = { gapId: daniel.match.gaps[0].id, question: "Q?", answer: "My managers each run a team. I don't manage all 45 staff directly.", hasExperience: true };

@@ -330,3 +330,74 @@ describe("NMC is supported only by a line that says the user holds it now (#483)
     });
   });
 });
+
+describe("the Honest CV guards read a registration the user does not hold, and one they do, right (#526)", () => {
+  const base = unregisteredFixtures.profile;
+  const careFor = fromCv("Care for up to eight acutely unwell patients on a 32-bed acute medical unit", "As an NMC registered nurse, care for up to eight acutely unwell patients");
+  const check = (profile: typeof base, change = careFor) => roleClaimAdded(change, { profile, gaps: unregisteredFixtures.match.gaps, answers: [], role });
+  const withSummary = (summary: string) => ({ ...base, summary });
+  const followUp = (answer: string) => ({ ...base, followUpAnswers: [{ id: "f1", question: "Anything else?", answer, answeredAt: "2026-11-01T10:00:00.000Z" }] });
+
+  describe("rejected", () => {
+    it.each([
+      [{ name: "NMC Test of Competence (CBT) passed" }],
+      [{ name: "NMC OSCE (2025)" }],
+      [{ name: "Test of Competence (CBT)", issuer: "Nursing and Midwifery Council" }],
+    ])("after a test that leads to registration, as a certificate: %j", (certificate) => {
+      expect(check({ ...base, certifications: [certificate] })).toBe("NMC");
+    });
+
+    it.each(["Preparing for NMC registration", "NMC OSCE preparation"])("after the skill %s", (skill) => {
+      expect(check({ ...base, skills: [...base.skills, skill] })).toBe("NMC");
+    });
+
+    it.each([
+      "NMC registration in progress",
+      "My NMC registration was submitted in May",
+      "Working towards registration with the NMC",
+      "NMC application in process",
+      "Applied to the NMC in May, registration processing",
+    ])("after an answer that says the registration is not through yet: %s", (answer) => {
+      expect(check(followUp(answer))).toBe("NMC");
+    });
+
+    it.each([
+      "Healthcare assistant supporting nurses registered with the NMC on a busy acute ward.",
+      "Healthcare assistant working with registered nurses (NMC) on a busy acute ward.",
+    ])("after a summary about other people's registration: %s", (summary) => {
+      expect(check(withSummary(summary))).toBe("NMC");
+    });
+
+    it.each([
+      "I will be NMC registered in May.",
+      "I'll join the NMC register in May.",
+      "No NMC registration.",
+      "NMC registration due in May.",
+      "Registered with the NMC until 2019.",
+      "Once I am NMC registered I can give IV medicines.",
+      "Sitting my NMC exams in June.",
+    ])("still, after a word next to the registration that says it is not held now: %s", (answer) => {
+      expect(check(followUp(answer))).toBe("NMC");
+    });
+  });
+
+  describe("kept", () => {
+    it.each([
+      "NMC registered nurse with no gaps in practice since 2019.",
+      "NMC registered adult nurse who will work nights and weekends.",
+      "NMC registered nurse and approved practice assessor.",
+      "Registered nurse (NMC) with three years on an acute unit.",
+    ])("a summary that says they hold it, whatever else it says: %s", (summary) => {
+      expect(check(withSummary(summary))).toBeNull();
+    });
+
+    it("a rewrite of a summary that says NMC registered with no gaps in practice", () => {
+      const summary = "NMC registered nurse with no gaps in practice since 2019.";
+      expect(check(withSummary(summary), fromCv(summary, "NMC registered adult nurse with no gaps in practice since 2019."))).toBeNull();
+    });
+
+    it("a line that keeps the wish to work towards registration with the NMC", () => {
+      expect(check(base, { ...careFor, after: "Healthcare assistant working towards registration with the NMC" })).toBeNull();
+    });
+  });
+});

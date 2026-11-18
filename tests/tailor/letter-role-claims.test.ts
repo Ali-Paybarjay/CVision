@@ -170,3 +170,24 @@ describe("the letter after an answer or a line that says the user is not registe
     expect(letterRoleClaim("As an NMC registered nurse, I give IV therapy.", job.title, { profile, gaps: match.gaps, answers, role: job.role })).toBe("NMC");
   });
 });
+
+describe("the letter after a test, other people's registration, or a true registration with other words (#526)", () => {
+  const { job, match, answers } = unregisteredFixtures;
+  const sentence = "As an NMC registered nurse, I give IV therapy.";
+  const claim = (profile: typeof unregisteredFixtures.profile) => letterRoleClaim(sentence, job.title, { profile, gaps: match.gaps, answers, role: job.role });
+  const base = unregisteredFixtures.profile;
+
+  it.each([
+    ["the certificate NMC Test of Competence (CBT) passed", { ...base, certifications: [{ name: "NMC Test of Competence (CBT) passed" }] }],
+    ["the skill Preparing for NMC registration", { ...base, skills: [...base.skills, "Preparing for NMC registration"] }],
+    ["a summary of NMC registration in progress", { ...base, summary: "Adult nurse trained overseas, NMC registration in progress." }],
+    ["a summary about nurses registered with the NMC", { ...base, summary: "Healthcare assistant supporting nurses registered with the NMC on a busy acute ward." }],
+    ["a summary about registered nurses (NMC)", { ...base, summary: "Healthcare assistant working with registered nurses (NMC) on a busy acute ward." }],
+  ])("takes out the NMC sentence after %s", (_, profile) => {
+    expect(claim(profile)).toBe("NMC");
+  });
+
+  it("keeps the NMC sentence for a nurse whose summary says NMC registered with no gaps in practice", () => {
+    expect(claim({ ...base, summary: "NMC registered nurse with no gaps in practice since 2019." })).toBeNull();
+  });
+});

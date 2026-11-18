@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { jobConditions } from "@/features/profile/job-conditions";
 import type { Gap, Job, MatchResult, Profile } from "@/shared/contracts";
 import { askModel, loadPrompt, type Requester } from "@/shared/ai";
 import { actionVerbs, bigSixSkills, bigSixTarget, isBigSix } from "./big-six";
 import { jobForPrompt } from "./job-for-prompt";
-import { enforceNothingInvented } from "./nothing-invented";
+import { cvLines, enforceNothingInvented, normalise, requirementTerms } from "./nothing-invented";
 import { fitsCv, sectionLines, listedSkillsTheAdAsksFor } from "./tailored-cv";
 import { ProposalSchema, type GapAnswer, type Proposal, type TailoringProposal } from "./types";
 
@@ -66,18 +67,39 @@ export type SuggestInput = {
 };
 
 /**
+ * The job's conditions (#222), such as a driving licence, night shifts or a DBS check, that the match did not judge
+ * and no CV line shows, as missing gaps. Since #497 they are not gaps, so without them a CV suggestion could end
+ * "…, with a full UK driving licence." (#526). A CV line shows one when it has any of its words, as the check reads them.
+ */
+function conditionsNotOnCv(job: Job, match: MatchResult, profile: Profile): Gap[] {
+  const judged = new Set([...match.gaps, ...match.strengths].map((item) => item.requirement));
+  const lines = cvLines(profile).map(normalise);
+  const essential = new Set(job.requirements.essential);
+  return jobConditions(job)
+    .filter(({ requirement }) => !judged.has(requirement) && !requirementTerms(requirement).some((term) => lines.some((line) => line.includes(term))))
+    .map(({ requirement }, index): Gap => ({
+      id: `condition-${index + 1}`,
+      requirement,
+      importance: essential.has(requirement) ? "essential" : "desirable",
+      kind: "missing",
+      detail: "",
+    }));
+}
+
+/**
  * Suggested changes made from the CV alone, before the user answers anything: lines of their CV rewritten for the
  * job, and the main skills (such as Communication, never a tool) its lines show, up to six in all. Every change quotes a CV line
- * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap counted as not confirmed. That check removes a change that adds a missing gap's requirement, or the ad's registration or Band (#422); the rest of the ad is kept out by the prompt and the evals.
+ * as evidence, rewrites a line that is on the CV, and passes the Nothing invented check with every gap, and every condition of the job the CV does not show (#526), counted as not confirmed. That check removes a change that adds a missing gap's requirement or such a condition, or the ad's registration or Band (#422); the rest of the ad is kept out by the prompt and the evals.
  */
 export async function suggestFromCv({ profile, job, match, sample, requester }: SuggestInput): Promise<TailoringProposal> {
   // Main skills the CV lists and this ad asks for count towards the six. Its tools, and listed skills this ad does not need, do not.
   const room = Math.max(0, bigSixTarget - listedSkillsTheAdAsksFor(profile, job).length);
+  const missing = [...match.gaps.filter((gap) => gap.kind === "missing"), ...conditionsNotOnCv(job, match, profile)];
   const prompt = await loadPrompt("tailor-suggest", {
     // The whole ad, once per job, so a rewrite knows the setting and the ad's words for the same work (#403).
     job: jobForPrompt(job, { withAd: true }),
     strengths: JSON.stringify(match.strengths, null, 2),
-    missing: JSON.stringify(match.gaps.filter((gap) => gap.kind === "missing").map((gap) => gap.requirement), null, 2),
+    missing: JSON.stringify(missing.map((gap) => gap.requirement), null, 2),
     lines: JSON.stringify(Object.fromEntries(sections.map((section) => [section, sectionLines(profile, section)])), null, 2),
     skillsToAdd: String(room),
     mainSkills: bigSixSkills.join(", "),
@@ -96,10 +118,8 @@ export async function suggestFromCv({ profile, job, match, sample, requester }: 
   const fromCv = [...cvChanges.filter((change) => change.before !== null).slice(0, 5), ...newSkills];
   const { kept, removed } = enforceNothingInvented(fromCv, {
     profile,
-    gaps: match.gaps.filter((gap) => gap.kind === "missing"),
-    answers: match.gaps
-      .filter((gap) => gap.kind === "missing")
-      .map((gap) => ({ gapId: gap.id, question: "", answer: "Not confirmed yet.", hasExperience: false })),
+    gaps: missing,
+    answers: missing.map((gap) => ({ gapId: gap.id, question: "", answer: "Not confirmed yet.", hasExperience: false })),
     role: job.role,
   });
 

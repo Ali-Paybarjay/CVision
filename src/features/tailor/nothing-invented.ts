@@ -136,8 +136,9 @@ const wantedNouns = "roles?|posts?|positions?|jobs?|vacanc(?:y|ies)|register|reg
 /**
  * Without the places that name the term as something wanted, not held: "looking for a Band 6 role", "seeking Band 6
  * roles", "keen to progress to a Band 6 role", "ready for the Senior Staff Nurse (Band 6) post", "due to join the NMC
- * register". For a registration, a clause that says it is pending, awaited, due or expected is a wish too:
- * "NMC registration pending". "Acted up into a Band 6 role" is a claim and stays.
+ * register", "working towards registration with the NMC" (#526). For a registration, a clause that says it is
+ * pending, awaited, due or expected is a wish too: "NMC registration pending". "Acted up into a Band 6 role" is a
+ * claim and stays.
  */
 function withoutJobsWanted(text: string, { term, kind }: RoleTerm): string {
   const name = `\\(?${escaped(term)}\\)?`;
@@ -149,45 +150,75 @@ function withoutJobsWanted(text: string, { term, kind }: RoleTerm): string {
   );
   const result = text.replace(wanted, " ");
   if (kind !== "registration") return result;
+  const withBody = new RegExp(`\\b(?:${wanting})\\s+${article}${words}regist(?:er|ered|ration)\\s+(?:with|by|on)\\s+(?:the\\s+)?${name}`, "g");
   // "NMC registration pending", "awaiting my NMC PIN, expected in May": the whole clause is about the future.
   return result
+    .replace(withBody, " ")
     .split(/(?<=[,;.])/)
     .map((clause) => (/\b(pending|awaiting|due|expected)\b/.test(clause) ? clause.replace(new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`, "g"), " ") : clause))
     .join("");
 }
 
-/** Without the places that name the term for someone else: "alongside NMC registered nurses", "support the Band 6 nurse in charge". */
+/**
+ * Without the places that name the term for someone else: "alongside NMC registered nurses", "support the Band 6 nurse
+ * in charge", and after a plural such as nurses or staff, "nurses registered with the NMC", "staff regulated by the
+ * HCPC" and "registered nurses (NMC)" (#526). "Registered nurse (NMC)" is their own.
+ */
 function withoutOthers(text: string, term: string): string {
   const name = `\\(?${escaped(term)}\\)?`;
   const people = "nurses|staff|colleagues|doctors|midwives|practitioners|professionals|clinicians|nurse in charge|sister|charge nurse";
+  const plural = "nurses|staff|colleagues|doctors|midwives|practitioners|professionals|clinicians";
   const forOthers = new RegExp(
     // "Registered with the NMC" is the user's own registration, so "with" after registered or registration is not about others.
-    `\\b(?:alongside|(?<!\\bregist(?:ered|ration)\\s)with|under|support(?:ed|ing)?|assist(?:ed|ing)?|help(?:ed|ing)?|shadow(?:ed|ing)?)\\s+(?:the\\s+|a\\s+|an\\s+|other\\s+)?${name}|${name}\\s+(?:registered\\s+)?(?:${people})\\b`,
+    `\\b(?:alongside|(?<!\\bregist(?:ered|ration)\\s)with|under|support(?:ed|ing)?|assist(?:ed|ing)?|help(?:ed|ing)?|shadow(?:ed|ing)?)\\s+(?:the\\s+|a\\s+|an\\s+|other\\s+)?${name}|${name}\\s+(?:registered\\s+)?(?:${people})\\b` +
+      `|\\b(?:${plural})\\s+(?:(?:who|that)\\s+(?:are|were)\\s+)?(?:registered|regulated)\\s+(?:with|by)\\s+(?:the\\s+)?${name}|\\b(?:${plural})\\s+\\(${escaped(term)}\\)`,
     "g",
   );
   return text.replace(forOthers, " ");
 }
 
 /**
- * A clause about a registration the user does not hold now: not yet, once they qualify, pending, lapsed, approved
- * programmes, pre-registration, students and trainees (#483). Student and trainee only when no plural noun follows
- * within two words, so "mentors student nurses" stays; plan, hope, aim and intend only with "to", so "care plans" stays.
+ * A clause about a registration the user does not hold now: not yet, pending, lapsed, pre-registration, students and
+ * trainees (#483). Student and trainee only when no plural noun follows within two words, so "mentors student nurses"
+ * stays; plan, hope, aim and intend only with "to", so "care plans" stays. Words that say so only next to the
+ * registration, such as no, will and approved, are in notHeldNear (#526).
  */
 const notHeldNow = new RegExp(
-  String.raw`\b(?:not|no|never|yet|until|once|will|eligible|expect(?:s|ed|ing)?|(?:hop(?:e|es|ing)|plan(?:s|ning)?|aim(?:s|ing)?|intend(?:s|ing)?) to|pending|await(?:s|ed|ing)?|due|lapsed|expired|approved|exams?|leads? to|leading to|(?:on|upon) (?:qualifying|completion)|pre-registration|re-registration|registration assessment|(?:student|trainee)(?! (?:[a-z-]+ )?[a-z-]+s\b))\b|n't\b|'ll\b`,
+  String.raw`\b(?:not|never|yet|eligible|expect(?:s|ed|ing)?|(?:hop(?:e|es|ing)|plan(?:s|ning)?|aim(?:s|ing)?|intend(?:s|ing)?) to|pending|await(?:s|ed|ing)?|lapsed|expired|leads? to|leading to|(?:on|upon) (?:qualifying|completion)|pre-registration|re-registration|registration assessment|(?:student|trainee)(?! (?:[a-z-]+ )?[a-z-]+s\b))\b|n't\b`,
 );
+
+/** Words that say a registration is not held now only next to it (#526), before it ("will be NMC registered")… */
+const beforeRegistration =
+  "will|once|until|due|approved|exams?|applying|applied|preparing|working towards|submitted|test of competence|cbt|osce";
+/** …or after it ("NMC registration in progress", "NMC approved", "NMC Test of Competence"). */
+const afterRegistration = "once|until|due|approved|exams?|applied|submitted|processing|in progress|in process|test of competence|cbt|osce";
+
+/**
+ * Whether a clause says the registration is not held now with a word next to the term or to "register…" (#526): up
+ * to two words before it ("will be NMC registered", "preparing for the NMC OSCE", "working towards registration"),
+ * "no" right before it ("no current NMC registration"), or right after it, perhaps after "application", "is" or "was"
+ * ("NMC registration in progress", "NMC application in process", "NMC registration was submitted"). So "NMC registered
+ * nurse with no gaps in practice" and "NMC registered nurse who will work nights" keep their NMC.
+ */
+function notHeldNear(clause: string, term: string): boolean {
+  const it = `(?:${escaped(term)}|regist(?:er|ered|ering|ers|ration))`;
+  const between = (words: number) => String.raw`[\s()/:-]+(?:[a-z0-9']+[\s()/:-]+){0,${words}}`;
+  const before = `(?:(?<![a-z0-9'])no${between(1)}|(?:(?<![a-z0-9'])(?:${beforeRegistration})|'ll)${between(2)})${it}(?![a-z0-9])`;
+  const after = `(?<![a-z0-9])${it}(?:\\s+(?:application|pin))?(?:\\s+(?:is|was|currently|now|still))?[\\s()/:-]+(?:${afterRegistration})(?![a-z0-9])`;
+  return new RegExp(`${before}|${after}`).test(clause);
+}
 
 /**
  * Without the registration term in every clause of a supporting line that says it is not held now (#483): "I'm not NMC
- * registered yet", "eligible for NMC registration in September", "my NMC registration lapsed". Only for a registration,
- * only on the side of the support: at worst a true line stays out.
+ * registered yet", "eligible for NMC registration in September", "my NMC registration lapsed", "NMC registration in
+ * progress" (#526). Only for a registration, only on the side of the support: at worst a true line stays out.
  */
 function heldNow(line: string, { term, kind }: RoleTerm): string {
   if (kind !== "registration") return line;
   const name = new RegExp(`(?<![a-z0-9])${escaped(term)}(?![a-z0-9])`, "g");
   return line
     .split(/(?<=[,;.])/)
-    .map((clause) => (notHeldNow.test(clause) ? clause.replace(name, " ") : clause))
+    .map((clause) => (notHeldNow.test(clause) || notHeldNear(clause, term) ? clause.replace(name, " ") : clause))
     .join("");
 }
 
@@ -206,8 +237,9 @@ function promotedTo(line: string, term: string): string {
  *   a summary or degree line that says they are registered (#466). Other duties never count.
  * - For both: the line the change rewrites, unless it names the term for someone else ("alongside NMC registered
  *   nurses"), their follow-up answers, and the words of each yes answer.
- * - For a registration, every supporting line except titles, skills and certificates loses each clause that says it is
- *   not held now (heldNow, #483): "I'm not NMC registered yet", "eligible for NMC registration", "pre-registration". A yes counts only by its own words, not by
+ * - For a registration, every supporting line except titles loses each clause that says it is not held now (heldNow,
+ *   #483, #526): "I'm not NMC registered yet", "eligible for NMC registration", "pre-registration", "NMC Test of
+ *   Competence (CBT) passed". A yes counts only by its own words, not by
  *   the requirement it answers: "I qualify in March" is a yes to the NMC gap, not NMC registration (#464). So a bare
  *   "Yes" supports nothing, which at worst leaves out a true line.
  */
@@ -242,7 +274,11 @@ function supportedRoleTerm(roleTerm: RoleTerm, before: string, { profile, answer
       ? [...titles, ...profile.experience.flatMap((job) => [...job.duties, ...job.achievements]).map((line) => promotedTo(oneSpelling(line), term))]
       : [
           ...titles,
-          ...[...profile.skills, ...profile.certifications.flatMap((item) => [item.name, item.issuer ?? ""])].map((line) => oneSpelling(line)),
+          // Held now too (#526): "NMC Test of Competence (CBT) passed" or "Preparing for NMC registration" is no
+          // registration. A certificate is read with its issuer, so a test the NMC set is none either.
+          ...[...profile.skills, ...profile.certifications.map((item) => (item.issuer ? `${item.name} (${item.issuer})` : item.name))].map((line) =>
+            heldNow(oneSpelling(line), roleTerm),
+          ),
           // Not about others, held now, and about being registered (#483). Titles skip withoutOthers: "Band 6 Sister" is their own.
           ...[profile.summary, ...profile.education.flatMap((item) => [item.qualification, item.subject ?? ""])]
             .map((line) => heldNow(withoutOthers(oneSpelling(line), term), roleTerm))
@@ -314,11 +350,12 @@ const tapPrefix = /^yes, i have done this (?:at work|in study or on my own): /;
 
 /**
  * What the user said themselves in an answer or a quote from one: without the requirement a tap repeats, without a
- * quote of the ad's words alone, and without a clause that denies something ("I don't manage all 45 staff").
+ * quote of the ad's words alone, and without a clause that denies something ("I don't manage all 45 staff"). An answer
+ * is the ad's words only when it repeats the whole requirement: "Weekly" to "How often…?" is the user's own (#526).
  */
-function ownWordsIn(text: string, requirement: string): string {
+function ownWordsIn(text: string, requirement: string, kind: "answer" | "quote"): string {
   let said = normalise(text);
-  if (requirement && requirement.includes(said)) return "";
+  if (requirement && (kind === "quote" ? requirement.includes(said) : said === requirement)) return "";
   const tap = said.match(tapPrefix);
   if (tap) {
     said = said.slice(tap[0].length);
@@ -345,8 +382,8 @@ function ownWordsIn(text: string, requirement: string): string {
 export function scopeWordAdded(change: ProposedChange, sources: EvidenceSources): string | null {
   const gap = sources.gaps.find((item) => item.id === change.gapId);
   const requirement = gap ? normalise(gap.requirement) : "";
-  const answers = change.gapId ? sources.answers.filter((item) => item.gapId === change.gapId).map((item) => ownWordsIn(item.answer, requirement)) : [];
-  const said = new Set([normalise(change.before ?? ""), ownWordsIn(change.evidence, requirement), ...answers].flatMap((text) => text.match(scopeWord) ?? []));
+  const answers = change.gapId ? sources.answers.filter((item) => item.gapId === change.gapId).map((item) => ownWordsIn(item.answer, requirement, "answer")) : [];
+  const said = new Set([normalise(change.before ?? ""), ownWordsIn(change.evidence, requirement, "quote"), ...answers].flatMap((text) => text.match(scopeWord) ?? []));
   return normalise(change.after).match(scopeWord)?.find((word) => !said.has(word)) ?? null;
 }
 
