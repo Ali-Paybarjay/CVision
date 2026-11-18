@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { brand } from "@/shared/brand";
 import { personas } from "@/shared/sample-data";
 import clinicalJob from "../../../sample-data/clinical/job.json";
-import { adLinkFailureMessage, jobSite, needsPersonSpecHint, personSpecHint, siteLabel, type AdLinkFailure } from "./job-link";
+import {
+  adLinkFailureMessage,
+  jobSite,
+  linkNoAnswerMessage,
+  needsPersonSpecHint,
+  personSpecHint,
+  siteLabel,
+  type AdLinkFailure,
+} from "./job-link";
 
 describe("jobSite", () => {
   it("knows a site by its address and its subdomains, whatever the case", () => {
@@ -70,6 +78,13 @@ describe("adLinkFailureMessage", () => {
 
   it("asks for the text from the file when the link opens one", () => {
     expect(adLinkFailureMessage("not-a-page", "https://jobs.example.com/ad.pdf")).toContain("Copy the ad from the file");
+  });
+});
+
+describe("linkNoAnswerMessage (#523)", () => {
+  it("doesn't guess why the link got no answer, and offers trying again or pasting the ad", () => {
+    expect(linkNoAnswerMessage).toBe("We couldn’t get the ad just now. Try again, or copy the ad from the page and paste it below.");
+    expect(linkNoAnswerMessage).not.toMatch(/connection|reach CVision/i);
   });
 });
 

@@ -29,10 +29,11 @@ type JobListProps = {
  * The user's jobs in a card, such as Tailor's "Which job is this CV for?", each with Delete (#462). A deleted job
  * leaves the list at once, with nothing in its place, so the list looks as it will after a reload (#519). Focus moves
  * to the next job's link (the one before it when the last row goes, or into `empty` when none is left), and a screen
- * reader hears which job was deleted. Jobs on the user's dashboard come first, together at the top (Shayan, #519).
+ * reader hears which job was deleted. The jobs still in progress come first, as the list is for picking the one the
+ * user is working on, and the jobs on their dashboard follow, together at the bottom (Marzieh, #519).
  */
 export function JobList({ title, jobs, empty }: JobListProps) {
-  const ordered = dashboardFirst(jobs);
+  const ordered = inProgressFirst(jobs);
   const router = useRouter();
   const [deleted, setDeleted] = useState<string[]>([]);
   const [said, setSaid] = useState<JobListSaid | null>(null);
@@ -123,9 +124,9 @@ export function JobListView({
   );
 }
 
-/** The jobs on the user's dashboard first, then the rest, each group in the order given. */
-export function dashboardFirst(jobs: JobListJob[]): JobListJob[] {
-  return [...jobs.filter((job) => job.onDashboard), ...jobs.filter((job) => !job.onDashboard)];
+/** The jobs still in progress first, then the ones on the user's dashboard, each group in the order given. */
+export function inProgressFirst(jobs: JobListJob[]): JobListJob[] {
+  return [...jobs.filter((job) => !job.onDashboard), ...jobs.filter((job) => job.onDashboard)];
 }
 
 /** The job to move focus to once `gone` leaves the list: the next one still shown, else the one before it, else none. */
