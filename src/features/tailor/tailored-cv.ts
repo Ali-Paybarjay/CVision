@@ -8,7 +8,7 @@ import { normalise } from "./nothing-invented";
 export type CvLine = {
   text: string;
   tailored: boolean;
-  /** Printed in bold before the text; only the labels of the last section use it: "Certificates:", "Driving licence:", "Tools:". */
+  /** Printed in bold before the text; only the labels of the last section use it: "Certificates:", "Driving licence:", "Skills and tools:". */
   label?: string;
 };
 
@@ -23,7 +23,7 @@ export const cvHeadings = {
   certificates: "Certificates:",
   languages: "Languages:",
   drivingLicence: "Driving licence:",
-  tools: "Tools:",
+  tools: "Skills and tools:",
 };
 
 /** A job or project on the CV. `company` is empty when the CV names no organisation. */
@@ -43,15 +43,18 @@ export type TailoredCv = {
   summary: CvLine | null;
   /** At most six main skills such as Communication, never tools: those the user approved, then those the CV lists, what the job asks for first. */
   skills: CvLine[];
-  /** Up to four skills that are not main skills, such as software and tools, the most relevant first, listed as "Tools" in the last section of the CV. */
+  /** Up to four skills that are not main skills or spoken languages, such as software and tools, the most relevant first, listed as "Skills and tools" in the last section of the CV. */
   technicalSkills: CvLine[];
   experience: CvEntry[];
   education: CvLine[];
   certifications: CvLine[];
   drivingLicences: CvLine[];
-  /** Projects and languages as the Profile has them: they take no tailoring changes yet. Volunteering is not on the CV in this phase. */
+  /** Projects as the Profile has them: they take no tailoring changes yet. Volunteering is not on the CV in this phase. */
   projects: CvEntry[];
-  /** Listed as "Languages" in the last section of the CV, under the certificates. */
+  /**
+   * The Profile's languages, then the spoken languages the CV lists among its skills (#529), each language once unless the
+   * user approved two lines for it. Listed as "Languages" in the last section of the CV, under the certificates.
+   */
   languages: CvLine[];
   /** Approved changes whose `before` line is not on the CV (or was already changed), so they could not be placed. */
   unplaced: TailoringChange[];
@@ -233,6 +236,75 @@ function licenceDetail(line: CvLine): CvLine {
   return detail ? { ...line, text: detail } : line;
 }
 
+/**
+ * Spoken languages by the English names a UK CV gives them. Profiles made before #253 kept languages among the skills,
+ * where they ended up beside the tools (#529). Programming languages are not here, so "R" and "JavaScript" stay tools.
+ */
+const spokenLanguages = new Set(
+  [
+    "Afrikaans", "Akan", "Albanian", "Amharic", "Arabic", "Armenian", "Azerbaijani", "Azeri", "Bangla", "Basque", "Belarusian",
+    "Bengali", "Bosnian", "Bulgarian", "Burmese", "Cantonese", "Catalan", "Chinese", "Croatian", "Czech", "Danish", "Dari", "Dutch",
+    "English", "Estonian", "Farsi", "Filipino", "Finnish", "Flemish", "French", "Gaelic", "Georgian", "German", "Greek", "Gujarati",
+    "Hausa", "Hebrew", "Hindi", "Hungarian", "Icelandic", "Igbo", "Indonesian", "Irish", "Irish Gaelic", "Italian", "Japanese",
+    "Kannada", "Kazakh", "Khmer", "Korean", "Kurdish", "Kurmanji", "Latvian", "Lingala", "Lithuanian", "Macedonian", "Malay",
+    "Malayalam", "Maltese", "Mandarin", "Mandarin Chinese", "Marathi", "Mongolian", "Nepali", "Norwegian", "Oromo", "Pashto",
+    "Persian", "Polish", "Portuguese", "Punjabi", "Romanian", "Russian", "Scottish Gaelic", "Serbian", "Shona", "Sinhala", "Slovak",
+    "Slovenian", "Somali", "Sorani", "Spanish", "Swahili", "Swedish", "Sylheti", "Tagalog", "Tajik", "Tamil", "Telugu", "Thai",
+    "Tigrinya", "Turkish", "Twi", "Ukrainian", "Urdu", "Uzbek", "Vietnamese", "Welsh", "Xhosa", "Yoruba", "Zulu",
+  ].map((name) => name.toLowerCase()),
+);
+
+/** One language as the CV prints it: "Spanish (B2)", or "Farsi" with no level. */
+function languageLine(name: string, level?: string): string {
+  return level ? `${name} (${level})` : name;
+}
+
+/** The words a level is written in: "Native", "B2", "IELTS 8", "reading, writing", "Upper-intermediate". */
+const levelWords = new Set([
+  "native", "speaker", "mother", "tongue", "first", "language", "bilingual", "fluent", "fluency", "proficient", "proficiency",
+  "advanced", "upper", "lower", "pre", "intermediate", "basic", "beginner", "elementary", "conversational", "working",
+  "professional", "full", "limited", "business", "good", "excellent", "spoken", "written", "reading", "writing", "speaking",
+  "listening", "and", "level", "ielts", "toefl", "hsk", "jlpt", "dele", "delf", "dalf", "cefr",
+]);
+const isLevelWord = (word: string) => levelWords.has(word) || /^(?:[abc][12]\+?|n[1-5]|\d+(?:\.\d+)?)$/.test(word);
+
+/**
+ * "English (Fluent)", "Spanish – B2" or "Welsh" read as a language and its level; null for anything else. Only a skill that
+ * is a language's name and nothing more, with or without a level in brackets or after a spaced dash, is a language, so
+ * "Business English", "English Literature" and "Microsoft English Proofing" are not. A level is up to five words that all
+ * say how well, such as "Native", "B2" or "reading, writing": "English (Literature)", "English (GCSE and A level)",
+ * "Spanish – translation" and the language pair "English – Farsi" stay skills. The one exception is a single language in
+ * brackets that names the variety, as in "Chinese (Mandarin)".
+ */
+function asLanguage(text: string): { name: string; level?: string } | null {
+  const part = text.trim().replace(/[.;,]+$/, "");
+  const bracketed = part.match(/^([^()]+?)\s*\(([^()]+)\)$/);
+  const withLevel = bracketed ?? part.match(/^([^()]+?)\s+[-–—]\s+([^()]+)$/);
+  const name = (withLevel ? withLevel[1] : part).replace(/\s+/g, " ").trim();
+  const level = withLevel?.[2].trim();
+  if (!spokenLanguages.has(name.toLowerCase())) return null;
+  if (level === undefined) return { name };
+  const words = level.toLowerCase().split(/[\s,/–—-]+/).filter(Boolean);
+  if (words.length === 0 || words.length > 5) return null;
+  // "Chinese (Mandarin)" names its variety in brackets; "English – Farsi" is two languages, not a level.
+  const variety = Boolean(bracketed) && words.length === 1 && spokenLanguages.has(words[0]);
+  if (!variety && !words.every(isLevelWord)) return null;
+  return { name, level };
+}
+
+/**
+ * The spoken languages in one skill line, such as "Persian (Native), English (Fluent)", or null when any part of the line
+ * is not a language: "English, Maths" stays a skill as the user wrote it. Commas inside brackets do not split the line.
+ */
+export function languagesIn(text: string): { name: string; level?: string }[] | null {
+  const found = text
+    .split(/[,;](?![^()]*\))/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map(asLanguage);
+  return found.length > 0 && found.every((item): item is { name: string; level?: string } => item !== null) ? found : null;
+}
+
 /** The CV's lines in one section, exactly as the tailored CV shows them: a change's `before` must be one of these. */
 export function sectionLines(profile: Profile, section: TailoringChange["section"]): string[] {
   switch (section) {
@@ -326,7 +398,8 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
   }
   // A main skill that did not make the six stays in the Profile; it is not a tool. An approved one is reported to the user, never lost silently.
   const leftOut = mainSkills.filter((line) => !skills.includes(line));
-  const otherSkills = allSkills.filter((line) => !isBigSix(line.text) && !isDrivingLicence(line));
+  // A spoken language among the skills goes under Languages, never beside the tools (#529).
+  const otherSkills = allSkills.filter((line) => !isBigSix(line.text) && !isDrivingLicence(line) && !languagesIn(line.text));
   const tools = relevantLinesFirst(otherSkills, job, true);
   const technicalSkills = tools.slice(0, maxTools);
   // "MSc (Data Science), Merit. University of Manchester", in plain text like every other line. A tailored line stays as approved.
@@ -345,6 +418,29 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
   const allCertificates = [...certifications, ...added("certifications")];
   const certificates = relevantLinesFirst(allCertificates.filter((line) => !isDrivingLicence(line)), job, true);
 
+  // The Profile's languages as they are, then those among the skills, each language once (#529). A repeat is left out, unless
+  // the user approved it: then it takes the place of a line they did not change (You approve everything), or, beside a line
+  // they also approved, it is added. A repeat with a level takes the place of an unchanged line with none, so "Fluent" is
+  // never lost; otherwise the first level stays, the Profile's before the skills'.
+  const languages = (profile.languages ?? []).map((item) => asIs(languageLine(item.name, item.level)));
+  const shownAt = new Map<string, { index: number; level?: string }>(
+    (profile.languages ?? []).map((item, index) => [normalise(item.name), { index, level: item.level }]),
+  );
+  for (const line of allSkills) {
+    for (const language of languagesIn(line.text) ?? []) {
+      const entry: CvLine = { text: languageLine(language.name, language.level), tailored: line.tailored };
+      const shown = shownAt.get(normalise(language.name));
+      if (!shown) {
+        shownAt.set(normalise(language.name), { index: languages.push(entry) - 1, level: language.level });
+      } else if (!languages[shown.index].tailored && (line.tailored || (!shown.level && language.level))) {
+        languages[shown.index] = entry;
+        shown.level = language.level;
+      } else if (line.tailored && !same(languages[shown.index].text, entry.text)) {
+        languages.push(entry);
+      }
+    }
+  }
+
   return {
     fullName: profile.fullName,
     headline: experience[0]?.title ?? "",
@@ -357,7 +453,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     certifications: certificates.slice(0, maxCertificates),
     drivingLicences: [...allCertificates, ...allSkills].filter(isDrivingLicence).map(licenceDetail),
     projects: (profile.projects ?? []).map((item) => ({ title: item.name, company: item.organisation ?? "", dates: dateRange(item.startDate, item.endDate), lines: item.details.map(asIs) })),
-    languages: (profile.languages ?? []).map((item) => asIs(item.level ? `${item.name} (${item.level})` : item.name)),
+    languages,
     unplaced: approved.filter((change) => !used.has(change.id)),
     sameLine: approved.filter((change) => !used.has(change.id) && approved.some((other) => used.has(other.id) && sameTarget(other, change))),
     overLimit: [...leftOut, ...tools.slice(maxTools), ...certificates.slice(maxCertificates)].filter((line) => line.tailored).map((line) => line.text),

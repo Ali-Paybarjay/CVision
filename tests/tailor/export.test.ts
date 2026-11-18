@@ -109,7 +109,7 @@ describe.each<ExportFormat>(["pdf", "docx"])("the %s file follows the templates"
     for (const name of ["Communication", "Leadership", "Teamwork"]) expect(text).toContain(name);
     expect(text).toContain(line);
     expect(text).not.toContain(`Communication: ${line}`);
-    expect(text).toContain("Tools:");
+    expect(text).toContain("Skills and tools:");
   });
 });
 
@@ -245,5 +245,16 @@ describe("languages and projects in the files (#228)", () => {
   it("add no heading for a Profile without them", () => {
     const headings = cvBlocks(buildTailoredCv(profile, [])).flatMap((block) => (block.kind === "heading" ? [block.text] : []));
     expect(headings).not.toContain("PROJECTS");
+  });
+});
+
+describe("languages among the skills in the files (#529)", () => {
+  const mixed = { ...profile, skills: ["Excel", "Persian (Native), English (Fluent)", "Business English", "Spanish – B2"], certifications: [] };
+
+  it.each(["pdf", "docx"] as const)("are on the Languages line of the %s, and the rest under Skills and tools", async (format) => {
+    const text = await fileText(await blocksToFile(cvBlocks(buildTailoredCv(mixed, [])), format, { title: "CV", author: "Sara" }), format);
+    expect(text).toMatch(/Languages:\s*Persian \(Native\), English \(Fluent\), Spanish \(B2\)/);
+    expect(text).toMatch(/Skills and tools:\s*Excel, Business English/);
+    expect(text).not.toContain("Tools:");
   });
 });
