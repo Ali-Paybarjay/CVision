@@ -114,9 +114,17 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(approveFromCv.first()).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("✓ Approved: 1")).toBeVisible();
   await expect(tailoredLines).toHaveCount(1);
+  // The preview marks the approved line on Fit, and says the highlight is not in the download (#501).
+  await expect(
+    page.getByRole("complementary", { name: "Your CV for this job" }).getByText("The highlight is only on this page, not in your download."),
+  ).toBeVisible();
 
-  // A gap is answered in the user's own words, one question at a time.
-  await page.getByRole("button", { name: /^2\. Questions about your experience/ }).click();
+  // A gap is answered in the user's own words, one question at a time, opened from the overview above the steps.
+  await page.getByRole("button", { name: "Answer this question" }).click();
+  // The open step has one Coral button, for its main task: Save answer (#500).
+  const coral = page.locator(".bg-cta").filter({ visible: true });
+  await expect(coral).toHaveCount(1);
+  await expect(coral).toHaveText("Save answer");
   const gap = page.getByRole("region", { name: "2. Questions about your experience" }).getByRole("article").filter({ visible: true });
   await gap.getByRole("textbox", { name: "Your answer" }).fill("I explained my dashboards to the regional sales team every Monday.");
   await gap.getByRole("button", { name: "Save answer" }).click();
@@ -133,6 +141,12 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await page.getByRole("button", { name: /^5\. Download and apply/ }).click();
   // The final check sits above the downloads and never stops them (#489).
   await expect(page.getByRole("heading", { name: "Final check" })).toBeVisible();
+  // PDF is the first row; Word sits under it as links (#498).
+  await expect(page.getByRole("button", { name: "Download CV (PDF)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download CV (Word)" })).toBeVisible();
+  // The sample ad has a link, so Apply opens it; "I’ve applied" is only for an ad with no link (#498).
+  await expect(page.getByRole("link", { name: "Open the ad on example.com" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /I’ve applied/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Start interview practice" })).toHaveAttribute("href", "/interview?job=sara-job-1");
 });
 

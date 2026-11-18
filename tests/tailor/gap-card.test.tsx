@@ -10,10 +10,25 @@ import { personas } from "@/shared/sample-data";
 vi.mock("@/features/tailor/actions", () => ({ answerGap: vi.fn() }));
 
 const gap = personas.sara.match.gaps[0];
-const card = (prompt: GapPrompt) =>
+const card = (prompt: GapPrompt, main?: boolean) =>
   renderToStaticMarkup(
-    <GapCard jobId="j" prompt={prompt} state={{ phase: "open" }} setState={() => {}} onAnswered={() => {}} earlierAnswers={[]} changes={[]} onDecide={async () => {}} />,
+    <GapCard jobId="j" prompt={prompt} state={{ phase: "open" }} setState={() => {}} onAnswered={() => {}} earlierAnswers={[]} changes={[]} onDecide={async () => {}} main={main} />,
   );
+const saveAnswer = (html: string) => html.match(/<button[^>]*>Save answer<\/button>/)?.[0] ?? "";
+
+describe("Save answer (#500)", () => {
+  it("is the step's Coral button on a question asked one at a time", () => {
+    const button = saveAnswer(card({ gap, question: "Have you done this?" }, true));
+    expect(button).toContain("bg-cta");
+    expect(button).not.toContain("bg-emphasis");
+  });
+
+  it("stays plain on a question under “More ways to strengthen your CV”, where several are open at once", () => {
+    const button = saveAnswer(card({ gap, question: "Have you done this?" }));
+    expect(button).not.toBe("");
+    expect(button).not.toContain("bg-cta");
+  });
+});
 
 describe("the gap card", () => {
   it("shows the options to choose, with a plain no", () => {

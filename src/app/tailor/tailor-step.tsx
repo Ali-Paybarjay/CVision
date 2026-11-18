@@ -14,7 +14,7 @@ const statusStyles: Record<StepStatus, string> = {
   "not-started": "bg-canvas text-text-muted",
 };
 
-/** The small label that says how far a step, or the whole application, has gone. */
+/** The small label beside the page's title that says how far the whole application has gone (each step's status is said to a screen reader only, #500). */
 export function StatusPill({ status }: { status: StepStatus }) {
   return <span className={cn("shrink-0 rounded-full px-3 py-1 text-xs font-semibold", statusStyles[status])}>{statusNames[status]}</span>;
 }
@@ -107,7 +107,9 @@ export function TailorStep({ id, title, summary, status, icon, open, onToggle, c
             <span className="text-lg font-semibold sm:text-xl">{title}</span>
             {!open && <span className="text-sm font-normal text-text-muted">{summary}</span>}
           </span>
-          <StatusPill status={status} />
+          {/* Said to a screen reader only: the circles above, the tick on a closed finished step and the label beside
+              the title already show it, so a label on every row said it a fourth time (#500). */}
+          <span className="sr-only">, {statusNames[status]}</span>
         </button>
       </h3>
       <div id={panelId} hidden={!open}>

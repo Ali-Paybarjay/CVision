@@ -6,7 +6,7 @@ import type { Profile } from "@/shared/contracts";
 import { ButtonLink, Button, Card, cn, Field, Input, Notice, Textarea, WaitNote } from "@/shared/ui";
 import { checkJobAction, readAdLinkAction, type CheckJobResult, type ReadAdLinkResult } from "../job-actions";
 import { checkAdText, parseAdUrl } from "../job-extraction";
-import { needsPersonSpecHint, personSpecHint } from "../job-link";
+import { linkNoAnswerMessage, needsPersonSpecHint, personSpecHint } from "../job-link";
 import { useStoredProfile } from "../profile-store";
 import { MatchReport } from "./match-report";
 import { SignInToStart } from "./sign-in-to-start";
@@ -187,11 +187,7 @@ export function JobForm({ profile, demoMode, initialSource = "link", focusAd, on
         result = await readAdLinkAction({ url });
       } catch {
         // Nothing is wrong with the link, so the message goes where every other failure does, with the box for the ad.
-        result = {
-          ok: false,
-          code: "unreadable",
-          message: "We couldn’t reach CVision. Check your connection and try again, or paste the ad below.",
-        };
+        result = { ok: false, code: "unreadable", message: linkNoAnswerMessage };
       }
       if (result.ok) {
         setLinkAd(result.text);

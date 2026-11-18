@@ -1,23 +1,26 @@
 import { cvHeadings, otherLines, type CvEntry, type CvLine, type TailoredCv } from "@/features/tailor/tailored-cv";
-import { CvPaper } from "@/shared/ui";
+import { CvPaper, FitLine } from "@/shared/ui";
 
-/** Every line looks the same: no highlight for a tailored line and no bold inside it; only a screen reader hears which lines were tailored.
- *  Only the last section's labels ("Tools:") stay bold. */
-function Line({ line, as: Tag = "p" }: { line: CvLine; as?: "p" | "li" }) {
-  return (
-    <Tag>
+/** A tailored line is on Fit only when the preview is `marked` (step 3 of Tailor, #501); otherwise every line looks the
+ *  same, as in the download. A screen reader always hears which lines were tailored. No bold inside a line: only the last
+ *  section's labels ("Tools:") are bold. */
+function Line({ line, as: Tag = "p", marked = false }: { line: CvLine; as?: "p" | "li"; marked?: boolean }) {
+  const content = (
+    <>
       {line.label && <strong>{line.label} </strong>}
       {line.text}
       {line.tailored && <span className="sr-only"> (tailored for this job)</span>}
-    </Tag>
+    </>
   );
+  if (marked && line.tailored) return <FitLine as={Tag}>{content}</FitLine>;
+  return <Tag>{content}</Tag>;
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 border-b border-cv-ink/20 pb-1 text-xs font-bold tracking-wider text-accent">{children}</h3>;
 }
 
-function Entries({ heading, items }: { heading: string; items: CvEntry[] }) {
+function Entries({ heading, items, marked }: { heading: string; items: CvEntry[]; marked: boolean }) {
   if (items.length === 0) return null;
   return (
     <>
@@ -32,7 +35,7 @@ function Entries({ heading, items }: { heading: string; items: CvEntry[] }) {
           {item.lines.length > 0 && (
             <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
               {item.lines.map((line, lineIndex) => (
-                <Line key={lineIndex} line={line} as="li" />
+                <Line key={lineIndex} line={line} as="li" marked={marked} />
               ))}
             </ul>
           )}
@@ -42,8 +45,11 @@ function Entries({ heading, items }: { heading: string; items: CvEntry[] }) {
   );
 }
 
-/** The tailored CV in the layout of the template, as the download will look: every line plain, tailored or not. */
-export function CvPreview({ cv }: { cv: TailoredCv }) {
+/**
+ * The tailored CV in the layout of the template, as the download will look. `marked` puts the approved lines on Fit, for
+ * step 3 of Tailor only (#501): the download, the overview at the top of the page and the saved page keep every line plain.
+ */
+export function CvPreview({ cv, marked = false }: { cv: TailoredCv; marked?: boolean }) {
   const other = otherLines(cv);
   return (
     <CvPaper aria-label="Your tailored CV" className="text-sm leading-relaxed">
@@ -61,7 +67,7 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
         <>
           <Heading>{cvHeadings.summary}</Heading>
           <div className="mt-1">
-            <Line line={cv.summary} />
+            <Line line={cv.summary} marked={marked} />
           </div>
         </>
       )}
@@ -71,21 +77,21 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
           <Heading>{cvHeadings.skills}</Heading>
           <ul className="mt-1 grid list-disc grid-flow-col gap-x-6 gap-y-1 pl-5 font-semibold" style={{ gridTemplateRows: `repeat(${Math.ceil(cv.skills.length / 2)}, auto)` }}>
             {cv.skills.map((line, index) => (
-              <Line key={index} line={line} as="li" />
+              <Line key={index} line={line} as="li" marked={marked} />
             ))}
           </ul>
         </>
       )}
 
-      <Entries heading={cvHeadings.experience} items={cv.experience} />
-      <Entries heading={cvHeadings.projects} items={cv.projects} />
+      <Entries heading={cvHeadings.experience} items={cv.experience} marked={marked} />
+      <Entries heading={cvHeadings.projects} items={cv.projects} marked={marked} />
 
       {cv.education.length > 0 && (
         <>
           <Heading>{cvHeadings.education}</Heading>
           <div className="mt-1 flex flex-col gap-1">
             {cv.education.map((line, index) => (
-              <Line key={index} line={line} />
+              <Line key={index} line={line} marked={marked} />
             ))}
           </div>
         </>
@@ -96,7 +102,7 @@ export function CvPreview({ cv }: { cv: TailoredCv }) {
           <Heading>{cvHeadings.other}</Heading>
           <div className="mt-1 flex flex-col gap-1">
             {other.map((line, index) => (
-              <Line key={index} line={line} />
+              <Line key={index} line={line} marked={marked} />
             ))}
           </div>
         </>

@@ -137,9 +137,10 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
     }
   };
 
-  const gapCard = (prompt: GapPrompt) => (
+  const gapCard = (prompt: GapPrompt, main = false) => (
     <GapCard
       key={prompt.gap.id}
+      main={main}
       jobId={job.id}
       prompt={prompt}
       state={gapStates[prompt.gap.id] ?? { phase: "open" }}
@@ -278,7 +279,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
               <h4 id="preview-heading" className="font-semibold">
                 Your CV for this job
               </h4>
-              <p className="text-sm text-text-muted">Highlighted lines are the changes you approved.</p>
+              <p className="text-sm text-text-muted">Highlighted lines are the changes you approved. The highlight is only on this page, not in your download.</p>
               {cv.sameLine.length > 0 && (
                 <Notice tone="error" title="More than one change to the same line">
                   Only one change per line can be on your CV, so {cv.sameLine.map((change) => `“${change.after}”`).join(", ")}{" "}
@@ -303,10 +304,10 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   {cv.leftInProfile.join(", ")}.
                 </Notice>
               )}
-              <CvPreview cv={cv} />
+              <CvPreview cv={cv} marked />
             </aside>
             <div>
-              <Button onClick={() => goTo(4)}>Continue to cover letter</Button>
+              <Button variant="primary" onClick={() => goTo(4)}>Continue to cover letter</Button>
             </div>
           </TailorStep>
 
@@ -319,7 +320,8 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
           >
             <CoverLetterPanel jobId={job.id} profile={profile} changes={changes} answers={Object.values(answers)} letter={approvedLetter} setLetter={setLetter} />
             <div>
-              <Button variant="quiet" onClick={() => goTo(5)}>
+              {/* Coral only once the letter is approved: before that, the letter's own button is the step's one Coral (#500). */}
+              <Button variant={approvedLetter?.approved ? "primary" : "quiet"} onClick={() => goTo(5)}>
                 Continue to download and apply
               </Button>
             </div>
