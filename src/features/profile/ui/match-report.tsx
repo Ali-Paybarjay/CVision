@@ -160,7 +160,10 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
   );
 }
 
-/** What each kind of gap is called on the page (#188): a word, so the kind never rests on colour alone. */
+/**
+ * What each kind of gap is called on the page (#188): a word, so the kind never rests on colour alone. An unclear gap the
+ * match couldn't check is called “Not checked” instead (#527, below).
+ */
 export const gapLabel: Record<Gap["kind"], string> = {
   unclear: "Partly shown",
   missing: "Not shown yet",

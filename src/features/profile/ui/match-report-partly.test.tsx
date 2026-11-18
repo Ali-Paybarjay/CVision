@@ -6,7 +6,8 @@ import { defaultDetail } from "../match";
 import { MatchReport } from "./match-report";
 
 // Each gap says in words how far the profile shows it (#188, decision 3B): "Partly shown" with the profile lines
-// behind it, or "Not shown yet" with no quote. Its own file, so it doesn't meet the changes in #222.
+// behind it, or "Not shown yet" with no quote, or "Not checked" when the match couldn't check it (#527). Its own
+// file, so it doesn't meet the changes in #222.
 
 vi.mock("next/link", () => ({
   default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
