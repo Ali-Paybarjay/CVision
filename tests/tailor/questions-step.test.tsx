@@ -27,6 +27,21 @@ describe("the questions step's Coral button (#500)", () => {
     for (const prompt of main) expect(html).toContain(`${prompt.question} main=true`);
     expect(html).toContain(`${extra.question} main=false`);
   });
+
+  it("keeps Previous and Next short and muted, with the whole name for a screen reader", () => {
+    // Every question answered, so the step opens on the first one with Next.
+    const html = step(Object.fromEntries(prompts.map((prompt) => [prompt.gap.id, answered])));
+    expect(html).toMatch(/<button[^>]*text-text-muted[^>]*>Previous<span class="sr-only"> question<\/span><\/button>/);
+    expect(html).toMatch(/<button[^>]*text-text-muted[^>]*>Next<span class="sr-only"> question<\/span><\/button>/);
+    expect(html).not.toContain("Previous question");
+  });
+
+  it("leaves Review your tailored CV its own colour on the last question", () => {
+    const allButLast = Object.fromEntries(prompts.slice(0, -1).map((prompt) => [prompt.gap.id, answered]));
+    const button = step(allButLast).match(/<button[^>]*>Review your tailored CV<\/button>/)?.[0] ?? "";
+    expect(button).toContain("text-accent");
+    expect(button).not.toContain("text-text-muted");
+  });
 });
 
 describe("the questions step (#488)", () => {

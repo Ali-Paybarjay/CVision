@@ -56,12 +56,22 @@ export function QuestionsStep({ questions, more, gapStates, gapCard, onFinished 
         </div>
       ))}
 
+      {/* Short words, so both fit on one line on a phone, and muted, so they don't compete with Save answer (#500).
+          Only "Review your tailored CV" keeps the accent: on the last question there is no "Review your tailored CV now". */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button variant="quiet" onClick={() => setCurrent(current - 1)} disabled={current === 0} className="px-0">
-          Previous question
+        <Button variant="quiet" onClick={() => setCurrent(current - 1)} disabled={current === 0} className="px-0 text-text-muted">
+          Previous<span className="sr-only"> question</span>
         </Button>
-        <Button variant="quiet" onClick={() => (isLast ? onFinished() : setCurrent(current + 1))} className="px-0">
-          {isLast ? "Review your tailored CV" : isAnswered(questions[current]) ? "Next question" : "Skip for now"}
+        <Button variant="quiet" onClick={() => (isLast ? onFinished() : setCurrent(current + 1))} className={isLast ? "px-0" : "px-0 text-text-muted"}>
+          {isLast ? (
+            "Review your tailored CV"
+          ) : isAnswered(questions[current]) ? (
+            <>
+              Next<span className="sr-only"> question</span>
+            </>
+          ) : (
+            "Skip for now"
+          )}
         </Button>
       </div>
 
