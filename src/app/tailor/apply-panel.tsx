@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { recordApply, type ApplyResult } from "@/features/tailor/actions";
-import { ButtonLink, Notice } from "@/shared/ui";
+import { Button, ButtonLink, Notice } from "@/shared/ui";
 import { saveFailedMessage, unreachableMessage } from "./messages";
 
 /** The site a link really opens, e.g. "linkedin.com". The link is the one the user gave, often a job board, so it is never called the employer's. */
@@ -22,6 +22,7 @@ export function interviewPracticePath(jobId: string): string {
 
 /**
  * Apply opens the job ad at the link the user gave, in a new tab, and adds the job to the user's tracker.
+ * An ad with no link, such as one pasted as text, has an "I’ve applied" button instead, which only adds the job (#498).
  * The app never sends an application on the user's behalf.
  */
 export function ApplyPanel({
@@ -65,7 +66,12 @@ export function ApplyPanel({
           Apply
         </h4>
         <p className="mt-1 text-sm text-text-muted">
-          We never apply for you. {site ? `This opens the job ad on ${site}` : "This opens the job ad"} in a new tab, where you send your CV and cover letter yourself.
+          We never apply for you.{" "}
+          {jobUrl ? (
+            <>{site ? `This opens the job ad on ${site}` : "This opens the job ad"} in a new tab, where you send your CV and cover letter yourself.</>
+          ) : (
+            "You send your CV and cover letter yourself."
+          )}
         </p>
       </div>
 
@@ -78,9 +84,17 @@ export function ApplyPanel({
           </ButtonLink>
         </div>
       ) : (
-        <Notice tone="warning" title="This job ad has no link">
-          We could not find the employer’s application page in the ad. Apply the way the ad describes, for example by email.
-        </Notice>
+        <>
+          <Notice tone="info" title="This job ad has no link">
+            Apply the way the ad describes, for example by email. Then add the job to your applications, so you can follow it up from your dashboard.
+          </Notice>
+          <div>
+            {/* No ad to open, so this button only records the application, with the same guard against a double click. */}
+            <Button variant="primary" onClick={onApply}>
+              I’ve applied: add it to my applications
+            </Button>
+          </div>
+        </>
       )}
 
       {result && (
@@ -93,8 +107,8 @@ export function ApplyPanel({
       )}
       {result?.saveFailed && <p className="text-sm text-text-muted">{saveFailedMessage}</p>}
 
-      {/* The next step after applying, shown before and after Apply. "Open the ad" stays the page's one Coral button,
-          and "practice" is a noun only, as on the dashboard (#258) and in the interview section (#239). */}
+      {/* The next step after applying, shown before and after Apply. "Open the ad", or "I’ve applied" for an ad with no link,
+          stays the step's one Coral button, and "practice" is a noun only, as on the dashboard (#258) and in the interview section (#239). */}
       <div className="flex flex-col items-start gap-2 border-t border-line pt-4">
         <p className="text-sm text-text-muted">Get ready for this job’s interview questions while you wait to hear back.</p>
         <ButtonLink href={interviewPracticePath(jobId)}>Start interview practice</ButtonLink>

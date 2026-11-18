@@ -29,6 +29,35 @@ describe("the Apply button names the site it really opens (#240)", () => {
   });
 });
 
+describe("an ad with no link still reaches the dashboard, with an I’ve applied button (#498)", () => {
+  it("offers I’ve applied as the one Coral button", () => {
+    const html = panel(null);
+    expect(html).toMatch(/<button [^>]*bg-cta[^>]*>I’ve applied: add it to my applications<\/button>/);
+    expect(html.match(/bg-cta/g) ?? []).toHaveLength(1);
+  });
+
+  it("says how to apply without a link, in a note rather than a warning", () => {
+    const html = panel(null);
+    expect(html).toContain("This job ad has no link");
+    expect(html).toContain("Apply the way the ad describes, for example by email.");
+    expect(html).not.toContain("bg-warning-bg");
+  });
+
+  it("does not promise a new tab when there is no ad to open", () => {
+    const html = panel(null);
+    expect(html).toContain("We never apply for you.");
+    expect(html).toContain("You send your CV and cover letter yourself.");
+    expect(html).not.toContain("in a new tab");
+  });
+
+  it("keeps I’ve applied away from an ad with a link", () => {
+    const html = panel("https://www.reed.co.uk/jobs/1");
+    expect(html).not.toContain("I’ve applied");
+    expect(html).toContain("in a new tab");
+    expect(html).not.toContain("This job ad has no link");
+  });
+});
+
 describe("after Apply, step 5 leads to interview practice for the same job", () => {
   it("links to this job's practice, with the dashboard's name for it", () => {
     const html = panel("https://www.reed.co.uk/jobs/1");
