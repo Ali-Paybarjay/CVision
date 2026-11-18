@@ -129,6 +129,12 @@ describe("the dashboard's application list", () => {
     expect(saving).toContain(">Cancel</button>");
   });
 
+  // A user asked what "Next step" is for (18 November, #521).
+  it("says under Next step that it is the user's own note for this application", () => {
+    const form = renderMidSave([withStep(row("1", "applied", "2026-10-20", "Data Analyst"), "Call back")]);
+    expect(text(form)).toContain("Next step A note for yourself: what you’ll do next for this application.");
+  });
+
   it("shows only the date once the application has been sent, and nothing without a closing date", () => {
     expect(text(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")]))).toContain("Closing date 24 Oct 2026 ");
     expect(render([row("1", "applied", "2026-10-20", "Data Analyst", "2026-10-24")])).not.toContain("border-warning");

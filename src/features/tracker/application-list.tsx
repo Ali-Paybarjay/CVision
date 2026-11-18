@@ -279,7 +279,8 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
               )}
             </Field>
             <div className={nextStepText ? undefined : "sm:col-span-2"}>
-              <Field label="Next step">
+              {/* A user asked what this field is for (18 November, #521). */}
+              <Field label="Next step" hint="A note for yourself: what you’ll do next for this application.">
                 {(props) => (
                   <Input
                     {...props}
