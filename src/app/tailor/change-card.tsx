@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
-import { Button, CvPaper, Field, FitLine, Textarea } from "@/shared/ui";
+import { Button, cn, CvPaper, Field, FitLine, Textarea, WarningIcon } from "@/shared/ui";
 
 /** What happened to a card's line when another change to it was approved (#465). */
 export type LineNote = "replaced" | "sent-back";
@@ -15,7 +15,35 @@ const sectionNames: Record<TailoringChange["section"], string> = {
   certifications: "Certificates",
 };
 
-/** One suggested change with its before, after and evidence, and the user's Approve, Reject and Edit. Approve and Reject switch the decision. */
+/**
+ * Each decision as a chip of its own colour, with a mark and words (#531): Approved on Fit, Rejected muted, and a change
+ * not decided yet in the warning colour, as something to check. The count in step 3 uses the same words.
+ */
+const decisionWords: Record<TailoringStatus, string> = {
+  approved: "✓ Approved",
+  rejected: "✕ Rejected",
+  proposed: "Not decided yet",
+};
+
+const decisionColours: Record<TailoringStatus, string> = {
+  approved: "bg-fit text-accent",
+  rejected: "border border-line text-text-muted",
+  proposed: "bg-warning-bg text-warning",
+};
+
+function DecisionChip({ status }: { status: TailoringStatus }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[12.5px] font-semibold", decisionColours[status])}>
+      {status === "proposed" && <WarningIcon className="size-3.5 shrink-0" />}
+      {decisionWords[status]}
+    </span>
+  );
+}
+
+/**
+ * One suggested change with its before, after and evidence, and the user's Approve, Reject and Edit. Approve and Reject
+ * switch the decision, and Undo beside a decision takes the change back to not decided yet (#531).
+ */
 export function ChangeCard({
   change,
   onDecide,
@@ -43,17 +71,9 @@ export function ChangeCard({
     });
   };
 
-  const statusText =
-    change.status === "approved"
-      ? "✓ Approved"
-      : change.status === "rejected"
-        ? "✕ Rejected"
-        : lineNote === "sent-back"
-          ? "Back with your suggestions: you approved another change to this line."
-          : "Waiting for your decision";
-
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-line p-4">
+    // An approved card has the Teal edge of a tailored line, so the decisions on a long list are seen at a glance (#531).
+    <div className={cn("flex flex-col gap-3 rounded-md border p-4", change.status === "approved" ? "border-fit-bar" : "border-line")}>
       <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">{sectionNames[change.section]}</p>
 
       <CvPaper as="div" className="text-sm">
@@ -116,9 +136,16 @@ export function ChangeCard({
           <Button variant="quiet" onClick={() => setEditing(true)} disabled={pending}>
             Edit
           </Button>
-          <span className="text-sm text-text-muted" aria-live="polite">
-            {statusText}
+          <span className="flex flex-wrap items-center gap-2 text-sm text-text-muted" aria-live="polite">
+            <DecisionChip status={change.status} />
+            {change.status === "proposed" && lineNote === "sent-back" && "Back with your suggestions: you approved another change to this line."}
           </span>
+          {/* Quiet, beside the decision it takes back: the change is not decided again, as before Approve or Reject (#531). */}
+          {change.status !== "proposed" && (
+            <Button variant="quiet" onClick={() => decide("proposed")} disabled={pending} className="px-0">
+              Undo<span className="sr-only"> your decision</span>
+            </Button>
+          )}
         </div>
       )}
       {lineNote === "replaced" && change.status === "approved" && (

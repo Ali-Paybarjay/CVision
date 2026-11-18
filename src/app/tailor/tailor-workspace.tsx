@@ -253,9 +253,10 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
             status={statuses[3]}
             icon={<DocumentIcon />}
           >
+            {/* The same words as the chip on each card: "Not decided yet", not "Waiting", which read as "Awaiting what?" (#531). */}
             <p className="rounded-md bg-canvas px-4 py-3 text-sm" aria-live="polite">
-              <span className="font-semibold">✓ Approved: {counts.approved}</span> · ✕ Rejected: {counts.rejected} · Waiting: {counts.waiting}. Only
-              approved changes go into your CV.
+              <span className="font-semibold">✓ Approved: {counts.approved}</span> · ✕ Rejected: {counts.rejected} · Not decided yet: {counts.waiting}.
+              Only approved changes go into your CV.
             </p>
             {fromAnswers.length > 0 && (
               <section className="flex flex-col gap-4" aria-labelledby="from-answers-heading">
