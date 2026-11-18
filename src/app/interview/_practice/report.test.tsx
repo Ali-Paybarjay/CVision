@@ -1,8 +1,21 @@
-// The report after "End here" (#205): answered questions keep today's card, the others show a suggested answer.
+// The report after "End here" (#205): answered questions keep today's card, the others show a suggested answer. A
+// skipped question (#530) says "Skipped" and has no score.
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { InterviewSession } from "@/features/interview/contracts";
-import { applyEvaluation, applySuggestion, endEarly, mainAnswer, missingSuggestionIds } from "@/features/interview/engine/session";
+import {
+  addAnswer,
+  applyEvaluation,
+  applyFollowUpDecision,
+  applySuggestion,
+  askQuestion,
+  endEarly,
+  endIfSkipped,
+  mainAnswer,
+  missingSuggestionIds,
+  nextStep,
+  skipQuestion,
+} from "@/features/interview/engine/session";
 import { evaluateAnswer, fallbackSuggestion, suggestAnswer, suggestionContext } from "@/features/interview/engine/stages";
 import { dataAnalystSara as fixture } from "@/features/interview/fixtures/data-analyst-sara";
 import { endedSessionFor, inputsFor, readySessionFor, runMockSession } from "@/features/interview/test-support";
@@ -81,6 +94,55 @@ describe("the report after 'End here'", () => {
 
   it("renders nothing for a practice that is still going", () => {
     expect(renderToStaticMarkup(<FeedbackReport session={readySessionFor(fixture)} />)).toBe("");
+  });
+});
+
+describe("the report after 'Skip this question' (#530)", () => {
+  const at = "2026-11-18T20:00:00.000Z";
+  /** Asks the next question, as the page does once one is finished. */
+  const askNext = (session: InterviewSession) => {
+    const next = nextStep(session);
+    return next.step === "ask" ? askQuestion(session, next.questionId, at, `${next.questionId}-asked`) : session;
+  };
+  /** Skips each question in turn; the last skip ends the practice as the page does. */
+  const skipRest = (session: InterviewSession) => {
+    let skipped = session;
+    for (let next = nextStep(skipped); next.step === "answer"; next = nextStep(skipped)) skipped = askNext(skipQuestion(skipped, next.questionId, at));
+    return endIfSkipped(skipped, at);
+  };
+
+  it("with every question skipped: 'Skipped' on each, a suggested answer for each, and no score", async () => {
+    const session = await withSuggestions(skipRest(askNext(readySessionFor(fixture))));
+    const html = renderToStaticMarkup(<FeedbackReport session={session} />);
+    expect(html.match(/<\/svg>Skipped<\/span>/g)).toHaveLength(6);
+    expect(html).not.toContain("Not answered");
+    expect(html).toContain("No question was answered, so there is no score.");
+    expect(html).not.toContain("You ended before answering");
+    expect(html.match(/Read a suggested answer/g)?.length).toBeGreaterThan(0);
+    expect(html).not.toContain("Overall score");
+    expect(html).not.toContain("Do this next time");
+  });
+
+  it("with one answer and the rest skipped: that answer's score and card, and 'Skipped' with no score for the others", async () => {
+    let session = askNext(readySessionFor(fixture));
+    session = addAnswer(session, { questionId: "q1", kind: "main", text: fixture.answers.q1.main, startedAt: at, submittedAt: at, id: "q1-answer" });
+    session = askNext(applyFollowUpDecision(session, { questionId: "q1", askFollowUp: false, gapType: "none", usedFallback: false, reason: "Moving on." }, at, "q1-decision"));
+    session = skipRest(session);
+    session = applyEvaluation(session, (await evaluateAnswer(session, "q1")).evaluation);
+    session = await withSuggestions(session);
+
+    const html = renderToStaticMarkup(<FeedbackReport session={session} />);
+    expect(html).toContain("Based on the 1 of 6 questions you answered");
+    expect(html).toContain("every question you didn&#x27;t answer has a suggested answer built from your profile");
+    expect(html).not.toContain("You ended the practice early");
+    expect(html.match(/<\/svg>Skipped<\/span>/g)).toHaveLength(5);
+    expect(html.match(/Do this next time/g)).toHaveLength(1);
+  });
+
+  it("keeps 'Not answered' and today's words after 'End here' with nothing skipped", async () => {
+    const html = renderToStaticMarkup(<FeedbackReport session={await withSuggestions(endedSessionFor(fixture))} />);
+    expect(html).not.toContain("Skipped");
+    expect(html).toContain("You ended before answering, so there is no score.");
   });
 });
 

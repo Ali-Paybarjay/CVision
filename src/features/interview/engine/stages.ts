@@ -71,6 +71,7 @@ import {
   decisionFor,
   followUpAnswer,
   followUpQuestion,
+  isSkipped,
   mainAnswer,
   suggestionFor,
   technicalQuestions,
@@ -461,6 +462,8 @@ export async function evaluateAnswer(
   const main = mainAnswer(session, questionId);
   if (main === null) throw new InterviewStageError(`${questionId} has no answer yet.`);
   if (unansweredQuestionIds(session).includes(questionId)) throw new InterviewStageError(`${questionId} was not answered, so it gets a suggested answer instead.`);
+  // A skipped question (#530) is never sent to the model to be scored, even by a page that asks.
+  if (isSkipped(session, questionId)) throw new InterviewStageError(`${questionId} was skipped, so it is not scored.`);
   const asked = followUpQuestion(session, questionId) !== null;
   const followUp = followUpAnswer(session, questionId);
   if (asked && followUp === null) throw new InterviewStageError(`${questionId} is waiting for its follow-up answer.`);

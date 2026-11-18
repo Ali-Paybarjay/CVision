@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InterviewSession } from "@/features/interview/contracts";
 import { dataAnalystSara } from "@/features/interview/fixtures/data-analyst-sara";
 import { askQuestion } from "@/features/interview/engine/session";
-import { inputsFor, runMockSession } from "@/features/interview/test-support";
-import { InterviewFlow } from "./_practice/flow";
+import { inputsFor, readySessionFor, runMockSession } from "@/features/interview/test-support";
+import { InterviewFlow, skipAndAdvance } from "./_practice/flow";
 import { createPracticeStore } from "./_practice/store";
 import { answersGiven, ConfirmStartAgain, Intro, LastPractice } from "./practice";
 
@@ -55,6 +55,11 @@ describe("Start again during a practice (#263)", () => {
     expect(answersGiven(null)).toBe(0);
     expect(answersGiven(finished)).toBe(finished.questions.length);
     expect(answersGiven({ ...finished, turns: [] })).toBe(0);
+  });
+
+  it("does not count a skipped question as an answer to lose (#530)", () => {
+    const atFirst = askQuestion(readySessionFor(dataAnalystSara), "q1", "2026-11-18T20:00:00.000Z", "q1-asked");
+    expect(answersGiven(skipAndAdvance(atFirst, "q1"))).toBe(0);
   });
 
   it("asks in place, says what is lost and offers a way back", () => {
@@ -204,5 +209,43 @@ describe("the question page in design A", () => {
   it("says plainly when the profile doesn't show the skill yet", async () => {
     const html = render(await atQuestion(2, (q) => (q.id === "q2" ? { ...q, competencyId: "c5" } : q)));
     expect(html).toContain("Your profile doesn&#x27;t show this yet, so answer from any experience you have, including study or projects.");
+  });
+
+  describe("Skip this question (#530)", () => {
+    const skipButton = (html: string) => html.match(/<button[^>]*>Skip this question<\/button>/g) ?? [];
+
+    it("sits under the answer as a quiet button, so Coral stays on Submit answer", async () => {
+      const html = render(await atQuestion(2));
+      expect(skipButton(html)).toHaveLength(1);
+      expect(skipButton(html)[0]).toContain("underline-offset-4");
+      expect(skipButton(html)[0]).not.toContain("bg-cta");
+      expect(html.match(/bg-cta/g)).toHaveLength(1);
+      expect(html.indexOf(">Skip this question</button>")).toBeGreaterThan(html.indexOf(">Submit answer</button>"));
+      expect(html).toContain("It won&#x27;t be scored. You&#x27;ll get a suggested answer for it at the end.");
+    });
+
+    it("is not offered for a follow-up, which is part of the answer already given", async () => {
+      const finished = await runMockSession(dataAnalystSara);
+      // Question 2's sample answer gets a follow-up: the practice waits for its answer.
+      const keep = new Set(["q1", "q2"]);
+      const atFollowUp: InterviewSession = {
+        ...finished,
+        turns: (finished.turns ?? []).filter((t) => keep.has(t.questionId) && !(t.questionId === "q2" && t.speaker === "candidate" && t.kind === "follow-up")),
+        followUpDecisions: (finished.followUpDecisions ?? []).filter((d) => keep.has(d.questionId)),
+        evaluations: (finished.evaluations ?? []).filter((e) => e.questionId === "q1"),
+        report: undefined,
+      };
+      const html = render(atFollowUp);
+      expect(html).toContain("Your answer to the follow-up");
+      expect(skipButton(html)).toHaveLength(0);
+    });
+
+    it("brings the next question, and the list says the skipped one was skipped, not answered", async () => {
+      const html = render(skipAndAdvance(await atQuestion(2), "q2"));
+      expect(html).toContain("Question 3 of 6");
+      expect(html).toContain("1 of 6 answered");
+      expect(html).toMatch(/Question 2: <\/span>SQL<\/p><div[^>]*>Skipped<\/div>/);
+      expect(html.match(/>Scored</g)).toHaveLength(1);
+    });
   });
 });

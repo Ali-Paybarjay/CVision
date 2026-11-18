@@ -1,7 +1,7 @@
 import { track } from "@/shared/analytics/track";
 import { getSupabaseAdmin } from "@/shared/supabase/admin";
 import type { InterviewReport, InterviewSession } from "../contracts";
-import { reportQuestionIds } from "../engine/session";
+import { isSkipped, reportQuestionIds } from "../engine/session";
 import { countWords } from "../engine/text";
 
 export const sessionCompletedEvent = "interview.session_completed";
@@ -33,7 +33,7 @@ export function sessionCompletedProperties(session: InterviewSession, report: In
   };
 }
 
-/** The details of interview.session_ended_early (#205): counts only, never text. */
+/** The details of interview.session_ended_early (#205): counts only, never text. `skipped`: questions closed with Skip (#530). */
 export function sessionEndedEarlyProperties(session: InterviewSession) {
   return {
     sessionId: session.id,
@@ -41,6 +41,7 @@ export function sessionEndedEarlyProperties(session: InterviewSession) {
     mode: session.versions?.mode ?? "mock",
     questions: session.questions.length,
     answered: reportQuestionIds(session).length,
+    skipped: session.questions.filter((q) => isSkipped(session, q.id)).length,
   };
 }
 

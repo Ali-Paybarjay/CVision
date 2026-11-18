@@ -260,7 +260,7 @@ describe("'End here' (#205)", () => {
     expect((await post({ step: "end", jobId: "sara-job-1", session })).status).toBe(200);
     await Promise.all(deferred.map((work) => work()));
     expect(tracked).toEqual([
-      { name: "interview.session_ended_early", properties: { sessionId: session.id, jobId: "sara-job-1", mode: "mock", questions: 6, answered: 0 }, actor: { userId: "user-1" } },
+      { name: "interview.session_ended_early", properties: { sessionId: session.id, jobId: "sara-job-1", mode: "mock", questions: 6, answered: 0, skipped: 0 }, actor: { userId: "user-1" } },
     ]);
 
     recordedSessionIds.push(session.id);

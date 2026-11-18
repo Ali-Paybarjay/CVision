@@ -178,6 +178,41 @@ export function endEarly(session: InterviewSession, at: string): InterviewSessio
   return { ...ended, endedAt: at };
 }
 
+/**
+ * "Skip this question" (#530): an empty main answer, the way "End here" records a skipped follow-up. The answer box
+ * never sends an empty answer, so only Skip leaves one.
+ */
+export function isSkipped(session: InterviewSession, questionId: string): boolean {
+  return mainAnswer(session, questionId) === "";
+}
+
+/**
+ * "Skip this question" (#530): the question waiting for its main answer is closed with no answer and no follow-up,
+ * decided here rather than by the model. A skipped question is never scored: it gets a suggested answer once the
+ * practice ends (see endIfSkipped).
+ */
+export function skipQuestion(session: InterviewSession, questionId: string, at: string): InterviewSession {
+  const step = nextStep(session);
+  if (step.step !== "answer" || step.kind !== "main" || step.questionId !== questionId) {
+    throw new InterviewRuleError(`${questionId} is not waiting for its answer.`);
+  }
+  const skipped = addAnswer(session, { questionId, kind: "main", text: "", startedAt: at, submittedAt: at, id: `${questionId}-skipped` });
+  const decision: FollowUpDecision = { questionId, askFollowUp: false, gapType: "none", usedFallback: false, reason: "The candidate skipped this question." };
+  return applyFollowUpDecision(skipped, decision, at, `${questionId}-skipped-follow-up`);
+}
+
+/**
+ * Once every question is done and at least one was skipped (#530), the practice ends as "End here" ends it: the
+ * answers are scored, each skipped question gets a suggested answer, and no overall report is written, as that report
+ * needs every question scored. Any other session comes back unchanged.
+ */
+export function endIfSkipped(session: InterviewSession, at: string): InterviewSession {
+  if (session.endedAt || !session.reviewChangelog || session.questions.length === 0) return session;
+  if (!session.questions.some((q) => isSkipped(session, q.id))) return session;
+  if (!session.questions.every((q) => isQuestionFinished(session, q.id))) return session;
+  return endEarly(session, at);
+}
+
 /** After "End here" the record is closed: no question, answer or follow-up is added. */
 function assertNotEnded(session: InterviewSession): void {
   if (session.endedAt) throw new InterviewRuleError("The practice has ended.");
@@ -193,10 +228,13 @@ export type SessionStep =
   | { step: "report" }
   | { step: "done" };
 
-/** The questions the report scores: every question, or after "End here" only those with a genuine answer. */
+/**
+ * The questions the report scores: every question, or after "End here" only those with a genuine answer. A skipped
+ * question (#530) is never one, so it is not sent to the model to be scored.
+ */
 export function reportQuestionIds(session: InterviewSession): string[] {
   const unanswered = new Set(unansweredQuestionIds(session));
-  return session.questions.filter((q) => !unanswered.has(q.id)).map((q) => q.id);
+  return session.questions.filter((q) => !unanswered.has(q.id) && !isSkipped(session, q.id)).map((q) => q.id);
 }
 
 /** The score after "End here": the average of the answered questions only, or null when none was answered. */

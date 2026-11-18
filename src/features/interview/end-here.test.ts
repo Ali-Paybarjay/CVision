@@ -78,7 +78,7 @@ describe("after 'End here'", () => {
 
   it("records counts only in interview.session_ended_early", () => {
     const properties = sessionEndedEarlyProperties(endedAfterTwo());
-    expect(properties).toEqual({ sessionId: "ready-data-analyst-sara", jobId: fixture.job.id, mode: "mock", questions: 6, answered: 1 });
+    expect(properties).toEqual({ sessionId: "ready-data-analyst-sara", jobId: fixture.job.id, mode: "mock", questions: 6, answered: 1, skipped: 0 });
     expect(JSON.stringify(properties)).not.toContain(fixture.answers.q2.main.slice(0, 30));
   });
 });
