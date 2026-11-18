@@ -29,9 +29,10 @@ type JobListProps = {
  * The user's jobs in a card, such as Tailor's "Which job is this CV for?", each with Delete (#462). A deleted job
  * leaves the list at once, with nothing in its place, so the list looks as it will after a reload (#519). Focus moves
  * to the next job's link (the one before it when the last row goes, or into `empty` when none is left), and a screen
- * reader hears which job was deleted.
+ * reader hears which job was deleted. Jobs on the user's dashboard come first, together at the top (Shayan, #519).
  */
 export function JobList({ title, jobs, empty }: JobListProps) {
+  const ordered = dashboardFirst(jobs);
   const router = useRouter();
   const [deleted, setDeleted] = useState<string[]>([]);
   const [said, setSaid] = useState<JobListSaid | null>(null);
@@ -50,7 +51,7 @@ export function JobList({ title, jobs, empty }: JobListProps) {
   }, [deleted]);
 
   const onDeleted = (job: JobListJob) => {
-    justDeleted.current = { id: job.id, order: jobs.map(({ id }) => id) };
+    justDeleted.current = { id: job.id, order: ordered.map(({ id }) => id) };
     setDeleted((ids) => [...ids, job.id]);
     setSaid((last) => ({ text: `Deleted: ${job.name}`, count: (last?.count ?? 0) + 1 }));
     // The browser's Back button shows the copy of this page Next kept, which still had the job: refreshing replaces it.
@@ -70,7 +71,7 @@ export function JobList({ title, jobs, empty }: JobListProps) {
   return (
     <JobListView
       title={title}
-      jobs={jobs.filter((job) => !deleted.includes(job.id))}
+      jobs={ordered.filter((job) => !deleted.includes(job.id))}
       empty={empty}
       said={said}
       onDeleted={onDeleted}
@@ -120,6 +121,11 @@ export function JobListView({
       </p>
     </>
   );
+}
+
+/** The jobs on the user's dashboard first, then the rest, each group in the order given. */
+export function dashboardFirst(jobs: JobListJob[]): JobListJob[] {
+  return [...jobs.filter((job) => job.onDashboard), ...jobs.filter((job) => !job.onDashboard)];
 }
 
 /** The job to move focus to once `gone` leaves the list: the next one still shown, else the one before it, else none. */

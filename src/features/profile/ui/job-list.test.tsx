@@ -39,6 +39,14 @@ describe("JobList", () => {
     expect(html).not.toContain("Add a job first");
   });
 
+  it("puts the jobs on the user's dashboard first, together at the top, each group in the order given", () => {
+    const tees = job(4, "Tees Valley Rail", true);
+    const html = renderToStaticMarkup(<JobList title={title} jobs={[jobs[0], jobs[2], jobs[1], tees]} empty={empty} />);
+
+    const order = [...html.matchAll(/<a href="[^"]*" class="[^"]*">([^<]*)<\/a>/g)].map(([, name]) => name);
+    expect(order).toEqual([jobs[2].name, tees.name, jobs[0].name, jobs[1].name]);
+  });
+
   it("shows what the page shows with no jobs when there are none", () => {
     const html = renderToStaticMarkup(<JobList title={title} jobs={[]} empty={empty} />);
 
