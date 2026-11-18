@@ -411,6 +411,16 @@ describe("a spoken language among the skills goes under Languages, not beside th
     expect(twoLines.languages.map((line) => line.text)).toEqual(["Spanish (DELE A2)", "Spanish (Fluent)"]);
   });
 
+  it("marks only the language a rewritten line changed, not one it kept as it was (#543)", () => {
+    const rewritten = change("approved", { id: "en", section: "skills", before: "Persian (Native), English (Fluent)", after: "Persian (Native), English (C1)" });
+    const cv = buildTailoredCv(withSkills(["Persian (Native), English (Fluent)", "Excel"]), [rewritten]);
+    expect(cv.languages).toEqual([{ text: "Persian (Native)", tailored: false }, { text: "English (C1)", tailored: true }]);
+    expect([cv.unplaced, cv.overLimit, cv.leftInProfile]).toEqual([[], [], []]);
+    // The Profile's own "Persian (Native)" stays the user's line, not one the change made.
+    const inProfile = buildTailoredCv(withSkills(["Persian (Native), English (Fluent)", "Excel"], [{ name: "Persian", level: "Native" }]), [rewritten]);
+    expect(inProfile.languages).toEqual([{ text: "Persian (Native)", tailored: false }, { text: "English (C1)", tailored: true }]);
+  });
+
   it("shows two approved lines for one language, but the same approved line once", () => {
     const approved = (id: string, after: string) => change("approved", { id, section: "skills", before: null, after });
     const cv = buildTailoredCv(withSkills(["Excel"]), [approved("a", "Spanish (Fluent)"), approved("b", "Spanish (Fluent)"), approved("c", "Spanish (DELE B2)")]);

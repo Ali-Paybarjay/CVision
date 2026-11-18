@@ -437,7 +437,10 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     const before = madeBy.get(line)?.before;
     const rewrote = (before ? languagesIn(before) : null)?.map((item) => languageLine(item.name, item.level)) ?? [];
     for (const language of languagesIn(line.text) ?? []) {
-      const entry: Shown = { line: { text: languageLine(language.name, language.level), tailored: line.tailored }, name: normalise(language.name), level: language.level };
+      // Only a language the change altered is tailored: "Persian (Native)" kept as it was in the line it rewrote is the user's own (#543).
+      const text = languageLine(language.name, language.level);
+      const tailored = line.tailored && !rewrote.some((old) => same(old, text));
+      const entry: Shown = { line: { text, tailored }, name: normalise(language.name), level: language.level };
       const repeats = languages.filter((shown) => shown.name === entry.name);
       const sameText = repeats.find((shown) => same(shown.line.text, entry.line.text));
       if (sameText) {
