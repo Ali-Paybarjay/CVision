@@ -52,8 +52,8 @@ export type TailoredCv = {
   /** Projects as the Profile has them: they take no tailoring changes yet. Volunteering is not on the CV in this phase. */
   projects: CvEntry[];
   /**
-   * The Profile's languages, then the spoken languages the CV lists among its skills (#529), each language once. Listed as
-   * "Languages" in the last section of the CV, under the certificates.
+   * The Profile's languages, then the spoken languages the CV lists among its skills (#529), each language once unless the
+   * user approved two lines for it. Listed as "Languages" in the last section of the CV, under the certificates.
    */
   languages: CvLine[];
   /** Approved changes whose `before` line is not on the CV (or was already changed), so they could not be placed. */
@@ -259,22 +259,36 @@ function languageLine(name: string, level?: string): string {
   return level ? `${name} (${level})` : name;
 }
 
+/** The words a level is written in: "Native", "B2", "IELTS 8", "reading, writing", "Upper-intermediate". */
+const levelWords = new Set([
+  "native", "speaker", "mother", "tongue", "first", "language", "bilingual", "fluent", "fluency", "proficient", "proficiency",
+  "advanced", "upper", "lower", "pre", "intermediate", "basic", "beginner", "elementary", "conversational", "working",
+  "professional", "full", "limited", "business", "good", "excellent", "spoken", "written", "reading", "writing", "speaking",
+  "listening", "and", "level", "ielts", "toefl", "hsk", "jlpt", "dele", "delf", "dalf", "cefr",
+]);
+const isLevelWord = (word: string) => levelWords.has(word) || /^(?:[abc][12]\+?|n[1-5]|\d+(?:\.\d+)?)$/.test(word);
+
 /**
  * "English (Fluent)", "Spanish – B2" or "Welsh" read as a language and its level; null for anything else. Only a skill that
- * is a language's name and nothing more, with or without a short level in brackets or after a spaced dash, is a language, so
- * "Business English", "English Literature" and "Microsoft English Proofing" are not. A level of several words that names a
- * language is not a level either: "Spanish – English translation" and "Spanish–English translation" stay skills.
+ * is a language's name and nothing more, with or without a level in brackets or after a spaced dash, is a language, so
+ * "Business English", "English Literature" and "Microsoft English Proofing" are not. A level is up to five words that all
+ * say how well, such as "Native", "B2" or "reading, writing": "English (Literature)", "English (GCSE and A level)",
+ * "Spanish – translation" and the language pair "English – Farsi" stay skills. The one exception is a single language in
+ * brackets that names the variety, as in "Chinese (Mandarin)".
  */
 function asLanguage(text: string): { name: string; level?: string } | null {
   const part = text.trim().replace(/[.;,]+$/, "");
-  const withLevel = part.match(/^([^()]+?)\s*\(([^()]+)\)$/) ?? part.match(/^([^()]+?)\s+[-–—]\s+([^()]+)$/);
+  const bracketed = part.match(/^([^()]+?)\s*\(([^()]+)\)$/);
+  const withLevel = bracketed ?? part.match(/^([^()]+?)\s+[-–—]\s+([^()]+)$/);
   const name = (withLevel ? withLevel[1] : part).replace(/\s+/g, " ").trim();
   const level = withLevel?.[2].trim();
   if (!spokenLanguages.has(name.toLowerCase())) return null;
   if (level === undefined) return { name };
-  const words = level.split(/\s+/).filter(Boolean);
+  const words = level.toLowerCase().split(/[\s,/–—-]+/).filter(Boolean);
   if (words.length === 0 || words.length > 5) return null;
-  if (words.length > 1 && words.some((word) => spokenLanguages.has(word.toLowerCase().replace(/[^\p{L}]/gu, "")))) return null;
+  // "Chinese (Mandarin)" names its variety in brackets; "English – Farsi" is two languages, not a level.
+  const variety = Boolean(bracketed) && words.length === 1 && spokenLanguages.has(words[0]);
+  if (!variety && !words.every(isLevelWord)) return null;
   return { name, level };
 }
 
@@ -404,14 +418,26 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
   const allCertificates = [...certifications, ...added("certifications")];
   const certificates = relevantLinesFirst(allCertificates.filter((line) => !isDrivingLicence(line)), job, true);
 
-  // The Profile's languages as they are, then those among the skills, each language once: the Profile's level wins.
+  // The Profile's languages as they are, then those among the skills, each language once (#529). A repeat is left out, unless
+  // the user approved it: then it takes the place of a line they did not change (You approve everything), or, beside a line
+  // they also approved, it is added. A repeat with a level takes the place of an unchanged line with none, so "Fluent" is
+  // never lost; otherwise the first level stays, the Profile's before the skills'.
   const languages = (profile.languages ?? []).map((item) => asIs(languageLine(item.name, item.level)));
-  const languagesShown = new Set((profile.languages ?? []).map((item) => normalise(item.name)));
+  const shownAt = new Map<string, { index: number; level?: string }>(
+    (profile.languages ?? []).map((item, index) => [normalise(item.name), { index, level: item.level }]),
+  );
   for (const line of allSkills) {
     for (const language of languagesIn(line.text) ?? []) {
-      if (languagesShown.has(normalise(language.name))) continue;
-      languagesShown.add(normalise(language.name));
-      languages.push({ text: languageLine(language.name, language.level), tailored: line.tailored });
+      const entry: CvLine = { text: languageLine(language.name, language.level), tailored: line.tailored };
+      const shown = shownAt.get(normalise(language.name));
+      if (!shown) {
+        shownAt.set(normalise(language.name), { index: languages.push(entry) - 1, level: language.level });
+      } else if (!languages[shown.index].tailored && (line.tailored || (!shown.level && language.level))) {
+        languages[shown.index] = entry;
+        shown.level = language.level;
+      } else if (line.tailored && !same(languages[shown.index].text, entry.text)) {
+        languages.push(entry);
+      }
     }
   }
 

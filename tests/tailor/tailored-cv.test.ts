@@ -359,6 +359,26 @@ describe("a spoken language among the skills goes under Languages, not beside th
     expect(cv.languages.map((line) => line.text)).toEqual(["English (Native)", "Spanish (B2)"]);
   });
 
+  it("takes the level from the skills when the Profile's language has none", () => {
+    expect(buildTailoredCv(withSkills(["English (Fluent)"], [{ name: "English" }]), []).languages.map((line) => line.text)).toEqual(["English (Fluent)"]);
+    expect(buildTailoredCv(withSkills(["Welsh", "Welsh (Conversational)"]), []).languages.map((line) => line.text)).toEqual(["Welsh (Conversational)"]);
+  });
+
+  it("never drops an approved language the Profile already lists: it takes the place of the unchanged line", () => {
+    const added = change("approved", { id: "es", section: "skills", before: null, after: "Spanish (Fluent)" });
+    expect(buildTailoredCv(withSkills(["Excel"], [{ name: "Spanish", level: "B1" }]), [added]).languages).toEqual([{ text: "Spanish (Fluent)", tailored: true }]);
+    const rewritten = change("approved", { id: "es", section: "skills", before: "Spanish (B1)", after: "Spanish (Fluent)" });
+    const cv = buildTailoredCv(withSkills(["Spanish (B1)", "Excel"], [{ name: "Spanish", level: "B1" }]), [rewritten]);
+    expect(cv.languages).toEqual([{ text: "Spanish (Fluent)", tailored: true }]);
+    expect([cv.unplaced, cv.overLimit]).toEqual([[], []]);
+  });
+
+  it("shows two approved lines for one language, but the same approved line once", () => {
+    const approved = (id: string, after: string) => change("approved", { id, section: "skills", before: null, after });
+    const cv = buildTailoredCv(withSkills(["Excel"]), [approved("a", "Spanish (Fluent)"), approved("b", "Spanish (Fluent)"), approved("c", "Spanish (DELE B2)")]);
+    expect(cv.languages.map((line) => line.text)).toEqual(["Spanish (Fluent)", "Spanish (DELE B2)"]);
+  });
+
   it("does not count a language against the four tools", () => {
     const cv = buildTailoredCv(withSkills(["Word", "Outlook", "Slack", "Zoom", "Polish (Native)"]), []);
     expect(cv.technicalSkills.map((line) => line.text)).toEqual(["Word", "Outlook", "Slack", "Zoom"]);
@@ -378,12 +398,19 @@ describe("a spoken language among the skills goes under Languages, not beside th
     expect(languagesIn("Spanish — B2")).toEqual([{ name: "Spanish", level: "B2" }]);
     expect(languagesIn("Mandarin  Chinese (HSK 4)")).toEqual([{ name: "Mandarin Chinese", level: "HSK 4" }]);
     expect(languagesIn("Chinese (Mandarin)")).toEqual([{ name: "Chinese", level: "Mandarin" }]);
+    for (const level of ["Upper-intermediate", "IELTS 7.5", "JLPT N2", "C1+", "Native/Bilingual", "Full professional proficiency"]) {
+      expect(languagesIn(`English (${level})`), level).toEqual([{ name: "English", level }]);
+    }
     const notLanguages = [
       "Fluent English",
       "English (Fluent) – IELTS 8",
       "English – one of my many strengths at work",
       "Spanish–English translation",
       "Spanish – English translation",
+      "English – Farsi",
+      "English (Literature)",
+      "English (GCSE and A level)",
+      "Spanish – translation",
       "Serbo-Croatian",
       "",
     ];
