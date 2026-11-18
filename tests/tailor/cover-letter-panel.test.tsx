@@ -19,6 +19,25 @@ const panel = (withNote: boolean) =>
     />,
   );
 
+const coral = (html: string) => html.match(/bg-cta/g) ?? [];
+
+describe("the cover letter's one Coral button (#500)", () => {
+  it("is Write my cover letter before there is a letter", () => {
+    const html = renderToStaticMarkup(
+      <CoverLetterPanel jobId="j" profile={personas.sara.profile} changes={[]} answers={[]} letter={null} setLetter={() => {}} />,
+    );
+    expect(coral(html)).toHaveLength(1);
+    expect(html).toMatch(/<button[^>]*bg-cta[^>]*>Write my cover letter<\/button>/);
+  });
+
+  it("is Approve cover letter once there is one, with Write it again plain beside it", () => {
+    const html = panel(false);
+    expect(coral(html)).toHaveLength(1);
+    expect(html).toMatch(/<button[^>]*bg-cta[^>]*>Approve cover letter<\/button>/);
+    expect(html).not.toMatch(/<button[^>]*bg-cta[^>]*>Write it again<\/button>/);
+  });
+});
+
 describe("the cover letter panel (#466)", () => {
   it("shows the note about sentences taken out", () => {
     const html = panel(true);

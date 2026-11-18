@@ -41,13 +41,18 @@ type GapCardProps = {
   roleOf?: (change: TailoringChange) => { role: string; named: boolean } | undefined;
   /** What happened to a card's line when another change to it was approved (#465). */
   lineNoteOf?: (change: TailoringChange) => LineNote | undefined;
+  /**
+   * A question asked one at a time in step 2, whose "Save answer" is the step's one Coral button (#500). Only one shows
+   * at a time; those under "More ways to strengthen your CV" are open together, so theirs stay plain.
+   */
+  main?: boolean;
 };
 
 /**
  * One thing the job asks for that the CV does not show, answered in the user's own words, with one of the things they
  * may have done when the question offers any, or with a plain no.
  */
-export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf, lineNoteOf }: GapCardProps) {
+export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf, lineNoteOf, main = false }: GapCardProps) {
   const [detail, setDetail] = useState("");
   const [pending, startTransition] = useTransition();
   // Whether this answer waits for the model, which took about 30 seconds on the live site (6 November, #325): see waitsForModel.
@@ -107,14 +112,11 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
               {state.message}
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => submit(detail.trim())}
-            disabled={pending || detail.trim() === ""}
-            className="min-h-11 w-full rounded-full bg-emphasis px-5 text-sm font-semibold text-on-emphasis transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {pending ? "Writing a suggestion…" : "Save answer"}
-          </button>
+          <div>
+            <Button variant={main ? "primary" : "secondary"} onClick={() => submit(detail.trim())} disabled={pending || detail.trim() === ""}>
+              {pending ? "Writing a suggestion…" : "Save answer"}
+            </Button>
+          </div>
           <WaitNote>{pending && askingModel && waitNote}</WaitNote>
           {options.length > 0 && (
             <div className="flex flex-col gap-2" role="group" aria-label="Or choose an answer">

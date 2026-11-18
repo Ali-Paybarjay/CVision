@@ -12,6 +12,23 @@ const step = (gapStates: Record<string, GapState>, questions = prompts, more: Ga
     <QuestionsStep questions={questions} more={more} gapStates={gapStates} gapCard={(prompt) => <p>{prompt.question}</p>} onFinished={() => {}} />,
   );
 
+describe("the questions step's Coral button (#500)", () => {
+  it("asks for the main card on a question asked one at a time, and not under “More ways to strengthen your CV”", () => {
+    const [extra, ...main] = prompts;
+    const html = renderToStaticMarkup(
+      <QuestionsStep
+        questions={main}
+        more={[extra]}
+        gapStates={{}}
+        gapCard={(prompt, isMain) => <p>{`${prompt.question} main=${isMain === true}`}</p>}
+        onFinished={() => {}}
+      />,
+    );
+    for (const prompt of main) expect(html).toContain(`${prompt.question} main=true`);
+    expect(html).toContain(`${extra.question} main=false`);
+  });
+});
+
 describe("the questions step (#488)", () => {
   it("counts an answer under “More ways to strengthen your CV” too", () => {
     const [extra, ...main] = prompts;

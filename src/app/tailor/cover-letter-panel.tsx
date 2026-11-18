@@ -134,12 +134,14 @@ export function CoverLetterPanel({ jobId, profile, changes, answers, letter, set
 
       <div className="flex flex-wrap items-center gap-3">
         {!letter?.approved && (
-          <Button onClick={write} disabled={pending}>
+          // One Coral at a time (#500): Write my cover letter until there is a letter, then Approve cover letter.
+          <Button variant={letter?.text ? "secondary" : "primary"} onClick={write} disabled={pending}>
             {pending ? "Writing your letter…" : letter?.text ? "Write it again" : "Write my cover letter"}
           </Button>
         )}
         {letter?.text && !letter.approved && (
           <Button
+            variant="primary"
             onClick={() => draft && setLetter({ text: joinLetter(draft), approved: true, basis, draft })}
             disabled={pending || !draft || !canApprove(draft)}
           >

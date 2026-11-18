@@ -11,7 +11,8 @@ type QuestionsStepProps = {
   /** The rest, offered together under "More ways to strengthen your CV". */
   more: GapPrompt[];
   gapStates: Record<string, GapState>;
-  gapCard: (prompt: GapPrompt) => React.ReactNode;
+  /** `main` for a question asked one at a time, whose Save answer is the step's Coral button (#500). */
+  gapCard: (prompt: GapPrompt, main?: boolean) => React.ReactNode;
   onFinished: () => void;
 };
 
@@ -51,7 +52,7 @@ export function QuestionsStep({ questions, more, gapStates, gapCard, onFinished 
       {questions.map((prompt, index) => (
         <div key={prompt.gap.id} hidden={index !== current}>
           <p className="mb-1 text-lg font-semibold">Question {index + 1}</p>
-          {gapCard(prompt)}
+          {gapCard(prompt, true)}
         </div>
       ))}
 
