@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { prerender } from "react-dom/static";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { brand } from "@/shared/brand";
 import HomePage from "./page";
@@ -23,6 +24,11 @@ vi.mock("@/shared/analytics/actions", () => {
   return { trackHomeCtaClick };
 });
 
+// The Coral button asks who is signed in; nobody is, unless a test says so.
+const { getCurrentUser } = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
+vi.mock("@/features/account/current-user", () => ({ getCurrentUser }));
+getCurrentUser.mockResolvedValue(null);
+
 /** The text of the element with this id, from the rendered page. */
 function textOf(html: string, id: string) {
   return html.match(new RegExp(`id="${id}"[^>]*>([^<]*)<`))?.[1];
@@ -37,7 +43,8 @@ describe("home page calls to action (#177)", () => {
     expect(brand.cta.primary).not.toMatch(/free/i);
     expect(brand.cta.cvCheckAction).not.toMatch(/free/i);
 
-    // Sign-up, then the profile, also from the confirmation email (#507).
+    // Sign-up, then the profile, also from the confirmation email (#507). Rendered without waiting, this is the button
+    // before the session is read, the same as a signed-out visitor's.
     const primary = html.match(/<a href="\/sign-up\?next=%2Fprofile"([^>]*)>([^<]*)<\/a>/);
     expect(primary?.[2]).toBe(brand.cta.primary);
     expect(primary?.[1]).toContain('aria-describedby="hero-cta-note"');
@@ -60,10 +67,49 @@ describe("home page calls to action (#177)", () => {
   });
 
   it("still records home.cta_clicked for both hero buttons with the same values", () => {
-    expect(tracked).toEqual([
+    // The Coral button is bound as the Suspense fallback and again once the session is read (#528), so count values, not calls.
+    const heroClicks = [
       { cta: "get_started", placement: "hero" },
       { cta: "cv_check", placement: "hero" },
-    ]);
+    ];
+    expect(tracked).toEqual(expect.arrayContaining(heroClicks));
+    for (const click of tracked) expect(heroClicks).toContainEqual(click);
+  });
+});
+
+describe("home page Coral button once the session is read (#528)", () => {
+  /** The whole page, with the button that reads the session streamed in, as a visitor's browser gets it. */
+  async function renderStreamed() {
+    const { prelude } = await prerender(<HomePage />);
+    return new Response(prelude).text();
+  }
+  const coralLinks = (html: string) => [...html.matchAll(/<a href="([^"]*)"([^>]*)>([^<]*)<\/a>/g)].filter(([, , attributes]) => attributes.includes("bg-cta"));
+
+  afterEach(() => {
+    getCurrentUser.mockResolvedValue(null);
+  });
+
+  it("takes a signed-in user straight to the job step, not to the sign-up page's You're already signed in", async () => {
+    getCurrentUser.mockResolvedValue({ id: "user-1", email: "sam@example.com" });
+    const html = await renderStreamed();
+
+    const coral = coralLinks(html);
+    expect(coral).toHaveLength(1);
+    expect(coral[0][1]).toBe("/jobs");
+    expect(coral[0][2]).toContain('aria-describedby="hero-cta-note"');
+    expect(coral[0][3]).toBe(brand.cta.primary);
+    expect(html).not.toContain("/sign-up");
+    expect(textOf(html, "hero-cta-note")).toBe(brand.cta.primaryNote);
+  });
+
+  it("keeps a signed-out visitor's sign-up link, then the profile", async () => {
+    const html = await renderStreamed();
+
+    const coral = coralLinks(html);
+    expect(coral).toHaveLength(1);
+    expect(coral[0][1]).toBe("/sign-up?next=%2Fprofile");
+    expect(coral[0][3]).toBe(brand.cta.primary);
+    expect(html).not.toContain('href="/jobs"');
   });
 });
 
