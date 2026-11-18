@@ -30,11 +30,13 @@ export function carryCheckedCv(file: File | null, account: string | null): void 
 }
 
 /**
- * What the CV check's Tailor button does (#336): carries the checked file for a signed-in account, or, for pasted text
- * or a visitor, forgets any file an earlier check kept. A function of its own so the decision can be tested.
+ * What the CV check's Tailor button does (#336): carries the checked file for a signed-in account on its way to
+ * Profile, or, for pasted text, a visitor or an account that already has a profile and goes on to a job ad instead
+ * (#548), forgets any file an earlier check kept. A function of its own so the decision can be tested.
  */
-export function carryFromCheck(check: { signedIn: boolean; file: File | null; account: string | null }): void {
-  carryCheckedCv(check.signedIn ? check.file : null, check.signedIn ? check.account : null);
+export function carryFromCheck(check: { signedIn: boolean; hasProfile?: boolean; file: File | null; account: string | null }): void {
+  const toProfile = check.signedIn && !check.hasProfile;
+  carryCheckedCv(toProfile ? check.file : null, toProfile ? check.account : null);
 }
 
 /** The file kept for this account, or null, including when another account checked it. Reading changes nothing. */

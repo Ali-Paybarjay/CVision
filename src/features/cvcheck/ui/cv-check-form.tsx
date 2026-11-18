@@ -13,15 +13,27 @@ import type { CvCheckResponse } from "../server/check-request";
 
 type Source = "file" | "text";
 type Errors = { file?: string; text?: string; form?: string; limit?: { message: string; signedIn: boolean } };
-/** `file` is the CV file that was checked, if one was uploaded rather than pasted: Profile can use it (#336). */
-type Checked = { result: CvCheckResult; truncated: boolean; signedIn: boolean; file: File | null; account: string | null };
+/**
+ * `file` is the CV file that was checked, if one was uploaded rather than pasted: Profile can use it (#336).
+ * `hasProfile`: a signed-in user's account already has a saved profile (#548).
+ */
+type Checked = {
+  result: CvCheckResult;
+  truncated: boolean;
+  signedIn: boolean;
+  hasProfile: boolean;
+  file: File | null;
+  account: string | null;
+};
 
 /**
- * Where "Tailor my CV to a job" leads: a signed-in user straight to their profile, a visitor to sign-up and then
- * their profile. Sign-up would only tell a signed-in user that they are signed in already (#331).
+ * Where "Tailor my CV to a job" leads: a signed-in user with a profile on to a job ad, the next step of the path
+ * (#548); one without a profile straight to Profile to build it; a visitor to sign-up and then their profile.
+ * Sign-up would only tell a signed-in user that they are signed in already (#331).
  */
-function tailorPath(signedIn: boolean): string {
-  return signedIn ? "/profile" : withNext("/sign-up", "/profile");
+function tailorPath(signedIn: boolean, hasProfile: boolean): string {
+  if (!signedIn) return withNext("/sign-up", "/profile");
+  return hasProfile ? "/jobs" : "/profile";
 }
 
 /**
@@ -73,7 +85,8 @@ export function CvCheckForm({ demoMode }: { demoMode: boolean }) {
         const uploaded = source === "file" ? form.get("cv") : null;
         const file = uploaded instanceof File ? uploaded : null;
         const account = signedIn ? (response.account ?? null) : null;
-        setChecked(newCheck({ result: response.result, truncated: response.truncated, signedIn, file, account }));
+        const hasProfile = signedIn && response.hasProfile === true;
+        setChecked(newCheck({ result: response.result, truncated: response.truncated, signedIn, hasProfile, file, account }));
         return;
       }
       if (response.code === "limit-reached") setErrors({ limit: { message: response.message, signedIn } });
@@ -207,6 +220,7 @@ export function CvCheckReport({
   result,
   truncated,
   signedIn,
+  hasProfile,
   file,
   account,
   demoMode,
@@ -293,18 +307,20 @@ export function CvCheckReport({
           you’ve told us.
         </p>
         {/* A signed-in user's checked file goes with them to Profile, so they don't upload it twice (#336). It stays in this
-            page's memory only; a visitor's would be lost on the way through sign-up, so it isn't offered. */}
+            page's memory only; a visitor's would be lost on the way through sign-up, so it isn't offered. A user who
+            has a profile goes on to a job ad instead (#548), where the file has no use, so none goes. */}
         <ButtonLink
-          href={tailorPath(signedIn)}
+          href={tailorPath(signedIn, hasProfile)}
           variant="primary"
           onClick={() => {
-            // Kept for this account only. Pasted text, or a visitor: no file goes, and none from an earlier check stays.
-            carryFromCheck({ signedIn, file, account });
+            // Kept for this account only. Pasted text, a visitor or a profile already: no file goes, and none from an
+            // earlier check stays.
+            carryFromCheck({ signedIn, hasProfile, file, account });
           }}
         >
           {brand.cta.primary}
         </ButtonLink>
-        {signedIn && file && account && (
+        {signedIn && !hasProfile && file && account && (
           <p className="text-sm text-text-muted">We’ll bring the CV you just checked, so you don’t need to upload it again.</p>
         )}
         {/* Said plainly, so a visitor isn't surprised to be asked for the file again after sign-up (#375). */}

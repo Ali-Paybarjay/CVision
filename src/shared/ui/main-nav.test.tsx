@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { brand } from "@/shared/brand";
-import { MainNav } from "./main-nav";
+import { MainNav, MainNavFallback } from "./main-nav";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
@@ -60,6 +60,15 @@ describe("CV check in the top menu", () => {
       "/interview",
       "/cv-check",
     ]);
+  });
+
+  // The fallback showed the visitor's CV check, so a signed-in user saw it flash and go on every full load (#548).
+  it("before the session is read: only the links both menus share, so nothing flashes and goes", () => {
+    const fallback = pageLinks(renderToStaticMarkup(<MainNavFallback />));
+    expect(fallback).toEqual(pageLinks(renderToStaticMarkup(<MainNav signedIn />)));
+    expect(fallback).not.toContain("/cv-check");
+    // A visitor's menu only adds the CV check at the end, so no link before it moves.
+    expect(pageLinks(renderToStaticMarkup(<MainNav signedIn={false} />)).slice(0, fallback.length)).toEqual(fallback);
   });
 });
 

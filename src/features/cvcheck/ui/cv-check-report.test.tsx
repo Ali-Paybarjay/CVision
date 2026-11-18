@@ -36,12 +36,13 @@ const result: CvCheckResult = {
   ],
 };
 
-function render(signedIn: boolean, file: File | null = null) {
+function render(signedIn: boolean, file: File | null = null, hasProfile = false) {
   return renderToStaticMarkup(
     <CvCheckReport
       result={result}
       truncated={false}
       signedIn={signedIn}
+      hasProfile={hasProfile}
       file={file}
       account={signedIn ? "account-a" : null}
       demoMode={false}
@@ -50,11 +51,21 @@ function render(signedIn: boolean, file: File | null = null) {
   );
 }
 
+/** Where the result's one Coral button leads. */
+const coralHref = (html: string) => html.match(/<a href="([^"]*)" class="[^"]*bg-cta/)?.[1];
+
 describe("CvCheckReport", () => {
   // A signed-in pilot was sent to sign-up from here (#331).
-  it("sends a signed-in user to their profile, and a visitor to sign-up and then their profile", () => {
-    expect(render(true)).toContain('href="/profile"');
-    expect(render(false)).toContain('href="/sign-up?next=%2Fprofile"');
+  it("sends a signed-in user with no profile to Profile, and a visitor to sign-up and then their profile", () => {
+    expect(coralHref(render(true))).toBe("/profile");
+    expect(coralHref(render(false))).toBe("/sign-up?next=%2Fprofile");
+  });
+
+  // Tailor my CV to a job took a signed-in user with a profile back to the profile they had (#548).
+  it("sends a signed-in user who has a profile on to a job ad", () => {
+    const html = render(true, null, true);
+    expect(coralHref(html)).toBe("/jobs");
+    expect(html.match(/bg-cta/g)).toHaveLength(1);
   });
 
   // A pilot wanted CVision to ask about what's missing and rewrite the CV, not knowing Tailor does (#333). The card
@@ -81,6 +92,11 @@ describe("CvCheckReport with an uploaded CV", () => {
   it("promises nothing for a visitor, whose file would be lost on the way through sign-up, or for pasted text", () => {
     expect(render(false, file)).not.toContain("We’ll bring the CV you just checked");
     expect(render(true, null)).not.toContain("We’ll bring the CV you just checked");
+  });
+
+  // They go on to a job ad, not to Profile, so no file goes with them (#548).
+  it("promises nothing to a signed-in user who has a profile", () => {
+    expect(render(true, file, true)).not.toContain("We’ll bring the CV you just checked");
   });
 
   // Said plainly, so the second upload after sign-up isn't a surprise (#375).
@@ -123,13 +139,13 @@ describe("a new check", () => {
     carryFromCheck({ signedIn: true, file: first, account: "account-a" });
     expect(carriedCvFor("account-a")).toBe(first);
 
-    newCheck({ result, truncated: false, signedIn: true, file: null, account: "account-a" });
+    newCheck({ result, truncated: false, signedIn: true, hasProfile: false, file: null, account: "account-a" });
     expect(carriedCvFor("account-a")).toBeNull();
   });
 
   it("forgets it too when the new check was another file, which goes to Profile only with its own Tailor click", () => {
     carryFromCheck({ signedIn: true, file: first, account: "account-a" });
-    const checked = newCheck({ result, truncated: false, signedIn: true, file: second, account: "account-a" });
+    const checked = newCheck({ result, truncated: false, signedIn: true, hasProfile: false, file: second, account: "account-a" });
     expect(carriedCvFor("account-a")).toBeNull();
 
     carryFromCheck(checked);

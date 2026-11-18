@@ -55,6 +55,16 @@ describe("carried CV", () => {
     expect(carriedCvFor("account-a")).toBeNull();
   });
 
+  // A user with a profile goes on to a job ad from the check, where the file has no use (#548).
+  it("carries nothing for an account that already has a profile, and forgets an earlier file", () => {
+    const uploaded = cv("checked.pdf");
+    carryFromCheck({ signedIn: true, hasProfile: false, file: uploaded, account: "account-a" });
+    expect(carriedCvFor("account-a")).toBe(uploaded);
+
+    carryFromCheck({ signedIn: true, hasProfile: true, file: cv("again.pdf"), account: "account-a" });
+    expect(carriedCvFor("account-a")).toBeNull();
+  });
+
   // Profile subscribes, so a page Next keeps alive shows the latest file and loses a cleared one at once.
   it("tells subscribers when the file changes, until they unsubscribe", () => {
     const listener = vi.fn();

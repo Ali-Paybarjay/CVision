@@ -1,6 +1,7 @@
 import "server-only";
 import { AskModelError, type Requester } from "@/shared/ai";
 import type { CvCheckResult } from "@/shared/contracts";
+import { getMyProfile } from "@/features/profile/my-data";
 import { cleanCvText, CvFileError, cvFileMessages, MAX_CV_BYTES, MAX_CV_CHARACTERS, readCvText } from "@/features/profile/server/read-cv";
 import { checkCv } from "./check-cv";
 
@@ -11,6 +12,11 @@ export type CvCheckResponse = (
       result: CvCheckResult;
       /** True when only the start of a very long CV was checked. */
       truncated: boolean;
+      /**
+       * For a signed-in user only: whether their account has a saved profile, so the result's Tailor button goes on
+       * to a job ad rather than back to the profile they already have (#548).
+       */
+      hasProfile?: boolean;
     }
   | { ok: false; code: CvCheckErrorCode; message: string }
 ) & {
@@ -73,10 +79,23 @@ export async function handleCvCheckRequest(form: FormData, options: { requester?
     return { ok: false, code: "missing", message: cvCheckMessages.missing };
   }
 
+  // A signed-in user's profile is looked up beside the check, so it adds no wait. A visitor's browser isn't told.
+  const signedIn = options.requester !== undefined && "userId" in options.requester;
+  const profile = signedIn ? hasSavedProfile() : Promise.resolve(undefined);
   try {
-    return { ok: true, result: await checkCv(cvText, { requester: options.requester }), truncated };
+    const [result, hasProfile] = await Promise.all([checkCv(cvText, { requester: options.requester }), profile]);
+    return { ok: true, result, truncated, ...(hasProfile === undefined ? {} : { hasProfile }) };
   } catch (error) {
     return { ok: false, ...describeAiError(error) };
+  }
+}
+
+/** Whether the signed-in user has saved a profile. One that can't be read counts as none: Profile is the way on then. */
+async function hasSavedProfile(): Promise<boolean> {
+  try {
+    return (await getMyProfile()) !== null;
+  } catch {
+    return false;
   }
 }
 
