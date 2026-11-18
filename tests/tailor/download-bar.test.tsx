@@ -22,7 +22,8 @@ describe("the downloads put PDF first and Word under it as links (#498)", () => 
     expect(html).toContain("Approve your cover letter to download it");
     expect(html).not.toContain("Download letter");
     expect(classesOf(html, "Download CV (PDF)")).toContain("border-accent");
-    expect(classesOf(html, "Download CV (Word)")).toContain("underline");
+    // The class itself, not a substring: the quiet button's own `hover:underline` must not pass for it.
+    expect(classesOf(html, "Download CV (Word)")?.split(" ")).toContain("underline");
     expect(classesOf(html, "Download CV (Word)")).not.toContain("border-accent");
     expect(html).not.toContain("bg-cta");
   });
@@ -34,7 +35,10 @@ describe("the downloads put PDF first and Word under it as links (#498)", () => 
     for (const index of [...pdfs, ...words]) expect(index).toBeGreaterThan(-1);
     expect(Math.max(...pdfs)).toBeLessThan(Math.min(...words));
     for (const name of ["Download CV (PDF)", "Download letter (PDF)"]) expect(classesOf(html, name)).toContain("border-accent");
-    for (const name of ["Download CV (Word)", "Download letter (Word)"]) expect(classesOf(html, name)).not.toContain("border-accent");
+    for (const name of ["Download CV (Word)", "Download letter (Word)"]) {
+      expect(classesOf(html, name)?.split(" ")).toContain("underline");
+      expect(classesOf(html, name)).not.toContain("border-accent");
+    }
     expect(html).not.toContain("Approve your cover letter to download it");
     expect(html).not.toContain("bg-cta");
   });

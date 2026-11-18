@@ -38,7 +38,7 @@ export function ApplyPanel({
   onApplied: () => void;
 }) {
   const [result, setResult] = useState<ApplyResult | null>(null);
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
   // A double click must not record the application twice; the link itself still opens every time.
   const recording = useRef(false);
   const site = jobUrl ? linkSite(jobUrl) : null;
@@ -89,9 +89,10 @@ export function ApplyPanel({
             Apply the way the ad describes, for example by email. Then add the job to your applications, so you can follow it up from your dashboard.
           </Notice>
           <div>
-            {/* No ad to open, so this button only records the application, with the same guard against a double click. */}
+            {/* No ad to open, so this button only records the application, with the same guard against a double click.
+                No new tab shows that it worked, so its label says so while it records; it stays enabled to keep the focus on it. */}
             <Button variant="primary" onClick={onApply}>
-              I’ve applied: add it to my applications
+              {pending ? "Adding it to your applications…" : "I’ve applied: add it to my applications"}
             </Button>
           </div>
         </>
