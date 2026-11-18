@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveOnePerLine, buildTailoredCv, newLineRole, newLinePlace, roleForNewLine, fitsCv, formatMonth, otherLines } from "@/features/tailor/tailored-cv";
+import { approveOnePerLine, buildTailoredCv, newLineRole, newLinePlace, roleForNewLine, fitsCv, formatMonth, languagesIn, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { cvLines } from "@/features/tailor/nothing-invented";
 import { personas } from "@/shared/sample-data";
@@ -207,7 +207,7 @@ describe("the tailored CV for a job (#216)", () => {
     expect(shown(buildTailoredCv({ ...profile, skills: ["Team management", "Leader", "Excel"] }, [], job))).toEqual(["Team management", "Leader"]);
   });
 
-  it("keeps a tool the ad asks for under Tools, not in the six", () => {
+  it("keeps a tool the ad asks for under Skills and tools, not in the six", () => {
     const cv = buildTailoredCv({ ...profile, skills: ["Excel", "Word", "Python (pandas)"] }, [], job);
     expect(shown(cv)).toEqual([]);
     expect(cv.technicalSkills[0].text).toBe("Python (pandas)");
@@ -258,13 +258,13 @@ describe("the tailored CV for a job (#216)", () => {
     expect(cv.experience.map((role) => role.company)).toEqual(profile.experience.map((role) => role.company));
   });
 
-  it("labels certificates, driving licence and tools in the last section", () => {
+  it("labels certificates, driving licence, and skills and tools in the last section", () => {
     const cv = buildTailoredCv(
       { ...profile, skills: ["Excel", "Git"], certifications: [{ name: "PRINCE2 Foundation", year: 2023 }, { name: "Full UK driving licence" }] },
       [],
       job,
     );
-    expect(otherLines(cv).map((line) => `${line.label} ${line.text}`)).toEqual(["Certificates: PRINCE2 Foundation (2023)", "Driving licence: Full UK", "Tools: Excel, Git"]);
+    expect(otherLines(cv).map((line) => `${line.label} ${line.text}`)).toEqual(["Certificates: PRINCE2 Foundation (2023)", "Driving licence: Full UK", "Skills and tools: Excel, Git"]);
   });
 
   it("shows the four tools the ad cares about most, not all of them", () => {
@@ -316,7 +316,7 @@ describe("languages and projects on the tailored CV (#228)", () => {
       "Certificates: PRINCE2 Foundation (2023)",
       "Languages: Welsh (Fluent), Farsi",
       "Driving licence: Full UK",
-      "Tools: Excel",
+      "Skills and tools: Excel",
     ]);
   });
 
@@ -328,6 +328,66 @@ describe("languages and projects on the tailored CV (#228)", () => {
   it("counts languages and projects as evidence for Nothing invented", () => {
     const lines = cvLines(full);
     for (const line of ["Welsh", "Fluent", "Bus delay dashboard", "Built a dashboard of bus delays"]) expect(lines).toContain(line);
+  });
+});
+
+describe("a spoken language among the skills goes under Languages, not beside the tools (#529)", () => {
+  const last = (cv: ReturnType<typeof buildTailoredCv>) => otherLines(cv).map((line) => `${line.label} ${line.text}`);
+  const withSkills = (skills: string[], languages?: { name: string; level?: string }[]) => ({ ...profile, skills, certifications: [], languages });
+
+  it("moves a language with its level in brackets or after a dash, and a language with no level", () => {
+    const cv = buildTailoredCv(withSkills(["Excel", "English (Fluent)", "Spanish – B2", "Italian - A2", "Persian (Native)", "Welsh", "SQL"]), []);
+    expect(last(cv)).toEqual(["Languages: English (Fluent), Spanish (B2), Italian (A2), Persian (Native), Welsh", "Skills and tools: Excel, SQL"]);
+    expect(cv.technicalSkills.map((line) => line.text)).toEqual(["Excel", "SQL"]);
+    expect(cv.leftInProfile).toEqual([]);
+  });
+
+  it("leaves skills that only contain a language's name, and programming languages, under Skills and tools", () => {
+    const skills = ["English Literature", "Business English", "Microsoft English Proofing", "English, Maths", "R", "JavaScript", "Java"];
+    const cv = buildTailoredCv(withSkills(skills), []);
+    expect(cv.languages).toEqual([]);
+    expect([...cv.technicalSkills.map((line) => line.text), ...cv.leftInProfile].sort()).toEqual([...skills].sort());
+  });
+
+  it("splits one line of several languages into each language, but never splits inside brackets", () => {
+    const cv = buildTailoredCv(withSkills(["Persian (Native), English (Fluent)", "French (reading, writing)", "Excel"]), []);
+    expect(last(cv)).toEqual(["Languages: Persian (Native), English (Fluent), French (reading, writing)", "Skills and tools: Excel"]);
+  });
+
+  it("lists a language once, with the Profile's level when the Profile already has it", () => {
+    const cv = buildTailoredCv(withSkills(["English (Fluent)", "Spanish (B2)", "spanish", "Excel"], [{ name: "English", level: "Native" }]), []);
+    expect(cv.languages.map((line) => line.text)).toEqual(["English (Native)", "Spanish (B2)"]);
+  });
+
+  it("does not count a language against the four tools", () => {
+    const cv = buildTailoredCv(withSkills(["Word", "Outlook", "Slack", "Zoom", "Polish (Native)"]), []);
+    expect(cv.technicalSkills.map((line) => line.text)).toEqual(["Word", "Outlook", "Slack", "Zoom"]);
+    expect(cv.languages.map((line) => line.text)).toEqual(["Polish (Native)"]);
+    expect([cv.leftInProfile, cv.overLimit]).toEqual([[], []]);
+  });
+
+  it("marks an approved language as tailored, and leaves a proposed one off the CV", () => {
+    const spanish = change("approved", { id: "es", section: "skills", before: null, after: "Spanish (Conversational)" });
+    const french = change("proposed", { id: "fr", section: "skills", before: null, after: "French (Basic)" });
+    const cv = buildTailoredCv(withSkills(["Excel"]), [spanish, french]);
+    expect(cv.languages).toEqual([{ text: "Spanish (Conversational)", tailored: true }]);
+    expect(JSON.stringify(cv)).not.toContain("French");
+  });
+
+  it("reads only a language's name and a short level", () => {
+    expect(languagesIn("Spanish — B2")).toEqual([{ name: "Spanish", level: "B2" }]);
+    expect(languagesIn("Mandarin  Chinese (HSK 4)")).toEqual([{ name: "Mandarin Chinese", level: "HSK 4" }]);
+    expect(languagesIn("Chinese (Mandarin)")).toEqual([{ name: "Chinese", level: "Mandarin" }]);
+    const notLanguages = [
+      "Fluent English",
+      "English (Fluent) – IELTS 8",
+      "English – one of my many strengths at work",
+      "Spanish–English translation",
+      "Spanish – English translation",
+      "Serbo-Croatian",
+      "",
+    ];
+    for (const text of notLanguages) expect(languagesIn(text), text).toBeNull();
   });
 });
 
