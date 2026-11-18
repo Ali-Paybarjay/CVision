@@ -283,7 +283,7 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
                   empty (18 November, #521). The example now sits in the hint, never inside the field. */}
               <Field
                 label="Next step"
-                hint="A note for yourself: what you’ll do next for this application, for example email the recruiter on Friday."
+                hint="Your own note, for example email the recruiter on Friday."
               >
                 {(props) => (
                   <Input

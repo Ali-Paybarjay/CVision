@@ -177,6 +177,12 @@ describe("full page load after signing in (#350)", () => {
     revealAutofilledPassword(field(() => false));
     expect(sets).toBe(0);
 
+    // A Strong Password Safari made is left alone, so Safari still saves it to the Keychain.
+    revealAutofilledPassword(
+      field((selector) => selector === ":-webkit-autofill-and-obscured" || selector === ":-webkit-autofill-strong-password"),
+    );
+    expect(sets).toBe(0);
+
     // Chrome and Firefox don't know the selector and throw: nothing breaks.
     expect(() =>
       revealAutofilledPassword(

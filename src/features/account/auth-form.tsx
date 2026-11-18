@@ -141,13 +141,20 @@ export function CheckEmailNotice({ email, next }: { email: string; next: string 
  */
 export function revealAutofilledPassword(input: Pick<HTMLInputElement, "matches" | "value"> | null): void {
   if (!input) return;
+  // A Strong Password Safari made is left alone: setting the value would tell Safari the page dropped it, and it may
+  // then not save it to the Keychain. Safari shows that kind on its own anyway.
+  if (matchesSelector(input, ":-webkit-autofill-and-obscured") && !matchesSelector(input, ":-webkit-autofill-strong-password")) {
+    const value = input.value;
+    input.value = value;
+  }
+}
+
+/** False, not an error, in a browser that doesn't know the selector (only WebKit knows these). */
+function matchesSelector(input: Pick<HTMLInputElement, "matches">, selector: string): boolean {
   try {
-    if (input.matches(":-webkit-autofill-and-obscured")) {
-      const value = input.value;
-      input.value = value;
-    }
+    return input.matches(selector);
   } catch {
-    // Not WebKit: nothing to undo.
+    return false;
   }
 }
 
