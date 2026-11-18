@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { Button, cn, CvPaper, Field, FitLine, Textarea, WarningIcon } from "@/shared/ui";
 
@@ -60,6 +60,9 @@ export function ChangeCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(change.after);
   const [pending, startTransition] = useTransition();
+  // Undo takes itself away, so focus goes to the chip, which then says "Not decided yet", and the next Tab carries on
+  // from this card, not from the top of the page (#531).
+  const status = useRef<HTMLSpanElement>(null);
 
   // The decision goes to the page at once, outside the transition: React would hold it until every async transition on
   // the page ends, such as a suggestion being written, and a second decision in that time would undo the first (#465).
@@ -136,13 +139,21 @@ export function ChangeCard({
           <Button variant="quiet" onClick={() => setEditing(true)} disabled={pending}>
             Edit
           </Button>
-          <span className="flex flex-wrap items-center gap-2 text-sm text-text-muted" aria-live="polite">
+          <span ref={status} className="flex flex-wrap items-center gap-2 text-sm text-text-muted" aria-live="polite" tabIndex={-1}>
             <DecisionChip status={change.status} />
             {change.status === "proposed" && lineNote === "sent-back" && "Back with your suggestions: you approved another change to this line."}
           </span>
           {/* Quiet, beside the decision it takes back: the change is not decided again, as before Approve or Reject (#531). */}
           {change.status !== "proposed" && (
-            <Button variant="quiet" onClick={() => decide("proposed")} disabled={pending} className="px-0">
+            <Button
+              variant="quiet"
+              onClick={() => {
+                decide("proposed");
+                status.current?.focus();
+              }}
+              disabled={pending}
+              className="px-0"
+            >
               Undo<span className="sr-only"> your decision</span>
             </Button>
           )}

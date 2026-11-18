@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { decideChange } from "@/features/tailor/actions";
 import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
-import { approveOnePerLine, buildTailoredCv, newLineRole } from "@/features/tailor/tailored-cv";
+import { buildTailoredCv, newLineRole } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
 import { Button, Card, Notice } from "@/shared/ui";
@@ -17,6 +17,7 @@ import { CvSuggestions } from "./cv-suggestions";
 import { DownloadBar } from "./download-bar";
 import { FinalCheck } from "./final-check";
 import { GapCard, type GapPrompt, type GapState } from "./gap-card";
+import { decideOnLine, type LineNotes } from "./line-decision";
 import { unreachableMessage } from "./messages";
 import { QuestionsStep } from "./questions-step";
 import { DocumentIcon, DownloadIcon, JobIcon, LetterIcon, QuestionIcon, StatusPill, StepTracker, TailorStep, type StepStatus } from "./tailor-step";
@@ -77,7 +78,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   const [letter, setLetter] = useState<LetterState | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   // The last approval that sent an earlier change to the same line back, so both cards can say so (#465).
-  const [lineNotes, setLineNotes] = useState<{ approved: string; sentBack: string[] } | null>(null);
+  const [lineNotes, setLineNotes] = useState<LineNotes>(null);
   const lineNoteOf = (change: TailoringChange): LineNote | undefined =>
     lineNotes?.approved === change.id ? "replaced" : lineNotes?.sentBack.includes(change.id) ? "sent-back" : undefined;
   const cv = buildTailoredCv(profile, changes, job);
@@ -125,12 +126,13 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   };
 
   const update = async (next: TailoringChange) => {
-    // Only one change per CV line: approving a second one sends the earlier one back to the suggestions (#272).
-    const { changes: updated, sentBack } = approveOnePerLine(latest.current, next);
+    // Only one change per CV line: approving a second one sends the earlier one back to the suggestions (#272), and
+    // Undo on it straight after approves the earlier one again (#531).
+    const { changes: updated, toSave, notes } = decideOnLine(latest.current, next, lineNotes);
     changeList(() => updated);
-    setLineNotes(sentBack.length > 0 ? { approved: next.id, sentBack: sentBack.map((change) => change.id) } : null);
+    setLineNotes(notes);
     try {
-      const results = await Promise.all([next, ...sentBack].map((change) => decideChange(change)));
+      const results = await Promise.all(toSave.map((change) => decideChange(change)));
       setSaveNote(results.find((result) => !result.saved)?.message ?? null);
     } catch {
       setSaveNote(unreachableMessage);

@@ -4,6 +4,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ChangeCard } from "@/app/tailor/change-card";
+import { decideOnLine } from "@/app/tailor/line-decision";
 import { TailorWorkspace } from "@/app/tailor/tailor-workspace";
 import type { TailoringChange } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
@@ -21,10 +22,16 @@ vi.mock("@/shared/ui", async (importOriginal) => {
     },
   };
 });
-// A server render cannot start a transition, so here the saving just runs.
+// A server render cannot start a transition, so here the saving just runs. A server render fills no ref either, so while
+// a test turns `focus.fake` on, a ref that waits for an element holds a stand-in that counts the times it takes focus.
+const focus = vi.hoisted(() => ({ fake: false, calls: 0 }));
 vi.mock("react", async (importOriginal) => {
   const react = await importOriginal<typeof import("react")>();
-  return { ...react, useTransition: () => [false, (callback: () => unknown) => void callback()] };
+  return {
+    ...react,
+    useTransition: () => [false, (callback: () => unknown) => void callback()],
+    useRef: (initial: unknown) => (focus.fake && initial === null ? { current: { focus: () => void focus.calls++ } } : react.useRef(initial)),
+  };
 });
 vi.mock("@/features/tailor/actions", () => ({ decideChange: vi.fn(), answerGap: vi.fn(), suggestCvChanges: vi.fn(), createCoverLetter: vi.fn(), recordApply: vi.fn() }));
 
@@ -92,6 +99,62 @@ describe("Undo after a decision (#531)", () => {
     expect(card(change("proposed")).press("Approve")?.status).toBe("approved");
     expect(card(change("approved")).press("Reject")?.status).toBe("rejected");
   });
+
+  it("moves focus to the chip as Undo goes away, so the next Tab carries on from this card", () => {
+    focus.fake = true;
+    try {
+      const { html, press } = card(change("approved"));
+      expect(html).toMatch(/<span class="[^"]*" aria-live="polite" tabindex="-1"><span class="inline-flex/);
+      expect(focus.calls).toBe(0);
+      press("Undo");
+      expect(focus.calls).toBe(1);
+      // Approve and Reject keep focus where it is.
+      card(change("proposed")).press("Approve");
+      card(change("approved")).press("Reject");
+      expect(focus.calls).toBe(1);
+    } finally {
+      focus.fake = false;
+      focus.calls = 0;
+    }
+  });
+});
+
+describe("Undo on a change that replaced another on the same line (#531, #465)", () => {
+  const lineA: TailoringChange = { ...change("proposed"), id: "change-a" };
+  const lineB: TailoringChange = { ...change("proposed"), id: "change-b", after: "Built Tableau dashboards that the regional managers used every Monday" };
+  const statuses = (changes: TailoringChange[]) => Object.fromEntries(changes.map((item) => [item.id, item.status]));
+
+  it("approves the earlier change again, so the line is as it was before the decision", () => {
+    const first = decideOnLine([lineA, lineB], { ...lineA, status: "approved" }, null);
+    expect(statuses(first.changes)).toEqual({ "change-a": "approved", "change-b": "proposed" });
+    expect(first.notes).toBeNull();
+
+    const second = decideOnLine(first.changes, { ...lineB, status: "approved" }, first.notes);
+    expect(statuses(second.changes)).toEqual({ "change-a": "proposed", "change-b": "approved" });
+    expect(second.notes).toEqual({ approved: "change-b", sentBack: ["change-a"] });
+
+    const undone = decideOnLine(second.changes, { ...lineB, status: "proposed" }, second.notes);
+    expect(statuses(undone.changes)).toEqual({ "change-a": "approved", "change-b": "proposed" });
+    // Both go to the saved decisions, and neither card keeps a note about the other.
+    expect(undone.toSave.map((item) => [item.id, item.status])).toEqual([
+      ["change-b", "proposed"],
+      ["change-a", "approved"],
+    ]);
+    expect(undone.notes).toBeNull();
+  });
+
+  it("leaves the earlier change where it is after Reject, or after another decision came in between", () => {
+    const onLine = [lineA, { ...lineB, status: "approved" as const }];
+    const notes = { approved: "change-b", sentBack: ["change-a"] };
+    expect(statuses(decideOnLine(onLine, { ...lineB, status: "rejected" }, notes).changes)).toEqual({ "change-a": "proposed", "change-b": "rejected" });
+    expect(statuses(decideOnLine(onLine, { ...lineB, status: "proposed" }, null).changes)).toEqual({ "change-a": "proposed", "change-b": "proposed" });
+  });
+
+  it("leaves a single Undo as it was: nothing else on the line moves", () => {
+    const undone = decideOnLine([{ ...lineA, status: "approved" }, lineB], { ...lineA, status: "proposed" }, null);
+    expect(statuses(undone.changes)).toEqual({ "change-a": "proposed", "change-b": "proposed" });
+    expect(undone.toSave).toEqual([{ ...lineA, status: "proposed" }]);
+  });
 });
 
 describe("the decision chip on each change (#531)", () => {
@@ -120,7 +183,7 @@ describe("the decision chip on each change (#531)", () => {
   it("gives each decision a look of its own, in the live region a screen reader hears", () => {
     const looks = (["approved", "rejected", "proposed"] as const).map((status) => chip(card(change(status)).html).match(/class="([^"]*)"/)?.[1]);
     expect(new Set(looks).size).toBe(3);
-    expect(card(change("approved")).html).toMatch(/<span class="[^"]*" aria-live="polite"><span class="inline-flex/);
+    expect(card(change("approved")).html).toMatch(/<span class="[^"]*" aria-live="polite"[^>]*><span class="inline-flex/);
   });
 
   it("gives an approved card the Teal edge of a tailored line, and the others the usual line", () => {
