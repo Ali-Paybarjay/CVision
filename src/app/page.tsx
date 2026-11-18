@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { getCurrentUser } from "@/features/account/current-user";
 import { cvHeadings } from "@/features/tailor/tailored-cv";
 import { trackHomeCtaClick } from "@/shared/analytics/actions";
 import { brand } from "@/shared/brand";
@@ -18,15 +20,10 @@ export default function HomePage() {
           <h1 className="mt-4 text-5xl leading-[1.02] tracking-[-0.035em] sm:text-6xl xl:text-7xl 2xl:text-[5.25rem]">{brand.hero.headline}</h1>
           <p className="mt-6 max-w-[52ch] text-lg text-text-muted">{brand.hero.subline}</p>
           <div className="mt-8">
-            <TrackedButtonLink
-              href={signUpThenProfile}
-              variant="primary"
-              className="w-full sm:w-auto"
-              aria-describedby="hero-cta-note"
-              onTrack={trackHomeCtaClick.bind(null, { cta: "get_started", placement: "hero" })}
-            >
-              {brand.cta.primary}
-            </TrackedButtonLink>
+            {/* Reads the session, so it streams in; until then the button is the visitor's sign-up link. */}
+            <Suspense fallback={<TailorButton href={signUpThenProfile} />}>
+              <TailorButtonForVisitor />
+            </Suspense>
             <p id="hero-cta-note" className="mt-2 text-sm text-text-muted">
               {brand.cta.primaryNote}
             </p>
@@ -105,6 +102,30 @@ export default function HomePage() {
       </section>
     </main>
   );
+}
+
+/** The page's one Coral button, "Tailor my CV to a job". */
+function TailorButton({ href }: { href: string }) {
+  return (
+    <TrackedButtonLink
+      href={href}
+      variant="primary"
+      className="w-full sm:w-auto"
+      aria-describedby="hero-cta-note"
+      onTrack={trackHomeCtaClick.bind(null, { cta: "get_started", placement: "hero" })}
+    >
+      {brand.cta.primary}
+    </TrackedButtonLink>
+  );
+}
+
+/**
+ * A visitor signs up, then builds their profile. A signed-in user goes straight to the job step, not to the sign-up
+ * page's "You're already signed in" (#528); with no profile yet, that step sends them to build one.
+ */
+async function TailorButtonForVisitor() {
+  const user = await getCurrentUser();
+  return <TailorButton href={user ? "/jobs" : signUpThenProfile} />;
 }
 
 /** Sara's job ad beside her CV: a number joins each tailored CV line to the requirement that asked for it. */
