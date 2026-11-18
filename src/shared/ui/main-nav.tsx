@@ -10,7 +10,10 @@ import { ButtonLink } from "./button";
 import { cn } from "./cn";
 import { CloseIcon, MenuIcon } from "./icons";
 
-const links = navItems.filter((item) => item.href !== "/");
+/** The page links, without Home (the logo is the link home) and, for a signed-in user, without visitor-only pages. */
+function linksFor(signedIn: boolean) {
+  return navItems.filter((item) => item.href !== "/" && !(signedIn && "visitorOnly" in item && item.visitorOnly));
+}
 
 function isCurrent(pathname: string | null, href: string) {
   return pathname !== null && (pathname === href || pathname.startsWith(`${href}/`));
@@ -18,18 +21,20 @@ function isCurrent(pathname: string | null, href: string) {
 
 function NavLinks({
   pathname,
+  signedIn,
   onNavigate,
   className,
   children,
 }: {
   pathname: string | null;
+  signedIn: boolean;
   onNavigate?: () => void;
   className?: string;
   children?: React.ReactNode;
 }) {
   return (
     <ul className={className}>
-      {links.map((item) => {
+      {linksFor(signedIn).map((item) => {
         const current = isCurrent(pathname, item.href);
         return (
           <li key={item.href}>
@@ -52,9 +57,9 @@ function NavLinks({
   );
 }
 
-/** Before the pathname and session are known (prerendering), the same links without the current-page mark. */
+/** Before the pathname and session are known (prerendering), the visitor's links without the current-page mark. */
 export function MainNavFallback() {
-  return <NavLinks pathname={null} className="hidden items-center gap-5 lg:flex" />;
+  return <NavLinks pathname={null} signedIn={false} className="hidden items-center gap-5 lg:flex" />;
 }
 
 /**
@@ -109,7 +114,7 @@ export function MainNav({ signedIn, signOut }: { signedIn: boolean; signOut?: Re
 
   return (
     <>
-      <NavLinks pathname={pathname} className={cn("hidden items-center gap-5", wide.links)} />
+      <NavLinks pathname={pathname} signedIn={signedIn} className={cn("hidden items-center gap-5", wide.links)} />
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {signedIn && signOut && <div className="hidden md:block">{signOut}</div>}
         {showSignIn && (
@@ -151,7 +156,7 @@ export function MainNav({ signedIn, signOut }: { signedIn: boolean; signOut?: Re
           // Its own layer, above anything positioned on the page, such as Tailor's steps (#298).
           className={cn("absolute inset-x-0 top-full z-20 border-b border-line bg-surface px-4 pb-3", wide.narrowOnly)}
         >
-          <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} className="flex flex-col">
+          <NavLinks pathname={pathname} signedIn={signedIn} onNavigate={() => setOpen(false)} className="flex flex-col">
             {showSignIn && (
               <li className="sm:hidden">
                 <Link

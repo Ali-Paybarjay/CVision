@@ -119,6 +119,21 @@ export function ProfileOverview({
         </div>
       </Card>
 
+      {/* The CV check left the signed-in menu, so it sits next to the CV it is about. It looks at the CV on its own,
+          not at a job ad, which is what tells it apart from Check a job. */}
+      <Card aria-labelledby="cv-check-heading">
+        <h2 id="cv-check-heading" className="text-xl">
+          Is your CV ready for UK employers?
+        </h2>
+        <p className="mt-2 text-text-muted">
+          The CV check looks at your CV on its own, not at a job ad, and shows what to fix first. It doesn’t change
+          your profile.
+        </p>
+        <ButtonLink href="/cv-check" className="mt-4">
+          Check my CV
+        </ButtonLink>
+      </Card>
+
       <Card>
         <h2 className="text-xl">What you’re looking for</h2>
         {editingPreferences ? (
