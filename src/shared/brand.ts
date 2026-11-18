@@ -81,6 +81,13 @@ export const brand = {
   example: {
     /** Above the example, so a new visitor sees the outcome is a whole CV, not one sentence (Marzieh, #176). */
     title: (firstName: string, job: string) => `${firstName}’s CV, tailored for a ${job} job`,
+    /**
+     * Right under the title, so a visitor knows how to read the two panels before they look at them: the caption under
+     * the figure is read last. A user said "This section is not clear" (18 November, #521).
+     */
+    // Names the two panels, not where they sit: on a phone they are one above the other.
+    howToRead: (firstName: string) =>
+      `The job ad lists what the job asks for, and ${firstName}’s CV shows it after tailoring: each number joins a requirement to the CV line written for it. In the job ad, a tick (Matched) means it’s already on her CV; a warning sign (Not on your CV) means it isn’t, so CVision leaves it out.`,
     caption: (name: string, firstName: string, job: string, company: string) =>
       `${name} is a fictional example. The numbered lines were tailored for the ${job} job at ${company}, from ${firstName}’s own answers to follow-up questions. It works the same way for any UK job, from shops and offices to NHS roles.`,
   },

@@ -279,7 +279,12 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
               )}
             </Field>
             <div className={nextStepText ? undefined : "sm:col-span-2"}>
-              <Field label="Next step">
+              {/* A user asked what this field is for, and took its grey example for a saved next step, so they saved it
+                  empty (18 November, #521). The example now sits in the hint, never inside the field. */}
+              <Field
+                label="Next step"
+                hint="Your own note, for example email the recruiter on Friday."
+              >
                 {(props) => (
                   <Input
                     {...props}
@@ -287,7 +292,6 @@ function ApplicationRow({ item, heading: Heading, today, sample, moved, onSaved 
                     value={nextStep}
                     onChange={(event) => setNextStep(event.target.value)}
                     maxLength={nextStepMaxLength}
-                    placeholder="For example, follow up by email on Friday"
                     autoComplete="off"
                   />
                 )}

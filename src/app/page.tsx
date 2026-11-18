@@ -111,9 +111,12 @@ export default function HomePage() {
 function Example() {
   return (
     <figure aria-labelledby="example-title" className="flex min-w-0 flex-col gap-4">
-      <h2 id="example-title" className="text-lg leading-snug">
-        {brand.example.title(example.firstName, example.job)}
-      </h2>
+      <div>
+        <h2 id="example-title" className="text-lg leading-snug">
+          {brand.example.title(example.firstName, example.job)}
+        </h2>
+        <p className="mt-1 max-w-[65ch] text-sm text-text-muted">{brand.example.howToRead(example.firstName)}</p>
+      </div>
       <div className="grid items-start gap-4 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
         <div className="rounded-[14px] border border-line bg-surface p-4">
           <SectionLabel as="h3">The job ad</SectionLabel>

@@ -99,6 +99,17 @@ describe("home page headline (#178)", () => {
     expect(words(hero).split(brand.proof).length - 1).toBe(1);
   });
 
+  // A user said "This section is not clear" (18 November, #521): how to read the two panels comes before them.
+  it("says how to read the example right under its title, before the job ad and the CV", () => {
+    const howTo = "The job ad lists what the job asks for, and Sara’s CV shows it after tailoring";
+    expect(words(html)).toContain(howTo);
+    expect(words(html)).toContain("each number joins a requirement to the CV line written for it");
+    // It names the panels, never where they sit: on a phone they are one above the other.
+    expect(words(html)).not.toContain("On the left");
+    expect(html.indexOf("The job ad lists")).toBeLessThan(html.indexOf(">The job ad</h3>"));
+    expect(words(html).indexOf("Sara’s CV, tailored for a Junior Data Analyst job")).toBeLessThan(words(html).indexOf(howTo));
+  });
+
   it("gives Sara's CV the real tailored CV's headings, in its order (#216, Marzieh in #295)", () => {
     const paper = words(html.slice(html.indexOf("<article"), html.indexOf("</article>")));
     const at = [cvHeadings.skills, cvHeadings.experience, cvHeadings.education].map((heading) => paper.indexOf(` ${heading} `));
