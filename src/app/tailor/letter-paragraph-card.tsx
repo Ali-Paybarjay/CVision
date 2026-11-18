@@ -22,7 +22,8 @@ export function LetterParagraphCard({ paragraph, number, total, disabled = false
   const statusText = paragraph.decision === "kept" ? "✓ Kept" : removed ? "✕ Removed" : "Waiting for your decision";
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-line p-4">
+    // On a phone only a line above each paragraph, so its text is not in three boxes at half the screen's width (#500).
+    <div className="flex flex-col gap-3 border-t border-line pt-4 sm:rounded-md sm:border sm:p-4">
       <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
         Paragraph {number} of {total}
       </p>
