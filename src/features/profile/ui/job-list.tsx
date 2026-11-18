@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefCallback, type RefObject } from "react";
 import { Card } from "@/shared/ui";
 import { JobListItem } from "./job-list-item";
@@ -31,30 +32,29 @@ type JobListProps = {
  * reader hears which job was deleted.
  */
 export function JobList({ title, jobs, empty }: JobListProps) {
+  const router = useRouter();
   const [deleted, setDeleted] = useState<string[]>([]);
   const [said, setSaid] = useState<JobListSaid | null>(null);
   const links = useRef(new Map<string, HTMLAnchorElement>());
   const emptyBox = useRef<HTMLDivElement>(null);
-  // The job that just left the list, so focus can move on from where it was.
-  const justDeleted = useRef<string | null>(null);
+  // The job that just left the list, and the list's order then, so focus can move on from where it was.
+  const justDeleted = useRef<{ id: string; order: string[] } | null>(null);
 
   useEffect(() => {
     const gone = justDeleted.current;
     if (!gone) return;
     justDeleted.current = null;
-    const next = jobAfter(
-      jobs.map((job) => job.id),
-      gone,
-      deleted,
-    );
+    const next = jobAfter(gone.order, gone.id, deleted);
     if (next) links.current.get(next)?.focus();
     else emptyBox.current?.querySelector<HTMLElement>("a[href], button")?.focus();
-  }, [jobs, deleted]);
+  }, [deleted]);
 
   const onDeleted = (job: JobListJob) => {
-    justDeleted.current = job.id;
+    justDeleted.current = { id: job.id, order: jobs.map(({ id }) => id) };
     setDeleted((ids) => [...ids, job.id]);
     setSaid((last) => ({ text: `Deleted: ${job.name}`, count: (last?.count ?? 0) + 1 }));
+    // The browser's Back button shows the copy of this page Next kept, which still had the job: refreshing replaces it.
+    router.refresh();
   };
 
   const link =

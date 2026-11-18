@@ -12,6 +12,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("../job-actions", () => ({ deleteJobAction: vi.fn() }));
 
 const job = (n: number, company: string, onDashboard = false): JobListJob => ({
