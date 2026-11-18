@@ -14,7 +14,7 @@ const statusStyles: Record<StepStatus, string> = {
   "not-started": "bg-canvas text-text-muted",
 };
 
-/** The small label that says how far a step, or the whole application, has gone. */
+/** The small label beside the page's title that says how far the whole application has gone (each step's status is said to a screen reader only, #500). */
 export function StatusPill({ status }: { status: StepStatus }) {
   return <span className={cn("shrink-0 rounded-full px-3 py-1 text-xs font-semibold", statusStyles[status])}>{statusNames[status]}</span>;
 }
