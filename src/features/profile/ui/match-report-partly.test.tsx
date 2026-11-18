@@ -2,10 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { Gap } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
+import { defaultDetail } from "../match";
 import { MatchReport } from "./match-report";
 
 // Each gap says in words how far the profile shows it (#188, decision 3B): "Partly shown" with the profile lines
-// behind it, or "Not shown yet" with no quote. Its own file, so it doesn't meet the changes in #222.
+// behind it, or "Not shown yet" with no quote, or "Not checked" when the match couldn't check it (#527). Its own
+// file, so it doesn't meet the changes in #222.
 
 vi.mock("next/link", () => ({
   default: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
@@ -80,5 +82,39 @@ describe("MatchReport: how far the profile shows each gap (#188)", () => {
 
   it("says in the score note that a Partly shown requirement counts half", () => {
     expect(report(unclear)).toContain("and one marked “Partly shown” counts half.");
+  });
+});
+
+// The match marks a requirement "unclear" when the model skipped it, or called it met with no profile line behind it.
+// Nobody saw the profile show any of it, so it isn't "Partly shown" (#527).
+describe("MatchReport: a gap the match couldn't check (#527)", () => {
+  it.each([
+    ["the model skipped it", defaultDetail.unchecked],
+    ["the model gave no profile line for it", defaultDetail.noEvidence],
+  ])("labels it Not checked, not Partly shown, when %s", (_why, detail) => {
+    const item = gapItem(report({ ...unclear, detail }), unclear.requirement);
+    expect(item).toContain("Not checked");
+    expect(item).not.toContain("Partly shown");
+    expect(item).toContain(detail);
+  });
+
+  it("keeps Partly shown for an unclear gap the profile touches on", () => {
+    const html = report({ ...unclear, detail: defaultDetail.unclear });
+    const item = gapItem(html, unclear.requirement);
+    expect(item).toContain("Partly shown");
+    expect(html).not.toContain("Not checked");
+  });
+
+  it("keeps Not shown yet for a missing gap, whatever its sentence says", () => {
+    const missing: Gap = { ...rest.find((gap) => gap.kind === "missing")!, detail: defaultDetail.unchecked };
+    const item = gapItem(report(unclear, [missing]), missing.requirement);
+    expect(item).toContain("Not shown yet");
+    expect(item).not.toContain("Not checked");
+  });
+
+  it("says in the score note that a Not checked requirement counts half too", () => {
+    expect(report({ ...unclear, detail: defaultDetail.unchecked })).toContain(
+      "and one marked “Partly shown” or “Not checked” counts half.",
+    );
   });
 });

@@ -69,7 +69,8 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
         {hasRequirements && (
           <p className="mt-3 max-w-[65ch] text-sm text-text-muted">
             How the score works: essential requirements count three times as much as desirable ones. A requirement
-            your profile shows clearly counts in full, and one marked “{gapLabel.unclear}” counts half.
+            your profile shows clearly counts in full, and one marked “{gapLabel.unclear}”
+            {match.gaps.some(isUnchecked) && ` or “${uncheckedLabel}”`} counts half.
           </p>
         )}
       </Card>
@@ -159,11 +160,25 @@ export function MatchReport({ job, match, saved, demo, focusHeading, onCheckAnot
   );
 }
 
-/** What each kind of gap is called on the page (#188): a word, so the kind never rests on colour alone. */
+/**
+ * What each kind of gap is called on the page (#188): a word, so the kind never rests on colour alone. An unclear gap the
+ * match couldn't check is called “Not checked” instead (#527, below).
+ */
 export const gapLabel: Record<Gap["kind"], string> = {
   unclear: "Partly shown",
   missing: "Not shown yet",
 };
+
+/**
+ * An "unclear" gap the match couldn't check (#527): the model skipped it, or called it met with no profile line behind
+ * it. "Partly shown" would say the profile shows some of it, which nobody saw. It still counts half, like any unclear gap.
+ */
+const uncheckedLabel = "Not checked";
+const uncheckedDetails: readonly string[] = [defaultDetail.unchecked, defaultDetail.noEvidence];
+
+function isUnchecked(gap: Gap): boolean {
+  return gap.kind === "unclear" && uncheckedDetails.includes(gap.detail);
+}
 
 /** Only an essential gap is amber (#503): with every gap amber, the report read like a list of errors. */
 const gapLook: Record<Gap["importance"], { Icon: typeof WarningIcon; icon: string; label: string }> = {
@@ -190,7 +205,7 @@ function GapList({ title, gaps }: { title: string; gaps: Gap[] }) {
                 <p className="font-semibold">{gap.requirement}</p>
                 <p className="mt-1">
                   <span className={`inline-flex rounded-md px-2 py-0.5 text-[12.5px] font-semibold ${look.label}`}>
-                    {gapLabel[gap.kind]}
+                    {isUnchecked(gap) ? uncheckedLabel : gapLabel[gap.kind]}
                   </span>
                 </p>
                 {/* The stock sentence only repeats "Not shown yet" (#503). One the model wrote can say more, such as
