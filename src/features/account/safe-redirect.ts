@@ -19,7 +19,10 @@ export function safeRedirectPath(next: unknown, fallback = defaultDestination): 
     return fallback;
   }
 
-  return target.origin === site ? `${target.pathname}${target.search}` : fallback;
+  if (target.origin !== site) return fallback;
+  // "/..//evil.com" resolves to the path "//evil.com", which a browser reads as another site (found 18 November).
+  const path = `${target.pathname}${target.search}`;
+  return path.startsWith("//") || path.startsWith("/\\") ? fallback : path;
 }
 
 /** `path` with `next` as its return address, e.g. withNext("/sign-in", "/interview?job=1"). */

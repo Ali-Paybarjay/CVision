@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/shared/supabase/server";
 import { fullReloadField } from "./full-reload-field";
-import { safeRedirectPath } from "./safe-redirect";
+import { defaultDestination, safeRedirectPath } from "./safe-redirect";
 
 export type AuthFormState = {
   error?: string;
@@ -87,6 +87,69 @@ export async function signIn(_: AuthFormState, formData: FormData): Promise<Auth
   const { error } = await supabase.auth.signInWithPassword(credentials);
   if (error?.code === "email_not_confirmed") return { error: notConfirmed };
   if (error) return { error: "That email and password do not match an account." };
+
+  return arriveAt(formData, readNext(formData));
+}
+
+/** What the "Forgot your password?" form shows after it is sent. */
+export type ResetRequestState = { error?: string; fieldError?: string; sentTo?: string };
+
+/** What the "Choose a new password" form shows after it is sent. */
+export type NewPasswordState = { error?: string; fieldError?: string; expired?: boolean; go?: string };
+
+const EmailSchema = z.email("Enter a valid email address.");
+const PasswordSchema = z.string().min(8, "Use at least 8 characters.");
+
+/** Where the reset link lands: /auth/confirm signs the user in, then the page to choose a new password. */
+const newPasswordPath = "/sign-in/new-password";
+
+/**
+ * "Forgot your password?" (#524): emails a link that signs the user in and opens the page to choose a new password.
+ * The answer is the same whether or not the email has an account (Supabase sends nothing to an unknown address and
+ * doesn't say so), so the form never tells anyone which emails have accounts.
+ */
+export async function requestPasswordReset(_: ResetRequestState, formData: FormData): Promise<ResetRequestState> {
+  const email = EmailSchema.safeParse(formData.get("email"));
+  if (!email.success) return { fieldError: z.flattenError(email.error).formErrors[0] ?? "Enter a valid email address." };
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: notConnected };
+
+  // The page the user was heading to stays with them: after the new password, they go on there.
+  const next = readNext(formData);
+  const landing = next === defaultDestination ? newPasswordPath : `${newPasswordPath}?next=${encodeURIComponent(next)}`;
+  const origin = (await headers()).get("origin") ?? "";
+  const { error } = await supabase.auth.resetPasswordForEmail(email.data, {
+    redirectTo: `${origin}/auth/confirm?next=${encodeURIComponent(landing)}`,
+  });
+  if (error?.code === "over_email_send_rate_limit" || error?.status === 429) {
+    return { error: "We’ve just sent a link. Wait a minute, then try again." };
+  }
+  if (error) return { error: "We couldn’t send the link just now. Try again in a minute." };
+  return { sentTo: email.data };
+}
+
+/**
+ * Saves the new password for the user the reset link signed in, then goes on to the page they were heading to, as a
+ * full page load like signing in (#350). Without that sign-in (an expired link, or one opened in another browser)
+ * nothing changes and the page offers a new link.
+ */
+export async function setNewPassword(_: NewPasswordState, formData: FormData): Promise<NewPasswordState> {
+  const password = PasswordSchema.safeParse(formData.get("password"));
+  if (!password.success) return { fieldError: z.flattenError(password.error).formErrors[0] ?? "Use at least 8 characters." };
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { error: notConnected };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { expired: true };
+
+  const { error } = await supabase.auth.updateUser({ password: password.data });
+  if (error?.code === "same_password") return { fieldError: "Choose a password you haven’t used for this account before." };
+  if (error?.code === "weak_password") return { fieldError: "Choose a longer or less common password." };
+  if (error) return { error: "We couldn’t save your new password. Try again in a minute." };
 
   return arriveAt(formData, readNext(formData));
 }

@@ -31,6 +31,11 @@ describe("safeRedirectPath", () => {
     "evil.com",
     "dashboard",
     " /dashboard",
+    // Resolve to the path "//evil.com", which a browser reads as another site (found in review, 18 November).
+    "/..//evil.com",
+    "/.//evil.com",
+    "/a/..//evil.com",
+    "/%2e%2e//evil.com",
   ])("sends %j back to the dashboard instead of another site", (next) => {
     expect(safeRedirectPath(next)).toBe("/dashboard");
   });
