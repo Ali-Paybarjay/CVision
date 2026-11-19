@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CvCheckResult } from "@/shared/contracts";
 import { carriedCvFor, carryFromCheck } from "@/shared/carried-cv";
 import { CvCheckForm, CvCheckReport, newCheck } from "./cv-check-form";
+import { countIssues, ScoreOverview } from "./score-overview";
 
 // Render checks for the result of a CV check: where its main button leads and what the next step says.
 
@@ -72,6 +73,18 @@ describe("CvCheckReport score overview", () => {
     expect(words).toContain("Worth fixing 1 issue");
     expect(words).toContain("Polish 1 issue");
     expect(html.match(/style="width:([\d.]+)%"/g)).toEqual(["style=\"width:0%\"", "style=\"width:50%\"", "style=\"width:50%\""]);
+  });
+});
+
+describe("ScoreOverview as an example", () => {
+  it("draws the picture with no meter and hides it from screen readers", () => {
+    const html = renderToStaticMarkup(<ScoreOverview score={68} counts={{ high: 1, medium: 2, low: 1 }} example />);
+    expect(html).not.toContain('role="meter"');
+    expect(html).toMatch(/^<div[^>]*aria-hidden="true"/);
+  });
+
+  it("counts the issues of each kind", () => {
+    expect(countIssues(result.issues)).toEqual({ high: 0, medium: 1, low: 1 });
   });
 });
 
