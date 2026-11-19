@@ -54,6 +54,27 @@ function render(signedIn: boolean, file: File | null = null, hasProfile = false)
 /** Where the result's one Coral button leads. */
 const coralHref = (html: string) => html.match(/<a href="([^"]*)" class="[^"]*bg-cta/)?.[1];
 
+describe("CvCheckReport score overview", () => {
+  const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+  it("shows the check's own score in the ring, as a meter a screen reader can read", () => {
+    const html = render(false);
+    expect(text(html)).toContain("72% Overall score");
+    expect(html).toContain('role="meter"');
+    expect(html).toContain('aria-valuenow="72"');
+    expect(html).toContain('aria-valuetext="72 out of 100"');
+  });
+
+  it("counts the issues of each kind, with a bar for each share", () => {
+    const html = render(false);
+    const words = text(html);
+    expect(words).toContain("Fix first 0 issues");
+    expect(words).toContain("Worth fixing 1 issue");
+    expect(words).toContain("Polish 1 issue");
+    expect(html.match(/style="width:([\d.]+)%"/g)).toEqual(["style=\"width:0%\"", "style=\"width:50%\"", "style=\"width:50%\""]);
+  });
+});
+
 describe("CvCheckReport", () => {
   // A signed-in pilot was sent to sign-up from here (#331).
   it("sends a signed-in user with no profile to Profile, and a visitor to sign-up and then their profile", () => {

@@ -215,6 +215,79 @@ function downloadResult(result: CvCheckResult, notes: ResultNotes) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const SEVERITIES = ["high", "medium", "low"] as const;
+
+/** Each kind of issue has its own colour, from the brand's tokens, so the three bars tell apart at a glance. */
+const severityBar: Record<(typeof SEVERITIES)[number], string> = {
+  high: "bg-warning",
+  medium: "bg-fit-bar",
+  low: "bg-text-muted",
+};
+
+/**
+ * The score as a ring, and beside it how many issues of each kind the check found. Every number is the check's own:
+ * the ring fills to the score, and each bar to its share of the issues.
+ */
+function ScoreOverview({ result }: { result: CvCheckResult }) {
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const total = result.issues.length;
+
+  return (
+    <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
+      <div
+        role="meter"
+        aria-label="Readiness score"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={result.score}
+        aria-valuetext={`${result.score} out of 100`}
+        className="relative size-36 shrink-0"
+      >
+        <svg viewBox="0 0 100 100" className="size-full -rotate-90" aria-hidden="true">
+          <circle cx="50" cy="50" r={radius} fill="none" strokeWidth="9" className="stroke-fit" />
+          <circle
+            cx="50"
+            cy="50"
+            r={radius}
+            fill="none"
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeDasharray={`${(circumference * result.score) / 100} ${circumference}`}
+            className="stroke-fit-bar"
+          />
+        </svg>
+        <span className="absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
+          <span className="text-4xl font-bold leading-none text-text tabular-nums">{result.score}%</span>
+          <span className="mt-1 text-xs text-text-muted">Overall score</span>
+        </span>
+      </div>
+
+      <ul className="flex w-full min-w-0 flex-col gap-4">
+        {SEVERITIES.map((severity) => {
+          const count = result.issues.filter((issue) => issue.severity === severity).length;
+          return (
+            <li key={severity} className="flex flex-col gap-1.5">
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="font-semibold">{severityLabels[severity]}</span>
+                <span className="text-text-muted tabular-nums">
+                  {count} {count === 1 ? "issue" : "issues"}
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-canvas" aria-hidden="true">
+                <div
+                  className={cn("h-full rounded-full", severityBar[severity])}
+                  style={{ width: total === 0 ? "0%" : `${(count / total) * 100}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /** The result of a check. Exported for its render tests. */
 export function CvCheckReport({
   result,
@@ -249,21 +322,7 @@ export function CvCheckReport({
         <h2 id="result-heading" ref={headingRef} tabIndex={-1} className="text-2xl">
           {readinessLabels[result.readiness]}
         </h2>
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-text-muted">
-            <span className="text-3xl font-bold text-text">{result.score}</span> out of 100
-          </p>
-          <div
-            role="meter"
-            aria-label="Readiness score"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={result.score}
-            className="h-2 w-full overflow-hidden rounded-full bg-fit"
-          >
-            <div className="h-full rounded-full bg-fit-bar" style={{ width: `${result.score}%` }} />
-          </div>
-        </div>
+        <ScoreOverview result={result} />
         <p className="text-lg">{result.summary}</p>
       </Card>
 
