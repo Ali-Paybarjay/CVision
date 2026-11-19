@@ -682,16 +682,32 @@ describe("profile screens", () => {
     expect(card).toContain("doesn’t change your profile");
   });
 
-  // The CV check keeps no result, so the ring beside it shows no score: a made-up number would break the Honest CV
-  // Promise. "Not checked yet" was wrong right after a check, so its line is true either way (#548).
-  it("shows the CV check's score ring empty, with no number, and a line that is true before and after a check", () => {
-    const words = overview(fromBrowser(stored("sara")), "browser");
-    const card = words.slice(words.indexOf("Is your CV ready"), words.indexOf("What you’re looking for"));
+  // The CV check keeps no result, so Profile has no score of the user's own. The picture of a result beside the card
+  // uses sample numbers, so it is labelled an example and hidden from screen readers, and is no meter: a sample
+  // number read as the user's own would break the Honest CV Promise. Its last line is true before and after a check
+  // (#548).
+  it("shows an example of the CV check's result, labelled as one, never as the user's score", () => {
+    const html = overview(fromBrowser(stored("sara")), "browser");
+    const raw = renderToStaticMarkup(
+      <ProfileOverview
+        saved={fromBrowser(stored("sara"))}
+        storage="browser"
+        persistent
+        focusHeading={false}
+        onEdit={noop}
+        onUploadNew={noop}
+        onDelete={async () => null}
+        onSavePreferences={async () => null}
+      />,
+    );
+    const card = html.slice(html.indexOf("Is your CV ready"), html.indexOf("What you’re looking for"));
+    const figure = raw.match(/<figure[^>]*>.*?<\/figure>/)?.[0] ?? "";
 
-    expect(card).toContain("Your score shows in the check. We don’t save it.");
-    expect(card).not.toContain("Not checked yet");
-    expect(card).toMatch(/\?\s+\/ 100/);
-    expect(card).not.toMatch(/\d+\s*%|\b\d{1,2}\s*\/\s*100/);
+    expect(card).toMatch(/Example\s+68%\s+Overall score/);
+    expect(card).toContain("An example of what the check shows. Your score shows in the check. We don’t save it.");
+    expect(figure).toContain('aria-hidden="true"');
+    expect(figure).not.toContain('role="meter"');
+    expect(raw).not.toContain('role="meter"');
   });
 
   it("counts volunteering, projects and languages in the summary when the profile has them (#227)", () => {

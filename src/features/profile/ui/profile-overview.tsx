@@ -11,6 +11,7 @@ import { builtFromCv, type SavedProfile } from "../saved-profile";
 import { useFocusHeading } from "./focus-heading";
 import { count, formatDay, formatPeriod } from "./format";
 import { PreferencesForm } from "./preferences-form";
+import { ScoreOverview } from "@/features/cvcheck/ui/score-overview";
 import { Button, ButtonLink, Card, Notice } from "@/shared/ui";
 
 type ProfileOverviewProps = {
@@ -124,7 +125,7 @@ export function ProfileOverview({
           not at a job ad, which is what tells it apart from Check a job. It doesn't read the saved profile: it asks
           for the CV again, so the text says so (#548). Question and button are the brand's, as on the home page. */}
       <Card aria-labelledby="cv-check-heading">
-        <div className="flex flex-col-reverse gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] md:items-center">
           <div className="min-w-0">
             <h2 id="cv-check-heading" className="text-xl">
               {brand.cta.cvCheckQuestion}
@@ -137,7 +138,7 @@ export function ProfileOverview({
               {brand.cta.cvCheckAction}
             </ButtonLink>
           </div>
-          <ScoreRing />
+          <ResultExample />
         </div>
       </Card>
 
@@ -245,37 +246,21 @@ export function ProfileOverview({
 }
 
 /**
- * The CV check's score ring, empty. The check keeps no result, so Profile has no score to show: an empty ring with a
- * question mark, never a made-up number (Honest CV Promise). The score out of 100 appears in the check. Its line is
- * true whether or not the user has checked their CV: "Not checked yet" was wrong right after a check (#548).
+ * What the CV check's result looks like, with sample numbers. The check keeps no result, so Profile has no score of
+ * the user's own; showing one would break the Honest CV Promise. So the picture is labelled an example above and
+ * below, and is hidden from screen readers. Its last line stays true before and after a check (#548).
  */
-function ScoreRing() {
+function ResultExample() {
   return (
-    <div className="flex shrink-0 flex-col items-center gap-1 self-center">
-      <div className="relative size-28" aria-hidden="true">
-        <svg viewBox="0 0 100 100" className="size-full">
-          <circle cx="50" cy="50" r="46" className="fill-fit" />
-          {/* Dotted, not a partial arc: an arc would read as a low score. */}
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            fill="none"
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeDasharray="0.1 9.9"
-            className="stroke-accent"
-          />
-        </svg>
-        <span className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-bold leading-none text-accent">?</span>
-          <span className="mt-1 text-xs text-text-muted">/ 100</span>
-        </span>
-      </div>
-      <span className="max-w-40 text-center text-xs font-semibold text-text-muted">
-        Your score shows in the check. We don’t save it.
-      </span>
-    </div>
+    <figure className="flex min-w-0 flex-col gap-3 rounded-lg border border-line p-4">
+      <p className="w-fit rounded-sm bg-fit px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-accent">
+        Example
+      </p>
+      <ScoreOverview score={68} counts={{ high: 1, medium: 2, low: 1 }} size="compact" example />
+      <figcaption className="text-xs text-text-muted">
+        An example of what the check shows. Your score shows in the check. We don’t save it.
+      </figcaption>
+    </figure>
   );
 }
 
