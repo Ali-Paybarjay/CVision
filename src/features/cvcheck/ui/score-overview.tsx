@@ -80,7 +80,8 @@ export function ScoreOverview({
         </svg>
         <span className="absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
           <span className={cn("font-bold leading-none text-text tabular-nums", look.score)}>{score}%</span>
-          <span className={cn("mt-1 text-text-muted", look.label)}>Overall score</span>
+          {/* An example says so inside the ring too, so its number is never read as the user's own score (#556). */}
+          <span className={cn("mt-1 text-text-muted", look.label)}>{example ? "Example" : "Overall score"}</span>
         </span>
       </div>
 
