@@ -256,7 +256,8 @@ function ResultExample() {
       <p className="w-fit rounded-sm bg-fit px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-accent">
         Example
       </p>
-      <ScoreOverview score={68} counts={{ high: 1, medium: 2, low: 1 }} size="compact" example />
+      {/* Not the mock check's own answer (68, with 1, 2 and 1 issues), so a check never seems to match it (#556). */}
+      <ScoreOverview score={74} counts={{ high: 0, medium: 2, low: 2 }} size="compact" example />
       <figcaption className="text-xs text-text-muted">
         An example of what the check shows. Your score shows in the check. We don’t save it.
       </figcaption>

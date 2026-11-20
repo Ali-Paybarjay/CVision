@@ -703,9 +703,14 @@ describe("profile screens", () => {
     const card = html.slice(html.indexOf("Is your CV ready"), html.indexOf("What you’re looking for"));
     const figure = raw.match(/<figure[^>]*>.*?<\/figure>/)?.[0] ?? "";
 
-    expect(card).toMatch(/Example\s+68%\s+Overall score/);
+    // The ring itself says Example, not "Overall score", and the numbers are not the mock check's answer (#556).
+    expect(card).toMatch(/Example\s+74%\s+Example/);
+    expect(card).not.toContain("Overall score");
+    expect(card).not.toContain("68%");
     expect(card).toContain("An example of what the check shows. Your score shows in the check. We don’t save it.");
-    expect(figure).toContain('aria-hidden="true"');
+    // The whole picture is hidden, not only the parts ScoreOverview always hides: the element right after the label
+    // carries aria-hidden itself.
+    expect(figure).toMatch(/<figure[^>]*><p[^>]*>Example<\/p><div[^>]*aria-hidden="true"/);
     expect(figure).not.toContain('role="meter"');
     expect(raw).not.toContain('role="meter"');
   });
