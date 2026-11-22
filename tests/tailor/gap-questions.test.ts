@@ -143,8 +143,9 @@ describe("never shows a question whether something in the CV is accredited or re
     expect(prompt).toContain('Never an open "How did you…"');
     expect(prompt).toContain("never name one employer in it");
     expect(prompt).toContain("their No must mean they have not done it anywhere");
-    expect(prompt).toContain("Give options for every question, with two exceptions.");
-    expect(prompt).toContain("A question that asks for a number, how often, or a result: give no options");
+    expect(prompt).toContain("Give options for every question: they should never have to write an answer from nothing.");
+    expect(prompt).toContain('A "Which…" or "What…" question is fine only with options that name the likely answers.');
+    expect(prompt).toContain("A range is not a claim");
     expect(prompt).toContain("never from the ad");
     expect(prompt).toContain("For an `unclear` gap, first name the CV line it rests on in a short sentence of its own, without its employer, then ask.");
     expect(prompt).toContain("or a course, degree, project or volunteering of theirs");
