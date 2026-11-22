@@ -7,7 +7,6 @@ import { buildTailoredCv, newLineRole, sameTarget } from "@/features/tailor/tail
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
 import { Button, Card, cn, Notice } from "@/shared/ui";
-import { answerStarters } from "./answer-starters";
 import { ApplyPanel } from "./apply-panel";
 import { ChangeCard, type LineNote } from "./change-card";
 import { ChooseAnotherJob } from "./choose-another-job";
@@ -101,7 +100,6 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   const cv = buildTailoredCv(profile, changes, job);
   // The live CV: the approved changes, and the suggestions not decided yet in their places, marked as suggested.
   const shown = suggestionsToShow(changes);
-  const starters = answerStarters(profile);
   const liveCv = buildTailoredCv(profile, changes.map((change) => (shown.includes(change) ? { ...change, status: "approved" as const } : change)), job);
   const approvedLines = new Set(changes.filter((change) => change.status === "approved").map((change) => change.after));
   const marks: PreviewMarks = {
@@ -182,7 +180,6 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       main={main}
       heading={heading}
       onShow={showOnCv}
-      starters={starters}
       jobId={job.id}
       prompt={prompt}
       state={gapStates[prompt.gap.id] ?? { phase: "open" }}
