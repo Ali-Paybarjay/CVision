@@ -47,13 +47,15 @@ function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]
 }
 
 /**
- * The suggested changes the live CV shows in a dashed box: each one not decided yet, unless an approved change or an
- * earlier suggestion already takes its line, as only one change per line can be on the CV (#272).
+ * The suggested changes the live CV shows in a dashed box: each one from the user's answers not decided yet, unless an
+ * approved change or an earlier suggestion already takes its line, as only one change per line can be on the CV (#272).
+ * Suggestions from the CV itself wait in step 3 until approved: shown too, they made every line dashed, and the line the
+ * user's answer just gave got lost among them (#559).
  */
 function suggestionsToShow(changes: TailoringChange[]): TailoringChange[] {
   const shown: TailoringChange[] = [];
   for (const change of changes) {
-    if (change.status !== "proposed") continue;
+    if (change.status !== "proposed" || !change.gapId) continue;
     const taken = changes.some((other) => other.status === "approved" && sameTarget(other, change)) || shown.some((other) => sameTarget(other, change));
     if (!taken) shown.push(change);
   }
@@ -259,7 +261,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       {(
         [
           ["ask", "Ask & Improve"],
-          ["cv", `CV Preview · ${counts.approved + counts.waiting} ${counts.approved + counts.waiting === 1 ? "change" : "changes"}`],
+          ["cv", `CV Preview · ${counts.approved + shown.length} ${counts.approved + shown.length === 1 ? "change" : "changes"}`],
         ] as const
       ).map(([value, words]) => (
         <button

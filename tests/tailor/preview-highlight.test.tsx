@@ -99,3 +99,25 @@ describe("an approved item on a line of the last section (#543)", () => {
     expect(tools.slice(0, tools.indexOf("</p>")).replace(/<[^>]+>|\(tailored for this job\)/g, "").replace(/\s+,/g, ",").trim()).toBe(`Skills and tools: ${file?.text}`);
   });
 });
+
+describe("the live CV beside the questions (#559)", () => {
+  const live = (changes: TailoringChange[]) => {
+    const html = renderToStaticMarkup(<TailorWorkspace job={job} jobUrl={null} label="" profile={profile} prompts={[]} savedChanges={changes} />);
+    const start = html.indexOf('aria-label="Your tailored CV"');
+    return html.slice(start, html.indexOf("</article>", start));
+  };
+
+  it("shows a suggestion from an answer in a dashed box, before it is approved", () => {
+    const paper = live([{ ...approved, status: "proposed" }]);
+    expect(paper).toContain(after);
+    expect(holder(paper, after)).toBe("");
+    expect(paper).toContain("border-dashed");
+    expect(paper).toContain("(suggested, not on your CV yet)");
+  });
+
+  it("leaves a suggestion from the CV itself off until it is approved, so the answers' lines stand out", () => {
+    const paper = live([{ ...approved, gapId: undefined, evidenceSource: "cv", status: "proposed" }]);
+    expect(paper).not.toContain(after);
+    expect(paper).not.toContain("border-dashed");
+  });
+});
