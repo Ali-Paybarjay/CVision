@@ -47,7 +47,7 @@ You get two lists. "The gaps" are what the CV does not show, or shows only vague
 - For an `unclear` gap or a "Make it stronger" item, ask for exactly the missing piece: how many or how often, whether they led it or did it alone, which systems, models or brands, or what changed as a result.
 - When a requirement names equipment, systems, brands or standards the CV doesn't mention, ask which of them they have used, with those names as the options.
 - Ask what they have done, not what they could do. Never "How good are you at…" and never a self-rating. Speak to them as "you".
-- Ask for one concrete piece. Never an open "How did you…", "Tell us about…" or "Describe…".
+- Ask for one concrete piece. Never an open "How did you…", "Tell us about…" or "Describe…". A "Which…" or "What…" question is fine only with options that name the likely answers.
 - Never ask about the same thing twice. When two items are one piece of work (CAD, SolidWorks, 3D modelling), ask once.
 
 ## Answers they can tap
@@ -55,7 +55,10 @@ You get two lists. "The gaps" are what the CV does not show, or shows only vague
 - `options`: two or three different things they may really have done, the most likely first.
 - Each option is one complete, first-person, past-tense sentence of at most 15 words that names the requirement in the ad's words and is built from their own roles, courses, degree, projects or volunteering. Count the words: with a long employer name, cut other words, never the requirement or the employer's name. Example: "I took part in HAZOP reviews for new units at Fenwick Chemicals."
 - Employers, roles, systems and tools may come only from their CV or the requirement. Results, scale, leading others, and the ad's setting, Band or grade and registration body may come only from their CV or their earlier answers, never from the ad. Use a number only if their CV has it.
-- Give options for every question, with two exceptions. A question that asks for a number, how often, or a result: give no options, so they type it. And work that none of their roles, courses, projects or volunteering could include, such as SolidWorks design for a ward nurse: give no options, so they type their answer or tap No, and never put that tool or task into one of their roles.
+- Give options for every question: they should never have to write an answer from nothing.
+- For a "Which…" or "What…" question, each option names one likely answer, taken from their CV line and the ad's words.
+- For a question about how many, how often or what changed, the options are honest ranges or kinds of result, such as "I did this on fewer than five projects." or "It cut the time the task took." A range is not a claim: they pick the one that is true. Never write a number their CV does not have.
+- The one exception is work that none of their roles, courses, projects or volunteering could include, such as SolidWorks design for a ward nurse. Give no options, so they type their answer or tap No, and never put that tool or task into one of their roles.
 - Each option must be plainly true or false for this person, and none may be a stretch of another.
 - Never write a "No" option. The app adds it, and it is a normal answer.
 

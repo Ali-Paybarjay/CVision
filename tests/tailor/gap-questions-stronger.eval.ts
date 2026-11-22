@@ -33,6 +33,14 @@ describe.skipIf(!getAiProvider())("Gap questions (live)", () => {
       }
     });
 
+    // Every question has answers to tap, so nobody writes an answer from nothing (#561). Only the nurse's case may have
+    // none: none of her roles could include engineering work.
+    if (!name.startsWith("(c)")) {
+      it("gives two or three answers to tap for every question (#561)", () => {
+        for (const item of questions) expect(item.options?.length ?? 0, item.question).toBeGreaterThanOrEqual(2);
+      });
+    }
+
     it("never asks about a condition of the job", () => {
       for (const item of questions) expect(item.question, item.question).not.toMatch(conditions);
     });
