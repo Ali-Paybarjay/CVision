@@ -1,10 +1,11 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { answerGap } from "@/features/tailor/actions";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
 import { Button, cn, Notice, SectionLabel, Textarea, WaitNote } from "@/shared/ui";
+import { withStarter, type AnswerStarter } from "./answer-starters";
 import { ChangeCard, type LineNote } from "./change-card";
 import { unreachableMessage } from "./messages";
 
@@ -50,6 +51,8 @@ type GapCardProps = {
   heading?: string;
   /** Shows a suggested line on the live CV beside the questions. */
   onShow?: (change: TailoringChange) => void;
+  /** The user's own roles, project and degree, to start an answer with when the question has no answers to tap (#561). */
+  starters?: AnswerStarter[];
 };
 
 /**
@@ -68,13 +71,26 @@ export function whyAsking(gap: Gap): string {
  * One thing the job asks for that the CV does not show, answered in the user's own words, with one of the things they
  * may have done when the question offers any, or with a plain no.
  */
-export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf, lineNoteOf, main = false, heading, onShow }: GapCardProps) {
+export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAnswers, changes, onDecide, roleOf, lineNoteOf, main = false, heading, onShow, starters = [] }: GapCardProps) {
   const [detail, setDetail] = useState("");
   const [pending, startTransition] = useTransition();
   // Whether this answer waits for the model, which took about 30 seconds on the live site (6 November, #325): see waitsForModel.
   const [askingModel, setAskingModel] = useState(false);
   const errorId = useId();
   const optionsId = useId();
+  const startersId = useId();
+  const answerBox = useRef<HTMLTextAreaElement>(null);
+  // A start alone ("At Maroon Karan, I") is not an answer yet.
+  const onlyStart = starters.some((starter) => detail.trim() === starter.start.trim());
+  const start = (starter: AnswerStarter) => {
+    const next = withStarter(detail, starter, starters);
+    setDetail(next);
+    // The user goes on writing straight after the start.
+    requestAnimationFrame(() => {
+      answerBox.current?.focus();
+      answerBox.current?.setSelectionRange(next.length, next.length);
+    });
+  };
   const { gap, options = [] } = prompt;
 
   const submit = (chosen: string | null) => {
@@ -144,9 +160,38 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
               ))}
             </div>
           )}
+          {/* No answers to tap: the user's own roles start the answer, as "Where did you do this?" on the Tailor v2 canvas (#561). */}
+          {options.length === 0 && starters.length > 0 && (
+            <div className="flex flex-col gap-2" role="group" aria-labelledby={startersId}>
+              <p id={startersId} className="font-semibold">
+                Where did you do this? <span className="font-normal text-text-muted">Tap one to start your answer.</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {starters.map((starter) => {
+                  const chosen = detail.startsWith(starter.start);
+                  return (
+                    <button
+                      key={starter.label}
+                      type="button"
+                      aria-pressed={chosen}
+                      onClick={() => start(starter)}
+                      disabled={pending}
+                      className={cn(
+                        "min-h-11 rounded-full px-3.5 py-2 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                        chosen ? "border-2 border-accent bg-fit" : "border border-line bg-surface hover:border-accent",
+                      )}
+                    >
+                      {starter.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <p className="font-semibold">{options.length > 0 ? "Something else, in your words" : "Your answer, in your words"}</p>
             <Textarea
+              ref={answerBox}
               aria-label="Your answer"
               aria-describedby={state.phase === "error" ? errorId : undefined}
               placeholder="Your answer…"
@@ -162,7 +207,7 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
             </p>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant={main ? "primary" : "secondary"} onClick={() => submit(detail.trim())} disabled={pending || detail.trim() === ""}>
+            <Button variant={main ? "primary" : "secondary"} onClick={() => submit(detail.trim())} disabled={pending || detail.trim() === "" || onlyStart}>
               {pending ? "Writing a suggestion…" : "Save answer"}
             </Button>
             <button
