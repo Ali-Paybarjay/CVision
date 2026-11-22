@@ -12,7 +12,7 @@ type QuestionsStepProps = {
   more: GapPrompt[];
   gapStates: Record<string, GapState>;
   /** `main` for a question asked one at a time, whose Save answer is the step's Coral button (#500). */
-  gapCard: (prompt: GapPrompt, main?: boolean) => React.ReactNode;
+  gapCard: (prompt: GapPrompt, main?: boolean, heading?: string) => React.ReactNode;
   onFinished: () => void;
 };
 
@@ -51,8 +51,7 @@ export function QuestionsStep({ questions, more, gapStates, gapCard, onFinished 
 
       {questions.map((prompt, index) => (
         <div key={prompt.gap.id} hidden={index !== current}>
-          <p className="mb-1 text-lg font-semibold">Question {index + 1}</p>
-          {gapCard(prompt, true)}
+          {gapCard(prompt, true, `Question ${index + 1} of ${questions.length}`)}
         </div>
       ))}
 
@@ -78,10 +77,10 @@ export function QuestionsStep({ questions, more, gapStates, gapCard, onFinished 
       {/* After one answer, here or under "More ways", the user can stop: before, they had to skip each question to the
           last one to see their CV (#488). */}
       {[...questions, ...more].some(isAnswered) && !isLast && (
-        <div className="flex flex-col items-start gap-2 rounded-md bg-canvas px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3">
           <Button onClick={onFinished}>Review your tailored CV now</Button>
           {answered < questions.length && (
-            <p className="text-sm text-text-muted">The questions you haven’t answered stay here, so you can come back to them.</p>
+            <p className="min-w-48 flex-1 text-sm text-text-muted">The questions you haven’t answered stay here, so you can come back to them.</p>
           )}
         </div>
       )}

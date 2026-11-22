@@ -3,16 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { decideChange } from "@/features/tailor/actions";
 import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
-import { buildTailoredCv, newLineRole } from "@/features/tailor/tailored-cv";
+import { buildTailoredCv, newLineRole, sameTarget } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
-import { Button, Card, Notice } from "@/shared/ui";
+import { Button, Card, cn, Notice } from "@/shared/ui";
 import { ApplyPanel } from "./apply-panel";
 import { ChangeCard, type LineNote } from "./change-card";
 import { ChooseAnotherJob } from "./choose-another-job";
 import { CoverLetterPanel } from "./cover-letter-panel";
-import { CvOverview } from "./cv-overview";
-import { CvPreview } from "./cv-preview";
+import { CvPreview, type PreviewMarks } from "./cv-preview";
 import { CvSuggestions } from "./cv-suggestions";
 import { DownloadBar } from "./download-bar";
 import { FinalCheck } from "./final-check";
@@ -48,9 +47,26 @@ function withoutRepeats(suggested: TailoringChange[], current: TailoringChange[]
 }
 
 /**
- * The Tailor workspace for one job, as five steps with one open at a time: the job, a question for each thing
- * the job asks for that the CV does not show, the suggested changes, the cover letter, then download and Apply. The CV
- * preview in the review step shows approved changes only.
+ * The suggested changes the live CV shows in a dashed box: each one from the user's answers not decided yet, unless an
+ * approved change or an earlier suggestion already takes its line, as only one change per line can be on the CV (#272).
+ * Suggestions from the CV itself wait in step 3 until approved: shown too, they made every line dashed, and the line the
+ * user's answer just gave got lost among them (#559).
+ */
+function suggestionsToShow(changes: TailoringChange[]): TailoringChange[] {
+  const shown: TailoringChange[] = [];
+  for (const change of changes) {
+    if (change.status !== "proposed" || !change.gapId) continue;
+    const taken = changes.some((other) => other.status === "approved" && sameTarget(other, change)) || shown.some((other) => sameTarget(other, change));
+    if (!taken) shown.push(change);
+  }
+  return shown;
+}
+
+/**
+ * The Tailor workspace for one job, laid out as on the Tailor v2 canvas (artboards 1 and 2): the steps on the left, with
+ * one open at a time (the job, a question for each thing the job asks for that the CV does not show, the suggested
+ * changes, the cover letter, then download and Apply), and the live CV on the right, with the suggested lines dashed and
+ * the approved ones on Fit. On a phone the two sides are two tabs. The download has approved changes only.
  */
 export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedChanges = [], notice = null }: TailorWorkspaceProps) {
   // The page's heading takes focus once when the workspace arrives, so a screen reader says the page is ready (#419).
@@ -82,6 +98,25 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   const lineNoteOf = (change: TailoringChange): LineNote | undefined =>
     lineNotes?.approved === change.id ? "replaced" : lineNotes?.sentBack.includes(change.id) ? "sent-back" : undefined;
   const cv = buildTailoredCv(profile, changes, job);
+  // The live CV: the approved changes, and the suggestions not decided yet in their places, marked as suggested.
+  const shown = suggestionsToShow(changes);
+  const liveCv = buildTailoredCv(profile, changes.map((change) => (shown.includes(change) ? { ...change, status: "approved" as const } : change)), job);
+  const approvedLines = new Set(changes.filter((change) => change.status === "approved").map((change) => change.after));
+  const marks: PreviewMarks = {
+    suggested: new Set(shown.map((change) => change.after).filter((line) => !approvedLines.has(line))),
+    ids: new Map([...changes.filter((change) => change.status === "approved"), ...shown].map((change) => [change.after, change.id])),
+  };
+  // Phone only: the questions or the CV, as two tabs. On a wide screen both are side by side.
+  const [view, setView] = useState<"ask" | "cv">("ask");
+  // The live CV, or the ad beside it; and with the changes marked, or as the download will look.
+  const [panel, setPanel] = useState<"cv" | "ad">("cv");
+  const [showChanges, setShowChanges] = useState(true);
+  const showOnCv = (change: TailoringChange) => {
+    setView("cv");
+    setPanel("cv");
+    setShowChanges(true);
+    requestAnimationFrame(() => document.getElementById(`cv-line-${change.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+  };
   // Approved changes whose line is not on the CV; those that lost their line to another change are told apart (#272).
   const notFound = cv.unplaced.filter((change) => !cv.sameLine.includes(change));
   // Worked out on every render, so a letter approved before the CV changed is never used as approved.
@@ -139,10 +174,12 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
     }
   };
 
-  const gapCard = (prompt: GapPrompt, main = false) => (
+  const gapCard = (prompt: GapPrompt, main = false, heading?: string) => (
     <GapCard
       key={prompt.gap.id}
       main={main}
+      heading={heading}
+      onShow={showOnCv}
       jobId={job.id}
       prompt={prompt}
       state={gapStates[prompt.gap.id] ?? { phase: "open" }}
@@ -181,26 +218,25 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
 
   return (
     <>
-    {/* The title comes first, above the overview, so the way back to the list is seen at once and a screen reader,
-        which starts at the focused heading, reaches it next (#462). The page's notice stays right under it (#468). */}
-    <header className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 ref={heading} tabIndex={-1} className="text-xl">
-          Tailor your CV
-        </h1>
-        <StatusPill status={applied ? "completed" : "in-progress"} />
+    {/* The title comes first, so the way back to the list is seen at once and a screen reader, which starts at the
+        focused heading, reaches it next (#462). The page's notice stays right under it (#468). */}
+    <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 ref={heading} tabIndex={-1} className="text-sm font-normal text-text-muted">
+            Tailor your CV
+          </h1>
+          <StatusPill status={applied ? "completed" : "in-progress"} />
+        </div>
+        <h2 className="text-2xl leading-tight sm:text-3xl">
+          {job.title} <span className="font-medium text-text-muted">· {job.company}</span>
+        </h2>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <ChooseAnotherJob />
+          {label && <p className="w-fit rounded-full border border-line px-2 py-0.5 text-xs text-text-muted">{label}</p>}
+        </div>
       </div>
-      <h2 className="text-3xl leading-tight sm:text-4xl">{job.title}</h2>
-      <p className="text-text-muted">{job.company} · Job application</p>
-      <ChooseAnotherJob />
-      {label && <p className="w-fit rounded-full border border-line px-2 py-0.5 text-xs text-text-muted">{label}</p>}
-    </header>
-
-    {notice && <Notice tone="info">{notice}</Notice>}
-
-    <CvOverview
-      cv={cv}
-      tracker={
+      <div className="w-full lg:w-[28rem]">
         <StepTracker
           steps={[
             { label: "Job", status: statuses[1] },
@@ -210,15 +246,41 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
             { label: "Download", status: statuses[5] },
           ]}
           current={openStep}
-          onSelect={(step) => goTo(step as Step)}
+          onSelect={(step) => {
+            setView("ask");
+            goTo(step as Step);
+          }}
         />
-      }
-      nextQuestion={questions.find((prompt) => gapStates[prompt.gap.id]?.phase !== "answered")?.question ?? null}
-      suggestion={changes.find((change) => change.status === "proposed") ?? null}
-      onAnswer={() => goTo(2)}
-      onReview={() => goTo(3)}
-    />
-    <Card className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+      </div>
+    </header>
+
+    {notice && <Notice tone="info">{notice}</Notice>}
+
+    {/* Phone only: "Ask & Improve" and "CV Preview", as on the canvas's phone artboard. */}
+    <div role="group" aria-label="What to show" className="grid grid-cols-2 overflow-hidden rounded-lg border border-line bg-surface lg:hidden">
+      {(
+        [
+          ["ask", "Ask & Improve"],
+          ["cv", `CV Preview · ${counts.approved + shown.length} ${counts.approved + shown.length === 1 ? "change" : "changes"}`],
+        ] as const
+      ).map(([value, words]) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={view === value}
+          onClick={() => setView(value)}
+          className={cn(
+            "min-h-12 border-b-[3px] px-2 text-[15px]",
+            view === value ? "border-accent font-semibold text-text" : "border-transparent font-medium text-text-muted",
+          )}
+        >
+          {words}
+        </button>
+      ))}
+    </div>
+
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+    <Card className={cn("min-w-0 flex-col gap-5", view === "ask" ? "flex" : "hidden lg:flex")}>
         {saveNote && <Notice tone="info">{saveNote}</Notice>}
 
         <div className="flex flex-col divide-y divide-line">
@@ -278,11 +340,6 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
               onDecide={update}
               lineNoteOf={lineNoteOf}
             />
-            <aside className="flex flex-col gap-3 border-t border-line pt-5" aria-labelledby="preview-heading">
-              <h4 id="preview-heading" className="font-semibold">
-                Your CV for this job
-              </h4>
-              <p className="text-sm text-text-muted">Highlighted lines are the changes you approved. The highlight is only on this page, not in your download.</p>
               {cv.sameLine.length > 0 && (
                 <Notice tone="error" title="More than one change to the same line">
                   Only one change per line can be on your CV, so {cv.sameLine.map((change) => `“${change.after}”`).join(", ")}{" "}
@@ -307,8 +364,6 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
                   {cv.leftInProfile.join(", ")}.
                 </Notice>
               )}
-              <CvPreview cv={cv} marked />
-            </aside>
             <div>
               <Button variant="primary" onClick={() => goTo(4)}>Continue to cover letter</Button>
             </div>
@@ -343,6 +398,91 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
           </TailorStep>
         </div>
     </Card>
+
+    {/* The live CV, beside the questions on a wide screen, staying in view while the page scrolls. */}
+    <aside
+      aria-labelledby="preview-heading"
+      className={cn(
+        "min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-surface lg:sticky lg:top-4 lg:flex lg:max-h-[calc(100vh-2rem)]",
+        view === "cv" ? "flex" : "hidden",
+      )}
+    >
+      <h2 id="preview-heading" className="sr-only">
+        Your CV for this job
+      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-canvas px-4 py-3">
+        <div role="group" aria-label="Show" className="flex gap-1">
+          {(
+            [
+              ["cv", "Your CV"],
+              ["ad", "The job ad"],
+            ] as const
+          ).map(([value, words]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={panel === value}
+              onClick={() => setPanel(value)}
+              className={cn("min-h-10 rounded-md px-3.5 text-sm", panel === value ? "bg-surface font-semibold text-text" : "font-medium text-text-muted")}
+            >
+              {words}
+            </button>
+          ))}
+        </div>
+        {panel === "cv" && (
+          <div role="group" aria-label="How the CV looks" className="flex overflow-hidden rounded-md border border-line text-[13px]">
+            {(
+              [
+                [true, "Show changes"],
+                [false, "As it will download"],
+              ] as const
+            ).map(([value, words]) => (
+              <button
+                key={words}
+                type="button"
+                aria-pressed={showChanges === value}
+                onClick={() => setShowChanges(value)}
+                className={cn("min-h-9 px-3", showChanges === value ? "bg-text font-semibold text-surface" : "bg-surface font-medium text-text")}
+              >
+                {words}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Scrolls on its own on a wide screen, so it can take keyboard focus. */}
+      <div tabIndex={0} aria-label={panel === "cv" ? "Your CV" : "The job ad"} className="min-h-0 flex-1 overflow-y-auto bg-canvas p-3 sm:p-4">
+        {panel === "cv" ? (
+          showChanges ? (
+            <CvPreview cv={liveCv} marked marks={marks} />
+          ) : (
+            <CvPreview cv={cv} />
+          )
+        ) : (
+          <div className="flex flex-col gap-3 rounded-sm border border-line bg-surface p-5 text-sm sm:p-6">
+            <p className="font-semibold">
+              {job.title}, {job.company}
+              {job.location && ` (${job.location})`}
+            </p>
+            <p className="whitespace-pre-line text-text-muted">{job.description}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-line px-4 py-3 text-[13px] text-text-muted">
+        <span className="flex items-center gap-2">
+          <span aria-hidden="true" className="h-3.5 w-5 rounded-[3px] border-[1.5px] border-dashed border-accent bg-fit" />
+          Suggested, waiting for you
+        </span>
+        <span className="flex items-center gap-2">
+          <span aria-hidden="true" className="h-3.5 w-5 border-l-[3px] border-fit-bar bg-fit" />
+          Approved for this job
+        </span>
+        <span className="basis-full">Highlighted lines are the changes you approved. The highlight is only on this page, not in your download.</span>
+      </div>
+    </aside>
+    </div>
     </>
   );
 }

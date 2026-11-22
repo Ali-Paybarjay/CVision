@@ -1,19 +1,46 @@
 import { Fragment } from "react";
 import { cvHeadings, otherLines, type CvEntry, type CvLine, type GroupLine, type TailoredCv } from "@/features/tailor/tailored-cv";
-import { CvPaper, FitLine } from "@/shared/ui";
+import { cn, CvPaper, FitLine } from "@/shared/ui";
 
-/** A tailored line is on Fit only when the preview is `marked` (step 3 of Tailor, #501); otherwise every line looks the
- *  same, as in the download. A screen reader always hears which lines were tailored. No bold inside a line: only the last
- *  section's labels ("Tools:") are bold. */
-function Line({ line, as: Tag = "p", marked = false }: { line: CvLine; as?: "p" | "li"; marked?: boolean }) {
+/**
+ * Which tailored lines are only suggested, and the change each line came from, for the live CV beside the questions:
+ * a suggested line has a dashed edge and a "Suggested" tag, an approved one is on Fit (Tailor v2 canvas, artboard 1).
+ */
+export type PreviewMarks = { suggested: Set<string>; ids: Map<string, string> };
+
+/** A tailored line is on Fit only when the preview is `marked` (Tailor, #501); otherwise every line looks the
+ *  same, as in the download. A screen reader always hears which lines were tailored, and which are only suggested. No
+ *  bold inside a line: only the last section's labels ("Tools:") are bold. */
+function Line({ line, as: Tag = "p", marked = false, marks }: { line: CvLine; as?: "p" | "li"; marked?: boolean; marks?: PreviewMarks }) {
+  const suggested = marked && line.tailored && marks?.suggested.has(line.text);
+  const id = marked && line.tailored ? marks?.ids.get(line.text) : undefined;
   const content = (
     <>
       {line.label && <strong>{line.label} </strong>}
       {line.text}
-      {line.tailored && <span className="sr-only"> (tailored for this job)</span>}
+      {line.tailored && <span className="sr-only">{suggested ? " (suggested, not on your CV yet)" : " (tailored for this job)"}</span>}
     </>
   );
-  if (marked && line.tailored) return <FitLine as={Tag}>{content}</FitLine>;
+  if (suggested) {
+    return (
+      <Tag
+        id={id && `cv-line-${id}`}
+        className={cn("scroll-mt-24 rounded-md border-[1.5px] border-dashed border-accent bg-fit px-2.5 py-2", Tag === "li" && "-ml-5 list-none")}
+      >
+        <span aria-hidden="true" className="mr-1.5 inline-block rounded border border-accent bg-cv-paper px-1.5 text-[11px] font-bold text-accent">
+          Suggested
+        </span>
+        {content}
+      </Tag>
+    );
+  }
+  if (marked && line.tailored) {
+    return (
+      <FitLine as={Tag} id={id && `cv-line-${id}`} className="scroll-mt-24">
+        {content}
+      </FitLine>
+    );
+  }
   return <Tag>{content}</Tag>;
 }
 
@@ -38,7 +65,7 @@ function Heading({ children }: { children: React.ReactNode }) {
   return <h3 className="mt-6 border-b border-cv-ink/20 pb-1 text-xs font-bold tracking-wider text-accent">{children}</h3>;
 }
 
-function Entries({ heading, items, marked }: { heading: string; items: CvEntry[]; marked: boolean }) {
+function Entries({ heading, items, marked, marks }: { heading: string; items: CvEntry[]; marked: boolean; marks?: PreviewMarks }) {
   if (items.length === 0) return null;
   return (
     <>
@@ -53,7 +80,7 @@ function Entries({ heading, items, marked }: { heading: string; items: CvEntry[]
           {item.lines.length > 0 && (
             <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
               {item.lines.map((line, lineIndex) => (
-                <Line key={lineIndex} line={line} as="li" marked={marked} />
+                <Line key={lineIndex} line={line} as="li" marked={marked} marks={marks} />
               ))}
             </ul>
           )}
@@ -64,10 +91,11 @@ function Entries({ heading, items, marked }: { heading: string; items: CvEntry[]
 }
 
 /**
- * The tailored CV in the layout of the template, as the download will look. `marked` puts the approved lines on Fit, for
- * step 3 of Tailor only (#501): the download, the overview at the top of the page and the saved page keep every line plain.
+ * The tailored CV in the layout of the template, as the download will look. `marked` puts the approved lines on Fit, and
+ * with `marks` the suggested ones in a dashed box, for the live CV in Tailor only (#501): the download and the saved
+ * page keep every line plain.
  */
-export function CvPreview({ cv, marked = false }: { cv: TailoredCv; marked?: boolean }) {
+export function CvPreview({ cv, marked = false, marks }: { cv: TailoredCv; marked?: boolean; marks?: PreviewMarks }) {
   const other = otherLines(cv);
   return (
     <CvPaper aria-label="Your tailored CV" className="text-sm leading-relaxed">
@@ -85,7 +113,7 @@ export function CvPreview({ cv, marked = false }: { cv: TailoredCv; marked?: boo
         <>
           <Heading>{cvHeadings.summary}</Heading>
           <div className="mt-1">
-            <Line line={cv.summary} marked={marked} />
+            <Line line={cv.summary} marked={marked} marks={marks} />
           </div>
         </>
       )}
@@ -95,21 +123,21 @@ export function CvPreview({ cv, marked = false }: { cv: TailoredCv; marked?: boo
           <Heading>{cvHeadings.skills}</Heading>
           <ul className="mt-1 grid list-disc grid-flow-col gap-x-6 gap-y-1 pl-5 font-semibold" style={{ gridTemplateRows: `repeat(${Math.ceil(cv.skills.length / 2)}, auto)` }}>
             {cv.skills.map((line, index) => (
-              <Line key={index} line={line} as="li" marked={marked} />
+              <Line key={index} line={line} as="li" marked={marked} marks={marks} />
             ))}
           </ul>
         </>
       )}
 
-      <Entries heading={cvHeadings.experience} items={cv.experience} marked={marked} />
-      <Entries heading={cvHeadings.projects} items={cv.projects} marked={marked} />
+      <Entries heading={cvHeadings.experience} items={cv.experience} marked={marked} marks={marks} />
+      <Entries heading={cvHeadings.projects} items={cv.projects} marked={marked} marks={marks} />
 
       {cv.education.length > 0 && (
         <>
           <Heading>{cvHeadings.education}</Heading>
           <div className="mt-1 flex flex-col gap-1">
             {cv.education.map((line, index) => (
-              <Line key={index} line={line} marked={marked} />
+              <Line key={index} line={line} marked={marked} marks={marks} />
             ))}
           </div>
         </>

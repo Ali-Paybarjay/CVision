@@ -49,6 +49,7 @@ export function ChangeCard({
   onDecide,
   role,
   lineNote,
+  onShow,
 }: {
   change: TailoringChange;
   onDecide: (change: TailoringChange) => Promise<void>;
@@ -56,6 +57,8 @@ export function ChangeCard({
   role?: { role: string; named: boolean };
   /** After an approval to a line that already had one: on the new change, "replaced"; on the earlier one, "sent-back" (#465). */
   lineNote?: LineNote;
+  /** Brings the line into view on the live CV beside the questions. */
+  onShow?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(change.after);
@@ -97,11 +100,16 @@ export function ChangeCard({
           </>
         )}
         <p className="mt-4 text-xs font-semibold text-text-muted">After</p>
-        <FitLine className="mt-1">{change.after}</FitLine>
+        {/* Not decided yet: the dashed edge of a suggested line on the live CV. Approved: on Fit, as on the CV (Tailor v2 canvas). */}
+        {change.status === "proposed" ? (
+          <p className="mt-1 rounded-md border-[1.5px] border-dashed border-accent bg-fit px-3 py-2">{change.after}</p>
+        ) : (
+          <FitLine className="mt-1">{change.after}</FitLine>
+        )}
       </CvPaper>
 
       <p className="text-sm text-text-muted">
-        <span className="font-semibold">{change.evidenceSource === "cv" ? "From your CV:" : "From what you told us:"}</span> “
+        <span className="font-semibold">{change.evidenceSource === "cv" ? "Based on your CV:" : "Based on your answer:"}</span> “
         {change.evidence}”
       </p>
 
@@ -155,6 +163,11 @@ export function ChangeCard({
               className="px-0"
             >
               Undo<span className="sr-only"> your decision</span>
+            </Button>
+          )}
+          {onShow && change.status !== "rejected" && (
+            <Button variant="quiet" onClick={onShow} className="px-0 sm:ml-auto">
+              See it on your CV →
             </Button>
           )}
         </div>
