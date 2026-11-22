@@ -152,7 +152,8 @@ export function newLineRole(profile: Profile, change: TailoringChange): { role: 
 }
 
 /** Two changes to the same CV line: only one of them can be on the CV. A CV has one summary, so two summaries always are (#465). */
-function sameTarget(a: TailoringChange, b: TailoringChange): boolean {
+/** Whether two changes are to the same CV line, so only one of them can be on the CV (#272). */
+export function sameTarget(a: TailoringChange, b: TailoringChange): boolean {
   if (a.id === b.id || a.section !== b.section) return false;
   if (a.section === "summary") return true;
   return a.before !== null && b.before !== null && same(a.before, b.before);

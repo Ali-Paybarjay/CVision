@@ -28,7 +28,7 @@ const approved: TailoringChange = {
 const sentence = "Highlighted lines are the changes you approved. The highlight is only on this page, not in your download.";
 
 /** The opening tag of the element that holds the text, with the text right after it. */
-const holder = (html: string, text: string) => html.slice(0, html.indexOf(text)).match(/<(p|li)( class="[^"]*")?>$/)?.[0] ?? "";
+const holder = (html: string, text: string) => html.slice(0, html.indexOf(text)).match(/<(p|li)( [^>]*)?>$/)?.[0] ?? "";
 
 describe("the preview in step 3 (#501)", () => {
   it("says what the highlight is, and puts the approved line on Fit", () => {
@@ -42,8 +42,9 @@ describe("the preview in step 3 (#501)", () => {
     expect(preview).toContain(sentence);
     expect(preview).toContain(after);
     expect(holder(preview, after)).toContain("bg-fit");
-    // Only the approved line: the lines the user did not change stay plain.
-    expect(preview.split("bg-fit").length - 1).toBe(1);
+    // Only the approved line: the lines the user did not change stay plain. The key under the CV is not counted.
+    const paper = preview.slice(preview.indexOf('aria-label="Your tailored CV"'), preview.indexOf("</article>"));
+    expect(paper.split("bg-fit").length - 1).toBe(1);
     // A screen reader still hears which line was tailored.
     expect(preview).toContain("(tailored for this job)");
   });

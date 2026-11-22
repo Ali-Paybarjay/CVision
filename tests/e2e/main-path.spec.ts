@@ -113,22 +113,31 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await approveFromCv.first().click();
   await expect(approveFromCv.first()).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("✓ Approved: 1")).toBeVisible();
+  // On a phone the live CV is the second tab, beside the questions (Tailor v2 canvas, artboard 2).
+  const askTab = page.getByRole("button", { name: "Ask & Improve" });
+  const cvTab = page.getByRole("button", { name: /^CV Preview/ });
+  await cvTab.click();
   await expect(tailoredLines).toHaveCount(1);
   // The preview marks the approved line on Fit, and says the highlight is not in the download (#501).
   await expect(
     page.getByRole("complementary", { name: "Your CV for this job" }).getByText("The highlight is only on this page, not in your download."),
   ).toBeVisible();
+  await askTab.click();
   // A quiet Undo beside the decision takes the change back to not decided yet, and Approve works again (#531).
   await fromCv.getByRole("button", { name: "Undo your decision" }).click();
   await expect(approveFromCv.first()).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByText("✓ Approved: 0")).toBeVisible();
+  await cvTab.click();
   await expect(tailoredLines).toHaveCount(0);
+  await askTab.click();
   await approveFromCv.first().click();
   await expect(page.getByText("✓ Approved: 1")).toBeVisible();
+  await cvTab.click();
   await expect(tailoredLines).toHaveCount(1);
+  await askTab.click();
 
-  // A gap is answered in the user's own words, one question at a time, opened from the overview above the steps.
-  await page.getByRole("button", { name: "Answer this question" }).click();
+  // A gap is answered in the user's own words, one question at a time.
+  await page.getByRole("button", { name: /^2\. Questions about your experience/ }).click();
   // The open step has one Coral button, for its main task: Save answer (#500).
   const coral = page.locator(".bg-cta").filter({ visible: true });
   await expect(coral).toHaveCount(1);
@@ -143,7 +152,9 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await expect(page.getByRole("button", { name: "Review your tailored CV now" })).toBeVisible();
   await page.getByRole("button", { name: /^3\. Review your tailored CV/ }).click();
   await expect(page.getByText("✓ Approved: 2")).toBeVisible();
+  await cvTab.click();
   await expect(tailoredLines).toHaveCount(2);
+  await askTab.click();
 
   // Step 5 leads on to interview practice for the same job, as a secondary link beside Apply.
   await page.getByRole("button", { name: /^5\. Download and apply/ }).click();
@@ -177,12 +188,15 @@ test("step 3: two decisions made one after the other both stay, while each is st
   await approve.nth(1).click();
   for (const index of [0, 1]) await expect(approve.nth(index)).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("✓ Approved: 2")).toBeVisible();
+  await page.getByRole("button", { name: /^CV Preview/ }).click();
   await expect(tailoredLines).toHaveCount(2);
+  await page.getByRole("button", { name: "Ask & Improve" }).click();
 
   await reject.nth(0).click();
   await reject.nth(1).click();
   for (const index of [0, 1]) await expect(reject.nth(index)).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("✓ Approved: 0")).toBeVisible();
+  await page.getByRole("button", { name: /^CV Preview/ }).click();
   await expect(tailoredLines).toHaveCount(0);
 });
 
