@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { decideChange } from "@/features/tailor/actions";
 import { currentLetter, letterBasis, type LetterState } from "@/features/tailor/letter-state";
-import { buildTailoredCv, newLineRole, sameTarget } from "@/features/tailor/tailored-cv";
+import { buildTailoredCv, changesOnCv, newLineRole, sameTarget } from "@/features/tailor/tailored-cv";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Job, Profile, TailoringChange } from "@/shared/contracts";
 import { Button, Card, cn, Notice } from "@/shared/ui";
@@ -11,7 +11,7 @@ import { ApplyPanel } from "./apply-panel";
 import { ChangeCard, type LineNote } from "./change-card";
 import { ChooseAnotherJob } from "./choose-another-job";
 import { CoverLetterPanel } from "./cover-letter-panel";
-import { CvPreview, type PreviewMarks } from "./cv-preview";
+import { CvPreview } from "./cv-preview";
 import { CvSuggestions } from "./cv-suggestions";
 import { DownloadBar } from "./download-bar";
 import { FinalCheck } from "./final-check";
@@ -25,6 +25,10 @@ export type { GapPrompt };
 
 /** At most this many questions one by one; the rest wait under "More ways to strengthen your CV". */
 const mainQuestions = 5;
+
+/** Under the key to the live CV's marks: both marks, as a suggestion is highlighted too (#565). */
+export const legendSentence =
+  "Lines with a bar on the left are the changes you approved. Dashed lines are suggestions, not in your CV until you approve them. The highlight is only on this page, not in your download.";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -95,27 +99,54 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
   const [saveNote, setSaveNote] = useState<string | null>(null);
   // The last approval that sent an earlier change to the same line back, so both cards can say so (#465).
   const [lineNotes, setLineNotes] = useState<LineNotes>(null);
-  const lineNoteOf = (change: TailoringChange): LineNote | undefined =>
-    lineNotes?.approved === change.id ? "replaced" : lineNotes?.sentBack.includes(change.id) ? "sent-back" : undefined;
   const cv = buildTailoredCv(profile, changes, job);
-  // The live CV: the approved changes, and the suggestions not decided yet in their places, marked as suggested.
+  // The live CV: the approved changes, and the suggestions not decided yet in their places, each line marked as
+  // suggested by the change it came from, never by its text, so a tool or a language is marked too (#565).
   const shown = suggestionsToShow(changes);
-  const liveCv = buildTailoredCv(profile, changes.map((change) => (shown.includes(change) ? { ...change, status: "approved" as const } : change)), job);
-  const approvedLines = new Set(changes.filter((change) => change.status === "approved").map((change) => change.after));
-  const marks: PreviewMarks = {
-    suggested: new Set(shown.map((change) => change.after).filter((line) => !approvedLines.has(line))),
-    ids: new Map([...changes.filter((change) => change.status === "approved"), ...shown].map((change) => [change.after, change.id])),
-  };
+  const liveCv = buildTailoredCv(profile, changes, job, { suggestions: shown });
+  const onLiveCv = changesOnCv(liveCv);
+  const lineNoteOf = (change: TailoringChange): LineNote | undefined =>
+    lineNotes?.approved === change.id
+      ? "replaced"
+      : lineNotes?.sentBack.includes(change.id)
+        ? "sent-back"
+        : change.status === "proposed" && changes.some((other) => other.status === "approved" && sameTarget(other, change))
+          ? "taken"
+          : // An earlier suggestion holds its line on the live CV; approving this one makes that one "taken" (#565).
+            change.status === "proposed" && change.gapId && !onLiveCv.has(change.id) && shown.some((other) => other.id !== change.id && sameTarget(other, change))
+            ? "queued"
+            : undefined;
   // Phone only: the questions or the CV, as two tabs. On a wide screen both are side by side.
   const [view, setView] = useState<"ask" | "cv">("ask");
   // The live CV, or the ad beside it; and with the changes marked, or as the download will look.
   const [panel, setPanel] = useState<"cv" | "ad">("cv");
   const [showChanges, setShowChanges] = useState(true);
+  // The change whose "See it on your CV" opened the CV tab on a phone, or moved focus to the CV on a wide screen, for the
+  // way back to its question (#565).
+  const [backTo, setBackTo] = useState<string | null>(null);
   const showOnCv = (change: TailoringChange) => {
     setView("cv");
     setPanel("cv");
     setShowChanges(true);
-    requestAnimationFrame(() => document.getElementById(`cv-line-${change.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    setBackTo(change.id);
+    // The line takes focus, so a screen reader reads it and the keyboard carries on from it.
+    requestAnimationFrame(() => {
+      const line = document.getElementById(`cv-line-${change.id}`);
+      line?.scrollIntoView({ block: "center", behavior: "smooth" });
+      line?.focus({ preventScroll: true });
+    });
+  };
+  /** Only for a change whose line is on the live CV: otherwise the button would lead nowhere (#565). */
+  const showFor = (change: TailoringChange) => (onLiveCv.has(change.id) ? () => showOnCv(change) : undefined);
+  const backToQuestion = () => {
+    const id = backTo;
+    setView("ask");
+    setBackTo(null);
+    requestAnimationFrame(() => {
+      const button = document.getElementById(`show-${id}`);
+      button?.scrollIntoView({ block: "center" });
+      button?.focus({ preventScroll: true });
+    });
   };
   // Approved changes whose line is not on the CV; those that lost their line to another change are told apart (#272).
   const notFound = cv.unplaced.filter((change) => !cv.sameLine.includes(change));
@@ -179,7 +210,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       key={prompt.gap.id}
       main={main}
       heading={heading}
-      onShow={showOnCv}
+      onShow={showFor}
       jobId={job.id}
       prompt={prompt}
       state={gapStates[prompt.gap.id] ?? { phase: "open" }}
@@ -268,7 +299,10 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
           key={value}
           type="button"
           aria-pressed={view === value}
-          onClick={() => setView(value)}
+          onClick={() => {
+            setView(value);
+            setBackTo(null);
+          }}
           className={cn(
             "min-h-12 border-b-[3px] px-2 text-[15px]",
             view === value ? "border-accent font-semibold text-text" : "border-transparent font-medium text-text-muted",
@@ -405,6 +439,8 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       className={cn(
         "min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-surface lg:sticky lg:top-4 lg:flex lg:max-h-[calc(100vh-2rem)]",
         view === "cv" ? "flex" : "hidden",
+        // Room under the CV for the bar with "Back to the question", so it never covers the key's last line.
+        backTo && "mb-20 lg:mb-0",
       )}
     >
       <h2 id="preview-heading" className="sr-only">
@@ -455,7 +491,7 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
       <div tabIndex={0} aria-label={panel === "cv" ? "Your CV" : "The job ad"} className="min-h-0 flex-1 overflow-y-auto bg-canvas p-3 sm:p-4">
         {panel === "cv" ? (
           showChanges ? (
-            <CvPreview cv={liveCv} marked marks={marks} />
+            <CvPreview cv={liveCv} marked />
           ) : (
             <CvPreview cv={cv} />
           )
@@ -470,17 +506,29 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
         )}
       </div>
 
-      <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-line px-4 py-3 text-[13px] text-text-muted">
-        <span className="flex items-center gap-2">
-          <span aria-hidden="true" className="h-3.5 w-5 rounded-[3px] border-[1.5px] border-dashed border-accent bg-fit" />
-          Suggested, waiting for you
-        </span>
-        <span className="flex items-center gap-2">
-          <span aria-hidden="true" className="h-3.5 w-5 border-l-[3px] border-fit-bar bg-fit" />
-          Approved for this job
-        </span>
-        <span className="basis-full">Highlighted lines are the changes you approved. The highlight is only on this page, not in your download.</span>
-      </div>
+      {/* Back to the question whose "See it on your CV" brought focus here (#565), right after the CV so the next Tab
+          from the focused line reaches it. On a phone it is fixed at the foot of the screen, so it is in view wherever
+          the line is; on a wide screen it is a row under the CV, so the keyboard need not go back through the toggles. */}
+      {backTo && (
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-canvas px-4 py-3 lg:static lg:z-auto">
+          <Button onClick={backToQuestion}>← Back to the question</Button>
+        </div>
+      )}
+
+      {/* Only where the marks are: "As it will download" and the ad have none (#565). */}
+      {panel === "cv" && showChanges && (
+        <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-line px-4 py-3 text-[13px] text-text-muted">
+          <span className="flex items-center gap-2">
+            <span aria-hidden="true" className="h-3.5 w-5 rounded-[3px] border-[1.5px] border-dashed border-accent bg-fit" />
+            Suggested, waiting for you
+          </span>
+          <span className="flex items-center gap-2">
+            <span aria-hidden="true" className="h-3.5 w-5 border-l-[3px] border-fit-bar bg-fit" />
+            Approved for this job
+          </span>
+          <span className="basis-full">{legendSentence}</span>
+        </div>
+      )}
     </aside>
     </div>
     </>

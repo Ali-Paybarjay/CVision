@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { answerGap } from "@/features/tailor/actions";
 import type { GapAnswer, NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
@@ -48,18 +48,28 @@ type GapCardProps = {
   main?: boolean;
   /** "Question 2 of 5", above a question asked one at a time. */
   heading?: string;
-  /** Shows a suggested line on the live CV beside the questions. */
-  onShow?: (change: TailoringChange) => void;
+  /** Shows a suggested line on the live CV beside the questions; undefined for a change whose line is not on it (#565). */
+  onShow?: (change: TailoringChange) => (() => void) | undefined;
 };
 
 /**
  * Why the question is asked, from the gap's kind and the CV lines code copied for it, never from the model's words,
- * so it can only say what the CV shows.
+ * so it can only say what the CV shows. A "Make it stronger" gap is one the CV already shows: it quotes the line, as
+ * strongerGaps wrote it into the detail, and asks only for more (#444, #565). Its id is checked here, as
+ * gap-questions.ts would bring server code in.
  */
 export function whyAsking(gap: Gap): string {
+  if (gap.id.startsWith("stronger-")) {
+    const line = /^Already shown by: "([\s\S]*)"$/.exec(gap.detail)?.[1];
+    const more = "a detail such as a number, the scale or a result would make it stronger for this job.";
+    return line ? `your CV shows this in “${line}”; ${more}` : `your CV shows this; ${more}`;
+  }
   if (gap.kind === "unclear") {
     const line = gap.evidence?.[0];
-    return line ? `your CV says “${line}”, but not clearly enough for this job.` : "your CV touches on this, but without a clear example.";
+    // The line comes from the profile, which also holds follow-up answers and volunteering that the CV beside the
+    // question does not print, so it is quoted as the profile's, never as the CV's. With no line to quote, nothing is
+    // said to touch on it (#565).
+    return line ? `your profile says “${line}”, but not clearly enough for this job.` : "your CV doesn’t show this clearly yet.";
   }
   return "the job asks for this, and your CV doesn’t show it yet.";
 }
@@ -75,7 +85,20 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
   const [askingModel, setAskingModel] = useState(false);
   const errorId = useId();
   const optionsId = useId();
+  const resultId = useId();
   const { gap, options = [] } = prompt;
+  // After an answer the form goes, and the button that had focus with it: focus goes to what the answer gave, the
+  // suggestion, the next step or "Change my answer", so the next Tab is Approve, not the top of the page (#565). Not on a
+  // saved answer, and not when the user has moved on while the answer was written, such as typing in another question.
+  const card = useRef<HTMLElement>(null);
+  const justAnswered = useRef(false);
+  useEffect(() => {
+    if (state.phase !== "answered" || !justAnswered.current) return;
+    justAnswered.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && !card.current?.contains(active)) return;
+    document.getElementById(resultId)?.focus();
+  }, [state.phase, resultId]);
 
   const submit = (chosen: string | null) => {
     setState({ phase: "working" });
@@ -97,6 +120,7 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
           earlierAnswers: earlier,
         });
         if (!result.ok) return setState({ phase: "error", message: result.message });
+        justAnswered.current = true;
         onAnswered({ gapId: gap.id, question: prompt.question, answer: result.answer, hasExperience: result.hasExperience }, result.changes, result.nextSteps, result.hint);
       } catch {
         setState({ phase: "error", message: unreachableMessage });
@@ -105,9 +129,24 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
   };
 
   const essential = gap.importance === "essential";
+  // What an answer gave besides a line: the next steps not added to the CV, and a hint.
+  const nextSteps = state.phase === "answered" ? state.nextSteps : [];
+  const hint = state.phase === "answered" ? state.hint : null;
+  const hasNotices = nextSteps.length > 0 || Boolean(hint);
+  const notices = (
+    <>
+      {nextSteps.map((step, index) => (
+        <Notice key={index} tone="info" title="Not added to your CV">
+          {step.kind === "learn" ? "A way to build it: " : "Your closest real skill: "}
+          {step.suggestion}
+        </Notice>
+      ))}
+      {hint && <Notice tone="info">{hint}</Notice>}
+    </>
+  );
 
   return (
-    <article className={cn("flex flex-col gap-5", main && "rounded-lg border border-line bg-surface p-5 sm:p-6")}>
+    <article ref={card} className={cn("flex flex-col gap-5", main && "rounded-lg border border-line bg-surface p-5 sm:p-6")}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {heading && <p className="text-sm font-semibold text-accent">{heading}</p>}
@@ -182,7 +221,9 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
           or another part of the question (#531). */}
       {changes.length > 0 && (
         <div className="flex flex-col gap-3 border-t border-line pt-4">
-          <SectionLabel>{changes.length === 1 ? "Suggestion from your answer" : "Suggestions from your answer"}</SectionLabel>
+          <SectionLabel id={resultId} tabIndex={-1} className="scroll-mt-24">
+            {changes.length === 1 ? "Suggestion from your answer" : "Suggestions from your answer"}
+          </SectionLabel>
           {changes.map((change) => (
             <ChangeCard
               key={change.id}
@@ -190,7 +231,7 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
               onDecide={onDecide}
               role={roleOf?.(change)}
               lineNote={lineNoteOf?.(change)}
-              onShow={onShow && (() => onShow(change))}
+              onShow={onShow?.(change)}
             />
           ))}
         </div>
@@ -198,17 +239,18 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
 
       {state.phase === "answered" && (
         <>
-          {state.nextSteps.map((step, index) => (
-            <Notice key={index} tone="info" title="Not added to your CV">
-              {step.kind === "learn" ? "A way to build it: " : "Your closest real skill: "}
-              {step.suggestion}
-            </Notice>
-          ))}
-          {state.hint && <Notice tone="info">{state.hint}</Notice>}
+          {/* With no line, the next steps are what the answer gave, so focus lands on them first, not past them (#565). */}
+          {changes.length === 0 && hasNotices ? (
+            <div id={resultId} tabIndex={-1} className="flex scroll-mt-24 flex-col gap-3">
+              {notices}
+            </div>
+          ) : (
+            notices
+          )}
           {/* With a suggested line, Edit and Reject on its card already change what goes in; going back to the question is only for an answer with no line. */}
           {changes.length === 0 && (
             <div>
-              <Button variant="quiet" onClick={() => setState({ phase: "open" })}>
+              <Button id={hasNotices ? undefined : resultId} variant="quiet" onClick={() => setState({ phase: "open" })}>
                 Change my answer
               </Button>
             </div>
