@@ -63,19 +63,24 @@ function GroupedLine({ line, marked }: { line: GroupLine; marked: boolean }) {
         return (
           <Fragment key={index}>
             {index > 0 && line.separator}
+            {/* The screen reader's words sit inside the marked item, so a focused item says it is suggested or tailored (#565). */}
             {marked && part.tailored && part.suggested ? (
               <span className="scroll-mt-24 box-decoration-clone rounded border-[1.5px] border-dashed border-accent bg-fit px-1" {...spot}>
                 <SuggestedTag className="mr-1" />
                 {part.text}
+                <span className="sr-only">{spoken(part)}</span>
               </span>
             ) : marked && part.tailored ? (
               <mark className="scroll-mt-24 box-decoration-clone border-l-2 border-fit-bar bg-fit px-1 text-cv-ink" {...spot}>
                 {part.text}
+                <span className="sr-only">{spoken(part)}</span>
               </mark>
             ) : (
-              part.text
+              <>
+                {part.text}
+                {part.tailored && <span className="sr-only">{spoken(part)}</span>}
+              </>
             )}
-            {part.tailored && <span className="sr-only">{spoken(part)}</span>}
           </Fragment>
         );
       })}

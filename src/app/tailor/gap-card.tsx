@@ -66,8 +66,10 @@ export function whyAsking(gap: Gap): string {
   }
   if (gap.kind === "unclear") {
     const line = gap.evidence?.[0];
-    // With no line to quote, nothing on the CV is said to touch on it (#565).
-    return line ? `your CV says “${line}”, but not clearly enough for this job.` : "your CV doesn’t show this clearly yet.";
+    // The line comes from the profile, which also holds follow-up answers and volunteering that the CV beside the
+    // question does not print, so it is quoted as the profile's, never as the CV's. With no line to quote, nothing is
+    // said to touch on it (#565).
+    return line ? `your profile says “${line}”, but not clearly enough for this job.` : "your CV doesn’t show this clearly yet.";
   }
   return "the job asks for this, and your CV doesn’t show it yet.";
 }
@@ -86,11 +88,15 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
   const resultId = useId();
   const { gap, options = [] } = prompt;
   // After an answer the form goes, and the button that had focus with it: focus goes to what the answer gave, the
-  // suggestion or "Change my answer", so the next Tab is Approve, not the top of the page (#565). Not on a saved answer.
+  // suggestion, the next step or "Change my answer", so the next Tab is Approve, not the top of the page (#565). Not on a
+  // saved answer, and not when the user has moved on while the answer was written, such as typing in another question.
+  const card = useRef<HTMLElement>(null);
   const justAnswered = useRef(false);
   useEffect(() => {
     if (state.phase !== "answered" || !justAnswered.current) return;
     justAnswered.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && !card.current?.contains(active)) return;
     document.getElementById(resultId)?.focus();
   }, [state.phase, resultId]);
 
@@ -123,9 +129,24 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
   };
 
   const essential = gap.importance === "essential";
+  // What an answer gave besides a line: the next steps not added to the CV, and a hint.
+  const nextSteps = state.phase === "answered" ? state.nextSteps : [];
+  const hint = state.phase === "answered" ? state.hint : null;
+  const hasNotices = nextSteps.length > 0 || Boolean(hint);
+  const notices = (
+    <>
+      {nextSteps.map((step, index) => (
+        <Notice key={index} tone="info" title="Not added to your CV">
+          {step.kind === "learn" ? "A way to build it: " : "Your closest real skill: "}
+          {step.suggestion}
+        </Notice>
+      ))}
+      {hint && <Notice tone="info">{hint}</Notice>}
+    </>
+  );
 
   return (
-    <article className={cn("flex flex-col gap-5", main && "rounded-lg border border-line bg-surface p-5 sm:p-6")}>
+    <article ref={card} className={cn("flex flex-col gap-5", main && "rounded-lg border border-line bg-surface p-5 sm:p-6")}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {heading && <p className="text-sm font-semibold text-accent">{heading}</p>}
@@ -218,17 +239,18 @@ export function GapCard({ jobId, prompt, state, setState, onAnswered, earlierAns
 
       {state.phase === "answered" && (
         <>
-          {state.nextSteps.map((step, index) => (
-            <Notice key={index} tone="info" title="Not added to your CV">
-              {step.kind === "learn" ? "A way to build it: " : "Your closest real skill: "}
-              {step.suggestion}
-            </Notice>
-          ))}
-          {state.hint && <Notice tone="info">{state.hint}</Notice>}
+          {/* With no line, the next steps are what the answer gave, so focus lands on them first, not past them (#565). */}
+          {changes.length === 0 && hasNotices ? (
+            <div id={resultId} tabIndex={-1} className="flex scroll-mt-24 flex-col gap-3">
+              {notices}
+            </div>
+          ) : (
+            notices
+          )}
           {/* With a suggested line, Edit and Reject on its card already change what goes in; going back to the question is only for an answer with no line. */}
           {changes.length === 0 && (
             <div>
-              <Button id={resultId} variant="quiet" onClick={() => setState({ phase: "open" })}>
+              <Button id={hasNotices ? undefined : resultId} variant="quiet" onClick={() => setState({ phase: "open" })}>
                 Change my answer
               </Button>
             </div>

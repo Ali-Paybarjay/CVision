@@ -8,7 +8,7 @@ import { CvPreview } from "@/app/tailor/cv-preview";
 import { legendSentence, TailorWorkspace, type GapPrompt } from "@/app/tailor/tailor-workspace";
 import { findBrandProblems } from "@/features/tailor/brand-check";
 import { buildTailoredCv, changesOnCv, cvHeadings, otherLines } from "@/features/tailor/tailored-cv";
-import type { TailoringChange } from "@/shared/contracts";
+import type { Profile, TailoringChange } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 
 vi.mock("@/features/tailor/actions", () => ({ decideChange: vi.fn(), answerGap: vi.fn(), suggestCvChanges: vi.fn(), createCoverLetter: vi.fn(), recordApply: vi.fn() }));
@@ -79,8 +79,8 @@ describe("an approved item on a line of the last section (#543)", () => {
     ["a language", "Languages:", added("skills", "Spanish (Conversational)"), ["Welsh (Fluent)"]],
   ] as const)("puts only %s the user approved on Fit, not the whole line", (_, label, change, others) => {
     const html = renderToStaticMarkup(<CvPreview cv={buildTailoredCv(withLastSection, [change], job)} marked />);
-    // Only the approved item is marked, with the screen reader note right after it.
-    expect(html).toMatch(new RegExp(`<mark class="[^"]*bg-fit[^"]*">${change.after.replace(/[()]/g, "\\$&")}</mark><span class="sr-only"> \\(tailored for this job\\)</span>`));
+    // Only the approved item is marked, with the screen reader note inside it, so a focused item says so too (#565).
+    expect(html).toMatch(new RegExp(`<mark class="[^"]*bg-fit[^"]*">${change.after.replace(/[()]/g, "\\$&")}<span class="sr-only"> \\(tailored for this job\\)</span></mark>`));
     expect(html.split("bg-fit").length - 1).toBe(1);
     // The line itself is plain, and so are the items the user did not change.
     const line = html.slice(html.indexOf(`<p><strong>${label} </strong>`));
@@ -149,8 +149,8 @@ const git: TailoringChange = {
 };
 
 /** The live CV beside the questions, and the line of its last section with this label. */
-const liveCv = (changes: TailoringChange[], prompts: GapPrompt[] = []) => {
-  const html = renderToStaticMarkup(<TailorWorkspace job={job} jobUrl={null} label="" profile={profile} prompts={prompts} savedChanges={changes} />);
+const liveCv = (changes: TailoringChange[], prompts: GapPrompt[] = [], who: Profile = profile) => {
+  const html = renderToStaticMarkup(<TailorWorkspace job={job} jobUrl={null} label="" profile={who} prompts={prompts} savedChanges={changes} />);
   const start = html.indexOf('aria-label="Your tailored CV"');
   return { html, paper: html.slice(start, html.indexOf("</article>", start)) };
 };
@@ -170,7 +170,7 @@ describe("a suggestion in the last section of the live CV (#565)", () => {
     const { paper } = liveCv([git]);
     const tools = groupLine(paper, cvHeadings.tools);
     expect(tools).toMatch(
-      /<span class="[^"]*border-dashed[^"]*" id="cv-line-git-1" tabindex="-1"><span aria-hidden="true"[^>]*>Suggested<\/span>Git and GitHub<\/span><span class="sr-only"> \(suggested, not on your CV yet\)<\/span>/,
+      /<span class="[^"]*border-dashed[^"]*" id="cv-line-git-1" tabindex="-1"><span aria-hidden="true"[^>]*>Suggested<\/span>Git and GitHub<span class="sr-only"> \(suggested, not on your CV yet\)<\/span><\/span>/,
     );
     expect(tools).not.toContain("<mark");
     expect(paper).not.toContain("border-fit-bar");
@@ -191,7 +191,7 @@ describe("a suggestion in the last section of the live CV (#565)", () => {
   it("puts the same tool, once approved, on Fit with its id", () => {
     const { paper } = liveCv([{ ...git, status: "approved" }]);
     const tools = groupLine(paper, cvHeadings.tools);
-    expect(tools).toMatch(/<mark class="[^"]*bg-fit[^"]*" id="cv-line-git-1" tabindex="-1">Git and GitHub<\/mark><span class="sr-only"> \(tailored for this job\)<\/span>/);
+    expect(tools).toMatch(/<mark class="[^"]*bg-fit[^"]*" id="cv-line-git-1" tabindex="-1">Git and GitHub<span class="sr-only"> \(tailored for this job\)<\/span><\/mark>/);
     expect(tools).not.toContain("Suggested");
     expect(tools).not.toContain("border-dashed");
   });
@@ -206,9 +206,30 @@ describe("a suggestion in the last section of the live CV (#565)", () => {
     const { paper } = liveCv([{ ...git, id: "item-1", ...change }]);
     const line = groupLine(paper, label);
     expect(line).toContain(`id="cv-line-item-1" tabindex="-1"><span aria-hidden="true"`);
-    expect(line).toContain(`Suggested</span>${printed}</span><span class="sr-only"> (suggested, not on your CV yet)</span>`);
+    expect(line).toContain(`Suggested</span>${printed}<span class="sr-only"> (suggested, not on your CV yet)</span></span>`);
     expect(line).not.toContain("<mark");
     expect(paper).not.toContain("(tailored for this job)");
+  });
+
+  it("never calls a language the user already lists suggested, when a suggestion repeats it", () => {
+    const fluent = { ...profile, languages: [{ name: "English", level: "Fluent" }] };
+    const { paper } = liveCv([{ ...git, id: "english-1", after: "English (Fluent)" }], [], fluent);
+    const line = groupLine(paper, cvHeadings.languages);
+    expect(line).toContain("English (Fluent)");
+    expect(line).not.toContain("Suggested");
+    expect(line).not.toContain("(suggested, not on your CV yet)");
+    expect(line).not.toContain("border-dashed");
+    // The download has it once, as the user's own.
+    const download = buildTailoredCv(fluent, [{ ...git, id: "english-1", after: "English (Fluent)" }], job);
+    expect(download.languages).toEqual([{ text: "English (Fluent)", tailored: false }]);
+  });
+
+  it("still lets an approval take over the same language, as before (#543)", () => {
+    const fluent = { ...profile, languages: [{ name: "English", level: "Fluent" }] };
+    const { paper } = liveCv([{ ...git, id: "english-1", after: "English (Fluent)", status: "approved" }], [], fluent);
+    const line = groupLine(paper, cvHeadings.languages);
+    expect(line).toMatch(/<mark [^>]*id="cv-line-english-1"[^>]*>English \(Fluent\)<span class="sr-only"> \(tailored for this job\)<\/span><\/mark>/);
+    expect(line).not.toContain("Suggested");
   });
 });
 
@@ -241,5 +262,22 @@ describe("See it on your CV (#565)", () => {
     expect(html).not.toContain("See it on your CV");
     expect(html).toContain("Another change you approved is on this line. Approve this one to use it instead.");
     expect(paper).not.toContain(after);
+  });
+
+  it("is not on the second of two suggestions to one line, and its card says why", () => {
+    const second: TailoringChange = { ...approved, id: "change-2", gapId: "sara-gap-2", after: "Built Tableau dashboards for the regional sales team, refreshed every morning", status: "proposed" };
+    const { html, paper } = liveCv([{ ...approved, status: "proposed" }, second], [prompt("sara-gap-1"), prompt("sara-gap-2")]);
+    // The first suggestion holds the line on the live CV, and only it leads there.
+    expect(paper).toContain(after);
+    expect(paper).not.toContain(second.after);
+    expect(html).toContain('id="show-change-1"');
+    expect(html).not.toContain('id="show-change-2"');
+    // Only the second suggestion's cards, in step 2 and in step 3, say another suggestion is on its line; none says an approved change is.
+    const note = "Another suggestion is on this line of your CV. Approve this one to use it instead.";
+    const notes = [...html.matchAll(new RegExp(note.replace(/\./g, "\\."), "g"))].map((match) => match.index);
+    expect(notes).toHaveLength(2);
+    expect(findBrandProblems(note)).toEqual([]);
+    for (const at of notes) expect(html.lastIndexOf(second.after, at)).toBeGreaterThan(html.lastIndexOf(after, at));
+    expect(html).not.toContain("Another change you approved is on this line.");
   });
 });

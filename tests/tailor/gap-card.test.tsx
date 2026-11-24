@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ChangeCard } from "@/app/tailor/change-card";
 import { GapCard, waitNote, waitsForModel, whyAsking, type GapPrompt } from "@/app/tailor/gap-card";
 import { findBrandProblems } from "@/features/tailor/brand-check";
+import type { NextStep } from "@/features/tailor/types";
 import type { Gap, TailoringChange } from "@/shared/contracts";
 import { GapHelp } from "@/app/tailor/gap-help";
 import { personas } from "@/shared/sample-data";
@@ -60,12 +61,12 @@ const suggestion = (status: TailoringChange["status"]): TailoringChange => ({
   evidenceSource: "follow-up-answer",
   status,
 });
-const answered = (changes: TailoringChange[]) =>
+const answered = (changes: TailoringChange[], nextSteps: NextStep[] = [], hint: string | null = null) =>
   renderToStaticMarkup(
     <GapCard
       jobId="j"
       prompt={{ gap, question: "Have you used Power BI?" }}
-      state={{ phase: "answered", nextSteps: [], hint: null }}
+      state={{ phase: "answered", nextSteps, hint }}
       setState={() => {}}
       onAnswered={() => {}}
       earlierAnswers={[]}
@@ -83,6 +84,37 @@ describe("an answered gap", () => {
 
   it("lets the user change an answer that gave no line", () => {
     expect(answered([])).toContain("Change my answer");
+  });
+});
+
+describe("where focus goes after an answer with no line (#565)", () => {
+  const block = (html: string) => html.match(/<div id="([^"]+)" tabindex="-1" class="[^"]*scroll-mt-24[^"]*">/g) ?? [];
+  const changeButton = (html: string) => html.match(/<button[^>]*>Change my answer<\/button>/)?.[0] ?? "";
+  const learn: NextStep = { gapId: gap.id, kind: "learn", suggestion: "Take the free Power BI course on Microsoft Learn." };
+
+  it("is the next steps, before “Change my answer”, so a screen reader hears what the answer gave first", () => {
+    const html = answered([], [learn], "Add it once you have used it at work.");
+    expect(block(html)).toHaveLength(1);
+    // Both notices are inside the block, and the button comes after them, without the id.
+    const start = html.indexOf(block(html)[0] ?? "<none>");
+    expect(start).toBeGreaterThan(-1);
+    expect(html.indexOf("Not added to your CV")).toBeGreaterThan(start);
+    expect(html.indexOf("Add it once you have used it at work.")).toBeGreaterThan(start);
+    expect(html.indexOf("Change my answer")).toBeGreaterThan(html.indexOf("Add it once you have used it at work."));
+    expect(changeButton(html)).not.toMatch(/ id="/);
+  });
+
+  it("is “Change my answer” when the answer gave nothing else", () => {
+    const html = answered([]);
+    expect(changeButton(html)).toMatch(/ id="[^"]+"/);
+    expect(block(html)).toHaveLength(0);
+  });
+
+  it("is the suggestion when the answer gave a line, with the next steps after it as before", () => {
+    const html = answered([suggestion("proposed")], [{ ...learn, kind: "related-skill", suggestion: "Excel pivot tables" }]);
+    expect(html).toMatch(/<p [^>]*tabindex="-1"[^>]*>Suggestion from your answer<\/p>/);
+    expect(html).toContain("Excel pivot tables");
+    expect(block(html)).toHaveLength(0);
   });
 });
 
@@ -173,9 +205,18 @@ describe("Why we’re asking (#565)", () => {
     const unclear: Gap = { id: "gap-1", requirement: "Clear communication with non-technical stakeholders", importance: "essential", kind: "unclear", detail: "" };
     expect(whyAsking(unclear)).toBe("your CV doesn’t show this clearly yet.");
     expect(whyAsking({ ...unclear, evidence: ["Built Tableau dashboards for the regional sales team"] })).toBe(
-      "your CV says “Built Tableau dashboards for the regional sales team”, but not clearly enough for this job.",
+      "your profile says “Built Tableau dashboards for the regional sales team”, but not clearly enough for this job.",
     );
     expect(whyAsking({ ...unclear, kind: "missing" })).toBe("the job asks for this, and your CV doesn’t show it yet.");
+  });
+
+  // Evidence lines come from the profile, which holds follow-up answers and volunteering the CV beside the question does not print.
+  it("quotes an unclear gap's evidence as the profile's, never as a line of the CV", () => {
+    const unclear: Gap = { id: "gap-1", requirement: "Stock control", importance: "essential", kind: "unclear", detail: "", evidence: ["I helped run the weekly stock count"] };
+    const why = whyAsking(unclear);
+    expect(why).toBe("your profile says “I helped run the weekly stock count”, but not clearly enough for this job.");
+    expect(why).not.toContain("your CV says");
+    expect(findBrandProblems(why)).toEqual([]);
   });
 
   it("is what the card shows", () => {

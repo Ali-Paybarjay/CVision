@@ -112,13 +112,17 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
         ? "sent-back"
         : change.status === "proposed" && changes.some((other) => other.status === "approved" && sameTarget(other, change))
           ? "taken"
-          : undefined;
+          : // An earlier suggestion holds its line on the live CV; approving this one makes that one "taken" (#565).
+            change.status === "proposed" && change.gapId && !onLiveCv.has(change.id) && shown.some((other) => other.id !== change.id && sameTarget(other, change))
+            ? "queued"
+            : undefined;
   // Phone only: the questions or the CV, as two tabs. On a wide screen both are side by side.
   const [view, setView] = useState<"ask" | "cv">("ask");
   // The live CV, or the ad beside it; and with the changes marked, or as the download will look.
   const [panel, setPanel] = useState<"cv" | "ad">("cv");
   const [showChanges, setShowChanges] = useState(true);
-  // Phone only: the change whose "See it on your CV" opened the CV tab, for the way back to its question (#565).
+  // The change whose "See it on your CV" opened the CV tab on a phone, or moved focus to the CV on a wide screen, for the
+  // way back to its question (#565).
   const [backTo, setBackTo] = useState<string | null>(null);
   const showOnCv = (change: TailoringChange) => {
     setView("cv");
@@ -502,10 +506,11 @@ export function TailorWorkspace({ job, jobUrl, label, profile, prompts, savedCha
         )}
       </div>
 
-      {/* Phone only, right after the CV so the next Tab reaches it, and fixed at the foot of the screen so it is in
-          view wherever the line is: back to the question whose "See it on your CV" opened this tab (#565). */}
+      {/* Back to the question whose "See it on your CV" brought focus here (#565), right after the CV so the next Tab
+          from the focused line reaches it. On a phone it is fixed at the foot of the screen, so it is in view wherever
+          the line is; on a wide screen it is a row under the CV, so the keyboard need not go back through the toggles. */}
       {backTo && (
-        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-canvas px-4 py-3 lg:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-canvas px-4 py-3 lg:static lg:z-auto">
           <Button onClick={backToQuestion}>← Back to the question</Button>
         </div>
       )}

@@ -5,10 +5,10 @@ import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { Button, cn, CvPaper, Field, FitLine, Textarea, WarningIcon } from "@/shared/ui";
 
 /**
- * What happened to a card's line when another change to it was approved (#465), or, for a suggestion, that another
- * change the user approved holds its line, so it is not on the live CV (#565).
+ * What happened to a card's line when another change to it was approved (#465), or, for a suggestion, why it is not on
+ * the live CV: another change the user approved holds its line ("taken"), or an earlier suggestion does ("queued") (#565).
  */
-export type LineNote = "replaced" | "sent-back" | "taken";
+export type LineNote = "replaced" | "sent-back" | "taken" | "queued";
 
 const sectionNames: Record<TailoringChange["section"], string> = {
   summary: "Professional summary",
@@ -154,6 +154,7 @@ export function ChangeCard({
             <DecisionChip status={change.status} />
             {change.status === "proposed" && lineNote === "sent-back" && "Back with your suggestions: you approved another change to this line."}
             {change.status === "proposed" && lineNote === "taken" && "Another change you approved is on this line. Approve this one to use it instead."}
+            {change.status === "proposed" && lineNote === "queued" && "Another suggestion is on this line of your CV. Approve this one to use it instead."}
           </span>
           {/* Quiet, beside the decision it takes back: the change is not decided again, as before Approve or Reject (#531). */}
           {change.status !== "proposed" && (

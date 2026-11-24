@@ -465,9 +465,9 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
       const repeats = languages.filter((shown) => shown.name === entry.name);
       const sameText = repeats.find((shown) => same(shown.line.text, entry.line.text));
       if (sameText) {
-        // The same line twice is listed once, as approved when the user approved it; a suggestion never hides an approval.
-        const approvedAlready = sameText.line.tailored && !sameText.line.suggested;
-        if (entry.line.tailored && !(entry.line.suggested && approvedAlready)) sameText.line = entry.line;
+        // The same line twice is listed once, as approved when the user approved it. A suggestion never takes over a line
+        // already listed, the user's own, an approval or an earlier suggestion, so a line on the CV is never called suggested (#565).
+        if (entry.line.tailored && !entry.line.suggested) sameText.line = entry.line;
         continue;
       }
       const unchanged = repeats.filter((shown) => !shown.line.tailored);
