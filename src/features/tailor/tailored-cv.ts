@@ -10,6 +10,13 @@ export type CvLine = {
   tailored: boolean;
   /** Printed in bold before the text; only the labels of the last section use it: "Certificates:", "Driving licence:", "Skills and tools:". */
   label?: string;
+  /** Live CV only (`preview`): the change the line came from, so the page can bring it into view. */
+  changeId?: string;
+  /**
+   * Live CV only: the line is a suggestion not decided yet, in the place it would take once approved. It is never in
+   * the download, which is built without `preview` (#565).
+   */
+  suggested?: boolean;
 };
 
 /** The section headings of the CV, in order, the same in the preview and the files. */
@@ -334,15 +341,26 @@ export function fitsCv(profile: Profile, change: Pick<TailoringChange, "section"
  * An approved change replaces its `before` line where it finds it; a new line (before: null) is added to its section.
  * An approved change that finds no line is never dropped silently: it is listed in `unplaced` for the page to show.
  * With a job, the skills are at most six main skills, approved ones first, then those on the CV; the relevant work lines come first in each role.
+ *
+ * `preview` is for the live CV in Tailor only: its `suggestions` take their places as if approved, with every line
+ * they make marked `suggested`, so the page never shows one as approved (#565), and every tailored line carries its
+ * change's id. The download and the saved CV never pass it, so they hold approved changes only.
  */
-export function buildTailoredCv(profile: Profile, changes: TailoringChange[], job?: Job): TailoredCv {
-  const approved = changes.filter((change) => change.status === "approved");
+export function buildTailoredCv(profile: Profile, changes: TailoringChange[], job?: Job, preview?: { suggestions: TailoringChange[] }): TailoredCv {
+  const suggestedIds = new Set(preview?.suggestions.map((change) => change.id));
+  const approved = changes.filter((change) => change.status === "approved" || suggestedIds.has(change.id));
   const used = new Set<string>();
   /** The approved change each tailored line came from, so a language knows which line its change rewrote (#543). */
   const madeBy = new Map<CvLine, TailoringChange>();
+  const lineOf = (change: TailoringChange): CvLine => ({
+    text: change.after,
+    tailored: true,
+    ...(preview && { changeId: change.id }),
+    ...(suggestedIds.has(change.id) && { suggested: true }),
+  });
   const tailoredLine = (change: TailoringChange): CvLine => {
     used.add(change.id);
-    const line = { text: change.after, tailored: true };
+    const line = lineOf(change);
     madeBy.set(line, change);
     return line;
   };
@@ -372,7 +390,7 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
     const role = experience[roleForNewLine(profile, change)];
     if (!role) continue;
     used.add(change.id);
-    role.lines.push({ text: change.after, tailored: true });
+    role.lines.push(lineOf(change));
   }
   for (const role of experience) role.lines = relevantLinesFirst(role.lines, job);
 
@@ -441,12 +459,15 @@ export function buildTailoredCv(profile: Profile, changes: TailoringChange[], jo
       // Only a language the change altered is tailored: "Persian (Native)" kept as it was in the line it rewrote is the user's own (#543).
       const text = languageLine(language.name, language.level);
       const tailored = line.tailored && !rewrote.some((old) => same(old, text));
-      const entry: Shown = { line: { text, tailored }, name: normalise(language.name), level: language.level };
+      // On the live CV, a language from a suggestion keeps its mark, as its text is not the change's `after` (#565).
+      const marks = tailored ? { ...(line.changeId ? { changeId: line.changeId } : {}), ...(line.suggested ? { suggested: true } : {}) } : {};
+      const entry: Shown = { line: { text, tailored, ...marks }, name: normalise(language.name), level: language.level };
       const repeats = languages.filter((shown) => shown.name === entry.name);
       const sameText = repeats.find((shown) => same(shown.line.text, entry.line.text));
       if (sameText) {
-        // The same line twice is listed once, as approved when the user approved it.
-        if (entry.line.tailored) sameText.line = entry.line;
+        // The same line twice is listed once, as approved when the user approved it; a suggestion never hides an approval.
+        const approvedAlready = sameText.line.tailored && !sameText.line.suggested;
+        if (entry.line.tailored && !(entry.line.suggested && approvedAlready)) sameText.line = entry.line;
         continue;
       }
       const unchanged = repeats.filter((shown) => !shown.line.tailored);
@@ -497,7 +518,23 @@ export function otherLines(cv: TailoredCv): GroupLine[] {
       label,
       text: lines.map((line) => line.text).join(separator),
       tailored: lines.some((line) => line.tailored),
-      parts: lines.map((line) => ({ text: line.text, tailored: line.tailored })),
+      parts: lines.map(({ text, tailored, changeId, suggested }) => ({ text, tailored, ...(changeId ? { changeId } : {}), ...(suggested ? { suggested } : {}) })),
       separator,
     }));
+}
+
+/**
+ * The changes whose line is on this CV, as the preview draws it: within the six skills, four tools and four
+ * certificates. Only for a CV built with `preview`, whose lines carry their change's id. "See it on your CV" is
+ * offered only for these, so it never leads to nothing (#565).
+ */
+export function changesOnCv(cv: TailoredCv): Set<string> {
+  const lines = [
+    ...(cv.summary ? [cv.summary] : []),
+    ...cv.skills,
+    ...cv.experience.flatMap((role) => role.lines),
+    ...cv.education,
+    ...otherLines(cv).flatMap((line) => line.parts),
+  ];
+  return new Set(lines.flatMap((line) => (line.tailored && line.changeId ? [line.changeId] : [])));
 }

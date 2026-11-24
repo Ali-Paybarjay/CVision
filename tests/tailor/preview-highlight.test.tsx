@@ -1,11 +1,13 @@
-// Step 3's preview puts the lines the user approved on Fit, so "Highlighted lines are the changes you approved" is true,
-// and says the highlight is not in the download (#501). Without `marked` (the overview, the saved page) every line
-// stays plain, as in the file. On a line of the last section, only the approved item is on Fit (#543).
+// The live CV puts the lines the user approved on Fit, and the suggestions not decided yet in a dashed box, and says
+// so under it, with the highlight not in the download (#501, #565). Without `marked` (the overview, the saved page)
+// every line stays plain, as in the file. On a line of the last section, only the approved item is on Fit (#543), and
+// an item from a suggestion is dashed, never on Fit (#565).
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { CvPreview } from "@/app/tailor/cv-preview";
-import { TailorWorkspace } from "@/app/tailor/tailor-workspace";
-import { buildTailoredCv, otherLines } from "@/features/tailor/tailored-cv";
+import { legendSentence, TailorWorkspace, type GapPrompt } from "@/app/tailor/tailor-workspace";
+import { findBrandProblems } from "@/features/tailor/brand-check";
+import { buildTailoredCv, changesOnCv, cvHeadings, otherLines } from "@/features/tailor/tailored-cv";
 import type { TailoringChange } from "@/shared/contracts";
 import { personas } from "@/shared/sample-data";
 
@@ -25,7 +27,7 @@ const approved: TailoringChange = {
   evidenceSource: "follow-up-answer",
   status: "approved",
 };
-const sentence = "Highlighted lines are the changes you approved. The highlight is only on this page, not in your download.";
+const sentence = legendSentence;
 
 /** The opening tag of the element that holds the text, with the text right after it. */
 const holder = (html: string, text: string) => html.slice(0, html.indexOf(text)).match(/<(p|li)( [^>]*)?>$/)?.[0] ?? "";
@@ -119,5 +121,125 @@ describe("the live CV beside the questions (#559)", () => {
     const paper = live([{ ...approved, gapId: undefined, evidenceSource: "cv", status: "proposed" }]);
     expect(paper).not.toContain(after);
     expect(paper).not.toContain("border-dashed");
+  });
+});
+
+describe("the key under the live CV (#565)", () => {
+  it("says what both marks mean, and that neither is in the download", () => {
+    expect(legendSentence).toContain("bar on the left are the changes you approved");
+    expect(legendSentence).toContain("Dashed lines are suggestions, not in your CV until you approve them.");
+    // The words the main-path e2e test looks for.
+    expect(legendSentence).toContain("The highlight is only on this page, not in your download.");
+    expect(legendSentence).not.toContain("Highlighted lines are the changes you approved");
+    expect(findBrandProblems(legendSentence)).toEqual([]);
+  });
+});
+
+/** A suggestion from Sara's answer to the Git question, as in the demo (sara-job-1, Question 3). */
+const git: TailoringChange = {
+  id: "git-1",
+  jobId: job.id,
+  gapId: "sara-gap-3",
+  section: "skills",
+  before: null,
+  after: "Git and GitHub",
+  evidence: "I used Git and GitHub for my MSc dissertation code",
+  evidenceSource: "follow-up-answer",
+  status: "proposed",
+};
+
+/** The live CV beside the questions, and the line of its last section with this label. */
+const liveCv = (changes: TailoringChange[], prompts: GapPrompt[] = []) => {
+  const html = renderToStaticMarkup(<TailorWorkspace job={job} jobUrl={null} label="" profile={profile} prompts={prompts} savedChanges={changes} />);
+  const start = html.indexOf('aria-label="Your tailored CV"');
+  return { html, paper: html.slice(start, html.indexOf("</article>", start)) };
+};
+const groupLine = (paper: string, label: string) => {
+  const start = paper.indexOf(`<p><strong>${label} </strong>`);
+  return start < 0 ? "" : paper.slice(start, paper.indexOf("</p>", start));
+};
+/** The line as read on the page, without the tag and the screen reader's words. */
+const asRead = (line: string) =>
+  line
+    .replace(/<span class="sr-only">[^<]*<\/span>/g, "")
+    .replace(/<span aria-hidden="true"[^>]*>Suggested<\/span>/g, "")
+    .replace(/<[^>]+>/g, "");
+
+describe("a suggestion in the last section of the live CV (#565)", () => {
+  it("shows a tool from an answer as suggested, never on Fit as if approved", () => {
+    const { paper } = liveCv([git]);
+    const tools = groupLine(paper, cvHeadings.tools);
+    expect(tools).toMatch(
+      /<span class="[^"]*border-dashed[^"]*" id="cv-line-git-1" tabindex="-1"><span aria-hidden="true"[^>]*>Suggested<\/span>Git and GitHub<\/span><span class="sr-only"> \(suggested, not on your CV yet\)<\/span>/,
+    );
+    expect(tools).not.toContain("<mark");
+    expect(paper).not.toContain("border-fit-bar");
+    expect(paper).not.toContain("(tailored for this job)");
+  });
+
+  it("drops one of the user's own tools only as approving it would, and the download keeps them all", () => {
+    const tools = (cv: ReturnType<typeof buildTailoredCv>) => otherLines(cv).find((line) => line.label === cvHeadings.tools)?.text;
+    const ifApproved = tools(buildTailoredCv(profile, [{ ...git, status: "approved" }], job));
+    expect(asRead(groupLine(liveCv([git]).paper, cvHeadings.tools))).toBe(`${cvHeadings.tools} ${ifApproved}`);
+    // The download, built from approved changes only, has no Git and keeps the four tools it had.
+    const download = buildTailoredCv(profile, [git], job);
+    expect(tools(download)).toBe(tools(buildTailoredCv(profile, [], job)));
+    expect(tools(download)).not.toContain("Git");
+    expect(JSON.stringify(download)).not.toMatch(/changeId|suggested/);
+  });
+
+  it("puts the same tool, once approved, on Fit with its id", () => {
+    const { paper } = liveCv([{ ...git, status: "approved" }]);
+    const tools = groupLine(paper, cvHeadings.tools);
+    expect(tools).toMatch(/<mark class="[^"]*bg-fit[^"]*" id="cv-line-git-1" tabindex="-1">Git and GitHub<\/mark><span class="sr-only"> \(tailored for this job\)<\/span>/);
+    expect(tools).not.toContain("Suggested");
+    expect(tools).not.toContain("border-dashed");
+  });
+
+  it.each([
+    // A language's text is not the change's: "Welsh – Fluent" is printed "Welsh (Fluent)".
+    ["a language", cvHeadings.languages, { section: "skills", after: "Welsh – Fluent" }, "Welsh (Fluent)"],
+    ["a certificate", cvHeadings.certificates, { section: "certifications", after: "CSCS card" }, "CSCS card"],
+    // "Full UK driving licence" is printed "Full UK" after "Driving licence:".
+    ["a driving licence", cvHeadings.drivingLicence, { section: "skills", after: "Full UK driving licence" }, "Full UK"],
+  ] as const)("shows %s from an answer as suggested too", (_, label, change, printed) => {
+    const { paper } = liveCv([{ ...git, id: "item-1", ...change }]);
+    const line = groupLine(paper, label);
+    expect(line).toContain(`id="cv-line-item-1" tabindex="-1"><span aria-hidden="true"`);
+    expect(line).toContain(`Suggested</span>${printed}</span><span class="sr-only"> (suggested, not on your CV yet)</span>`);
+    expect(line).not.toContain("<mark");
+    expect(paper).not.toContain("(tailored for this job)");
+  });
+});
+
+describe("the changes on the live CV (#565)", () => {
+  it("are the approved changes and suggestions it shows, within the limits", () => {
+    const fromCv: TailoringChange = { ...git, id: "from-cv", gapId: undefined, after: "Looker", evidenceSource: "cv" };
+    const tools = ["Power BI", "DAX", "dbt", "Airflow", "BigQuery"].map((after): TailoringChange => ({ ...git, id: after, gapId: undefined, after, status: "approved" }));
+    const live = buildTailoredCv(profile, [git, fromCv, ...tools], job, { suggestions: [git] });
+    const onCv = changesOnCv(live);
+    expect(onCv.has("git-1")).toBe(true);
+    // A suggestion from the CV is not on the live CV until approved, and only four tools fit.
+    expect(onCv.has("from-cv")).toBe(false);
+    expect([...onCv].filter((id) => id !== "git-1")).toHaveLength(3);
+  });
+});
+
+describe("See it on your CV (#565)", () => {
+  const gaps = personas.sara.match.gaps;
+  const prompt = (id: string): GapPrompt => ({ gap: gaps.find((gap) => gap.id === id)!, question: "Have you done this?" });
+
+  it("is on a suggestion whose item is on the live CV, and leads to it", () => {
+    const { html } = liveCv([git], [prompt("sara-gap-3")]);
+    expect(html).toMatch(/<button[^>]*id="show-git-1"[^>]*>See it on your CV →<\/button>/);
+    expect(html).toContain('id="cv-line-git-1"');
+  });
+
+  it("is not on a suggestion whose line another approved change holds, and the card says why", () => {
+    const fromCv: TailoringChange = { ...approved, id: "from-cv", gapId: undefined, evidenceSource: "cv", after: "Built Tableau dashboards for the regional sales team, used weekly" };
+    const { html, paper } = liveCv([fromCv, { ...approved, status: "proposed" }], [prompt("sara-gap-1")]);
+    expect(html).not.toContain("See it on your CV");
+    expect(html).toContain("Another change you approved is on this line. Approve this one to use it instead.");
+    expect(paper).not.toContain(after);
   });
 });

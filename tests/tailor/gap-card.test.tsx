@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ChangeCard } from "@/app/tailor/change-card";
-import { GapCard, waitNote, waitsForModel, type GapPrompt } from "@/app/tailor/gap-card";
+import { GapCard, waitNote, waitsForModel, whyAsking, type GapPrompt } from "@/app/tailor/gap-card";
 import { findBrandProblems } from "@/features/tailor/brand-check";
-import type { TailoringChange } from "@/shared/contracts";
+import type { Gap, TailoringChange } from "@/shared/contracts";
 import { GapHelp } from "@/app/tailor/gap-help";
 import { personas } from "@/shared/sample-data";
 
@@ -113,7 +113,7 @@ describe("a question with a suggestion under it (#531)", () => {
     expect(label).toBeGreaterThan(html.indexOf("Have you used Power BI?"));
     expect(label).toBeLessThan(html.indexOf(">Work experience<"));
     // The kit's small capitals label, set apart from the question by a line.
-    expect(html).toMatch(/<div class="[^"]*border-t border-line[^"]*"><p class="[^"]*uppercase[^"]*">Suggestion from your answer<\/p>/);
+    expect(html).toMatch(/<div class="[^"]*border-t border-line[^"]*"><p class="[^"]*uppercase[^"]*"[^>]*>Suggestion from your answer<\/p>/);
   });
 
   it("says suggestions when the answer gave more than one", () => {
@@ -151,5 +151,34 @@ describe("the note while an answer waits for the model (#468)", () => {
   it("is true for a yes and a no alike, in our voice", () => {
     expect(waitNote).toBe("Writing a suggestion from your answer. This can take up to 30 seconds.");
     expect(findBrandProblems(waitNote)).toEqual([]);
+  });
+});
+
+describe("Why we’re asking (#565)", () => {
+  const line = "Cleaned and joined weekly sales data from 120 stores using SQL and Python";
+  const stronger: Gap = { id: "stronger-ab12cd34", requirement: "Strong SQL", importance: "essential", kind: "unclear", detail: `Already shown by: "${line}"` };
+
+  it("quotes the CV line a Make it stronger question builds on, and asks only for more", () => {
+    const why = whyAsking(stronger);
+    expect(why).toBe(`your CV shows this in “${line}”; a detail such as a number, the scale or a result would make it stronger for this job.`);
+    expect(why).not.toMatch(/touches on|without a clear example|not clearly/);
+    expect(findBrandProblems(why)).toEqual([]);
+  });
+
+  it("still says the CV shows it when the detail has no line to quote", () => {
+    expect(whyAsking({ ...stronger, detail: "" })).toBe("your CV shows this; a detail such as a number, the scale or a result would make it stronger for this job.");
+  });
+
+  it("never says the CV touches on an unclear requirement it has no line for", () => {
+    const unclear: Gap = { id: "gap-1", requirement: "Clear communication with non-technical stakeholders", importance: "essential", kind: "unclear", detail: "" };
+    expect(whyAsking(unclear)).toBe("your CV doesn’t show this clearly yet.");
+    expect(whyAsking({ ...unclear, evidence: ["Built Tableau dashboards for the regional sales team"] })).toBe(
+      "your CV says “Built Tableau dashboards for the regional sales team”, but not clearly enough for this job.",
+    );
+    expect(whyAsking({ ...unclear, kind: "missing" })).toBe("the job asks for this, and your CV doesn’t show it yet.");
+  });
+
+  it("is what the card shows", () => {
+    expect(card({ gap: stronger, question: "The job asks for “Strong SQL”, and your CV shows it. Can you add a detail?" })).toContain(`your CV shows this in “${line}”`);
   });
 });

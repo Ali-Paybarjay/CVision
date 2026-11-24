@@ -147,6 +147,11 @@ test("step 3, for now: approve a suggested change on the sample job", async ({ p
   await gap.getByRole("button", { name: "Save answer" }).click();
   const approveGap = gap.getByRole("button", { name: "Approve", exact: true });
   await expect(approveGap.first()).toBeVisible();
+  // Before Approve, the answer's line is on the live CV only as a suggestion, never counted as tailored (#565).
+  await cvTab.click();
+  await expect(page.getByRole("complementary", { name: "Your CV for this job" }).getByText("(suggested, not on your CV yet)")).toHaveCount(1);
+  await expect(tailoredLines).toHaveCount(1);
+  await askTab.click();
   await approveGap.first().click();
   // After one answer the CV is a click away, without skipping the other questions (#488).
   await expect(page.getByRole("button", { name: "Review your tailored CV now" })).toBeVisible();

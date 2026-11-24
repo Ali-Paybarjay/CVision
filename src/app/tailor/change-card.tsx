@@ -4,8 +4,11 @@ import { useRef, useState, useTransition } from "react";
 import type { TailoringChange, TailoringStatus } from "@/shared/contracts";
 import { Button, cn, CvPaper, Field, FitLine, Textarea, WarningIcon } from "@/shared/ui";
 
-/** What happened to a card's line when another change to it was approved (#465). */
-export type LineNote = "replaced" | "sent-back";
+/**
+ * What happened to a card's line when another change to it was approved (#465), or, for a suggestion, that another
+ * change the user approved holds its line, so it is not on the live CV (#565).
+ */
+export type LineNote = "replaced" | "sent-back" | "taken";
 
 const sectionNames: Record<TailoringChange["section"], string> = {
   summary: "Professional summary",
@@ -57,7 +60,7 @@ export function ChangeCard({
   role?: { role: string; named: boolean };
   /** After an approval to a line that already had one: on the new change, "replaced"; on the earlier one, "sent-back" (#465). */
   lineNote?: LineNote;
-  /** Brings the line into view on the live CV beside the questions. */
+  /** Brings the line into view on the live CV beside the questions; given only when the line is on it (#565). */
   onShow?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -150,6 +153,7 @@ export function ChangeCard({
           <span ref={status} className="flex flex-wrap items-center gap-2 text-sm text-text-muted" aria-live="polite" tabIndex={-1}>
             <DecisionChip status={change.status} />
             {change.status === "proposed" && lineNote === "sent-back" && "Back with your suggestions: you approved another change to this line."}
+            {change.status === "proposed" && lineNote === "taken" && "Another change you approved is on this line. Approve this one to use it instead."}
           </span>
           {/* Quiet, beside the decision it takes back: the change is not decided again, as before Approve or Reject (#531). */}
           {change.status !== "proposed" && (
@@ -166,7 +170,8 @@ export function ChangeCard({
             </Button>
           )}
           {onShow && change.status !== "rejected" && (
-            <Button variant="quiet" onClick={onShow} className="px-0 sm:ml-auto">
+            // Its id is the way back from the CV tab on a phone (#565).
+            <Button id={`show-${change.id}`} variant="quiet" onClick={onShow} className="px-0 sm:ml-auto">
               See it on your CV →
             </Button>
           )}
